@@ -127,9 +127,13 @@ A 20-year sim must not drift into nonsense: no ratings inflation, no division co
 | Scouting, game plans, prep      | Built                                            |
 | Matchmaking & aftermath         | Built                                            |
 | Retirement & fighter generation | Built                                            |
+| Create-a-fighter                | Built — background and build set your ceilings   |
+| Training & attribute development| Built                                            |
+| Ageing, decline & idle decay    | Built                                            |
+| The ladder: rankings, signings, title shots | Built                                |
 | Light DB, save/load, migrations | Built                                            |
 | Seed roster (57 fighters)       | Built                                            |
-| Fighter career mode             | Playable end to end                              |
+| Fighter career mode             | Playable: create, train, climb, fight, retire    |
 | Editor                          | Fighters editable; organisations designed        |
 | Heat, rivalries, money          | Designed (doc 08)                                |
 | Attribute development in camp   | Designed (doc 06)                                |

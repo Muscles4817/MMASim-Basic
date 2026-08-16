@@ -3,6 +3,8 @@ import { useGame } from './state/GameProvider';
 import { useRouter } from './state/router';
 import { Shell } from './shell/Shell';
 import { StartScreen } from './screens/StartScreen';
+import { CreateFighterScreen } from './screens/CreateFighterScreen';
+import { TrainingScreen } from './screens/TrainingScreen';
 import { HubScreen } from './screens/HubScreen';
 import { RosterScreen } from './screens/RosterScreen';
 import { FighterScreen } from './screens/FighterScreen';
@@ -27,6 +29,18 @@ export function App() {
       return (
         <Shell title="New career">
           <StartScreen />
+        </Shell>
+      );
+    case 'create':
+      return (
+        <Shell title="Create a fighter" showBack>
+          <CreateFighterScreen />
+        </Shell>
+      );
+    case 'training':
+      return (
+        <Shell title="Training" showBack>
+          <TrainingScreen />
         </Shell>
       );
     case 'hub':

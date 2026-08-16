@@ -242,3 +242,91 @@ describe('accessibility basics hold on the rendered app', () => {
     }
   });
 });
+
+describe('the career is a career, not a sequence of fights', () => {
+  /** Fill in the create-a-fighter form and turn pro. */
+  async function createFighter(user: ReturnType<typeof userEvent.setup>, last = 'Newman') {
+    window.location.hash = '#/create';
+    renderApp();
+    await user.type(await screen.findByLabelText(/First name/i), 'Ade');
+    await user.type(screen.getByLabelText(/Last name/i), last);
+    await user.click(screen.getByRole('button', { name: /Turn pro/i }));
+    expect(await screen.findByText(new RegExp(last))).toBeTruthy();
+  }
+
+  it('creates your own fighter, starting from nothing', async () => {
+    const user = userEvent.setup();
+    await createFighter(user);
+
+    // Unknown, unranked, and on the smallest show in the sport. That is the starting point.
+    const climb = (await screen.findByText(/The climb/i)).closest('section')!;
+    expect(within(climb).getAllByText(/Unranked/i).length).toBeGreaterThan(0);
+    expect(within(climb).getByText(/developmental/i)).toBeTruthy();
+    expectNoCrash();
+  }, 30_000);
+
+  it('lets the background choice actually change the fighter you get', async () => {
+    const user = userEvent.setup();
+    window.location.hash = '#/create';
+    renderApp();
+    // The preview only appears once the spec is valid, which needs a name.
+    await user.type(await screen.findByLabelText(/First name/i), 'Ade');
+    await user.type(screen.getByLabelText(/Last name/i), 'Preview');
+
+    await user.click(screen.getByRole('button', { name: /Collegiate Wrestler/i }));
+    const wrestlingRow = await screen.findByRole('meter', { name: /^Wrestling:/i });
+    const asWrestler = Number(wrestlingRow.getAttribute('aria-valuenow'));
+
+    await user.click(screen.getByRole('button', { name: /Amateur Boxer/i }));
+    const asBoxer = Number(
+      (await screen.findByRole('meter', { name: /^Wrestling:/i })).getAttribute('aria-valuenow'),
+    );
+
+    expect(asWrestler).toBeGreaterThan(asBoxer);
+    expectNoCrash();
+  }, 30_000);
+
+  it('improves the fighter through training, and the improvement persists', async () => {
+    const user = userEvent.setup();
+    await createFighter(user, 'Trainee');
+
+    await user.click(await screen.findByRole('link', { name: /Career/i }));
+    await user.click(await screen.findByRole('button', { name: /Go to training/i }));
+
+    expect(await screen.findByText(/What to work on/i)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /Wrestling/i }));
+    await user.click(screen.getByRole('button', { name: /Train for 8 weeks/i }));
+
+    // The camp report is the proof the numbers moved.
+    expect(await screen.findByText(/Camp report/i)).toBeTruthy();
+    const report = screen.getByText(/Camp report/i).closest('section')!;
+    expect(within(report).getAllByText(/^\+\d/).length).toBeGreaterThan(0);
+    expectNoCrash();
+  }, 40_000);
+
+  it('advances the calendar when time is spent training', async () => {
+    const user = userEvent.setup();
+    await createFighter(user, 'Clockwatcher');
+
+    const dateBefore = document.querySelector('.shell__subtitle')?.textContent;
+    await user.click(await screen.findByRole('link', { name: /Career/i }));
+    await user.click(await screen.findByRole('button', { name: /Go to training/i }));
+    await user.click(await screen.findByRole('button', { name: /Train for 8 weeks/i }));
+
+    await waitFor(() => {
+      expect(document.querySelector('.shell__subtitle')?.textContent).not.toBe(dateBefore);
+    });
+    expectNoCrash();
+  }, 40_000);
+
+  it('shows the climb, and what it will take to get a title shot', async () => {
+    const user = userEvent.setup();
+    await createFighter(user, 'Climber');
+
+    const climb = (await screen.findByText(/The climb/i)).closest('section')!;
+    expect(within(climb).getByRole('meter', { name: /Career progress/i })).toBeTruthy();
+    // Always says what is standing between you and the belt, eligible or not.
+    expect(climb.textContent).toMatch(/unranked|ranked|top three|two straight wins|not signed/i);
+    expectNoCrash();
+  }, 30_000);
+});

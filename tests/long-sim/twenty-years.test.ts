@@ -6,6 +6,8 @@ import {
   createRng,
   defaultGamePlan,
   DIVISIONS,
+  applyAgeing,
+  applyTraining,
   fighterAge,
   generateFighter,
   isDecisionMethod,
@@ -18,6 +20,8 @@ import {
   simulateFight,
   type Fighter,
   type FinishMethod,
+  type Coach,
+  type Gym,
   type Promotion,
 } from '@mmasim/engine';
 import { createMemoryAdapter, createNewGame } from '@mmasim/data';
@@ -49,6 +53,7 @@ interface SimSummary {
   maxHeadTrauma: number;
   retired: number;
   generated: number;
+  atDebut: Map<string, Fighter>;
 }
 
 /**
@@ -69,6 +74,10 @@ function runLongSim(seed: string): SimSummary {
   const divisionFights: Record<string, number> = {};
   /** Next day each fighter is available. */
   const readyOn = new Map<string, number>();
+  /** Day each fighter was last processed, so ageing is applied over real elapsed time. */
+  const lastSeen = new Map<string, number>();
+  /** Attributes at the moment each fighter entered the world, for the development check. */
+  const atDebut = new Map<string, Fighter>();
   let fights = 0;
   let generated = 0;
 
@@ -81,15 +90,15 @@ function runLongSim(seed: string): SimSummary {
       // Enough bodies to make a card without every fight being a rematch.
       const target = division.sex === 'female' ? 5 : 7;
       for (let i = active.length; i < target; i++) {
-        db.fighters.upsert(
-          generateFighter(rng.fork(`gen:${day}:${division.id}:${i}:${generated}`), {
-            id: `gen_${generated++}`,
-            divisionId: division.id,
-            sex: division.sex,
-            day,
-            promotionId: rng.pick(promotions).id,
-          }),
-        );
+        const born = generateFighter(rng.fork(`gen:${day}:${division.id}:${i}:${generated}`), {
+          id: `gen_${generated++}`,
+          divisionId: division.id,
+          sex: division.sex,
+          day,
+          promotionId: rng.pick(promotions).id,
+        });
+        atDebut.set(born.id as string, born);
+        db.fighters.upsert(born);
       }
     }
   };
@@ -135,6 +144,42 @@ function runLongSim(seed: string): SimSummary {
         rng: rng.fork(`a:${boutId}`),
       });
 
+      // Between fights, fighters train and age — the same loop the player is in. Without
+      // this the world is frozen: nobody improves, nobody declines, and the ratings-drift
+      // assertion below is checking a world that cannot change.
+      const develop = (f: Fighter): Fighter => {
+        const trainRng = rng.fork(`train:${f.id}:${day}`);
+        const gym = f.gymId ? (db.gyms.findById(f.gymId) as Gym | undefined) : undefined;
+        const coach = f.headCoachId
+          ? (db.coaches.findById(f.headCoachId) as Coach | undefined)
+          : undefined;
+
+        const trained = applyTraining({
+          fighter: f,
+          focuses: [
+            trainRng.pick([
+              'striking',
+              'wrestling',
+              'submissions',
+              'conditioning',
+              'strategy',
+            ] as const),
+          ],
+          weeks: 8,
+          gym,
+          coach,
+          day,
+          rng: trainRng,
+        }).fighter;
+
+        // Age over the real elapsed time since this fighter last competed. Ageing by a fixed
+        // amount per fight double-counts it: a busy fighter would lose several extra years of
+        // physical prime purely for having fought often.
+        const since = lastSeen.get(f.id as string) ?? day;
+        lastSeen.set(f.id as string, day);
+        return applyAgeing(trained, since, day, trainRng).fighter;
+      };
+
       // Careers end. Evaluated after every fight, which is when a fighter actually decides.
       const retireRng = rng.fork(`r:${boutId}`);
       const finalise = (f: Fighter): Fighter =>
@@ -142,8 +187,8 @@ function runLongSim(seed: string): SimSummary {
           ? { ...f, retiredDay: day, notes: retirementReason(f, day) }
           : f;
 
-      db.fighters.upsert(finalise(after.red));
-      db.fighters.upsert(finalise(after.blue));
+      db.fighters.upsert(finalise(develop(after.red)));
+      db.fighters.upsert(finalise(develop(after.blue)));
 
       // Whoever lost by stoppage serves the medical suspension.
       const redLost = result.winnerId !== undefined && result.winnerId !== red.id;
@@ -174,6 +219,7 @@ function runLongSim(seed: string): SimSummary {
     maxHeadTrauma: Math.max(...finalFighters.map((f) => f.condition.headTrauma)),
     retired: finalFighters.filter((f) => f.retiredDay !== undefined).length,
     generated,
+    atDebut,
   };
 }
 
@@ -199,19 +245,60 @@ describe(`${YEARS}-year world integrity`, () => {
   });
 
   it('does not inflate ratings over time', () => {
-    // Nothing in the current loop should move an attribute at all. When development lands,
-    // this assertion becomes a bounded-drift check rather than an equality one — and it will
-    // catch the day development starts quietly ratcheting the whole roster upward.
-    const before = new Map(sim.startingFighters.map((f) => [f.id as string, f]));
-    for (const after of sim.finalFighters) {
-      const start = before.get(after.id as string);
-      if (!start) continue; // Generated mid-run; nothing to compare against.
+    // Fighters now train and age, so individual attributes move — that is the point. What
+    // must NOT happen is the *population* drifting upward, which is how a rating scale dies:
+    // twenty years in, an 80 has to still mean what it meant in 2020.
+    // Compares the *top* of the population, not its average. The average legitimately falls
+    // as an elite seed roster is replaced by a realistic spread of newcomers; what must stay
+    // put is the ceiling of the scale, because that is what makes an 80 still mean an 80.
+    const topEnd = (fs: readonly Fighter[]) => {
+      const all = fs.flatMap((f) => ATTRIBUTE_KEYS.map((k) => f.attributes[k])).sort((a, b) => a - b);
+      return all.length === 0 ? 0 : all[Math.floor(all.length * 0.98)]!;
+    };
+
+    const startTop = topEnd(sim.startingFighters);
+    const endTop = topEnd(sim.finalFighters.filter((f) => f.retiredDay === undefined));
+
+    expect(
+      endTop,
+      `the top of the scale drifted ${startTop} -> ${endTop}`,
+    ).toBeLessThanOrEqual(startTop + 4);
+
+    // And nobody may exceed their own ceiling, however many camps they run.
+    for (const f of sim.finalFighters) {
       for (const key of ATTRIBUTE_KEYS) {
-        expect(after.attributes[key], `${after.lastName}.${key} drifted`).toBe(
-          start.attributes[key],
+        expect(f.attributes[key], `${f.lastName}.${key} passed its ceiling`).toBeLessThanOrEqual(
+          f.potential[key],
         );
       }
     }
+  });
+
+  it('lets fighters genuinely develop and genuinely decline', () => {
+    // Seeded fighters *and* everyone who debuted during the run. The seed roster is mostly
+    // at peak with very little upside left, so measuring only them would test the wrong half
+    // of the population.
+    const before = new Map<string, Fighter>([
+      ...sim.startingFighters.map((f) => [f.id as string, f] as const),
+      ...sim.atDebut,
+    ]);
+    let improved = 0;
+    let declined = 0;
+
+    for (const after of sim.finalFighters) {
+      const start = before.get(after.id as string);
+      if (!start) continue;
+      const delta =
+        ATTRIBUTE_KEYS.reduce((a, k) => a + after.attributes[k], 0) -
+        ATTRIBUTE_KEYS.reduce((a, k) => a + start.attributes[k], 0);
+      if (delta > 6) improved++;
+      if (delta < -6) declined++;
+    }
+
+    // Both must happen. A world where everyone only improves has no arc, and one where
+    // everyone only declines has no hope.
+    expect(improved, 'nobody improved over twenty years').toBeGreaterThan(0);
+    expect(declined, 'nobody declined over twenty years').toBeGreaterThan(0);
   });
 
   it('keeps every division alive', () => {

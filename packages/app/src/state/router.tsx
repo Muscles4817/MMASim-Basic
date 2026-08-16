@@ -23,6 +23,8 @@ import type { ReactNode } from 'react';
 
 export type Route =
   | { name: 'start' }
+  | { name: 'create' }
+  | { name: 'training' }
   | { name: 'hub' }
   | { name: 'roster' }
   | { name: 'fighter'; id: string }
@@ -41,6 +43,10 @@ function parse(hash: string): Route {
     case '':
     case 'start':
       return { name: 'start' };
+    case 'create':
+      return { name: 'create' };
+    case 'training':
+      return { name: 'training' };
     case 'hub':
       return { name: 'hub' };
     case 'roster':

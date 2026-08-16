@@ -1,0 +1,332 @@
+/**
+ * Creating the player's own fighter.
+ *
+ * The design problem: a create-a-fighter screen that hands out a points budget across
+ * fifteen attributes invites min-maxing and produces incoherent people — Power 90 on a body
+ * with no explosiveness, which the naturals layer says is impossible.
+ *
+ * So creation works the way generation does (doc 06): you choose a **background** and a
+ * **physical build**, those set your hidden naturals, and the naturals decide your ceilings.
+ * A small discretionary allocation then shapes where you already are within them. You are
+ * choosing what kind of athlete you are, not buying numbers.
+ */
+
+import { birthDayForAge, type GameDay } from '../core/clock.js';
+import { clamp, remap } from '../core/math.js';
+import type { Rng } from '../core/rng.js';
+import { asFighterId } from '../core/ids.js';
+import type { DivisionId, PromotionId } from '../core/ids.js';
+import { getDivision, type Sex } from '../domain/divisions.js';
+import type { Fighter } from '../domain/fighter.js';
+import { emptyRecordSummary, freshCondition } from '../domain/fighter.js';
+import type { Personality } from '../domain/personality.js';
+import { uniformPersonality } from '../domain/personality.js';
+import type { TraitId } from '../domain/traits.js';
+import { findTraitConflicts } from '../domain/traits.js';
+import {
+  ATTRIBUTE_KEYS,
+  toRating,
+  type AttributeKey,
+  type Attributes,
+  type Naturals,
+} from '../ratings/attributes.js';
+import { ceilingsFromNaturals } from './generation.js';
+
+/** Where a fighter came from. Sets their starting shape and their natural leanings. */
+export const BACKGROUNDS = [
+  'wrestler',
+  'boxer',
+  'kickboxer',
+  'grappler',
+  'streetFighter',
+  'athlete',
+] as const;
+export type Background = (typeof BACKGROUNDS)[number];
+
+export interface BackgroundMeta {
+  key: Background;
+  label: string;
+  blurb: string;
+  /** Rating points added on top of the baseline, per attribute. */
+  attributes: Readonly<Partial<Record<AttributeKey, number>>>;
+  /** Naturals leaning, in rating points. */
+  naturals: Readonly<Partial<Record<keyof Omit<Naturals, 'ageCurve'>, number>>>;
+  /** The hole this background starts with, named plainly. */
+  weakness: string;
+}
+
+export const BACKGROUND_META: Readonly<Record<Background, BackgroundMeta>> = {
+  wrestler: {
+    key: 'wrestler',
+    label: 'Collegiate Wrestler',
+    blurb: 'Years on the mat. You already know how to make people go where you want.',
+    attributes: { wrestling: 16, takedownDefence: 13, strength: 8, groundControl: 7, cardio: 5 },
+    naturals: { explosiveness: 6, engine: 5 },
+    weakness: 'You have never been punched in the face properly.',
+  },
+  boxer: {
+    key: 'boxer',
+    label: 'Amateur Boxer',
+    blurb: 'Real hands, real footwork, and a head that moves.',
+    attributes: { strikingOffence: 16, strikingDefence: 11, speed: 7, power: 6 },
+    naturals: { explosiveness: 5 },
+    weakness: 'Everything below the waist is a mystery to you.',
+  },
+  kickboxer: {
+    key: 'kickboxer',
+    label: 'Muay Thai / Kickboxer',
+    blurb: 'Long weapons, a clinch, and shins that have been conditioned the hard way.',
+    attributes: { kicking: 16, strikingOffence: 9, strikingDefence: 8, durability: 5 },
+    naturals: { explosiveness: 4, constitution: 4 },
+    weakness: 'The first competent double leg will be a shock.',
+  },
+  grappler: {
+    key: 'grappler',
+    label: 'Jiu-Jitsu Black Belt',
+    blurb: 'You are dangerous everywhere on the ground, including off your back.',
+    attributes: { submissions: 17, scrambling: 12, groundControl: 8, fightIq: 4 },
+    naturals: { recovery: 5, motorLearning: 4 },
+    weakness: 'You have to get it there first, and standing up you are a target.',
+  },
+  streetFighter: {
+    key: 'streetFighter',
+    label: 'Came Up Fighting',
+    blurb: 'No pedigree, no technique, and absolutely no fear.',
+    attributes: { power: 12, durability: 11, composure: 8, strikingOffence: 4 },
+    naturals: { constitution: 8, explosiveness: 5 },
+    weakness: 'Nothing you do is technically correct, and good opponents will show you that.',
+  },
+  athlete: {
+    key: 'athlete',
+    label: 'Elite Athlete, New To This',
+    blurb: 'Extraordinary raw material. Almost no idea what you are doing yet.',
+    attributes: { speed: 10, cardio: 9, strength: 8, power: 6 },
+    // The highest ceilings in the game, attached to the lowest starting skill. The long game.
+    naturals: { explosiveness: 10, engine: 9, motorLearning: 8, recovery: 6 },
+    weakness: 'You are an athlete pretending to be a fighter. For now.',
+  },
+};
+
+/** Physical build. Shifts naturals and walking weight within a division. */
+export const BUILDS = ['rangy', 'balanced', 'powerful'] as const;
+export type Build = (typeof BUILDS)[number];
+
+export const BUILD_META: Readonly<Record<Build, { label: string; blurb: string }>> = {
+  rangy: {
+    label: 'Rangy',
+    blurb: 'Long and light for the weight. More reach, less to hit you with.',
+  },
+  balanced: { label: 'Balanced', blurb: 'No particular physical advantage or disadvantage.' },
+  powerful: {
+    label: 'Powerful',
+    blurb: 'Thick and heavy for the weight. Hits harder, cuts harder, tires sooner.',
+  },
+};
+
+/** Attributes the player may distribute their discretionary points across. */
+export const ALLOCATABLE: readonly AttributeKey[] = ATTRIBUTE_KEYS;
+
+/**
+ * Discretionary points.
+ *
+ * Small on purpose. It is enough to say "I am the wrestler who can also punch a bit", not
+ * enough to build a finished fighter. What you become is decided by training.
+ */
+export const CREATION_POINTS = 24;
+/** No single attribute may take more than this at creation. */
+export const MAX_POINTS_PER_ATTRIBUTE = 8;
+
+export interface CreateFighterSpec {
+  id: string;
+  firstName: string;
+  lastName: string;
+  nickname?: string;
+  nationality: string;
+  sex: Sex;
+  age: number;
+  divisionId: DivisionId;
+  background: Background;
+  build: Build;
+  stance?: 'orthodox' | 'southpaw' | 'switch';
+  /** Discretionary points per attribute. Must total at most `CREATION_POINTS`. */
+  allocation?: Partial<Record<AttributeKey, number>>;
+  personality?: Partial<Personality>;
+  traits?: readonly TraitId[];
+  promotionId?: PromotionId;
+  gymId?: string;
+  day: GameDay;
+}
+
+export interface CreationIssue {
+  field: string;
+  message: string;
+}
+
+/** Validate a creation spec. Empty means it is buildable. */
+export function validateCreation(spec: CreateFighterSpec): CreationIssue[] {
+  const issues: CreationIssue[] = [];
+
+  if (!spec.firstName.trim()) issues.push({ field: 'firstName', message: 'First name is required.' });
+  if (!spec.lastName.trim()) issues.push({ field: 'lastName', message: 'Last name is required.' });
+  if (spec.age < 18 || spec.age > 35) {
+    issues.push({ field: 'age', message: 'Debut age must be between 18 and 35.' });
+  }
+
+  const allocation = spec.allocation ?? {};
+  const spent = Object.values(allocation).reduce((a, v) => a + (v ?? 0), 0);
+  if (spent > CREATION_POINTS) {
+    issues.push({ field: 'allocation', message: `Only ${CREATION_POINTS} points are available.` });
+  }
+  for (const [key, value] of Object.entries(allocation)) {
+    if ((value ?? 0) < 0) {
+      issues.push({ field: key, message: 'Points cannot be negative.' });
+    }
+    if ((value ?? 0) > MAX_POINTS_PER_ATTRIBUTE) {
+      issues.push({
+        field: key,
+        message: `No more than ${MAX_POINTS_PER_ATTRIBUTE} points in one attribute.`,
+      });
+    }
+  }
+
+  const conflicts = findTraitConflicts(spec.traits ?? []);
+  for (const [a, b] of conflicts) {
+    issues.push({ field: 'traits', message: `${a} and ${b} contradict each other.` });
+  }
+
+  return issues;
+}
+
+/** Baseline a debutant starts from before background, build and allocation. */
+const BASELINE = 32;
+
+/**
+ * Build the player's fighter.
+ *
+ * Starts deliberately low. A created fighter is a genuine prospect — below major-promotion
+ * level almost everywhere — because the game being offered is the climb, and a fighter who
+ * starts at 70 has nowhere to go.
+ */
+export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter {
+  const issues = validateCreation(spec);
+  if (issues.length > 0) {
+    throw new Error(`Cannot create fighter: ${issues.map((i) => i.message).join(' ')}`);
+  }
+
+  const division = getDivision(spec.divisionId);
+  const background = BACKGROUND_META[spec.background];
+
+  const buildShift = spec.build === 'powerful' ? 1 : spec.build === 'rangy' ? -1 : 0;
+  const walkingWeightLbs = Math.round(division.limitLbs * (1.07 + buildShift * 0.035));
+
+  // --- Naturals: background leaning, build, and a roll the player does not control --------
+  const naturals: Naturals = {
+    frame: toRating(clamp((walkingWeightLbs / 300) * 100, 5, 99)),
+    explosiveness: toRating(
+      52 + (background.naturals.explosiveness ?? 0) + buildShift * 4 + rng.range(-8, 10),
+    ),
+    engine: toRating(52 + (background.naturals.engine ?? 0) - buildShift * 4 + rng.range(-8, 10)),
+    constitution: toRating(52 + (background.naturals.constitution ?? 0) + rng.range(-9, 10)),
+    recovery: toRating(52 + (background.naturals.recovery ?? 0) + rng.range(-8, 9)),
+    // The single most important hidden number, and the one the player has least say over.
+    motorLearning: toRating(52 + (background.naturals.motorLearning ?? 0) + rng.range(-10, 14)),
+    injuryProneness: toRating(rng.normalClamped(46, 15, 12, 88)),
+    ageCurve: rng.pickWeighted(['standard', 'longPeak', 'lateBloomer', 'earlyBloomer'] as const, (c) =>
+      c === 'standard' ? 5 : c === 'longPeak' ? 2.5 : c === 'lateBloomer' ? 2 : 1.5,
+    ),
+  };
+
+  const potential = ceilingsFromNaturals(naturals, rng);
+
+  // --- Current attributes ------------------------------------------------------------------
+  const allocation = spec.allocation ?? {};
+  const attributes = {} as Attributes;
+
+  for (const key of ATTRIBUTE_KEYS) {
+    const fromBackground = background.attributes[key] ?? 0;
+    const fromAllocation = allocation[key] ?? 0;
+    // Older debutants arrive slightly further along; they have less runway to use it.
+    const experience = remap(spec.age, 18, 35, 0, 7);
+
+    const value = BASELINE + fromBackground + fromAllocation + experience + rng.range(-2, 2);
+    // Never above your own ceiling — the invariant the rest of the engine depends on.
+    attributes[key] = toRating(Math.min(potential[key], value));
+  }
+
+  // A created fighter must have a real hole, like everyone else on the roster.
+  const lowest = Math.min(...ATTRIBUTE_KEYS.map((k) => attributes[k]));
+  if (lowest >= 50) {
+    const weakest = ATTRIBUTE_KEYS.reduce((a, b) => (attributes[a] <= attributes[b] ? a : b));
+    attributes[weakest] = toRating(attributes[weakest] - 8);
+  }
+
+  const summary = emptyRecordSummary();
+
+  return {
+    id: asFighterId(spec.id),
+    firstName: spec.firstName.trim(),
+    lastName: spec.lastName.trim(),
+    nickname: spec.nickname?.trim() || undefined,
+    nationality: spec.nationality,
+    sex: spec.sex,
+    birthDay: birthDayForAge(spec.age, spec.day, rng.int(1, 12), rng.int(1, 28)),
+    walkingWeightLbs,
+    heightInches: Math.round(
+      remap(division.limitLbs, 115, 265, 63, 76) - buildShift * 1.5 + rng.range(-1, 1),
+    ),
+    reachInches: Math.round(
+      remap(division.limitLbs, 115, 265, 63, 79) - buildShift * 2 + rng.range(-1, 1),
+    ),
+    stance: spec.stance ?? 'orthodox',
+
+    divisionId: spec.divisionId,
+    divisionHistory: [spec.divisionId],
+
+    attributes,
+    naturals,
+    potential,
+    personality: { ...uniformPersonality(50), ...spec.personality },
+    traits: spec.traits ?? [],
+
+    condition: freshCondition(),
+    record: [],
+    priorRecord: summary,
+    summary: { ...summary },
+
+    promotionId: spec.promotionId,
+    gymId: spec.gymId as Fighter['gymId'],
+
+    // Nobody knows who you are. That is the whole point.
+    starPower: 1,
+    reputation: 5,
+
+    proDebutDay: spec.day,
+  };
+}
+
+/**
+ * A short, honest read on a freshly-created fighter.
+ *
+ * Uses the same uncertainty machinery the player will meet everywhere else: this is what a
+ * coach thinks looking at you, not a printout of your hidden ceilings.
+ */
+export function creationSummary(fighter: Fighter): string {
+  const best = ATTRIBUTE_KEYS.reduce((a, b) =>
+    fighter.attributes[a] >= fighter.attributes[b] ? a : b,
+  );
+  const worst = ATTRIBUTE_KEYS.reduce((a, b) =>
+    fighter.attributes[a] <= fighter.attributes[b] ? a : b,
+  );
+  const upside = ATTRIBUTE_KEYS.reduce(
+    (acc, k) => acc + (fighter.potential[k] - fighter.attributes[k]),
+    0,
+  );
+
+  const ceiling =
+    upside > 320 ? 'an enormous amount of room to grow' :
+    upside > 220 ? 'real room to grow' :
+    upside > 130 ? 'some room to grow' :
+    'not a great deal of room left';
+
+  return `Strongest right now in ${best}, weakest in ${worst}, with ${ceiling}.`;
+}

@@ -7,11 +7,13 @@ import {
   recordString,
   type Fighter,
   type MatchupAppraisal,
+  type Promotion,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Stat } from '../ui';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
+import { getLadderStatus, signWith, type LadderStatus } from '../game/progression';
 import { formatGameDay } from '../shell/Shell';
 
 /**
@@ -33,12 +35,20 @@ export function HubScreen() {
     [db, playerFighter, booking, world.day],
   );
 
+  const ladder = useMemo(
+    () => (playerFighter ? getLadderStatus(db, playerFighter) : undefined),
+    [db, playerFighter, world.day],
+  );
+
   if (!playerFighter) {
     return (
       <Empty title="No career in progress">
-        <Button variant="primary" onClick={() => navigate({ name: 'start' })}>
-          Pick a fighter
-        </Button>
+        <div className="row" style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
+          <Button variant="primary" onClick={() => navigate({ name: 'create' })}>
+            Create a fighter
+          </Button>
+          <Button onClick={() => navigate({ name: 'start' })}>Play as someone existing</Button>
+        </div>
       </Empty>
     );
   }
@@ -122,6 +132,20 @@ export function HubScreen() {
           )}
         </div>
       </Card>
+
+      {ladder && <LadderCard ladder={ladder} onSign={(p) => { signWith(db, fighter, p); commit(); }} />}
+
+      {!booking && (
+        <Card title="Between fights">
+          <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
+            Camps are where a career is actually made. Every week you train is a week older,
+            and every area has a ceiling you cannot train past.
+          </p>
+          <Button variant="primary" block onClick={() => navigate({ name: 'training' })}>
+            Go to training
+          </Button>
+        </Card>
+      )}
 
       {booking && opponent ? (
         <Card title="Next fight" raised>
@@ -279,5 +303,103 @@ function OfferRow({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Where you are on the climb.
+ *
+ * Deliberately the most prominent thing after the fighter card. A career mode without a
+ * visible ladder is just a sequence of fights — the player needs to see the rung they are
+ * on, the next one up, and exactly what it will take to reach it.
+ */
+function LadderCard({
+  ladder,
+  onSign,
+}: {
+  ladder: LadderStatus;
+  onSign(promotion: Promotion): void;
+}) {
+  const { promotion, position, isChampion, titleShot, offers, progress } = ladder;
+
+  const standing = isChampion
+    ? 'Champion'
+    : position === undefined
+      ? 'Unranked'
+      : `Ranked #${position}`;
+
+  return (
+    <Card title="The climb">
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <span>
+          <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, display: 'block' }}>
+            {standing}
+          </span>
+          <span className="muted">{promotion ? promotion.name : 'No promotion'}</span>
+        </span>
+        {promotion && (
+          <Chip tone={promotion.tier === 'global' ? 'accent' : 'info'}>{promotion.tier}</Chip>
+        )}
+      </div>
+
+      {/* One bar, from unsigned nobody to global champion. */}
+      <div
+        role="meter"
+        aria-valuenow={Math.round(progress * 100)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Career progress toward a world title"
+        style={{
+          height: 8,
+          borderRadius: 'var(--radius-full)',
+          background: 'var(--surface-sunken)',
+          overflow: 'hidden',
+          margin: 'var(--space-3) 0 var(--space-2)',
+        }}
+      >
+        <div
+          style={{
+            width: `${Math.max(2, progress * 100)}%`,
+            height: '100%',
+            background: 'var(--accent)',
+            transition: 'width var(--transition)',
+          }}
+        />
+      </div>
+
+      <p className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
+        {titleShot.reason}
+      </p>
+
+      {offers.length > 0 && (
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          <h3 className="section-title">Offers</h3>
+          <div className="stack" style={{ gap: 'var(--space-2)' }}>
+            {offers.map((offer) => (
+              <div
+                key={offer.promotion.id}
+                style={{
+                  padding: 'var(--space-3)',
+                  borderRadius: 'var(--radius)',
+                  border: '1px solid var(--accent)',
+                  background: 'var(--accent-soft)',
+                }}
+              >
+                <p style={{ fontWeight: 700 }}>{offer.promotion.name}</p>
+                <p className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
+                  {offer.pitch}
+                </p>
+                <div className="row" style={{ marginTop: 'var(--space-2)', flexWrap: 'wrap' }}>
+                  <Chip tone="positive">Signing bonus ${offer.bonus}k</Chip>
+                  <Button size="sm" variant="primary" onClick={() => onSign(offer.promotion)}>
+                    Sign with {offer.promotion.shortName}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }

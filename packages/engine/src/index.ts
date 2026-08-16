@@ -36,6 +36,8 @@ export * from './fight/simulate.js';
 // Progression
 export * from './progression/retirement.js';
 export * from './progression/generation.js';
+export * from './progression/development.js';
+export * from './progression/createFighter.js';
 
 // Camp
 export * from './camp/scouting.js';
@@ -43,6 +45,7 @@ export * from './camp/scouting.js';
 // Business
 export * from './business/matchmaking.js';
 export * from './business/aftermath.js';
+export * from './business/ladder.js';
 
 // Testing helpers (shared across the out-of-package test suites)
 export * from './testing/fixtures.js';

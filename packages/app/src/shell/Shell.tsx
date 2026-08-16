@@ -42,7 +42,7 @@ const NAV_ITEMS: readonly NavItem[] = [
     route: { name: 'hub' },
     label: 'Career',
     icon: '🥊',
-    matches: ['hub', 'camp', 'fight', 'start'],
+    matches: ['hub', 'camp', 'fight', 'start', 'create', 'training'],
   },
   { route: { name: 'roster' }, label: 'Roster', icon: '👥', matches: ['roster', 'fighter'] },
   { route: { name: 'rankings' }, label: 'Rankings', icon: '🏆' },
