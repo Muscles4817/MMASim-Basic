@@ -119,26 +119,37 @@ A 20-year sim must not drift into nonsense: no ratings inflation, no division co
 | [12 — Events & Cards](./12-events-and-cards.md)       | The unit that makes the business layer work   |
 | [13 — Promoter Mode](./13-promoter-mode.md)           | Money vs competition vs control               |
 | [14 — Coach Mode](./14-coach-mode.md)                 | Judged on outcomes you cannot control         |
+| [15 — Design Review Synthesis](./15-design-review-synthesis.md) | Docs 12–14 adjudicated after review |
+| [16 — Contracts, Free Agency & Managers](./16-contracts-free-agency-managers.md) | What you signed, and who signed it |
+| [17 — Money](./17-money.md)                           | Purses, net pay, the bank and the sink        |
 
 ## Build status
 
-| System                          | State                                            |
-| ------------------------------- | ------------------------------------------------ |
-| Ratings, curves, derived stats  | Built                                            |
-| Personality & traits            | Built                                            |
-| Fight engine                    | Built and calibrated                             |
-| Scouting, game plans, prep      | Built                                            |
-| Matchmaking & aftermath         | Built                                            |
-| Retirement & fighter generation | Built                                            |
-| Create-a-fighter                | Built — background and build set your ceilings   |
-| Training & attribute development| Built                                            |
-| Ageing, decline & idle decay    | Built                                            |
-| The ladder: rankings, signings, title shots | Built                                |
-| Light DB, save/load, migrations | Built                                            |
-| Seed roster (57 fighters)       | Built                                            |
-| Fighter career mode             | Playable: create, train, climb, fight, retire    |
-| Editor                          | Fighters editable; organisations designed        |
-| Heat, rivalries, money          | Designed (doc 08)                                |
-
-| Acute injuries                  | Built — recurrence, fighting hurt, aggravation    |
-| Coach & promoter modes          | Not started — both reuse the systems above       |
+| System | State |
+| ------ | ----- |
+| Ratings, curves, derived stats | Built |
+| Personality & traits | Built |
+| Fight engine | Built and calibrated |
+| Fouls, warnings, point deductions | Built — and `dq`/`noContest` can now actually happen |
+| Commentary & the booth | Built — a biased commentator genuinely misleads |
+| Scouting, game plans, prep | Built |
+| Matchmaking & aftermath | Built |
+| Retirement & fighter generation | Built |
+| Create-a-fighter | Built — background and build set your ceilings |
+| Training & attribute development | Built, and recalibrated: a created fighter can now reach a belt |
+| Ageing, decline & idle decay | Built |
+| Acute injuries | Built — recurrence, fighting hurt, aggravation |
+| Weight-class changes | Built — the payoff for ratings being absolute |
+| The ladder: rankings, signings, title shots | Built |
+| Heat, rivalries & purse calculation | Built (doc 08) |
+| The living world | Built — the roster fights, ages, retires and takes belts without you |
+| News feed | Built — weighted, and capped per weight so history is not evicted by noise |
+| Light DB, save/load, migrations | Built |
+| Seed roster (139 fighters, real 2020 champions) | Built |
+| Fighter career mode | Playable: create, train, climb, fight, retire |
+| Editor | Built — fighters, promotions, gyms, coaches, referees, judges, commentators |
+| PWA / offline | Built — manifest, icons, hand-written service worker |
+| Events & fight cards | Designed (doc 12). Not built |
+| Contracts, free agency, managers | Designed (doc 16). Not built |
+| Money as a resource | Designed (doc 17). `purseFor()` is display-only today |
+| Coach & promoter modes | Designed (docs 13–14). Not started — both reuse the systems above |
