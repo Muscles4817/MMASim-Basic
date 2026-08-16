@@ -1,6 +1,31 @@
 # 03 — Fight Engine
 
 > Status: living document.
+>
+> **Calibration note.** The engine is calibrated against the roster the game *ships*
+> (`tests/statistical/roster-profile.test.ts`), not against the synthetic archetypes in
+> `balance.test.ts`. That distinction was worth a lot: the archetype suite passed throughout
+> while the real population finished 77.7% of its fights, because seeded fighters carry the
+> high Power and Durability values the effect curve is heavy-tailed in. Where it stands:
+>
+> | | before | now | real sport |
+> | --- | --- | --- | --- |
+> | finish rate | 77.7% | 61.5% | ~48% |
+> | decisions | 21.7% | 36.7% | ~52% |
+> | KO : submission | 8.4:1 | 3.3:1 | ~1.8:1 |
+> | first-round finish | 44% | 32% | ~16% |
+>
+> Closer on every axis, all the way there on none. **The residual is structural**: a full
+> hazard × superlinearity × referee-threshold sweep could not close it from anywhere in the
+> grid, because every setting moves the roster and an even matchup in the same direction.
+> Reaching a real ~48% needs the strike volume feeding the referee's unanswered-shot counter
+> to come down — a change to the exchange model, not to a coefficient. That is the next piece
+> of fight-engine work, and the same change is what would bring first-round finishes down.
+>
+> One calibration matched reality almost exactly (46.4% finishes, 1.84:1) and was **rejected**:
+> it collapsed the bomber archetype's KO rate to ~40%. Design pillar 3 says Ngannou knocks
+> almost everyone out once he catches them clean, and a population average bought by deleting
+> the tail is not a better sport. Do not re-derive this by flattening `BASE_KD_HAZARD`.
 
 ## Shape of a fight
 

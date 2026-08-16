@@ -1,12 +1,17 @@
 # 16 — Contracts, Free Agency & Managers
 
-> Status: **built**, except revenue points paying out (needs doc 12's events), the bout
-> agreement as a separate object, bundling, teammate refusal, and the retirement ledger.
+> Status: **built**, except revenue points paying out, the bout agreement as a separate
+> object, bundling, teammate refusal, and the retirement ledger.
 >
 > What ships: promotional agreements with a tolled clock, the championship extension bounded
 > and priced, contract fairness driving resentment, renegotiation triggers, at-will release
 > risk, managers as per-promotion connection vectors with a recorded advice track, free agency
-> as a stratified near-monopsony, and unmatchable terms. See [17 — Money](./17-money.md) for
+> as a stratified near-monopsony, and unmatchable terms.
+>
+> Since: **the re-paper is live** — see below — and it is the mechanic that makes
+> `MAX_FIGHTS_OWED` a cap on how long you can be trapped *without having said yes again*
+> rather than a cap on captivity. **Release is live too**: promotions now actually cut people,
+> and the hub tells the player when their place is slipping. See [17 — Money](./17-money.md) for
 > the currency underneath it.
 >
 > Supersedes the contract sketch in [13 — Promoter Mode](./13-promoter-mode.md) and the

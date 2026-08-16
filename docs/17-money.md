@@ -1,13 +1,20 @@
 # 17 — Money
 
-> Status: **built**, except revenue points, the bonus pool, the locker-room bonus, the
-> purchasable one-shots and the retirement ledger — all of which need doc 12's events or doc
-> 16's contracts underneath them first.
+> Status: **built**, except revenue points paying out, the locker-room bonus and the
+> retirement ledger.
 >
 > What ships: `marketValue()`, a show/win `purseFor()`, `minimumPurse`, the deduction chain,
 > camp costs debited when a camp runs, sponsorship, weight-miss forfeiture, solvency, and the
 > bank on the fighter. `boutValue()` is now `drawWeight()` and is no longer denominated in
 > money.
+>
+> Since: the ledger reads the **signed agreement** rather than market value, so a deal that
+> has fallen behind actually underpays; card position multiplies the purse; the manager's rate
+> comes from the manager, so a self-managed fighter pays nobody. The **bonus pool** is live at
+> `bonusPoolFor()` and sized so the top promotion pays 50.5k an award — four times a
+> debutant's show purse, which is what makes an exciting loss worth something. The
+> **purchasable one-shots** are live and each owns exactly one dial of the camp. Promotions
+> now **earn and lose money** on the cards they run, via `settleNight()`.
 >
 > Split out of [16 — Contracts, Free Agency & Managers](./16-contracts-free-agency-managers.md)
 > because contracts, purses, costs and the bank in one document is unreadable. Doc 16 owns the

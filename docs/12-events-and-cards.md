@@ -1,12 +1,18 @@
 # 12 — Events & Fight Cards
 
-> Status: **built** in the world simulation. The player's own fight is not yet placed on a
-> card — that is the next step, and it is what the event screen needs.
+> Status: **built**, including the player's own fight, which is now placed on a real card at
+> a position the matchmaker decides from draw and stakes.
 >
 > What ships: cards ordered by draw weight with a title fight always headlining, card
 > positions driving distance and purse, the bonus pool awarded from what actually happened,
 > the gate/broadcast/costs equation, and `resolutionOrder()` implementing "detail follows the
 > player, not the broadcast".
+>
+> Since: `settleNight()` closes the loop this document is built around — **a promotion that
+> runs bad cards sees demand fall for the next one**. Budget takes the night's profit; buzz
+> moves on how the card *delivered* rather than what it earned, so a profitable dull night
+> loses attention and a ruinous spectacular one gains it. That gap between profitable and good
+> is the substrate promoter mode needs.
 > Revisions follow [15 — Design Review Synthesis](./15-design-review-synthesis.md).
 
 ## Why cards exist
