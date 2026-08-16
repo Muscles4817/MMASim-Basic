@@ -14,6 +14,7 @@ export function Card({
   raised,
   children,
   className = '',
+  role,
 }: {
   title?: ReactNode;
   action?: ReactNode;
@@ -21,12 +22,14 @@ export function Card({
   raised?: boolean;
   children: ReactNode;
   className?: string;
+  /** For the rare card whose *appearance* is the result of an action, e.g. a camp report. */
+  role?: string;
 }) {
   const classes = ['card', flush && 'card--flush', raised && 'card--raised', className]
     .filter(Boolean)
     .join(' ');
   return (
-    <section className={classes}>
+    <section className={classes} role={role}>
       {(title || action) && (
         <header className="card__header" style={flush ? { padding: 'var(--space-4)', marginBottom: 0 } : undefined}>
           {title && <h2 className="card__title">{title}</h2>}

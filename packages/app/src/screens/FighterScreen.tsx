@@ -194,32 +194,36 @@ export function FighterScreen({ id }: { id: string }) {
 
       {fighter.traits.length > 0 && (
         <Card title="Traits">
-          <div className="row" style={{ flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+          {/*
+            One rendering, not two. This was a coloured chip row *and* a full list of the
+            same labels with their blurbs directly beneath — the same information twice, and
+            the chip's tooltip a third time for anyone with a mouse.
+
+            The glyph carries the polarity so it survives greyscale, and a neutral trait gets
+            a neutral mark rather than the orange one that read as a problem.
+          */}
+          <ul className="trait-list">
             {fighter.traits.map((id) => {
               const trait = TRAITS[id];
               return (
-                <Chip
-                  key={id}
-                  tone={
-                    trait.polarity === 'positive'
-                      ? 'positive'
-                      : trait.polarity === 'negative'
-                        ? 'negative'
-                        : 'warning'
-                  }
-                  title={trait.blurb}
-                >
-                  {trait.label}
-                </Chip>
+                <li key={id} className={`trait trait--${trait.polarity}`}>
+                  <span className="trait__mark" aria-hidden="true">
+                    {trait.polarity === 'positive' ? '+' : trait.polarity === 'negative' ? '−' : '='}
+                  </span>
+                  <span>
+                    <strong className="trait__label">{trait.label}</strong>
+                    <span className="visually-hidden">
+                      {trait.polarity === 'positive'
+                        ? ' (strength)'
+                        : trait.polarity === 'negative'
+                          ? ' (weakness)'
+                          : ' (double-edged)'}
+                    </span>
+                    <span className="trait__blurb muted">{trait.blurb}</span>
+                  </span>
+                </li>
               );
             })}
-          </div>
-          <ul style={{ marginTop: 'var(--space-3)' }}>
-            {fighter.traits.map((id) => (
-              <li key={id} className="muted" style={{ fontSize: 'var(--text-sm)', marginBottom: 4 }}>
-                <strong>{TRAITS[id].label}:</strong> {TRAITS[id].blurb}
-              </li>
-            ))}
           </ul>
         </Card>
       )}

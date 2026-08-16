@@ -106,7 +106,7 @@ describe('editing a referee', () => {
     expect((reloaded as HTMLInputElement).value).toBe('77');
   });
 
-  it('keeps Save disabled until something actually changes', async () => {
+  it('marks Save unavailable until something actually changes, without removing it', async () => {
     const user = userEvent.setup();
     goTo('#/edit/referees');
     renderApp();
@@ -114,8 +114,15 @@ describe('editing a referee', () => {
     const rows = await screen.findAllByRole('button', { name: /^Edit / });
     await user.click(rows[0]!);
 
+    // aria-disabled, not disabled: a real `disabled` would drop the button out of the tab
+    // order the instant it was pressed, throwing focus to the document mid-save.
     const save = await screen.findByRole('button', { name: /^Saved$/ });
-    expect(save.hasAttribute('disabled')).toBe(true);
+    expect(save.getAttribute('aria-disabled')).toBe('true');
+    expect(save.hasAttribute('disabled')).toBe(false);
+
+    // And pressing it while unavailable must do nothing at all.
+    await user.click(save);
+    expect(screen.queryByText(/The change is live in the world/i)).toBeNull();
   });
 });
 

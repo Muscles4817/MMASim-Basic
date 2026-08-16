@@ -164,15 +164,23 @@ export function EditorEntityScreen({ kind, id }: { kind: EditorEntityKind; id: s
       </Card>
 
       <div className="row" style={{ flexWrap: 'wrap' }}>
-        <Button variant="primary" onClick={save} disabled={!dirty}>
+        {/*
+          aria-disabled rather than disabled, on both. A real `disabled` on the button the
+          user just pressed removes it from the tab order mid-interaction and throws focus
+          back to the document — so a keyboard user saves, loses their place, and gets no
+          confirmation because the "Saved" Alert is not where focus went. The sibling
+          fighter editor already refused to do this; the two screens disagreed.
+        */}
+        <Button variant="primary" onClick={() => dirty && save()} aria-disabled={!dirty}>
           {dirty ? 'Save changes' : 'Saved'}
         </Button>
         <Button
           onClick={() => {
+            if (!dirty) return;
             setDraft(original);
             setSaved(false);
           }}
-          disabled={!dirty}
+          aria-disabled={!dirty}
         >
           Revert
         </Button>

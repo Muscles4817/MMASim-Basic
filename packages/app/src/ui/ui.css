@@ -363,7 +363,9 @@ a.list__item:hover {
 
 .segmented__option {
   flex: 1;
-  min-height: 2.5rem;
+  /* Was 2.5rem — 40px, under the app's own --tap-target, whose comment says "never shrink
+     this". A segmented control is one of the most-tapped things on every screen. */
+  min-height: var(--tap-target);
   padding: 0 var(--space-2);
   border-radius: calc(var(--radius) - 3px);
   font-size: var(--text-sm);
@@ -418,4 +420,63 @@ a.list__item:hover {
   color: var(--warning);
   font-size: var(--text-base);
   line-height: 1;
+}
+
+/* --- Traits ----------------------------------------------------------------------------
+   A trait is a label and an explanation, shown once. The polarity is carried by a mark and
+   an edge colour and a hidden word — three channels, none of which is a tooltip, because a
+   tooltip shows nothing on a phone and this is teaching material. */
+
+.trait-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.trait {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border-inline-start: 3px solid var(--border-strong);
+  background: var(--surface-sunken);
+}
+
+.trait--positive {
+  border-inline-start-color: var(--positive);
+}
+
+.trait--negative {
+  border-inline-start-color: var(--negative);
+}
+
+.trait__mark {
+  flex: none;
+  font-weight: 800;
+  font-size: var(--text-base);
+  line-height: 1;
+  width: 1ch;
+  text-align: center;
+}
+
+.trait--positive .trait__mark {
+  color: var(--positive);
+}
+
+.trait--negative .trait__mark {
+  color: var(--negative);
+}
+
+.trait__label {
+  display: block;
+  font-weight: 700;
+}
+
+.trait__blurb {
+  display: block;
+  font-size: var(--text-sm);
 }

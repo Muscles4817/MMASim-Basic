@@ -54,8 +54,16 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
           alignItems: 'center',
           justifyContent: 'center',
           padding: 24,
-          background: '#f6f6f7',
-          color: '#16171a',
+          /*
+            Hard-coded rather than tokenised, deliberately: this screen may be recovering
+            from the very thing that failed to load the stylesheet, so it must depend on
+            nothing. But it still has to respect the OS scheme — a dark-mode player was
+            getting a full-screen white flash at the single worst possible moment. The
+            colours are inlined in both directions rather than imported.
+          */
+          background: 'Canvas',
+          color: 'CanvasText',
+          colorScheme: 'light dark',
           fontFamily: 'system-ui, sans-serif',
         }}
       >

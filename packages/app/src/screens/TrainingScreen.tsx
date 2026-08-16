@@ -30,7 +30,7 @@ import {
   runTraining,
   type TrainingOutcome,
 } from '../game/progression';
-import { Alert } from '../ui/signals';
+import { Alert, Trend } from '../ui/signals';
 
 const WEEK_OPTIONS = [
   { value: '4', label: '4 weeks' },
@@ -202,8 +202,24 @@ export function TrainingScreen() {
         </div>
       </Card>
 
+      <div className="row" style={{ flexWrap: 'wrap' }}>
+        <Button variant="primary" onClick={train}>
+          Train for {weeks} weeks
+        </Button>
+        <Button onClick={rest}>Rest instead</Button>
+        <Button variant="ghost" onClick={() => navigate({ name: 'hub' })}>
+          Back to career
+        </Button>
+      </div>
+
+      {/*
+        Live region, and below the action rather than above it. Tapping "Train" used to
+        insert this card *above* the button, pushing the button down and often landing the
+        result off-screen — the outcome of the screen's primary action, invisible and
+        unannounced.
+      */}
       {outcome && (
-        <Card title="Camp report">
+        <Card title="Camp report" role="status">
           {Object.keys(outcome.gains).length === 0 ? (
             <p className="muted">Nothing measurable changed.</p>
           ) : (
@@ -217,16 +233,10 @@ export function TrainingScreen() {
                     style={{ justifyContent: 'space-between', fontSize: 'var(--text-sm)' }}
                   >
                     <span>{ATTRIBUTE_META[key].label}</span>
-                    <span
-                      className="numeric"
-                      style={{
-                        fontWeight: 700,
-                        color: delta >= 0 ? 'var(--positive)' : 'var(--negative)',
-                      }}
-                    >
-                      {delta >= 0 ? '+' : ''}
-                      {delta.toFixed(1)}
-                    </span>
+                    {/* Trend rather than a hand-rolled coloured number: it carries a ▲/▼
+                        glyph and a hidden "up"/"down", so the direction survives greyscale
+                        and reaches a screen reader. It already existed and was unused. */}
+                    <Trend delta={delta} />
                   </li>
                 ))}
             </ul>
@@ -239,15 +249,6 @@ export function TrainingScreen() {
         </Card>
       )}
 
-      <div className="row" style={{ flexWrap: 'wrap' }}>
-        <Button variant="primary" onClick={train}>
-          Train for {weeks} weeks
-        </Button>
-        <Button onClick={rest}>Rest instead</Button>
-        <Button variant="ghost" onClick={() => navigate({ name: 'hub' })}>
-          Back to career
-        </Button>
-      </div>
 
       <DivisionPicker />
 

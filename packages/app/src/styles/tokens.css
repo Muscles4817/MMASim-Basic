@@ -59,7 +59,10 @@
   --band-elite: #1f7a4d;
   --band-strong: #4a7a1f;
   --band-solid: #7a6a1f;
-  --band-avg: #6b6e78;
+  /* Deliberately not --text-faint's #6b6e78: an average rating is ordinary, not
+     unimportant, and rendering it in the exact colour reserved for "ignore me" said the
+     wrong thing about half the roster. */
+  --band-avg: #5d6470;
   --band-weak: #9c5a1c;
   --band-poor: #b4322c;
   --band-none: #7a2c28;
