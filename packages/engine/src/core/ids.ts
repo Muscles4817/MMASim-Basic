@@ -49,6 +49,10 @@ export const asFighterId = (raw: string): FighterId => raw as FighterId;
 export const asPromotionId = (raw: string): PromotionId => raw as PromotionId;
 export const asGymId = (raw: string): GymId => raw as GymId;
 export const asDivisionId = (raw: string): DivisionId => raw as DivisionId;
+export const asCoachId = (raw: string): CoachId => raw as CoachId;
+export const asOfficialId = (raw: string): OfficialId => raw as OfficialId;
+export const asBoutId = (raw: string): BoutId => raw as BoutId;
+export const asEventId = (raw: string): EventId => raw as EventId;
 
 /**
  * A monotonic ID minter, e.g. `fighter_0001`.

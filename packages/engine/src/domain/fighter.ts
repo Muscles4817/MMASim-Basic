@@ -115,7 +115,16 @@ export interface Fighter {
   traits: readonly TraitId[];
 
   condition: Condition;
+  /** Bouts fought *inside this simulation*. Seeded fighters start empty. */
   record: readonly FightRecordEntry[];
+  /**
+   * Career accrued before the simulation started, for seeded fighters.
+   *
+   * Kept separate rather than fabricating hundreds of synthetic bouts: the invariant is
+   * `summary === merge(priorRecord, summariseRecord(record))`, which keeps the denormalised
+   * summary rebuildable even for a fighter who debuted with a 24-1 record.
+   */
+  priorRecord?: RecordSummary;
   summary: RecordSummary;
 
   gymId?: GymId;
@@ -231,4 +240,29 @@ export function summariseRecord(record: readonly FightRecordEntry[]): RecordSumm
   }
   s.streak = streak;
   return s;
+}
+
+/** Add two record summaries. Streak comes from the later one unless it is empty. */
+export function mergeSummaries(prior: RecordSummary, recent: RecordSummary): RecordSummary {
+  const recentBouts =
+    recent.wins + recent.losses + recent.draws + recent.noContests;
+  return {
+    wins: prior.wins + recent.wins,
+    losses: prior.losses + recent.losses,
+    draws: prior.draws + recent.draws,
+    noContests: prior.noContests + recent.noContests,
+    koWins: prior.koWins + recent.koWins,
+    submissionWins: prior.submissionWins + recent.submissionWins,
+    decisionWins: prior.decisionWins + recent.decisionWins,
+    koLosses: prior.koLosses + recent.koLosses,
+    submissionLosses: prior.submissionLosses + recent.submissionLosses,
+    // A fighter who has fought in-sim carries that streak; otherwise their seeded one holds.
+    streak: recentBouts > 0 ? recent.streak : prior.streak,
+  };
+}
+
+/** The authoritative career record: seeded history plus everything fought in-sim. */
+export function careerSummary(f: Pick<Fighter, 'record' | 'priorRecord'>): RecordSummary {
+  const recent = summariseRecord(f.record);
+  return f.priorRecord ? mergeSummaries(f.priorRecord, recent) : recent;
 }

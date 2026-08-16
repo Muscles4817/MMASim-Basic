@@ -3,7 +3,13 @@
   "compilerOptions": {
     "types": [
       "node"
-    ]
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@mmasim/engine": [
+        "../engine/src/index.ts"
+      ]
+    }
   },
   "include": [
     "src/**/*"

@@ -23,6 +23,7 @@ export * from './domain/traits.js';
 export * from './domain/divisions.js';
 export * from './domain/gameplan.js';
 export * from './domain/officials.js';
+export * from './domain/organisations.js';
 
 // Fight
 export * from './fight/types.js';

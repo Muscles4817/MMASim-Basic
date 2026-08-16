@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:long": "vitest run --project long-sim",
-    "typecheck": "tsc --build --force",
+    "typecheck": "tsc --noEmit -p packages/engine && tsc --noEmit -p packages/data && tsc --noEmit -p packages/app",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write ."

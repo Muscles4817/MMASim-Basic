@@ -209,8 +209,12 @@ them so far tonight. Detailed in [03 — Fight Engine](./03-fight-engine.md).
 
 Rules the seeder must follow (enforced by review, and partly by lint tests):
 
-1. **Holes are mandatory.** Every fighter, including champions, has at least one attribute
-   below 55. If a seeded fighter has no exploitable weakness, the rating is wrong.
+1. **Flaws are mandatory.** Every fighter, including champions, has a real exploitable
+   weakness. Usually that is an attribute below 55. For the rare fighter who genuinely has
+   no in-cage hole — Jon Jones' lowest rating is Power 70 — the flaw sits outside the cage
+   and is every bit as career-defining: a collapsed professionalism or discipline axis, or a
+   negative trait. Inventing a fake attribute hole for those fighters would be as dishonest
+   as inflating everyone else. A test enforces both the rule and the rarity of the exemption.
 2. **No reputation laundering.** Star Power reflects what the market paid, not likeability.
    Draws who are bad fighters get high Star Power and low ratings, and vice versa.
 3. **Recency honesty.** The seed is a snapshot of *2020 form*, not career peak. Fighters
