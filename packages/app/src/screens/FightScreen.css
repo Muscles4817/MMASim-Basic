@@ -333,3 +333,20 @@
   text-align: right;
   white-space: nowrap;
 }
+
+/* What the night did to you. Deliberately the first thing after the result, because it is
+   where the belt, the bonus, the injury and the money all land. */
+.aftermath {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aftermath li {
+  padding-inline-start: var(--space-3);
+  border-inline-start: 3px solid var(--accent);
+  line-height: 1.45;
+}

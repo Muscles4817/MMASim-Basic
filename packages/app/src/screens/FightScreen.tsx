@@ -189,7 +189,14 @@ export function FightScreen({ boutId }: { boutId?: string }) {
         {finished ? resultSentence(result, red, blue) : ''}
       </p>
 
-      {finished && <FightSummary result={result} red={red} blue={blue} db={db} />}
+      {finished && <FightSummary
+          result={result}
+          red={red}
+          blue={blue}
+          db={db}
+          notes={broadcast?.notes ?? []}
+          undercard={broadcast?.undercard ?? []}
+        />}
 
       {finished && (
         <div className="row" style={{ flexWrap: 'wrap' }}>
@@ -303,17 +310,17 @@ function FightSummary({
   red,
   blue,
   db,
+  notes,
+  undercard,
 }: {
   result: FightResult;
   red?: Fighter;
   blue?: Fighter;
   db: ReturnType<typeof useGame>['db'];
+  notes: readonly string[];
+  undercard: readonly { boutId: string; winnerName?: string; method: string; round: number }[];
 }) {
   const night = nightFor(db, result.boutId);
-  // The undercard results are not stored per bout, so the card shows who was on it and the
-  // player's own result; a full replay of somebody else's fight is doc 12's "expandable on
-  // request", which is not built.
-  const undercard: { bout: { boutId: string }; result: FightResult }[] = [];
   const methodLabel = isKoMethod(result.method)
     ? result.method === 'ko'
       ? 'Knockout'
@@ -349,6 +356,24 @@ function FightSummary({
       </Card>
 
       {/*
+        What the night actually did to you.
+
+        All of this was computed and thrown away: title changes, bonus awards, the weight-miss
+        forfeit, what the purse cleared once the camp and the taxman were paid, new injuries,
+        a grudge being born. A player could win a belt and Fight of the Night and the app
+        would say nothing at all. It is the single highest-value thing on this screen.
+      */}
+      {notes.length > 0 && (
+        <Card title="Afterwards">
+          <ul className="aftermath">
+            {notes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/*
         The night, and where on it the player was.
         Card position is the second axis of a career beside the record — being 12-0 and still
         opening the prelims is a real and frustrating situation, and it has to be visible for
@@ -362,7 +387,7 @@ function FightSummary({
           <div className="list">
             {night.bouts.map((bout) => {
               const isPlayer = bout.boutId === result.boutId;
-              const under = undercard.find((u) => u.bout.boutId === bout.boutId);
+              const under = undercard.find((u) => u.boutId === bout.boutId);
               const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
               const blue = db.fighters.findById(bout.blueId as string) as Fighter | undefined;
 
@@ -378,8 +403,8 @@ function FightSummary({
                     {isPlayer
                       ? 'See above'
                       : under
-                        ? under.result.winnerId
-                          ? `${(db.fighters.findById(under.result.winnerId as string) as Fighter | undefined)?.lastName ?? 'Winner'}, R${under.result.round}`
+                        ? under.winnerName
+                          ? `${under.winnerName}, R${under.round}`
                           : 'Draw'
                         : '—'}
                   </span>

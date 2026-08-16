@@ -9,11 +9,17 @@
 
 import {
   applyAftermath,
+  applyAgeing,
+  displayName,
+  fightNews,
   asPromotionId,
   createRng,
   defaultGamePlan,
   offerOpponents,
   readinessDelay,
+  retirementReason,
+  retirementUrge,
+  shouldRetire,
   activeInjuries,
   aggravate,
   aggravationChance,
@@ -42,6 +48,7 @@ import { accrueHeatFromFight } from './rivalries';
 import { campCostFor, currentPurse, settleFight } from './money';
 import { afterFight, recordAdviceFor, settleManagerAdvice, type ManagerAdvice } from './contracts';
 import { runSupportingCard } from './night';
+import { recordPlayerNews } from './world';
 
 const BOOKING_KEY = 'mmasim:booking';
 const RESULT_KEY = 'mmasim:lastResult';
@@ -116,6 +123,17 @@ export function clearTransientCareerState(): void {
 export interface StoredResult {
   result: FightResult;
   commentatorId?: string;
+  /**
+   * Everything the night actually did to the fighter.
+   *
+   * Title changes, bonus awards, the weight-miss forfeit, what the purse cleared after the
+   * camp and the taxman, new injuries, a grudge being born. All of this was computed and
+   * then dropped on the floor: `runBookedFight` returned it and nothing read it, so a player
+   * could win a belt and Fight of the Night and the app would say nothing.
+   */
+  notes?: readonly string[];
+  /** The undercard, so the card has results on it rather than dashes. */
+  undercard?: readonly { boutId: string; winnerName?: string; method: string; round: number }[];
 }
 
 export const getLastResult = (): FightResult | undefined =>
@@ -372,6 +390,24 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     isChampion: booking.bout.isTitleFight && playerWon,
   });
 
+  /*
+   * The player gets older too.
+   *
+   * `applyAgeing` ran only inside `runTraining` and `runLayoff`, and the world explicitly
+   * skipped the player — so the eight to ten weeks of every fight camp, which is the majority
+   * of career time, aged the entire sport except the person playing it. That produced a
+   * dominant and degenerate strategy: train to your peak, then never open the training screen
+   * again and fight forever with a frozen prime body. Opting out of training opted you out of
+   * decline, and pillar 7 was enforced on the roster and not on the player.
+   */
+  const agedPlayer = applyAgeing(
+    db.fighters.getById(red.id as string) as Fighter,
+    booking.campStartDay,
+    day,
+    createRng(`${world.seed}:age:${red.id}:${day}`),
+  );
+  db.fighters.upsert(agedPlayer.fighter as Fighter & { id: string });
+
   // Burn a fight off the deal, and re-read how aggrieved the fighter is now that their worth
   // has moved and their terms have not. Then settle what the manager said about it.
   afterFight(db, db.fighters.getById(red.id as string) as Fighter);
@@ -437,21 +473,84 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
       })
     : undefined;
 
+  /*
+   * Careers end.
+   *
+   * `shouldRetire` was called only for AI fighters, so the player's career had no terminal
+   * state at all — and `retirementUrge` was exported specifically so a UI could show a
+   * fighter *thinking about it* before they go, with no callers anywhere. A mode about
+   * climbing needs somewhere for the climb to stop.
+   */
+  const retiring = shouldRetire(
+    agedPlayer.fighter,
+    day,
+    createRng(`${world.seed}:retire:${red.id}:${day}`),
+  );
+  const retirementNotes: string[] = [];
+  if (retiring) {
+    const reason = retirementReason(agedPlayer.fighter, day);
+    db.fighters.upsert({
+      ...(db.fighters.getById(red.id as string) as Fighter),
+      retiredDay: day,
+      notes: reason,
+    } as Fighter & { id: string });
+    retirementNotes.push(`That is the end. ${reason}`);
+  } else {
+    const urge = retirementUrge(agedPlayer.fighter, day);
+    if (urge > 0.35) {
+      retirementNotes.push(
+        'You have started thinking about how this ends. Not yet — but you have thought about it.',
+      );
+    }
+  }
+
+  const notes = [
+    ...titleNotes,
+    ...weighInNotes,
+    ...(night?.notes ?? []),
+    ...(earnings?.notes ?? []),
+    ...injuryNotes,
+    ...heatNotes,
+    ...aftermath.notes,
+  ];
+
+  // The player's own career belongs in their own news feed. `recordPlayerNews` existed with
+  // no callers, and `NewsFeed` styled a "You" badge that could never fire — so the hub
+  // reported on everybody in the sport except the person playing it.
+  const playerItem = fightNews({
+    day,
+    boutId: booking.bout.id,
+    winnerName: playerWon ? displayName(red) : displayName(blue),
+    loserName: playerWon ? displayName(blue) : displayName(red),
+    winnerId: playerWon ? red.id : blue.id,
+    loserId: playerWon ? blue.id : red.id,
+    method: result.method,
+    round: result.round,
+    submissionName: result.submissionName,
+    divisionId: booking.bout.divisionId,
+    promotionId: red.promotionId,
+    isTitleFight: booking.bout.isTitleFight,
+    titleChangedHands: titleNotes.length > 0,
+    involvesPlayer: true,
+  });
+  if (playerItem) recordPlayerNews(db, [playerItem]);
+
   db.save();
-  writeJson(RESULT_KEY, { result, commentatorId: booking.bout.commentatorId });
-  clearBooking();
-  return {
+  writeJson(RESULT_KEY, {
     result,
-    notes: [
-      ...titleNotes,
-      ...weighInNotes,
-      ...(night?.notes ?? []),
-      ...(earnings?.notes ?? []),
-      ...injuryNotes,
-      ...heatNotes,
-      ...aftermath.notes,
-    ],
-  };
+    commentatorId: booking.bout.commentatorId,
+    notes,
+    undercard: (night?.undercard ?? []).map(({ bout, result: r }) => ({
+      boutId: bout.boutId,
+      winnerName: r.winnerId
+        ? (db.fighters.findById(r.winnerId as string) as Fighter | undefined)?.lastName
+        : undefined,
+      method: r.method,
+      round: r.round,
+    })),
+  });
+  clearBooking();
+  return { result, notes };
 }
 
 /**
