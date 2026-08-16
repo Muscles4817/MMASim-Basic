@@ -190,7 +190,10 @@ export function CampScreen() {
                   borderRadius: 'var(--radius)',
                   border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
                   background: isSelected ? 'var(--accent-soft)' : 'var(--surface)',
-                  opacity: atLimit ? 0.45 : 1,
+                  // 0.45 put the threat name at 2.93:1 and the drill line at 2.00:1 — four
+                  // ghost rows nobody could read. The row now says why it is unavailable
+                  // instead, which is what the aria-disabled comment above always promised.
+                  opacity: atLimit ? 0.72 : 1,
                 }}
               >
                 <span className="row" style={{ justifyContent: 'space-between', gap: 'var(--space-2)' }}>
@@ -203,6 +206,11 @@ export function CampScreen() {
                 >
                   Drill: {r.counter}
                 </span>
+                {atLimit && (
+                  <span style={{ display: 'block', marginTop: 'var(--space-2)' }}>
+                    <Chip tone="warning">⚠ Camp is full — drop one of your reads first</Chip>
+                  </span>
+                )}
               </button>
             );
           })}

@@ -207,7 +207,9 @@
   gap: var(--space-1);
   padding: 2px var(--space-2);
   border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
+  /* --surface rather than --surface-sunken: on the sunken ground the average and strong
+     band colours land at 4.39:1 and 4.43:1, a hair under AA. On --surface they clear it. */
+  background: var(--surface);
   border: 1px solid var(--border);
   border-inline-start: 3px solid var(--band);
   font-size: var(--text-xs);
@@ -255,7 +257,14 @@
 
 .alert__body {
   display: block;
-  opacity: 0.9;
+  /*
+    No opacity here.
+
+    Dimming to 0.9 dropped the warn tone to 3.86:1 and the good tone to 3.93:1 against their
+    own soft backgrounds — below AA, on the game's most consequential messages ("Damage is
+    accumulating", "This camp is compromised"). The separation from the title is already
+    carried by weight, which costs nothing in contrast.
+  */
 }
 
 .alert--info {
@@ -280,4 +289,28 @@
   background: var(--negative-soft);
   border-color: transparent;
   color: var(--negative);
+}
+
+/* --- Overall rating ------------------------------------------------------------------- */
+
+.overall {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.1;
+  min-width: 3.25rem;
+}
+
+.overall__value {
+  font-weight: 800;
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+}
+
+.overall__band {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }

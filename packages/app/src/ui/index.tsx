@@ -1,5 +1,6 @@
 /** Shared UI primitives. Presentational only — no game logic lives here. */
 
+import { useRef } from 'react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { ratingBand, type Rating, type RatingBandKey } from '@mmasim/engine';
 import './ui.css';
@@ -194,10 +195,24 @@ export function Segmented<T extends string>({
   // AT should say "selected, 1 of 3" rather than "toggle button, pressed". The roving
   // tabindex keeps the whole control to a single tab stop, with arrows moving between
   // options — which is what a keyboard user expects from a segmented control.
+  const optionRefs = useRef(new Map<string, HTMLButtonElement>());
+
+  /**
+   * Arrow-key movement.
+   *
+   * Moving focus is not optional here. This is a roving-tabindex radiogroup: the previously
+   * selected option becomes tabIndex={-1} and aria-checked={false} the moment onChange
+   * lands, so leaving DOM focus behind means the focus ring and the selection visibly
+   * diverge, and a screen reader announces nothing at all — the user arrows through the
+   * group in total silence. Affects the theme picker, the sex filter, playback speed,
+   * training length and the build picker.
+   */
   const move = (delta: number) => {
     const index = options.findIndex((o) => o.value === value);
     const next = options[(index + delta + options.length) % options.length];
-    if (next) onChange(next.value);
+    if (!next) return;
+    onChange(next.value);
+    optionRefs.current.get(String(next.value))?.focus();
   };
 
   return (
@@ -225,6 +240,10 @@ export function Segmented<T extends string>({
             aria-checked={selected}
             tabIndex={selected ? 0 : -1}
             className="segmented__option"
+            ref={(node) => {
+              if (node) optionRefs.current.set(String(option.value), node);
+              else optionRefs.current.delete(String(option.value));
+            }}
             onClick={() => onChange(option.value)}
           >
             {option.label}

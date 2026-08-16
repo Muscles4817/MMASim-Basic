@@ -9,8 +9,8 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Card, Empty, ListItem, Segmented, bandColour } from '../ui';
-import { Icon, StreakBadge } from '../ui/signals';
+import { Card, Empty, ListItem, Segmented } from '../ui';
+import { Icon, OverallRating, StreakBadge } from '../ui/signals';
 
 /**
  * Divisional rankings.
@@ -71,6 +71,17 @@ export function RankingsScreen() {
         </select>
       </label>
 
+      {/*
+        The list is ordered on rankingScore — reputation, streak and star power — and the
+        number on the right is overall *ability*, which is not what ordered it. Without this
+        line a player sees #6 at 88 sitting below #3 at 79 and has no way to learn why. The
+        explanation existed, as a code comment.
+      */}
+      <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
+        Ranked on what the sport believes — results, reputation and momentum — not on ability.
+        The rating on the right is ability, and the two disagreeing is the point.
+      </p>
+
       {shown.map((division) => {
         const ranked = all
           .filter((f) => f.divisionId === division.id)
@@ -111,20 +122,9 @@ export function RankingsScreen() {
                       </span>
                     }
                     trailing={
-                      <span
-                        className="numeric"
-                        style={{
-                          fontWeight: 800,
-                          fontSize: 'var(--text-lg)',
-                          color: bandColour(Math.round(overallRating(f.attributes))),
-                          minWidth: '2.25rem',
-                          textAlign: 'right',
-                        }}
-                        title="Overall rating"
-                      >
-                        <span className="visually-hidden">Overall rating </span>
-                        {Math.round(overallRating(f.attributes))}
-                      </span>
+                      // The band *word* beside the number, not just the colour: a division has to read
+                      // as a shape in greyscale too, and hue alone was the whole signal here.
+                      <OverallRating rating={overallRating(f.attributes)} />
                     }
                   />
                 ))}

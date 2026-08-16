@@ -13,23 +13,16 @@ import {
   describeHeat,
   describeInjury,
   recordString,
-  type AttributeGroup,
   type Fighter,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, RatingRow } from '../ui';
-import { Alert, Fact, FighterRead, Icon, KeyStat } from '../ui/signals';
+import { Alert, Fact, FighterRead, ICON, Icon, KeyStat } from '../ui/signals';
 import { FightRecordList, RecordSummaryBar } from '../ui/FightRecord';
 import { getLadderStatus } from '../game/progression';
 import { rivalriesFor } from '../game/rivalries';
-
-const GROUP_LABELS: Record<AttributeGroup, string> = {
-  physical: 'Physical',
-  striking: 'Striking',
-  grappling: 'Grappling',
-  mental: 'Mental',
-};
+import { GROUP_LABELS } from '../game/labels';
 
 /**
  * Fighter profile.
@@ -183,8 +176,14 @@ export function FighterScreen({ id }: { id: string }) {
                       {describeHeat(rivalry, world.day)}
                     </span>
                   </span>
+                  {/* A word, not a bare number. "Heat 42" is meaningless — 42 out of what?
+                      This matches how RatingRow pairs 84 with "Elite". */}
                   <Chip tone={rivalry.isRivalry ? 'negative' : heat > 45 ? 'warning' : 'neutral'}>
-                    {rivalry.isRivalry ? 'Grudge' : `Heat ${Math.round(heat)}`}
+                    {rivalry.isRivalry
+                      ? `${ICON.streak} Grudge`
+                      : heat > 45
+                        ? `${ICON.streak} Real interest`
+                        : 'Simmering'}
                   </Chip>
                 </div>
               );

@@ -11,8 +11,8 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Card, Empty, ListItem, Segmented, bandColour } from '../ui';
-import { StreakBadge } from '../ui/signals';
+import { Card, Empty, ListItem, Segmented } from '../ui';
+import { OverallRating, StreakBadge } from '../ui/signals';
 
 /**
  * Roster browser.
@@ -134,22 +134,9 @@ export function RosterScreen() {
                   </span>
                 }
                 trailing={
-                  // Band-coloured, so a division reads as a shape: where the elite sit and
-                  // where the filler starts, without comparing fifteen numbers.
-                  <span
-                    className="numeric"
-                    style={{
-                      fontWeight: 800,
-                      fontSize: 'var(--text-lg)',
-                      color: bandColour(Math.round(overallRating(f.attributes))),
-                      minWidth: '2.25rem',
-                      textAlign: 'right',
-                    }}
-                    title="Overall rating"
-                  >
-                    <span className="visually-hidden">Overall rating </span>
-                    {Math.round(overallRating(f.attributes))}
-                  </span>
+                  // The band *word* beside the number, not just the colour: a division has to read
+                  // as a shape in greyscale too, and hue alone was the whole signal here.
+                  <OverallRating rating={overallRating(f.attributes)} />
                 }
               />
             ))}

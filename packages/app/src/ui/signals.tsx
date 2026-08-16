@@ -24,6 +24,7 @@ import type { ReactNode } from 'react';
 import {
   ATTRIBUTE_META,
   ratingBand,
+  toRating,
   type AttributeKey,
   type Attributes,
   type FinishMethod,
@@ -57,6 +58,9 @@ export const ICON = {
   camp: '🥊',
   training: '📈',
   warning: '⚠️',
+  /** Confirmation and information. A green ▲ meant nothing for either. */
+  success: '✓',
+  info: 'ℹ️',
   locked: '🔒',
   time: '⏱',
 } as const;
@@ -287,9 +291,16 @@ export function Alert({
   title: string;
   children?: ReactNode;
 }) {
-  const icon: IconName = tone === 'danger' || tone === 'warn' ? 'warning' : 'rising';
+  const icon: IconName =
+    tone === 'danger' || tone === 'warn' ? 'warning' : tone === 'good' ? 'success' : 'info';
+
+  // `alert` interrupts, which is right for a failure and wrong for everything else — but
+  // `warn` and `good` were previously given no role at all, so a compromised camp, a carried
+  // injury and every editor warning were silent to assistive tech.
+  const role = tone === 'danger' ? 'alert' : 'status';
+
   return (
-    <div className={`alert alert--${tone}`} role={tone === 'danger' ? 'alert' : undefined}>
+    <div className={`alert alert--${tone}`} role={role}>
       <span className="alert__icon">
         <Icon name={icon} />
       </span>
@@ -298,5 +309,32 @@ export function Alert({
         {children && <span className="alert__body">{children}</span>}
       </span>
     </div>
+  );
+}
+
+/**
+ * A fighter's overall rating, with the band word beside it.
+ *
+ * The number was previously band-*coloured* and nothing else, on both the roster and the
+ * rankings — so "elite versus average", the single most scanned fact on those screens, was
+ * carried purely by hue. `RatingRow` had always done this correctly; these two had quietly
+ * dropped the half that makes it work.
+ *
+ * Three channels: the number, the band word, and the colour. Any two can fail.
+ */
+export function OverallRating({ rating }: { rating: number }) {
+  const value = Math.round(rating);
+  const band = ratingBand(toRating(value));
+
+  return (
+    <span className="overall" title={`Overall rating — ${band.label}`}>
+      <span className="visually-hidden">{`Overall rating ${value}, ${band.label}`}</span>
+      <span className="overall__value numeric" aria-hidden="true" style={{ color: bandColour(value) }}>
+        {value}
+      </span>
+      <span className="overall__band" aria-hidden="true">
+        {band.short}
+      </span>
+    </span>
   );
 }

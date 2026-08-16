@@ -144,7 +144,7 @@ export function FightScreen({ boutId }: { boutId?: string }) {
 
       <Card title="Play-by-play" flush>
         {commentator && (
-          <p className="fight-booth" title={describeCommentator(commentator)}>
+          <p className="fight-booth">
             <span aria-hidden="true">&#127908;</span>
             <span>
               Called by <strong>{commentator.name}</strong> &mdash;{' '}
@@ -255,10 +255,20 @@ function FeedLine({ event }: { event: FightEvent }) {
   if (isColour) {
     // No timestamp: this is somebody talking over the fight, not a thing that happened in
     // it, and giving it a clock reading would imply it was an event on the record.
+    //
+    // The italic and the muted colour were the only two channels, and a screen reader has
+    // neither — so a biased commentator's opinion was indistinguishable from an official
+    // event in the live region. The glyph and the hidden prefix fix that, the same way the
+    // foul lines above do.
     return (
       <p className={classes}>
-        <span className="fight-line__time" aria-hidden="true" />
-        <span>{event.text}</span>
+        <span className="fight-line__time fight-line__mic" aria-hidden="true">
+          &#127908;
+        </span>
+        <span>
+          <span className="visually-hidden">Commentary: </span>
+          {event.text}
+        </span>
       </p>
     );
   }
@@ -331,8 +341,24 @@ function FightSummary({
       </Card>
 
       <Card title="Fight statistics">
+        {/*
+          Naming both corners, because the numbers were attributed only by position and by
+          the red/blue bar — and --corner-red and --corner-blue have a computed contrast of
+          1.00:1, i.e. they are the same colour in greyscale and for a deuteranope. A screen
+          reader got no attribution at all.
+        */}
+        <div className="fight-stats__key">
+          <span className="fight-stats__key-name fight-stats__key-name--red">
+            {red?.lastName ?? 'Red corner'}
+          </span>
+          <span className="fight-stats__key-name fight-stats__key-name--blue">
+            {blue?.lastName ?? 'Blue corner'}
+          </span>
+        </div>
         <div className="fight-stats">
           <StatComparison
+            redName={red?.lastName ?? 'Red corner'}
+            blueName={blue?.lastName ?? 'Blue corner'}
             label="Significant strikes"
             red={result.stats.red.significantStrikesLanded}
             blue={result.stats.blue.significantStrikesLanded}
@@ -340,6 +366,8 @@ function FightSummary({
             blueSub={`of ${result.stats.blue.significantStrikesAttempted}`}
           />
           <StatComparison
+            redName={red?.lastName ?? 'Red corner'}
+            blueName={blue?.lastName ?? 'Blue corner'}
             label="Takedowns"
             red={result.stats.red.takedownsLanded}
             blue={result.stats.blue.takedownsLanded}
@@ -347,17 +375,23 @@ function FightSummary({
             blueSub={`of ${result.stats.blue.takedownsAttempted}`}
           />
           <StatComparison
+            redName={red?.lastName ?? 'Red corner'}
+            blueName={blue?.lastName ?? 'Blue corner'}
             label="Control time"
             red={result.stats.red.controlSeconds}
             blue={result.stats.blue.controlSeconds}
             format={(v) => `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, '0')}`}
           />
           <StatComparison
+            redName={red?.lastName ?? 'Red corner'}
+            blueName={blue?.lastName ?? 'Blue corner'}
             label="Knockdowns"
             red={result.stats.red.knockdowns}
             blue={result.stats.blue.knockdowns}
           />
           <StatComparison
+            redName={red?.lastName ?? 'Red corner'}
+            blueName={blue?.lastName ?? 'Blue corner'}
             label="Submission attempts"
             red={result.stats.red.submissionAttempts}
             blue={result.stats.blue.submissionAttempts}
@@ -367,7 +401,12 @@ function FightSummary({
 
       {isDecisionMethod(result.method) && (
         <Card title="Scorecards" flush>
-          <div className="scroll-x">
+          {/*
+            tabIndex for the same reason the play-by-play feed has it: the table is ~430px
+            wide inside a 264px viewport at 320px, and without this a keyboard-only user
+            physically cannot scroll across to the Total column.
+          */}
+          <div className="scroll-x" tabIndex={0} role="region" aria-label="Judges' scorecards">
             <table className="scorecards">
               <thead>
                 <tr>
@@ -430,6 +469,8 @@ function StatComparison({
   label,
   red,
   blue,
+  redName,
+  blueName,
   redSub,
   blueSub,
   format = (v: number) => String(Math.round(v)),
@@ -437,6 +478,8 @@ function StatComparison({
   label: string;
   red: number;
   blue: number;
+  redName: string;
+  blueName: string;
   redSub?: string;
   blueSub?: string;
   format?: (v: number) => string;
@@ -447,11 +490,16 @@ function StatComparison({
     <div className="fight-stat">
       <div className="fight-stat__row">
         <span className="fight-stat__value numeric">
+          {/* Attribution for anyone who cannot see which side of the row this is on. */}
+          <span className="visually-hidden">{`${redName}, ${label}: `}</span>
           {format(red)}
           {redSub && <span className="faint"> {redSub}</span>}
         </span>
-        <span className="fight-stat__label">{label}</span>
+        <span className="fight-stat__label" aria-hidden="true">
+          {label}
+        </span>
         <span className="fight-stat__value numeric" style={{ textAlign: 'right' }}>
+          <span className="visually-hidden">{`${blueName}, ${label}: `}</span>
           {blueSub && <span className="faint">{blueSub} </span>}
           {format(blue)}
         </span>

@@ -282,6 +282,20 @@
   transition: background var(--transition-fast);
 }
 
+/*
+  Truncate rather than overflow.
+
+  A long name in a row whose trailing chips are white-space: nowrap had nowhere to go: at
+  320px "Alexandre Pantoja" wrapped to three lines and individual words spilled past the
+  column, then got clipped by .card--flush { overflow: hidden }. .record-row__opponent
+  already did this correctly; the generic row did not.
+*/
+.list__primary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .list__item:last-child {
   border-bottom: none;
 }

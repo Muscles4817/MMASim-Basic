@@ -40,7 +40,11 @@
   font-size: var(--text-xs);
   font-weight: 700;
   letter-spacing: 0.06em;
-  opacity: 0.75;
+  /*
+    Not dimmed. These W/L/D letters are the *entire* non-colour channel that makes the record
+    bar readable without hue — and at opacity 0.75 they were the one thing on it below AA
+    (3.29:1 for the W). Dimming the accessibility affordance is the wrong thing to dim.
+  */
 }
 
 .record-summary__bar {

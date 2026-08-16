@@ -21,8 +21,10 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { bandColour, Button, Card, Chip, Empty, ListItem } from '../ui';
+import { bandColour, Button, Card, Empty, ListItem } from '../ui';
+import { Alert } from '../ui/signals';
 import { EDITOR_TYPES } from '../game/editorSchema';
+import { GROUP_LABELS } from '../game/labels';
 
 /**
  * The editor.
@@ -222,29 +224,23 @@ export function EditorFighterScreen({ id }: { id: string }) {
       </Card>
 
       {conflicts.length > 0 && (
-        <Card>
-          <div className="row" style={{ alignItems: 'flex-start', gap: 'var(--space-2)' }}>
-            <Chip tone="warning">Warning</Chip>
-            <div>
-              <p style={{ fontWeight: 600 }}>Contradictory traits</p>
-              <ul className="muted" style={{ fontSize: 'var(--text-sm)' }}>
-                {conflicts.map(([a, b]) => (
-                  <li key={`${a}-${b}`}>
-                    {ALL_TRAITS.find((t) => t.id === a)?.label} vs{' '}
-                    {ALL_TRAITS.find((t) => t.id === b)?.label}
-                  </li>
-                ))}
-              </ul>
-              <p className="faint" style={{ fontSize: 'var(--text-sm)' }}>
-                Allowed, but the two will fight each other in the simulation.
-              </p>
-            </div>
-          </div>
-        </Card>
+        <Alert tone="warn" title="Contradictory traits">
+          <ul style={{ margin: 'var(--space-1) 0', paddingInlineStart: '1.1rem' }}>
+            {conflicts.map(([a, b]) => (
+              <li key={`${a}-${b}`}>
+                {ALL_TRAITS.find((t) => t.id === a)?.label} vs{' '}
+                {ALL_TRAITS.find((t) => t.id === b)?.label}
+              </li>
+            ))}
+          </ul>
+          Allowed, but the two will fight each other in the simulation.
+        </Alert>
       )}
 
       {ATTRIBUTE_GROUPS.map((group) => (
-        <Card key={group} title={group}>
+        // The raw enum ("physical", "striking") was leaking through, hidden only by a CSS
+        // text-transform. FighterScreen has had a label map for exactly this all along.
+        <Card key={group} title={GROUP_LABELS[group]}>
           {ATTRIBUTES_BY_GROUP[group].map((key) => (
             <EditorSlider
               key={key}

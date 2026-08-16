@@ -132,7 +132,18 @@ export function StartScreen() {
                   </>
                 }
                 trailing={
-                  <span className="row" style={{ gap: 'var(--space-2)' }}>
+                  // Wrapping and non-shrinking: three nowrap chips need ~190px of the 264px
+                  // available at 320px, which left the name about sixty pixels and pushed it
+                  // out of the row entirely.
+                  <span
+                    className="row"
+                    style={{
+                      gap: 'var(--space-2)',
+                      flexWrap: 'wrap',
+                      justifyContent: 'flex-end',
+                      flex: '0 0 auto',
+                    }}
+                  >
                     {activeDivisionPeers(db, f) < 3 && (
                       <Chip tone="warning">Thin division</Chip>
                     )}

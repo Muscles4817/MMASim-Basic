@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
+import { displayName, type Fighter } from '@mmasim/engine';
 import { useGame } from './state/GameProvider';
 import { useRouter } from './state/router';
 import { Shell } from './shell/Shell';
 import { UpdatePrompt } from './shell/UpdatePrompt';
+import { Alert } from './ui/signals';
 import { StartScreen } from './screens/StartScreen';
 import { CreateFighterScreen } from './screens/CreateFighterScreen';
 import { TrainingScreen } from './screens/TrainingScreen';
@@ -22,7 +24,12 @@ import { SettingsScreen } from './screens/SettingsScreen';
 
 export function App() {
   const { route, replace } = useRouter();
-  const { playerFighter } = useGame();
+  const { db, playerFighter, saveError } = useGame();
+
+  const fighterName = (id: string): string | undefined => {
+    const fighter = db.fighters.findById(id) as Fighter | undefined;
+    return fighter ? displayName(fighter) : undefined;
+  };
 
   // A first-time visitor landing on the career hub with no fighter would see an empty
   // screen; send them to the one decision that has to be made first.
@@ -35,6 +42,19 @@ export function App() {
       {/* Renders nothing unless a newer build is genuinely waiting. Mounted here rather
           than per-screen so a pending update survives navigation. */}
       <UpdatePrompt />
+      {/*
+        A failed save was surfaced on the Settings screen and nowhere else, so a player whose
+        storage quota is full could fight, train and win for hours with nothing persisting
+        and only find out if they happened to open Settings. It belongs everywhere.
+      */}
+      {saveError && (
+        <div style={{ padding: 'var(--space-3) var(--space-4) 0' }}>
+          <Alert tone="danger" title="Your progress is not being saved">
+            {saveError.message} Nothing since the last successful save will survive a reload — freeing
+            some browser storage, or exporting your save from Settings, will fix it.
+          </Alert>
+        </div>
+      )}
       {renderRoute()}
     </>
   );
@@ -73,7 +93,9 @@ export function App() {
         );
       case 'fighter':
         return (
-          <Shell title="Fighter" showBack>
+          // The h1 names the subject, not the category. "Fighter" told a screen-reader user
+          // and anyone navigating by heading precisely nothing about whose page this is.
+          <Shell title={fighterName(route.id) ?? 'Fighter'} showBack>
             <FighterScreen key={route.id} id={route.id} />
           </Shell>
         );

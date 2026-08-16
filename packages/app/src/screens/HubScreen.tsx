@@ -16,10 +16,11 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty } from '../ui';
-import { Alert, Fact, FighterRead, Icon, KeyStat, StreakBadge } from '../ui/signals';
+import { Alert, Fact, FighterRead, ICON, Icon, KeyStat, StreakBadge } from '../ui/signals';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
 import { getLadderStatus, signWith, type LadderStatus } from '../game/progression';
 import { getRivalry, previousMeetings } from '../game/rivalries';
+import { PROMOTION_TIER_LABELS } from '../game/labels';
 import { formatGameDay } from '../shell/Shell';
 
 /**
@@ -352,28 +353,30 @@ function OfferRow({
                 ? 'You are the underdog'
                 : 'A coin flip'}
           </span>
+          {/* On the page, not in a title attribute — a tooltip shows nothing on a phone,
+              and this is the game's own teaching material. */}
+          {(history.total > 0 || heat >= 40) && (
+            <span className="list__secondary" style={{ display: 'block' }}>
+              {history.total > 0 &&
+                `You have met ${history.total === 1 ? 'once' : `${history.total} times`} — ${history.wins}–${history.losses}. `}
+              {rivalry.isRivalry
+                ? 'There is real bad blood here, and it pays.'
+                : heat >= 40 && 'The audience wants this one.'}
+            </span>
+          )}
         </span>
         <span className="row" style={{ gap: 'var(--space-1)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {/* A grudge is the single most important thing about an offer and has to be
-              visible before the row is opened, not two taps in. */}
+          {/*
+            A grudge is the single most important thing about an offer, so it gets a glyph
+            and outranks the difficulty chip rather than sitting beside it at equal weight.
+            "Rematch" moved down to the secondary line below — four equal pills made the
+            important one invisible, which is the whole failure this vocabulary exists to
+            prevent.
+          */}
           {rivalry.isRivalry ? (
-            <Chip tone="negative" title="You two have history. This one is personal.">
-              Grudge
-            </Chip>
+            <Chip tone="negative">{ICON.streak} Grudge</Chip>
           ) : (
-            heat >= 40 && (
-              <Chip tone="warning" title="The audience wants this fight.">
-                Heat
-              </Chip>
-            )
-          )}
-          {history.total > 0 && (
-            <Chip
-              tone="neutral"
-              title={`You have fought ${history.total === 1 ? 'once' : `${history.total} times`} before: ${history.wins}W-${history.losses}L`}
-            >
-              Rematch
-            </Chip>
+            heat >= 40 && <Chip tone="warning">{ICON.streak} Heat</Chip>
           )}
           <Chip tone={difficulty.tone}>{difficulty.label}</Chip>
         </span>
@@ -477,7 +480,9 @@ function LadderCard({
           <span className="muted">{promotion ? promotion.name : 'No promotion'}</span>
         </span>
         {promotion && (
-          <Chip tone={promotion.tier === 'global' ? 'accent' : 'info'}>{promotion.tier}</Chip>
+          <Chip tone={promotion.tier === 'global' ? 'accent' : 'info'}>
+            {PROMOTION_TIER_LABELS[promotion.tier]}
+          </Chip>
         )}
       </div>
 

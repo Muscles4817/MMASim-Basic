@@ -172,7 +172,6 @@ describe('every screen renders', () => {
     ['#/rankings', 'text', /Choose a division/i],
     ['#/editor', 'placeholder', /Find a fighter/i],
     ['#/settings', 'text', /Appearance/i],
-    ['#/fighter/f_ngannou', 'text', /Predator/i],
     ['#/editor/f_ngannou', 'text', /Walking weight/i],
   ];
 
@@ -184,6 +183,16 @@ describe('every screen renders', () => {
     } else {
       expect(await screen.findByText(expected)).toBeTruthy();
     }
+    expectNoCrash();
+  });
+
+  it('names the fighter in the page heading, not just the category', async () => {
+    // The h1 used to be the literal word "Fighter", so heading navigation and the shell's
+    // own route-change announcement told a screen-reader user nothing about whose page it is.
+    window.location.hash = '#/fighter/f_ngannou';
+    renderApp();
+    const heading = await screen.findByRole('heading', { level: 1 });
+    expect(heading.textContent).toMatch(/Ngannou/i);
     expectNoCrash();
   });
 

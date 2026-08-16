@@ -5,6 +5,7 @@ import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { useTheme } from '../state/theme';
 import { Button, Card, Chip, Segmented } from '../ui';
+import { Alert } from '../ui/signals';
 import { formatGameDay } from '../shell/Shell';
 
 export function SettingsScreen() {
@@ -62,20 +63,13 @@ export function SettingsScreen() {
           <Chip>Seed: {world.seed}</Chip>
         </div>
         {saveError ? (
-          <p
-            role="alert"
-            style={{
-              padding: 'var(--space-3)',
-              borderRadius: 'var(--radius)',
-              background: 'var(--negative-soft)',
-              color: 'var(--negative)',
-              fontSize: 'var(--text-sm)',
-              marginBottom: 'var(--space-3)',
-            }}
-          >
-            <strong>Your last save did not go through.</strong> {saveError.message} Progress made
-            since then will be lost if you close this tab.
-          </p>
+          // Through Alert, like every other failure in the app. Four hand-rolled renderings
+          // of "something is wrong" is exactly what a signal vocabulary is meant to prevent.
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <Alert tone="danger" title="Your last save did not go through">
+              {saveError.message} Progress made since then will be lost if you close this tab.
+            </Alert>
+          </div>
         ) : (
           <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
             {isPersistent()
