@@ -7,6 +7,7 @@
 
 import { asGymId, asPromotionId, type Fighter } from '@mmasim/engine';
 import { buildFighter, SEED_DAY, type FighterSpec } from './builder.js';
+import { SEED_MANAGERS } from './managers.js';
 import { HEAVY_DIVISION_SPECS } from './fighters-heavy.js';
 import { LIGHT_DIVISION_SPECS } from './fighters-light.js';
 import { SMALL_DIVISION_SPECS } from './fighters-small.js';
@@ -88,6 +89,7 @@ export interface SeedWorld {
   referees: typeof SEED_REFEREES;
   judges: typeof SEED_JUDGES;
   commentators: typeof SEED_COMMENTATORS;
+  managers: typeof SEED_MANAGERS;
 }
 
 export function buildSeedWorld(): SeedWorld {
@@ -100,6 +102,7 @@ export function buildSeedWorld(): SeedWorld {
     referees: SEED_REFEREES,
     judges: SEED_JUDGES,
     commentators: SEED_COMMENTATORS,
+    managers: SEED_MANAGERS,
   };
 }
 
@@ -112,3 +115,4 @@ export {
   SEED_PROMOTIONS,
   SEED_REFEREES,
 };
+export { SEED_MANAGERS } from './managers.js';

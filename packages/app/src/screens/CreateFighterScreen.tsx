@@ -26,6 +26,7 @@ import { useRouter } from '../state/router';
 import { Button, Card, Chip, RatingRow, Segmented } from '../ui';
 import { Alert } from '../ui/signals';
 import { clearTransientCareerState } from '../game/career';
+import { signFirstDeal } from '../game/contracts';
 
 /**
  * Create your fighter.
@@ -127,6 +128,12 @@ export function CreateFighterScreen() {
 
     const withCoach = { ...fighter, headCoachId: startingGym?.headCoachId };
     db.fighters.upsert(withCoach as never);
+
+    // A first deal, at the bottom promotion's floor, take it or leave it. Every fighter
+    // starts unsigned and unmanaged — both are real states — but a career needs a first
+    // rung, and the bottom of the sport is busy rather than empty.
+    signFirstDeal(db, withCoach as never);
+
     clearTransientCareerState();
     updateWorld({ playerRole: 'fighter', playerFighterId: fighter.id as string });
     commit();

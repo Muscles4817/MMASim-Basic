@@ -14,6 +14,7 @@ import { FighterScreen } from './screens/FighterScreen';
 import { CampScreen } from './screens/CampScreen';
 import { FightScreen } from './screens/FightScreen';
 import { RankingsScreen } from './screens/RankingsScreen';
+import { OffersScreen } from './screens/OffersScreen';
 import { EditorFighterScreen, EditorScreen } from './screens/EditorScreen';
 import {
   EditorEntityScreen,
@@ -109,6 +110,12 @@ export function App() {
         return (
           <Shell title="Fight night">
             <FightScreen boutId={route.boutId} />
+          </Shell>
+        );
+      case 'offers':
+        return (
+          <Shell title="Offers" showBack>
+            <OffersScreen />
           </Shell>
         );
       case 'rankings':

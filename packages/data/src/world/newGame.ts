@@ -16,6 +16,7 @@ import type {
   Fighter,
   Gym,
   Judge,
+  Manager,
   Promotion,
   Referee,
 } from '@mmasim/engine';
@@ -45,6 +46,7 @@ export function createNewGame(options: NewGameOptions = {}): GameDb {
   db.referees.upsertMany(seed.referees as unknown as (Referee & Entity)[]);
   db.judges.upsertMany(seed.judges as unknown as (Judge & Entity)[]);
   db.commentators.upsertMany(seed.commentators as unknown as (Commentator & Entity)[]);
+  db.managers.upsertMany(seed.managers as unknown as (Manager & Entity)[]);
 
   setWorld(db, {
     day: seed.day,

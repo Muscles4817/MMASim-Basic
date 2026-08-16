@@ -1,6 +1,13 @@
 # 16 — Contracts, Free Agency & Managers
 
-> Status: design, adjudicated after review. Nothing here is built.
+> Status: **built**, except revenue points paying out (needs doc 12's events), the bout
+> agreement as a separate object, bundling, teammate refusal, and the retirement ledger.
+>
+> What ships: promotional agreements with a tolled clock, the championship extension bounded
+> and priced, contract fairness driving resentment, renegotiation triggers, at-will release
+> risk, managers as per-promotion connection vectors with a recorded advice track, free agency
+> as a stratified near-monopsony, and unmatchable terms. See [17 — Money](./17-money.md) for
+> the currency underneath it.
 >
 > Supersedes the contract sketch in [13 — Promoter Mode](./13-promoter-mode.md) and the
 > manager layer proposed in [15 — Design Review Synthesis](./15-design-review-synthesis.md).

@@ -45,6 +45,7 @@ export type Route =
   | { name: 'camp' }
   | { name: 'fight'; boutId: string }
   | { name: 'rankings' }
+  | { name: 'offers' }
   | { name: 'editor' }
   | { name: 'editorFighter'; id: string }
   | { name: 'editorList'; kind: EditorEntityKind }
@@ -74,6 +75,8 @@ function parse(hash: string): Route {
       return param ? { name: 'fight', boutId: param } : { name: 'hub' };
     case 'rankings':
       return { name: 'rankings' };
+    case 'offers':
+      return { name: 'offers' };
     case 'editor':
       return param ? { name: 'editorFighter', id: param } : { name: 'editor' };
     case 'edit': {

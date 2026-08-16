@@ -1,7 +1,12 @@
 import { useMemo, useState } from 'react';
 import {
   currentHeat,
+  describeAdviceRecord,
+  describeFairness,
   describeHeat,
+  describeStable,
+  describeTrigger,
+  renegotiationTriggers,
   displayName,
   fighterAge,
   getDivision,
@@ -24,6 +29,7 @@ import { advanceWorld, readNews } from '../game/world';
 import { NewsFeed } from '../ui/NewsFeed';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 import { campCostFor, currentPurse, solvencyOf } from '../game/money';
+import { contractStanding } from '../game/contracts';
 import { formatGameDay } from '../shell/Shell';
 
 /**
@@ -73,6 +79,13 @@ export function HubScreen() {
   // the bank is really about.
   const gym = fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined;
   const bankState = solvencyOf(fighter, campCostFor(gym, 8));
+  const standing = contractStanding(db, fighter);
+  const triggers =
+    standing.agreement && standing.promotion
+      ? renegotiationTriggers(standing.agreement, fighter, standing.promotion, {
+          isChampion: ladder?.isChampion,
+        })
+      : [];
   const opponent = booking
     ? (db.fighters.findById(booking.opponentId) as Fighter | undefined)
     : undefined;
@@ -315,6 +328,68 @@ export function HubScreen() {
       )}
 
       {/*
+        Where you stand contractually.
+
+        Deliberately on the home screen rather than behind a Contracts tab: a contract counter
+        that says "fight 3 of 4" is the cheapest source of anticipation in the whole design,
+        because it makes free agency *approach* rather than arrive. The fairness ratio is
+        computed and never shown — a ratio needs a paragraph and a sentence does not.
+      */}
+      <Card title="Your situation">
+        {standing.freeAgent || !standing.agreement ? (
+          <>
+            <p className="prose" style={{ marginBottom: 'var(--space-3)' }}>
+              <strong>You are a free agent.</strong> Nobody owes you a fight and you owe nobody
+              one.
+            </p>
+            <Button variant="primary" onClick={() => navigate({ name: 'offers' })}>
+              See what is on the table
+            </Button>
+          </>
+        ) : (
+          <div className="stack" style={{ gap: 'var(--space-2)' }}>
+            <p style={{ fontWeight: 700 }}>{standing.status?.summary}</p>
+            <p className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
+              {standing.promotion?.name} · £{standing.agreement.showPurse}k to show, £
+              {standing.agreement.winBonus}k to win
+              {standing.agreement.championshipExtension === 'standard' &&
+                ' · you cannot leave while you hold the belt'}
+            </p>
+            <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
+              {describeFairness(standing.fairness ?? 1)}
+            </p>
+            {triggers.length > 0 && (
+              <Alert tone="info" title="You have grounds to reopen this">
+                {describeTrigger(triggers[0]!)}
+              </Alert>
+            )}
+            {standing.agreement.tolledDays > 0 && (
+              <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
+                The clock has been stopped for {standing.agreement.tolledDays} days you were not
+                available. Time out does not run a deal down.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* One number, and it is also the relationship. */}
+        <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
+          {standing.manager ? (
+            <>
+              <strong>{standing.manager.name}</strong> manages you, on{' '}
+              {Math.round(standing.manager.purseRate * 100)}% of the purse.{' '}
+              {describeAdviceRecord(standing.manager)} {describeStable(standing.manager)}
+            </>
+          ) : (
+            <>
+              You have no manager. You keep every penny and you are negotiating against people
+              who do this for a living.
+            </>
+          )}
+        </p>
+      </Card>
+
+      {/*
         The world, reported.
 
         Everything below this point is what makes the hub a home rather than a booking form:
@@ -337,6 +412,12 @@ export function HubScreen() {
             label="Training"
             hint="Camps, gyms, weight class"
             onClick={() => navigate({ name: 'training' })}
+          />
+          <HubLink
+            icon="📝"
+            label="Contract"
+            hint="Offers, and who negotiates"
+            onClick={() => navigate({ name: 'offers' })}
           />
           <HubLink
             icon="📊"

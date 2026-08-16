@@ -36,6 +36,7 @@ import {
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
 import { accrueHeatFromFight } from './rivalries';
 import { campCostFor, settleFight } from './money';
+import { afterFight, settleManagerAdvice } from './contracts';
 
 const BOOKING_KEY = 'mmasim:booking';
 const RESULT_KEY = 'mmasim:lastResult';
@@ -320,6 +321,11 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     position: booking.bout.isTitleFight ? 'mainEvent' : 'mainCard',
     isChampion: booking.bout.isTitleFight && playerWon,
   });
+
+  // Burn a fight off the deal, and re-read how aggrieved the fighter is now that their worth
+  // has moved and their terms have not. Then settle what the manager said about it.
+  afterFight(db, db.fighters.getById(red.id as string) as Fighter);
+  settleManagerAdvice(db, red, booking.bout.id, playerWon);
 
   // The fight builds its own rematch. A close, controversial or brutal night generates heat
   // between these two specifically, which is what makes a division produce grudges without

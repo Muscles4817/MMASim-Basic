@@ -39,6 +39,7 @@ import {
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
 import { advanceWorld } from './world';
 import { campCostFor, payForCamp } from './money';
+import { toll } from './contracts';
 
 /** How much an existing injury is blunting a camp, 0-1. Surfaced on the training screen. */
 export function currentCampImpairment(fighter: Fighter, day: number): number {
@@ -207,6 +208,10 @@ export function runLayoff(db: GameDb, fighter: Fighter, weeks: number): Training
   const days = weeks * 7;
   const toDay = world.day + days;
   const rng = createRng(`${world.seed}:idle:${fighter.id}:${world.day}`);
+
+  // Sitting out does not run a contract down. It stops the clock, which is the correction
+  // that turns the holdout from a reliable lever into a genuine gamble.
+  toll(db, fighter, days);
 
   const decayed = applyIdleDecay(fighter, days, rng);
   const aged = applyAgeing(decayed, world.day, toDay, rng);
