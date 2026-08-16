@@ -72,12 +72,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const resolved: 'light' | 'dark' = choice === 'system' ? (systemDark ? 'dark' : 'light') : choice;
 
-  // The theme-color meta tags key off prefers-color-scheme, which does not follow an
-  // explicit in-app choice. Setting it imperatively keeps the browser chrome in step.
+  /*
+   * Keep the browser chrome in step with an explicit in-app choice.
+   *
+   * index.html now ships a single *unscoped* theme-color and stamps it before first paint. It
+   * used to ship a media-scoped pair, which meant this selector never matched: the tag
+   * appended here landed at the end of <head> and the UA took the first matching tag in tree
+   * order instead, so this had no effect at all.
+   *
+   * The colours are duplicated from `--bg` in tokens.css because a meta tag cannot read a CSS
+   * custom property. Change one, change all three (here, index.html, tokens.css).
+   */
   useEffect(() => {
-    const meta = document.querySelector('meta[name="theme-color"]:not([media])');
-    const tag = meta ?? document.head.appendChild(Object.assign(document.createElement('meta'), { name: 'theme-color' }));
-    tag.setAttribute('content', resolved === 'dark' ? '#0e0f12' : '#f6f6f7');
+    const tag = document.querySelector('meta[name="theme-color"]');
+    tag?.setAttribute('content', resolved === 'dark' ? '#0e0f12' : '#f6f6f7');
   }, [resolved]);
 
   const value = useMemo<ThemeContextValue>(

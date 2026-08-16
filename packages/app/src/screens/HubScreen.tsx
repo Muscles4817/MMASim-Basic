@@ -865,7 +865,7 @@ function LadderCard({
                   {offer.pitch}
                 </p>
                 <div className="row" style={{ marginTop: 'var(--space-2)', flexWrap: 'wrap' }}>
-                  <Chip tone="positive">Signing bonus ${offer.bonus}k</Chip>
+                  <Chip tone="positive">Signing bonus £{offer.bonus}k</Chip>
                   <Button size="sm" variant="primary" onClick={() => onSign(offer.promotion)}>
                     Sign with {offer.promotion.shortName}
                   </Button>

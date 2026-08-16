@@ -523,7 +523,7 @@ export function CampScreen() {
                       padding: 'var(--space-2)',
                       border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
                       background: on ? 'var(--accent-soft)' : 'var(--surface)',
-                      borderRadius: 'var(--radius-2)',
+                      borderRadius: 'var(--radius)',
                       cursor: 'pointer',
                     }}
                   >

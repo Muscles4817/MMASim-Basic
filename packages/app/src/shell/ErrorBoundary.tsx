@@ -78,7 +78,16 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
               marginBottom: 20,
               padding: 12,
               borderRadius: 8,
-              background: '#eeeef1',
+              /*
+                Theme-aware without importing anything, which is the constraint this file
+                works under — it has to render when the app has already failed.
+
+                It was a hardcoded '#eeeef1'. The container correctly uses Canvas/CanvasText
+                with colorScheme 'light dark', so in dark mode the text is near-white — on a
+                near-white block. The diagnostic message, the one thing this screen exists to
+                show, was invisible.
+              */
+              background: 'color-mix(in srgb, CanvasText 8%, Canvas)',
               fontSize: 13,
               fontFamily: 'ui-monospace, monospace',
               wordBreak: 'break-word',
@@ -103,7 +112,12 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
           >
             Clear saved data and start again
           </button>
-          <p style={{ marginTop: 12, fontSize: 13, color: '#5c5f68' }}>
+          {/*
+            Was '#5c5f68', which on a dark Canvas is about 3.2:1 at 13px — under AA, on the
+            line that says the action is irreversible. CanvasText at reduced opacity keeps the
+            de-emphasis without leaving the theme.
+          */}
+          <p style={{ marginTop: 12, fontSize: 13, color: 'CanvasText', opacity: 0.75 }}>
             This deletes your career. There is no way to recover it.
           </p>
         </div>

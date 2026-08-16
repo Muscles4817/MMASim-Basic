@@ -51,8 +51,13 @@ export function App() {
       {saveError && (
         <div style={{ padding: 'var(--space-3) var(--space-4) 0' }}>
           <Alert tone="danger" title="Your progress is not being saved">
-            {saveError.message} Nothing since the last successful save will survive a reload — freeing
-            some browser storage, or exporting your save from Settings, will fix it.
+            {/*
+              No longer promises a save export. There is no export anywhere in the app, and
+              pointing the player at a feature that does not exist is at its worst precisely
+              here — on the message shown while their progress is actively being lost.
+            */}
+            {saveError.message} Nothing since the last successful save will survive a reload.
+            Freeing some browser storage usually fixes it.
           </Alert>
         </div>
       )}

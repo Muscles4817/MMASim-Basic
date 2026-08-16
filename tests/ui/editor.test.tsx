@@ -97,7 +97,15 @@ describe('editing a referee', () => {
     expect(save.hasAttribute('disabled')).toBe(false);
     await user.click(save);
 
-    expect(await screen.findByText(/^Saved$/)).toBeTruthy();
+    /*
+     * Matched as a button, because the alert now says "Saved" too.
+     *
+     * `original` was memoised on deps that never change, so it stayed pinned to the pre-save
+     * snapshot: the screen rendered a green "Saved" alert beside a button still reading "Save
+     * changes", and Revert stayed live and restored pre-save values over a world that already
+     * held the new ones. Now that both agree, a bare text match finds two.
+     */
+    expect(await screen.findByRole('button', { name: /^Saved$/ })).toBeTruthy();
 
     // And the value survives a full remount from storage, which is the actual claim.
     cleanup();
@@ -173,7 +181,43 @@ describe('warnings, not walls', () => {
     const save = await screen.findByRole('button', { name: /Save changes/i });
     expect(save.hasAttribute('disabled')).toBe(false);
     await user.click(save);
-    expect(await screen.findByText(/^Saved$/)).toBeTruthy();
+    expect(await screen.findByRole('button', { name: /^Saved$/ })).toBeTruthy();
+  });
+
+  it('stops offering to revert once the change is saved', async () => {
+    /*
+     * The other half of the stale-`original` bug. `original` was memoised on `[repo, id]`,
+     * neither of which ever changes — the repository keeps its identity for the life of the
+     * session — so it stayed pinned to the pre-save snapshot and `dirty` never went false.
+     *
+     * Revert therefore stayed live after saving and would restore the *pre-save* values into
+     * a form whose world already held the new ones, with nothing on screen to tell the player
+     * which was real.
+     */
+    const user = userEvent.setup();
+    goTo('#/edit/gyms');
+    renderApp();
+
+    const rows = await screen.findAllByRole('button', { name: /^Edit / });
+    await user.click(rows[0]!);
+
+    const prestige = await screen.findByLabelText(/Prestige, exact value/i);
+    await user.clear(prestige);
+    await user.type(prestige, '77');
+
+    const revert = await screen.findByRole('button', { name: /^Revert$/ });
+    expect(revert.getAttribute('aria-disabled'), 'revert should be live while dirty').toBe(
+      'false',
+    );
+
+    await user.click(await screen.findByRole('button', { name: /Save changes/i }));
+
+    // aria-disabled rather than disabled, so it keeps its place in the tab order and can
+    // still explain itself — the same rule the Save button follows.
+    expect(
+      (await screen.findByRole('button', { name: /^Revert$/ })).getAttribute('aria-disabled'),
+      'revert should go inert once the draft matches the world',
+    ).toBe('true');
   });
 });
 

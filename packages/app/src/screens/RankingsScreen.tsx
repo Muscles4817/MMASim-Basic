@@ -104,7 +104,15 @@ export function RankingsScreen() {
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
-      <Card>
+      {/*
+        Titled, so the h3s below it have an h2 to sit under.
+        
+        This card had no title, so it emitted no <h2> and the first headings on the page were
+        these h3s — document order ran h1 → h3 → h2, with the h2 only arriving with the second
+        card. The same violation the camp screen documents fixing; this was the last screen
+        still doing it.
+      */}
+      <Card title="Filters">
         <div className="stack" style={{ gap: 'var(--space-3)' }}>
           <div>
             <h3 className="section-title">Promotion</h3>

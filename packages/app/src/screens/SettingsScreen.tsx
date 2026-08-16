@@ -79,13 +79,25 @@ export function SettingsScreen() {
         )}
 
         {confirmingRestart ? (
-          <div className="stack">
+          /*
+           * Announced, and focus moved into it.
+           *
+           * Pressing the trigger unmounts the button that has focus, so focus fell back to the
+           * document body — and the replacement paragraph had no role and no live region. A
+           * keyboard or screen-reader user activated "Reset to the 2020 seed", was told nothing
+           * had happened, and was dumped at the top of the page. On the app's most destructive
+           * action, and on the branch specifically written to make it safe.
+           */
+          <div className="stack" role="alertdialog" aria-label="Confirm reset">
             <p style={{ fontWeight: 600, color: 'var(--negative)' }}>
               This deletes your career and every edit you have made. It cannot be undone.
             </p>
             <div className="row">
               <Button
                 variant="danger"
+                // Focus moves here as the step appears, so the trigger unmounting does not
+                // strand a keyboard user at the top of the document.
+                autoFocus
                 onClick={() => {
                   restart();
                   setConfirmingRestart(false);
@@ -99,8 +111,11 @@ export function SettingsScreen() {
           </div>
         ) : (
           // Two-step rather than a native confirm(): a modal dialog on mobile is easy to
-          // dismiss accidentally, and this is the one irreversible action in the app.
-          <Button variant="secondary" onClick={() => setConfirmingRestart(true)}>
+          // dismiss accidentally, and this is the most destructive action in the app.
+          //
+          // `danger`, not `secondary`: it was visually identical to "Play as someone else"
+          // directly above it.
+          <Button variant="danger" onClick={() => setConfirmingRestart(true)}>
             Reset to the 2020 seed
           </Button>
         )}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Empty } from '../ui';
@@ -106,7 +106,21 @@ export function EditorEntityScreen({ kind, id }: { kind: EditorEntityKind; id: s
   const meta = editorTypeFor(kind);
   const repo = repositoryFor(db, kind);
 
-  const original = useMemo(() => repo?.findById(id), [repo, id]);
+  /*
+   * Read fresh on every render, not memoised.
+   *
+   * It was `useMemo(..., [repo, id])`, and neither dep ever changes — `db` is held in state by
+   * GameProvider so the repository keeps its identity for the life of the session. So
+   * `original` stayed pinned to the pre-save snapshot forever, and three things went wrong at
+   * once after a save: `dirty` stayed true, the screen rendered a green "Saved" alert beside a
+   * button still reading "Save changes", and — worst — Revert stayed enabled and restored the
+   * *pre-save* values into a form whose world already held the new ones, with nothing to tell
+   * the player which was real.
+   *
+   * The fighter editor next door reads it directly on every render and behaves correctly. The
+   * comment further down claims these two screens are harmonised; on this point they were not.
+   */
+  const original = repo?.findById(id);
   const [draft, setDraft] = useState<Record<string, unknown> | undefined>(original);
   const [saved, setSaved] = useState(false);
 

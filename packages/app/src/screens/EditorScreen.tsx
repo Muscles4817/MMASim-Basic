@@ -302,7 +302,17 @@ export function EditorFighterScreen({ id }: { id: string }) {
         <Button variant="primary" block onClick={save}>
           {showSaved ? 'Saved' : 'Save changes'}
         </Button>
-        <Button variant="secondary" onClick={() => setDraft(original)} disabled={!dirty}>
+        {/*
+          `aria-disabled`, for the same reason the comment above gives for Save: clicking
+          Revert makes `dirty` false, and a real `disabled` then removes the control the user
+          just activated from the tab order and throws focus to the document — the exact
+          behaviour that comment refuses to allow on its sibling, three lines away.
+        */}
+        <Button
+          variant="secondary"
+          onClick={() => dirty && setDraft(original)}
+          aria-disabled={!dirty}
+        >
           Revert
         </Button>
       </div>

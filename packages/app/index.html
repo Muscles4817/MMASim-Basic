@@ -7,9 +7,16 @@
          is an accessibility failure. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="description" content="A deep MMA simulation: fight, coach, or run a promotion." />
-    <!-- Matches the CSS surface colour in each scheme so the browser chrome does not flash. -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f6f7" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e0f12" />
+    <!--
+      One unscoped theme-color, set by the script below and kept in step by ThemeProvider.
+
+      This was a media-scoped pair, which cannot follow an explicit in-app choice: the UA takes
+      the first theme-color in tree order whose media matches, so one of the two always matched
+      first and the tag ThemeProvider appended at the end of <head> was permanently shadowed. A
+      user on a dark-OS device who picked Light got a light app with dark browser chrome —
+      exactly the mismatch that code was written to fix.
+    -->
+    <meta name="theme-color" content="#f6f6f7" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon.svg" />
@@ -18,6 +25,36 @@
     <meta name="apple-mobile-web-app-title" content="MMA Sim" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>MMA Sim</title>
+    <!--
+      Stamp the theme before first paint.
+
+      ThemeProvider uses useLayoutEffect, which runs before React's output is painted — but the
+      document has already painted by then. index.html ships an empty #root and a stylesheet,
+      so `html { background: var(--bg) }` resolves through prefers-color-scheme on the very
+      first paint, and an explicit-light user on a dark device saw a dark flash on every cold
+      start regardless.
+
+      Blocking and inline is the only thing that runs early enough. Kept deliberately tiny, and
+      wrapped because a locked-down browser can throw on localStorage access — a theme flash is
+      not worth a blank page.
+    -->
+    <script>
+      (function () {
+        try {
+          var choice = localStorage.getItem('mmasim:theme');
+          if (choice === 'light' || choice === 'dark') {
+            document.documentElement.setAttribute('data-theme', choice);
+          }
+          var dark =
+            choice === 'dark' ||
+            (choice !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', dark ? '#0e0f12' : '#f6f6f7');
+        } catch (e) {
+          /* A theme flash is not worth a blank page. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

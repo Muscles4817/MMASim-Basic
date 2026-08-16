@@ -680,7 +680,7 @@ function DivisionPicker() {
         </div>
       )}
       <p className="faint prose" style={{ fontSize: 'var(--text-xs)', marginTop: 'var(--space-2)' }}>
-        Day {world.day}. Your body takes months to catch up with the move — you gain or lose
+        {formatGameDay(world.day)}. Your body takes months to catch up with the move — you gain or lose
         real weight over several camps, and that is a trade rather than an upgrade.
       </p>
     </Card>
