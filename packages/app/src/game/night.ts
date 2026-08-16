@@ -14,6 +14,7 @@
 import {
   applyAftermath,
   awardBonuses,
+  bonusPoolFor,
   broadcastFor,
   buildCard,
   createRng,
@@ -215,7 +216,7 @@ export function runSupportingCard(
   }
 
   // --- The bonuses ------------------------------------------------------------------------------
-  const bonusPool = Math.max(4, Math.round(promotion.budget * 0.0012));
+  const bonusPool = bonusPoolFor(promotion);
   const awards = awardBonuses(results, bonusPool);
 
   const notes: string[] = [];

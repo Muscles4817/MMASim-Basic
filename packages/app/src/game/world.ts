@@ -30,6 +30,7 @@ import {
   CARD_SIZE,
   agreementStatus,
   awardBonuses,
+  bonusPoolFor,
   broadcastFor,
   buildCard,
   campCost,
@@ -375,9 +376,9 @@ function buildNight(ctx: {
     broadcast,
     status: 'complete',
     bouts: card,
-    // A promotion pays what it can afford to. The floor is what makes a bonus worth chasing
-    // at the bottom of the sport rather than only at the top.
-    bonusPool: Math.max(4, Math.round(promotion.budget * 0.0012)),
+    // A promotion pays what it can afford to. See `bonusPoolFor` for why the floor matters
+    // as much as the rate.
+    bonusPool: bonusPoolFor(promotion),
   };
 
   // --- Run it ------------------------------------------------------------------------------

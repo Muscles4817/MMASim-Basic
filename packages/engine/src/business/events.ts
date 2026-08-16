@@ -211,6 +211,31 @@ export function performanceScore(result: FightResult): number {
  * Performance bonus is a full twelve-week camp at the best gym in the sport, which is what
  * makes it the "one more fight" hook rather than the contract.
  */
+/**
+ * What a promotion puts up in bonuses for one card.
+ *
+ * Was inlined identically in two places — the world's card runner and the player's night —
+ * at `budget * 0.0012` with a floor of 4, which put the top promotion's individual award at
+ * £12.5k. Real bonuses are $50k against a $12k prelim show purse, so the award was roughly a
+ * quarter of what it should be and the design claim it exists to support did not hold: *a
+ * prelim fighter can double their night's pay by having the right kind of fight.* At £12.5k
+ * against a £12k show purse it was a rounding adjustment, not the mechanism by which the
+ * bottom of a roster survives.
+ *
+ * At 0.0048 the top promotion pays £50.5k an award — four times a debutant's show money, and
+ * the number the real sport uses. The floor matters as much as the rate: it is what keeps a
+ * bonus worth chasing at the bottom of the sport, where a percentage of a small budget
+ * rounds to nothing. At 8 the smallest promotion still pays a full show purse.
+ *
+ * The other half of why this matters is that it makes an *exciting loss* worth something. In
+ * a game that otherwise pays only the raised hand, that is what stops the correct strategy
+ * being to fight safe and win boring — which is also the trade `riskLevel` now offers, and
+ * the two only work together.
+ */
+export function bonusPoolFor(promotion: Promotion): number {
+  return Math.max(8, Math.round(promotion.budget * 0.0048));
+}
+
 export function awardBonuses(
   results: readonly { boutId: string; result: FightResult }[],
   pool: number,

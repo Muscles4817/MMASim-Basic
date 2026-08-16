@@ -10,7 +10,7 @@ import { clamp, clamp01 } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import type { GameDay } from '../core/clock.js';
 import type { DivisionId, FighterId } from '../core/ids.js';
-import type { Fighter } from '../domain/fighter.js';
+import type { Fighter, FightRecordEntry } from '../domain/fighter.js';
 import { isActive } from '../domain/fighter.js';
 import type { FinishMethod } from '../domain/fighter.js';
 import type { Promotion } from '../domain/organisations.js';
@@ -86,6 +86,42 @@ export interface OpponentOptions {
  * a safer name. That is the decision the player should be making — the game gets much
  * duller if the matchmaker has already made it for them.
  */
+/** How long before the same fight can be made again, with nothing special about it. */
+export const REMATCH_COOLDOWN_DAYS = 365 * 2;
+
+/**
+ * How long before *this particular* fight can be made again.
+ *
+ * A flat two-year block on every rematch is the wrong shape, and it removes the sport's best
+ * recurring storyline. Real matchmaking runs a fight back quickly for two specific reasons,
+ * and slowly for everything else:
+ *
+ * - **A title fight.** An immediate rematch is close to standard for a belt changing hands,
+ *   and is written into some contracts outright. Six months.
+ * - **A close or controversial result.** A split decision, a majority decision or a draw is
+ *   an unfinished argument, and the promotion sells the argument. Nine months.
+ *
+ * Everything else keeps the full two years, because a one-sided fight nobody asked to see
+ * again is exactly what the cooldown exists to prevent. Without the exceptions, a title
+ * changing hands on a split decision — the single most rematchable event in the sport —
+ * was unbookable for two full years, and the belt would have moved on twice before the
+ * fight anyone wanted could be made.
+ */
+export function rematchCooldownFor(
+  entry: FightRecordEntry,
+  base: number = REMATCH_COOLDOWN_DAYS,
+): number {
+  if (entry.wasTitleFight) return Math.min(base, 182);
+
+  const contested =
+    entry.method === 'decisionSplit' ||
+    entry.method === 'decisionMajority' ||
+    entry.outcome === 'draw';
+  if (contested) return Math.min(base, 273);
+
+  return base;
+}
+
 export function offerOpponents(
   subject: Fighter,
   pool: readonly Fighter[],
@@ -94,9 +130,11 @@ export function offerOpponents(
   rng: Rng,
   options: OpponentOptions = {},
 ): MatchupAppraisal[] {
-  const cooldown = options.rematchCooldownDays ?? 365 * 2;
+  const baseCooldown = options.rematchCooldownDays ?? REMATCH_COOLDOWN_DAYS;
   const recentOpponents = new Set(
-    subject.record.filter((r) => day - r.day <= cooldown).map((r) => r.opponentId as string),
+    subject.record
+      .filter((r) => day - r.day <= rematchCooldownFor(r, baseCooldown))
+      .map((r) => r.opponentId as string),
   );
 
   const eligible = pool.filter(
