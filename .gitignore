@@ -17,3 +17,6 @@ Thumbs.db
 # VS Code debug browser profiles
 .vscode/.chrome-profile/
 .vscode/.edge-profile/
+
+# Local scratch scripts
+/.scratch/

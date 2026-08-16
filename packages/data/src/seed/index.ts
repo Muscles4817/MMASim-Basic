@@ -10,6 +10,8 @@ import { buildFighter, SEED_DAY, type FighterSpec } from './builder.js';
 import { HEAVY_DIVISION_SPECS } from './fighters-heavy.js';
 import { LIGHT_DIVISION_SPECS } from './fighters-light.js';
 import { SMALL_DIVISION_SPECS } from './fighters-small.js';
+import { MENS_DEPTH_SPECS } from './fighters-depth-mens.js';
+import { WOMENS_DEPTH_SPECS } from './fighters-depth-womens.js';
 import {
   SEED_COACHES,
   SEED_COMMENTATORS,
@@ -23,6 +25,8 @@ export const ALL_FIGHTER_SPECS: readonly FighterSpec[] = [
   ...HEAVY_DIVISION_SPECS,
   ...LIGHT_DIVISION_SPECS,
   ...SMALL_DIVISION_SPECS,
+  ...MENS_DEPTH_SPECS,
+  ...WOMENS_DEPTH_SPECS,
 ];
 
 /**
