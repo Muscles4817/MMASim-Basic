@@ -177,3 +177,58 @@ Every screen gets a UX pass, and the work is then re-reviewed by an independent 
 against mobile, desktop, accessibility, theming and game-UX criteria. Findings are triaged
 CRITICAL / MAJOR / MINOR and fixed at source. The point of the second pass is to catch the
 things the author has stopped being able to see.
+
+## What the passover found
+
+The signal vocabulary was reviewed by an independent critic whose brief was to mark it
+honestly. The verdict was that it was "a genuinely good idea that is only half-installed",
+and that is the right verdict — the failures were consistency failures, not concept failures.
+The findings worth keeping as rules:
+
+### A vocabulary is only as good as its least-consistent use
+
+Six of thirteen screens imported nothing from `signals.tsx`. Two of its exports (`Trend`,
+`MethodBadge`) had zero usages while screens hand-rolled worse versions of exactly those
+things. A component that exists and is not used is worse than one that does not exist: it
+implies a standard the code does not meet.
+
+### The flat wall can move into the chip layer
+
+`Chip` was the app's most-used component and had exactly one visual weight carrying eight
+different meanings — championship status beside height and reach at identical emphasis. That
+is the original "everything at one flat weight" complaint, relocated rather than solved. The
+lesson: **a component that can express anything expresses nothing.**
+
+### `title` is not an explanation
+
+Fourteen call sites explained themselves only through a `title` attribute. A tooltip shows
+nothing on a touch device and is unreliably announced on a role-less `<span>`, so those
+explanations reached desktop-mouse users and nobody else. `ui.css` already stated this rule
+and eleven call sites broke it. Teaching material goes **on the page**.
+
+### Colour-alone creeps back in through new code
+
+Every colour-alone failure found was in code written *after* the rule was written down: the
+band-coloured overall ratings, the Grudge/Heat chips, the commentary lines. Rule 2 is easy to
+agree with and easy to forget under a deadline. It needs to be checked, not just stated.
+
+### Two corner colours were the same colour
+
+`--corner-red` and `--corner-blue` have a computed contrast of **1.00:1** — identical relative
+luminance. Every fight statistic was attributed by nothing but hue, so in greyscale the
+comparison bar was one flat block. Picking two colours that "obviously look different"
+without computing the ratio is how this happens.
+
+### Disabled is not the same as unavailable
+
+A real `disabled` attribute removes a control from the tab order. Used on a validation gate
+it produces a silent dead end — the player taps and nothing happens, with no way to discover
+why. Used on a Save button it destroys focus at the exact moment the user acted. Prefer
+`aria-disabled` plus a handler that explains itself.
+
+### Focus rings and `overflow: hidden`
+
+The global `:focus-visible` uses `outline-offset`, which paints outside the element's box. A
+list row flush inside a `.card--flush` (which is `overflow: hidden`) therefore had its focus
+ring clipped away entirely — on the primary interactive element of six screens. Inset
+`box-shadow` cannot be clipped.

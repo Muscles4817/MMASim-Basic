@@ -1,7 +1,14 @@
 # 11 — Editor
 
-> Status: fighter editing is built. Promotion, gym, coach and official editing are designed
-> here and not yet implemented.
+> Status: built. Fighters, promotions, gyms, coaches, referees, judges and the commentary
+> booth are all editable.
+>
+> Everything except fighters is driven by a declarative schema in `app/src/game/editorSchema.ts`
+> rather than by bespoke forms, so adding an editable type is a data change and every field
+> gets the same validation, warning behaviour and labelling. Fighters keep their own screen:
+> fifteen attributes, hidden potential, personality and traits do not fit a generic form.
+>
+
 
 ## Principle: one definition of valid
 

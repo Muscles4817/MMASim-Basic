@@ -1,7 +1,24 @@
 # 08 — Promotions, Marketing, Heat & Rivalries
 
-> Status: design. Promotions, star power, reputation and matchmaking are built; the money,
-> heat and rivalry systems are designed here and not yet implemented.
+> Status: built, except events. Promotions, star power, reputation, matchmaking, heat,
+> rivalries and purses all ship. Cards and gate/broadcast revenue are doc 12.
+
+## What heat turned out to need
+
+Two rules earned their place while the module was being tested, and both are load-bearing:
+
+- **Interest cools; a grudge does not.** Ordinary heat decays to nothing inside a year. A
+  confirmed rivalry decays far more slowly *and* keeps 40% of its peak permanently, which is
+  why a grudge from three years ago still sells the rematch and a fight nobody talked about
+  does not. Without the residual, the distinction between `heat` and `isRivalry` was
+  cosmetic.
+- **Ignition is a gate, not a small chance.** A placid fighter never ends up in a grudge,
+  however loudly the other man shouts. A 10% chance rolled every week is just a slow
+  certainty, and "some people are simply not that guy" is both the truer rule and the one
+  that makes Aggression and Ego mean something.
+
+The instigator of post-fight heat is the **loser**. Heat comes from the man who thinks he was
+robbed, not from the man holding the belt.
 
 ## The idea
 
