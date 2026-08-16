@@ -105,7 +105,10 @@ describe('the world stays within its budget', () => {
     // Twenty years in one go — nothing in the game does this, which is the point.
     const out = advanceWorld(db, 0, 365 * 20, me.id);
     expect(out.truncated).toBe(true);
-    expect(out.fights).toBeLessThanOrEqual(220);
+    // A soft ceiling: the budget is checked before each night and a card is atomic, so a
+    // call can overshoot by at most one card. Stopping mid-event would leave unresolved
+    // bouts on a card, which is worse than nine extra simulations.
+    expect(out.fights).toBeLessThanOrEqual(220 + 9);
   });
 
   it('simulates a realistic camp quickly enough to sit behind a button', () => {

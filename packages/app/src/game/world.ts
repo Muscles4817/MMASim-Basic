@@ -27,7 +27,11 @@ import {
   applyAgeing,
   applyTraining,
   createRng,
+  CARD_SIZE,
   agreementStatus,
+  awardBonuses,
+  broadcastFor,
+  buildCard,
   campCost,
   consumeFight,
   contractFairness,
@@ -36,6 +40,9 @@ import {
   defaultGamePlan,
   defaultTerms,
   displayName,
+  drawWeight,
+  eventId,
+  eventName,
   fightNews,
   generateFighter,
   offerOpponents,
@@ -53,14 +60,19 @@ import {
   simulateFight,
   streakNews,
   trimFeed,
+  type BoutSeed,
+  type CardBout,
   type Coach,
   type DivisionId,
+  type FightNight,
+  type FightResult,
   type Fighter,
   type FighterId,
   type Gym,
   type NewsItem,
   type Promotion,
   type PromotionalAgreement,
+  type Venue,
   type Rng,
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
@@ -85,7 +97,12 @@ const STEP_DAYS = 14;
 const CARDS_PER_STEP = 6;
 
 /**
- * Hard ceiling on fights simulated in a single call.
+ * Ceiling on fights simulated in a single call.
+ *
+ * A soft ceiling rather than a hard one, because a card is atomic: the budget is checked
+ * before a night starts and the night then runs to completion, so a call can overshoot by at
+ * most one card. Stopping halfway through an event would leave a card with unresolved bouts
+ * on it, which is worse than nine extra simulations.
  *
  * The player is waiting for a screen. A twelve-week camp is six steps and ~36 fights, which
  * is comfortable; a player who somehow advances five years at once gets a world that moved
@@ -157,19 +174,28 @@ export function advanceWorld(
         break;
       }
 
-      const item = runOneBout({
+      /*
+       * A night, not a loose bout.
+       *
+       * The world used to simulate individual fights with no container, which meant card
+       * position did not exist, the bonus pool had nowhere to sit, and revenue points — which
+       * attach to an *event* — could never pay out. Bouts are collected, ordered by draw
+       * weight with a title fight always headlining, and then run as one card.
+       */
+      const promotion = rng.pick(promotions);
+      const built = buildNight({
         db,
         day,
-        rng: rng.fork(`bout:${day}:${card}`),
-        promotions,
+        rng: rng.fork(`night:${day}:${card}`),
+        promotion,
         available,
         readyOn,
         lastSeen,
         exceptId,
       });
-      if (!item) continue;
-      fights++;
-      if (item.news) news.push(...item.news);
+      if (!built) continue;
+      fights += built.fights;
+      news.push(...built.news);
     }
 
     if (truncated) break;
@@ -185,29 +211,157 @@ export function advanceWorld(
   return { fights, news: stored, truncated };
 }
 
-interface BoutContext {
+const VENUES: readonly Venue[] = [
+  { name: 'The Arena', city: 'Las Vegas', country: 'USA', capacity: 18000 },
+  { name: 'Riverside Hall', city: 'Manchester', country: 'UK', capacity: 12000 },
+  { name: 'Metro Dome', city: 'Tokyo', country: 'Japan', capacity: 15000 },
+  { name: 'Civic Centre', city: 'Sacramento', country: 'USA', capacity: 6000 },
+  { name: 'The Warehouse', city: 'Rotterdam', country: 'Netherlands', capacity: 3000 },
+];
+
+/**
+ * Build and run one night.
+ *
+ * Bouts are matched first, then ordered into a card, then simulated. That order matters: card
+ * position is a property of the whole night, so it cannot be known until every bout on it is.
+ */
+function buildNight(ctx: {
   db: GameDb;
   day: number;
   rng: Rng;
-  promotions: readonly Promotion[];
+  promotion: Promotion;
   available: Fighter[];
   readyOn: Map<string, number>;
   lastSeen: Map<string, number>;
   exceptId: FighterId;
+}): { fights: number; news: NewsItem[] } | undefined {
+  const { db, day, rng, promotion, available, readyOn, lastSeen } = ctx;
+
+  // --- Matchmaking: collect the bouts before deciding where any of them sit ----------------
+  const seeds: BoutSeed[] = [];
+  const used = new Set<string>();
+
+  for (let attempt = 0; attempt < CARD_SIZE * 2 && seeds.length < CARD_SIZE; attempt++) {
+    const pool = available.filter((f) => !used.has(f.id as string));
+    if (pool.length < 2) break;
+
+    const subject = rng.pick(pool);
+    const offers = offerOpponents(subject, pool, promotion, day, rng.fork(`m:${attempt}`));
+    if (offers.length === 0) continue;
+
+    const opponent = rng.pick(offers).opponent;
+    if (used.has(opponent.id as string)) continue;
+
+    used.add(subject.id as string);
+    used.add(opponent.id as string);
+
+    const champion = promotion.champions[subject.divisionId];
+    const isTitleFight =
+      champion !== undefined && (champion === subject.id || champion === opponent.id);
+
+    seeds.push({
+      boutId: `night:${day}:${promotion.id}:${seeds.length}`,
+      redId: subject.id,
+      blueId: opponent.id,
+      divisionId: subject.divisionId,
+      isTitleFight,
+      draw: drawWeight({
+        promotion,
+        red: subject,
+        blue: opponent,
+        heat: 0,
+        isRivalry: false,
+        isTitleFight,
+      }),
+    });
+  }
+
+  if (seeds.length === 0) return undefined;
+
+  const card = buildCard(seeds);
+  const totalDraw = seeds.reduce((a, s) => a + s.draw, 0);
+  const headlineDraw = card[0] ? (seeds.find((s) => s.boutId === card[0]!.boutId)?.draw ?? 0) : 0;
+  const broadcast = broadcastFor(promotion, headlineDraw, rng.fork('broadcast'));
+
+  const night: FightNight = {
+    id: eventId(promotion.id, day),
+    promotionId: promotion.id,
+    day,
+    name: eventName({
+      promotion,
+      broadcast,
+      number: Math.floor(day / 14) + 1,
+    }),
+    venue: rng.pick(VENUES),
+    broadcast,
+    status: 'complete',
+    bouts: card,
+    // A promotion pays what it can afford to. The floor is what makes a bonus worth chasing
+    // at the bottom of the sport rather than only at the top.
+    bonusPool: Math.max(4, Math.round(promotion.budget * 0.0012)),
+  };
+
+  // --- Run it ------------------------------------------------------------------------------
+  const news: NewsItem[] = [];
+  const results: { boutId: string; result: FightResult }[] = [];
+  let fights = 0;
+
+  for (const bout of card) {
+    const outcome = runCardBout({
+      db,
+      day,
+      rng: rng.fork(`bout:${bout.boutId}`),
+      promotion,
+      bout,
+      readyOn,
+      lastSeen,
+    });
+    if (!outcome) continue;
+    fights++;
+    results.push({ boutId: bout.boutId, result: outcome.result });
+    news.push(...outcome.news);
+  }
+
+  // --- The bonuses, decided by what actually happened ---------------------------------------
+  const awards = awardBonuses(results, night.bonusPool);
+  const bonusRecipients = new Set<string>(awards.performanceOfTheNight.map((id) => id as string));
+  const fotn = card.find((b) => b.boutId === awards.fightOfTheNight);
+  if (fotn) {
+    bonusRecipients.add(fotn.redId as string);
+    bonusRecipients.add(fotn.blueId as string);
+  }
+
+  for (const id of bonusRecipients) {
+    const fighter = db.fighters.findById(id) as Fighter | undefined;
+    if (!fighter) continue;
+    db.fighters.upsert({
+      ...fighter,
+      bank: round1(fighter.bank + awards.perAward),
+      lifetimeGross: round1(fighter.lifetimeGross + awards.perAward),
+      lifetimeNet: round1(fighter.lifetimeNet + awards.perAward * 0.55),
+    } as Fighter & { id: string });
+  }
+
+  db.events.upsert(night as FightNight & Entity);
+
+  void totalDraw;
+  return { fights, news };
 }
 
-/** One bout, start to finish, including everything it changes. */
-function runOneBout(ctx: BoutContext): { news: NewsItem[] } | undefined {
-  const { db, day, rng, promotions, available, readyOn, lastSeen } = ctx;
+/** One bout on a card, start to finish, including everything it changes. */
+function runCardBout(ctx: {
+  db: GameDb;
+  day: number;
+  rng: Rng;
+  promotion: Promotion;
+  bout: CardBout;
+  readyOn: Map<string, number>;
+  lastSeen: Map<string, number>;
+}): { news: NewsItem[]; result: FightResult } | undefined {
+  const { db, day, rng, promotion, bout, readyOn, lastSeen } = ctx;
 
-  const promotion = rng.pick(promotions);
-  const subject = rng.pick(available);
-  const offers = offerOpponents(subject, available, promotion, day, rng.fork('match'));
-  if (offers.length === 0) return undefined;
-
-  const opponent = rng.pick(offers).opponent;
-  const red = db.fighters.findById(subject.id as string) as Fighter | undefined;
-  const blue = db.fighters.findById(opponent.id as string) as Fighter | undefined;
+  const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
+  const blue = db.fighters.findById(bout.blueId as string) as Fighter | undefined;
   if (!red || !blue) return undefined;
 
   // Ranks *before* the fight, which is what makes an upset an upset.
@@ -224,22 +378,16 @@ function runOneBout(ctx: BoutContext): { news: NewsItem[] } | undefined {
     const index = divisionRanked.findIndex((r) => r.fighter.id === id);
     return index >= 0 ? index + 1 : undefined;
   };
-  const redRank = rankOfId(red.id);
-  const blueRank = rankOfId(blue.id);
-
-  // A title is on the line when the champion is in there against a ranked contender.
   const champion = promotion.champions[red.divisionId];
-  const isTitleFight =
-    champion !== undefined &&
-    (champion === (red.id as string) || champion === (blue.id as string)) &&
-    (redRank !== undefined || blueRank !== undefined);
+  const isTitleFight = bout.isTitleFight;
 
-  const boutId = `world:${day}:${red.id}:${blue.id}`;
+  const boutId = bout.boutId;
   const result = simulateFight({
     boutId,
     red: { fighter: red, plan: defaultGamePlan() },
     blue: { fighter: blue, plan: defaultGamePlan() },
-    rounds: isTitleFight ? 5 : 3,
+    // Card position decides the distance, which is one of the things having a card buys.
+    rounds: bout.rounds,
     seed: `${getWorld(db).seed}:${boutId}`,
   });
 
@@ -326,7 +474,7 @@ function runOneBout(ctx: BoutContext): { news: NewsItem[] } | undefined {
   readyOn.set(red.id as string, day + readinessDelay(after.red, redLost ? result.method : undefined));
   readyOn.set(blue.id as string, day + readinessDelay(after.blue, blueLost ? result.method : undefined));
 
-  return { news };
+  return { news, result };
 }
 
 /**

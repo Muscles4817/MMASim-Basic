@@ -1,6 +1,12 @@
 # 12 — Events & Fight Cards
 
-> Status: design, revised after review. Nothing in this document is built yet.
+> Status: **built** in the world simulation. The player's own fight is not yet placed on a
+> card — that is the next step, and it is what the event screen needs.
+>
+> What ships: cards ordered by draw weight with a title fight always headlining, card
+> positions driving distance and purse, the bonus pool awarded from what actually happened,
+> the gate/broadcast/costs equation, and `resolutionOrder()` implementing "detail follows the
+> player, not the broadcast".
 > Revisions follow [15 — Design Review Synthesis](./15-design-review-synthesis.md).
 
 ## Why cards exist
