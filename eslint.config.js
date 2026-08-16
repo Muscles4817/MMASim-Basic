@@ -2,7 +2,17 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', '**/*.tsbuildinfo'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      '**/coverage/**',
+      '**/*.tsbuildinfo',
+      // Browser profiles created by the VS Code debug launch configs.
+      '.vscode/.chrome-profile/**',
+      '.vscode/.edge-profile/**',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
