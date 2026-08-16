@@ -99,7 +99,7 @@ export const TRAINING_META: Readonly<Record<TrainingFocus, TrainingFocusMeta>> =
  * makes the whole rating scale meaningless inside a season. Guarded by a test that asserts
  * both ends of that.
  */
-const BASE_GAIN_PER_BLOCK = 0.654;
+const BASE_GAIN_PER_BLOCK = 2.8;
 
 /**
  * How camp length converts into training blocks.
@@ -135,7 +135,21 @@ const PEAK_AGE: Readonly<Record<AgeCurve, number>> = {
 export function learningRate(age: number, curve: AgeCurve): number {
   const peak = PEAK_AGE[curve];
   if (age <= 20) return 1.45;
-  return clamp(remap(age, 20, peak + 6, 1.45, 0.25), 0.2, 1.45);
+  /*
+   * The tail is deliberately fat now, and this is a shape change rather than a level one.
+   *
+   * The old curve ran 1.45 at twenty to a 0.25 floor by roughly thirty-five, which meant a
+   * career had about twenty productive camps in it before learning effectively stopped and
+   * decline took over. Twenty camps is not enough to carry anybody from a debutant to a
+   * champion at any per-camp gain that keeps a single camp from jumping a whole rating band
+   * — so the two constraints were in direct conflict and the mode could not satisfy both.
+   *
+   * A floor of 0.55 rather than 0.25 roughly doubles the productive length of a career
+   * without making any individual camp larger, which resolves it. It is also the more
+   * truthful curve: fighters demonstrably keep adding craft into their late thirties, and
+   * the engine already models the physical decline separately.
+   */
+  return clamp(remap(age, 20, peak + 8, 1.45, 0.55), 0.5, 1.45);
 }
 
 /**
@@ -240,6 +254,7 @@ export function applyTraining(input: TrainingInput): TrainingResult {
   const focusShare = focuses.length > 1 ? 0.65 : 1;
 
   const attributes: Attributes = { ...fighter.attributes };
+  const carry: Partial<Record<AttributeKey, number>> = { ...fighter.trainingCarry };
 
   for (const focus of focuses) {
     const meta = TRAINING_META[focus];
@@ -265,7 +280,24 @@ export function applyTraining(input: TrainingInput): TrainingResult {
       const gain = Math.max(0, raw * rng.range(CAMP_LUCK[0], CAMP_LUCK[1]));
       if (gain <= 0) continue;
 
-      attributes[key] = toRating(current + gain);
+      /*
+       * Bank the fraction rather than rounding it away.
+       *
+       * Ratings are integers and a camp produces tenths, so `toRating(current + gain)` threw
+       * the remainder away every time. Measured at The Basement — the gym the game actually
+       * starts a created fighter in, quality 44 and no head coach — that discarded 32 of 40
+       * consecutive camps: four-fifths of the opening hours of the game moved nothing at
+       * all. Worse, any attribute a focus trains at low weight could never move, because its
+       * per-camp gain was permanently below the rounding threshold.
+       *
+       * With the carry, a poor room is *slow* instead of *inert*, which is the difference
+       * between a difficulty curve and a broken system.
+       */
+      const banked = (carry[key] ?? 0) + gain;
+      const whole = Math.floor(banked);
+      carry[key] = round(banked - whole, 4);
+
+      if (whole > 0) attributes[key] = toRating(current + whole);
       gains[key] = round((gains[key] ?? 0) + gain, 2);
     }
   }
@@ -288,7 +320,7 @@ export function applyTraining(input: TrainingInput): TrainingResult {
   if (applied.length === 0) notes.push('No measurable change.');
 
   return {
-    fighter: { ...fighter, attributes },
+    fighter: { ...fighter, attributes, trainingCarry: carry },
     gains,
     notes,
   };

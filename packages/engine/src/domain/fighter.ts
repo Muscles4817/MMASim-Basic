@@ -9,7 +9,7 @@
 import type { GameDay } from '../core/clock.js';
 import { ageOn } from '../core/clock.js';
 import type { CoachId, DivisionId, FighterId, GymId, PromotionId } from '../core/ids.js';
-import type { Attributes, Naturals } from '../ratings/attributes.js';
+import type { AttributeKey, Attributes, Naturals } from '../ratings/attributes.js';
 import type { Personality } from './personality.js';
 import type { TraitId } from './traits.js';
 import type { Injury } from '../health/injuries.js';
@@ -110,6 +110,16 @@ export interface Fighter {
   lastDivisionChangeDay?: GameDay;
 
   attributes: Attributes;
+  /**
+   * Fractional training progress not yet worth a whole rating point.
+   *
+   * Ratings are integers, and camps produce fractions. Rounding the fraction away at the end
+   * of every camp meant that at a poor gym — including the one the game starts you in —
+   * four camps out of five moved nothing at all and the work was silently discarded. Banking
+   * the remainder means a slow room is *slow*, rather than a room where training does not
+   * happen. Never rendered; the rating is what the player sees.
+   */
+  trainingCarry?: Partial<Record<AttributeKey, number>>;
   /** Hidden. Never rendered as numbers. */
   naturals: Naturals;
   /** Hidden true ceilings. The player only ever sees a scouted estimate. */

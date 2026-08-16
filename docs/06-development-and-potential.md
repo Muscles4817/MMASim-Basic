@@ -136,3 +136,78 @@ half the divisions had died. The sport now replaces the people who leave.
 - No 600-fight careers, no immortal champions, no division collapse.
 - Acquired traits occur but never consume the roster.
 - Star power does not collapse into a single runaway name.
+
+## The audit that found the mode was unwinnable
+
+An independent analysis was asked one question — *does training move a fighter enough to
+matter, and is there a test that takes a created fighter and develops them into a champion?*
+The answer to the second was **no**, and finding out why answered the first.
+
+### It was not difficult to become champion. It was impossible.
+
+Verified directly across 2000 rolls: a created fighter's *potential*-overall — the rating
+they would have with every attribute trained to its ceiling and infinite time to do it —
+topped out at **71.2**, with a median of 61.2. The seeded champions rate **78.4 to 84.6**.
+
+No amount of play could close that. The central promise of the mode was unreachable by
+construction, and nothing tested it because no test had ever developed a created fighter past
+a single camp.
+
+### Four separate things were wrong
+
+| Defect | Effect |
+| ------ | ------ |
+| Naturals centred at 52 | Ceilings capped ~14 points below champion level. Nothing in play raises a ceiling |
+| Starting baseline of 32 | Debut at overall 36 — fifteen points below the *worst* professional on the roster |
+| Fractions rounded away each camp | At the game's own starting gym, **32 of 40 consecutive camps moved nothing at all** |
+| `learningRate` floored at 0.25 by ~35 | About twenty productive camps in an entire career |
+
+The last two compounded viciously: the opening hours of the game were inert, and the window
+in which training worked was too short to recover.
+
+### What changed
+
+- **Naturals centred at 73**, and rolled on a normal distribution with a fat tail rather than
+  a flat ±9. Most created fighters have the ceiling of a roster fighter, a few of a
+  contender, and a rare one is the real thing. That variance *is* the design — the brief
+  asked for extreme outliers to be genuinely extreme, and that has to apply to the player.
+- **Debut baseline of 46**, so a created fighter turns pro at around 50 — at the bottom of
+  the professional roster rather than below any professional level.
+- **Fractional training progress is banked** on the fighter as `trainingCarry`. A poor room
+  is now *slow* rather than *inert*, which is the difference between a difficulty curve and
+  a broken system. It also fixed a quieter lie: the camp report had been showing gains that
+  never happened.
+- **Every attribute is guaranteed room at debut.** Clamping starting attributes down to a
+  low ceiling roll had silently eaten the player's background and allocated points.
+- **`learningRate` floored at 0.55**, roughly doubling the productive length of a career
+  without making any single camp larger. That resolved a direct conflict: no per-camp gain
+  small enough to keep one camp modest could carry a debutant to a champion in twenty camps.
+- **Gain per block raised to 2.8** from 0.654.
+
+### Where it landed
+
+Forty full careers, played *pessimistically* — rotating focus rather than specialising:
+
+| | Overall |
+| --- | --- |
+| Debut | 49.8 |
+| Median career peak | 68.2 |
+| Best of forty | 79.7 |
+| Worst of forty | 56.4 |
+| Reached contender level (71+) | 25% |
+| Reached champion level (78+) | 5% |
+
+That is the shape the mode wants: the belt is a hard, uncertain target that a good roll
+played well can reach and a poor roll cannot.
+
+### The test that was pinning it
+
+`'makes one camp barely visible and two years transformative'` asserted a single camp added
+under four rating points — measured on a fixture with all attributes at 40 and all ceilings
+at 85, a forty-five-point gap no real fighter carries. An absolute bound on the most extreme
+possible case was, in practice, a bound on the gain constant itself, and it held the whole
+system below the level where a career could function.
+
+It now measures the **share of available room** a camp closes, which is what the claim was
+always about, and the absolute question is asked in `tests/long-sim/created-career.test.ts`
+against a fighter who can actually exist.

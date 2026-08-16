@@ -150,7 +150,7 @@ describe('training moves attributes', () => {
     expect(closed).toBeGreaterThan(0.8);
   });
 
-  it('makes one camp barely visible and two years transformative', () => {
+  it('makes one camp a fraction of the journey and two years transformative', () => {
     const start = prospect();
     const oneCamp = applyTraining({
       fighter: start,
@@ -161,8 +161,22 @@ describe('training moves attributes', () => {
       day: 0,
       rng: createRng('one'),
     }).fighter;
-    // A single camp adding five points would make ratings meaningless within a season.
-    expect(oneCamp.attributes.strikingOffence - start.attributes.strikingOffence).toBeLessThan(4);
+
+    /*
+     * As a share of the room available, not as an absolute number of points.
+     *
+     * This fixture is deliberately extreme — every attribute at 40 with every ceiling at 85,
+     * a forty-five point gap no real fighter carries — so an absolute bound here was really
+     * a bound on the *most* any camp could ever give, and it pinned the gain constant so low
+     * that a created fighter could not develop into anybody over an entire career. Measuring
+     * the share keeps the claim ("a camp is a step, not a transformation") while letting the
+     * rate be set by whether careers work, which is where it belongs.
+     *
+     * See tests/long-sim/created-career.test.ts for the bound on a fighter who actually exists.
+     */
+    const room = start.potential.strikingOffence - start.attributes.strikingOffence;
+    const closed = (oneCamp.attributes.strikingOffence - start.attributes.strikingOffence) / room;
+    expect(closed, 'one camp closed most of the gap to the ceiling').toBeLessThan(0.35);
 
     let long = start;
     for (let i = 0; i < 8; i++) {

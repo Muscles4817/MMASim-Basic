@@ -197,8 +197,21 @@ export function validateCreation(spec: CreateFighterSpec): CreationIssue[] {
   return issues;
 }
 
-/** Baseline a debutant starts from before background, build and allocation. */
-const BASELINE = 32;
+/**
+ * Baseline a debutant starts from, before background, build and allocation.
+ *
+ * At 32 a created fighter debuted at an overall rating of about 36 — fifteen points below
+ * the *worst* professional on the seeded roster and thirty below its median. That is not a
+ * prospect, it is an amateur, and it made the climb arithmetically unclosable: a career is
+ * roughly twenty-four useful camps before the learning rate collapses at thirty, and no
+ * per-camp gain small enough to keep "one camp is barely visible" true can cover forty-two
+ * points in twenty-four camps.
+ *
+ * At 46 they debut around 50 — at or just below the bottom of the professional roster,
+ * plainly not ready for anybody ranked, and with a career's worth of growth between them
+ * and a belt. The climb is still the game; it is now a climb that can actually be finished.
+ */
+const BASELINE = 46;
 
 /**
  * Build the player's fighter.
@@ -207,6 +220,29 @@ const BASELINE = 32;
  * level almost everywhere — because the game being offered is the climb, and a fighter who
  * starts at 70 has nowhere to go.
  */
+/**
+ * Where a created fighter's hidden athleticism is centred.
+ *
+ * This number decides the *ceiling* of the whole mode, because ceilings are derived from
+ * naturals and nothing in play ever raises a ceiling. At its original 52 a created fighter's
+ * potential-overall topped out at 71.2 across 2000 rolls, while the seeded champions rate
+ * 78.4 to 84.6 — so becoming champion was not difficult, it was arithmetically impossible,
+ * and the entire premise of the mode was unreachable by construction.
+ *
+ * At 66 a typical created fighter has the ceiling of a ranked contender and a good roll has
+ * the ceiling of a champion. That is the correct shape: the belt should be a hard, uncertain
+ * target rather than either a formality or a lie. It leaves them at roughly the equivalent
+ * of a tier-76 generated prospect — a real talent, not the best athlete alive.
+ *
+ * Note this raises what they can *become*, not what they start as. Starting attributes come
+ * from `BASELINE` plus background and allocation, and a created fighter still turns pro well
+ * below anybody on a major roster.
+ */
+const NATURALS_BASELINE = 73;
+
+/** Rating points of room every attribute has at debut, however the ceilings rolled. */
+const MINIMUM_DEBUT_HEADROOM = 4;
+
 export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter {
   const issues = validateCreation(spec);
   if (issues.length > 0) {
@@ -220,16 +256,35 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
   const walkingWeightLbs = Math.round(division.limitLbs * (1.07 + buildShift * 0.035));
 
   // --- Naturals: background leaning, build, and a roll the player does not control --------
+  /*
+   * The roll is normal rather than uniform, and deliberately wide.
+   *
+   * A flat ±9 gave every created fighter almost the same ceiling: the distribution had no
+   * tail, so nobody was ever exceptional and nobody was ever hopeless. The brief for this
+   * game is that extreme outliers are genuinely extreme, and that has to be true of the
+   * player's own fighter too — most people who turn pro have the ceiling of a solid roster
+   * fighter, a few have the ceiling of a contender, and a rare one is the real thing.
+   *
+   * Motor learning gets the widest spread of all, because it is the number that decides how
+   * much of the ceiling ever gets reached and the one the player has least say over. That is
+   * the roll a career is quietly decided by.
+   */
   const naturals: Naturals = {
     frame: toRating(clamp((walkingWeightLbs / 300) * 100, 5, 99)),
     explosiveness: toRating(
-      52 + (background.naturals.explosiveness ?? 0) + buildShift * 4 + rng.range(-8, 10),
+      rng.normalClamped(NATURALS_BASELINE + (background.naturals.explosiveness ?? 0) + buildShift * 4, 11, 30, 96),
     ),
-    engine: toRating(52 + (background.naturals.engine ?? 0) - buildShift * 4 + rng.range(-8, 10)),
-    constitution: toRating(52 + (background.naturals.constitution ?? 0) + rng.range(-9, 10)),
-    recovery: toRating(52 + (background.naturals.recovery ?? 0) + rng.range(-8, 9)),
+    engine: toRating(
+      rng.normalClamped(NATURALS_BASELINE + (background.naturals.engine ?? 0) - buildShift * 4, 11, 30, 96),
+    ),
+    constitution: toRating(
+      rng.normalClamped(NATURALS_BASELINE + (background.naturals.constitution ?? 0), 11, 30, 96),
+    ),
+    recovery: toRating(rng.normalClamped(NATURALS_BASELINE + (background.naturals.recovery ?? 0), 11, 30, 96)),
     // The single most important hidden number, and the one the player has least say over.
-    motorLearning: toRating(52 + (background.naturals.motorLearning ?? 0) + rng.range(-10, 14)),
+    motorLearning: toRating(
+      rng.normalClamped(NATURALS_BASELINE + (background.naturals.motorLearning ?? 0), 14, 28, 97),
+    ),
     injuryProneness: toRating(rng.normalClamped(46, 15, 12, 88)),
     ageCurve: rng.pickWeighted(['standard', 'longPeak', 'lateBloomer', 'earlyBloomer'] as const, (c) =>
       c === 'standard' ? 5 : c === 'longPeak' ? 2.5 : c === 'lateBloomer' ? 2 : 1.5,
@@ -249,8 +304,24 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
     const experience = remap(spec.age, 18, 35, 0, 7);
 
     const value = BASELINE + fromBackground + fromAllocation + experience + rng.range(-2, 2);
-    // Never above your own ceiling — the invariant the rest of the engine depends on.
-    attributes[key] = toRating(Math.min(potential[key], value));
+
+    /*
+     * A debutant has finished developing nowhere.
+     *
+     * The invariant is that an attribute never exceeds its ceiling, and the obvious way to
+     * enforce it — clamping the starting value down to the ceiling — is subtly wrong at
+     * creation: a low ceiling roll silently ate the player's background and their allocated
+     * points, so a boxer who put everything into striking could debut with the striking of
+     * a wrestler and never learn why. It also meant some attributes started *at* their
+     * ceiling, so the very first camp could never move them.
+     *
+     * Raising the ceiling instead keeps every choice the player made visible and guarantees
+     * there is somewhere to grow. The ceiling is hidden anyway; what the player sees is that
+     * their choices took.
+     */
+    const raised = toRating(Math.max(potential[key], value + MINIMUM_DEBUT_HEADROOM));
+    potential[key] = raised;
+    attributes[key] = toRating(Math.min(raised, value));
   }
 
   // A created fighter must have a real hole, like everyone else on the roster.
