@@ -3,9 +3,11 @@ import {
   currentHeat,
   describeAdviceRecord,
   describeFairness,
+  describeReleaseRisk,
   describeHeat,
   describeStable,
   describeTrigger,
+  releaseRisk,
   renegotiationTriggers,
   displayName,
   fighterAge,
@@ -86,6 +88,8 @@ export function HubScreen() {
           isChampion: ladder?.isChampion,
         })
       : [];
+  const jobRisk =
+    standing.promotion && !standing.freeAgent ? releaseRisk(fighter, standing.promotion) : 0;
   const opponent = booking
     ? (db.fighters.findById(booking.opponentId) as Fighter | undefined)
     : undefined;
@@ -371,6 +375,27 @@ export function HubScreen() {
             {triggers.length > 0 && (
               <Alert tone="info" title="You have grounds to reopen this">
                 {describeTrigger(triggers[0]!)}
+              </Alert>
+            )}
+
+            {/*
+              Whether the job is safe.
+
+              `describeReleaseRisk` was written and rendered nowhere, so the player could be
+              two losses from being cut with no way of knowing — while the world around them
+              now actually does the cutting. This is the one piece of contract information a
+              fighter genuinely has: everybody in a gym knows when somebody is fighting for
+              their job.
+
+              Silent at zero rather than reassuring, because a permanent "your place is not in
+              question" badge trains the player to stop reading the block.
+            */}
+            {jobRisk > 0 && (
+              <Alert
+                tone={jobRisk >= 0.45 ? 'danger' : 'warn'}
+                title={jobRisk >= 0.45 ? 'You are fighting for your job' : 'Your place is slipping'}
+              >
+                {describeReleaseRisk(jobRisk)}
               </Alert>
             )}
             {standing.agreement.tolledDays > 0 && (

@@ -48,6 +48,8 @@ import {
   offerOpponents,
   rankDivision,
   readinessDelay,
+  newsId,
+  releaseRisk,
   recordString,
   marketValue,
   purseFor,
@@ -577,6 +579,22 @@ function runCardBout(ctx: {
     const finalised = finalise(db, fighter, day, retireRng.fork(fighter.id as string), promotion);
     if (finalised.news) news.push(finalised.news);
     db.fighters.upsert(finalised.fighter as Fighter & Entity);
+
+    /*
+     * And some of them are ended for you. Checked after `finalise` so a fighter who has just
+     * retired is not also cut — being released on your way out of the sport is noise, not a
+     * story — and only after a loss, because a promotion does not cut a winner.
+     */
+    if (finalised.fighter.retiredDay === undefined && finalised.fighter.summary.streak < 0) {
+      const cut = releaseIfCut(
+        db,
+        finalised.fighter,
+        promotion,
+        day,
+        retireRng.fork(`cut:${fighter.id}`),
+      );
+      if (cut) news.push(cut);
+    }
   }
 
   /*
@@ -657,6 +675,55 @@ function settleRosterFighter(
       : fighter.resentment,
   };
   void day;
+}
+
+/**
+ * Cut a fighter who has run out of rope.
+ *
+ * `releaseRisk` had no callers anywhere — not in the world, not in the UI. So no promotion in
+ * the game ever released anybody, which quietly removed the entire downward half of a career:
+ * a roster could only be joined, never fallen out of, and free agency only ever handled people
+ * whose contracts had run their term.
+ *
+ * The realism correction it encodes matters, and it is why this is worth wiring rather than
+ * deleting: release is an at-will clause, not a losses trigger. Star power buys patience that
+ * a good record does not, so an exciting fighter survives 0-3 and a boring winner does not.
+ */
+function releaseIfCut(
+  db: GameDb,
+  fighter: Fighter,
+  promotion: Promotion,
+  day: number,
+  rng: Rng,
+): NewsItem | undefined {
+  const risk = releaseRisk(fighter, promotion);
+  if (risk <= 0 || rng.next() > risk) return undefined;
+
+  const agreement = fighter.agreementId
+    ? (db.agreements.findById(fighter.agreementId as string) as
+        | (PromotionalAgreement & Entity)
+        | undefined)
+    : undefined;
+  if (agreement) db.agreements.upsert({ ...agreement, status: 'terminated' } as never);
+
+  db.fighters.upsert({
+    ...fighter,
+    promotionId: undefined,
+    agreementId: undefined,
+  } as Fighter & Entity);
+
+  const skid = Math.max(0, -fighter.summary.streak);
+  return {
+    id: newsId(day, `cut:${fighter.id}`),
+    day,
+    kind: 'release',
+    weight: 'minor',
+    headline: `${promotion.shortName} release ${displayName(fighter)}`,
+    detail: `Cut after ${skid} straight ${skid === 1 ? 'defeat' : 'defeats'}. A free agent at ${fighter.age}.`,
+    fighterIds: [fighter.id],
+    divisionId: fighter.divisionId,
+    promotionId: promotion.id,
+  };
 }
 
 /**

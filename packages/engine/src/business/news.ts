@@ -30,7 +30,8 @@ export type NewsKind =
   | 'injury'
   | 'rivalry'
   | 'streak'
-  | 'signing';
+  | 'signing'
+  | 'release';
 
 /**
  * How loudly an item should be presented.
