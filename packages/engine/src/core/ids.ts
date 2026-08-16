@@ -18,6 +18,7 @@ export type EventId = Brand<string, 'EventId'>;
 export type BoutId = Brand<string, 'BoutId'>;
 export type ContractId = Brand<string, 'ContractId'>;
 export type RivalryId = Brand<string, 'RivalryId'>;
+export type NewsId = Brand<string, 'NewsId'>;
 export type InjuryId = Brand<string, 'InjuryId'>;
 export type CampId = Brand<string, 'CampId'>;
 export type OfficialId = Brand<string, 'OfficialId'>;
@@ -32,6 +33,7 @@ export type EntityId =
   | BoutId
   | ContractId
   | RivalryId
+  | NewsId
   | InjuryId
   | CampId
   | OfficialId

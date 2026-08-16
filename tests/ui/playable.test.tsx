@@ -429,7 +429,10 @@ describe('the interface says what matters', () => {
     window.location.hash = '#/rankings';
     renderApp();
     // The champion row is marked with a crown and the word, not a bare "C".
-    expect(await screen.findByText(/Champion/i)).toBeTruthy();
+    //
+    // Matched exactly rather than loosely: a promotion in the picker is called "Apex
+    // Fighting Championship", which a /Champion/i regex also matches.
+    expect(await screen.findByText('Champion', { exact: true })).toBeTruthy();
     expectNoCrash();
   });
 });

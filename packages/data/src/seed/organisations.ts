@@ -10,6 +10,7 @@
 import {
   asCoachId,
   asDivisionId,
+  asFighterId,
   asGymId,
   asOfficialId,
   asPromotionId,
@@ -53,7 +54,29 @@ export const SEED_PROMOTIONS: readonly Promotion[] = [
     budget: 42_000,
     buzz: 78,
     divisions: [...MENS, ...WOMENS],
-    champions: {},
+    /**
+     * The belts, as they actually sat in January 2020.
+     *
+     * These were all empty, which meant the world began with every title vacant — so no
+     * title fight could ever be generated, the ladder had no top, and "climb to the top of
+     * the mountain" was a climb toward nothing. A champion is also what `rankDivision`
+     * ranks *around*, so without them the number-one contender was whoever happened to
+     * sort first.
+     */
+    champions: {
+      [asDivisionId('mens-heavyweight')]: asFighterId('f_miocic'),
+      [asDivisionId('mens-light-heavyweight')]: asFighterId('f_jones'),
+      [asDivisionId('mens-middleweight')]: asFighterId('f_adesanya'),
+      [asDivisionId('mens-welterweight')]: asFighterId('f_usman'),
+      [asDivisionId('mens-lightweight')]: asFighterId('f_khabib'),
+      [asDivisionId('mens-featherweight')]: asFighterId('f_volkanovski'),
+      [asDivisionId('mens-bantamweight')]: asFighterId('f_cejudo'),
+      [asDivisionId('mens-flyweight')]: asFighterId('f_figueiredo'),
+      [asDivisionId('womens-strawweight')]: asFighterId('f_zhang'),
+      [asDivisionId('womens-flyweight')]: asFighterId('f_shevchenko'),
+      [asDivisionId('womens-bantamweight')]: asFighterId('f_nunes'),
+      [asDivisionId('womens-featherweight')]: asFighterId('f_nunes'),
+    },
     // Books the fights that sell, including ones that damage their own stars.
     matchmakingAggression: 72,
     narrativeControl: 88,

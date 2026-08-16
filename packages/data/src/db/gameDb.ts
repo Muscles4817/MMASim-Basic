@@ -12,6 +12,7 @@ import type {
   Gym,
   Commentator,
   Judge,
+  NewsItem,
   Promotion,
   Referee,
   Rivalry,
@@ -34,6 +35,7 @@ export const COLLECTIONS = [
   'judges',
   'commentators',
   'rivalries',
+  'news',
   'world',
 ] as const;
 
@@ -66,6 +68,7 @@ export interface GameDb {
   judges: Repository<Judge & Entity>;
   commentators: Repository<Commentator & Entity>;
   rivalries: Repository<Rivalry & Entity>;
+  news: Repository<NewsItem & Entity>;
   world: Repository<WorldMeta>;
   /** Persist every dirty collection. Call at save points, not on every mutation. */
   save(): void;
@@ -87,6 +90,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
   const judges = make<Judge & Entity>('judges');
   const commentators = make<Commentator & Entity>('commentators');
   const rivalries = make<Rivalry & Entity>('rivalries');
+  const news = make<NewsItem & Entity>('news');
   const world = make<WorldMeta>('world');
 
   const all: Flushable[] = [
@@ -98,6 +102,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
     judges,
     commentators,
     rivalries,
+    news,
     world,
   ];
 
@@ -110,6 +115,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
     judges,
     commentators,
     rivalries,
+    news,
     world,
     save: () => {
       for (const repo of all) repo.flush();

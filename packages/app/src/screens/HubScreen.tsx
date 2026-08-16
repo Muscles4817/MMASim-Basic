@@ -20,6 +20,8 @@ import { Alert, Fact, FighterRead, ICON, Icon, KeyStat, StreakBadge } from '../u
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
 import { getLadderStatus, signWith, type LadderStatus } from '../game/progression';
 import { getRivalry, previousMeetings } from '../game/rivalries';
+import { advanceWorld, readNews } from '../game/world';
+import { NewsFeed } from '../ui/NewsFeed';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 import { formatGameDay } from '../shell/Shell';
 
@@ -36,6 +38,8 @@ export function HubScreen() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [pendingOffer, setPendingOffer] = useState<MatchupAppraisal | undefined>();
   const [booking, setBooking] = useState(() => getBooking(playerFighter?.id as string | undefined));
+
+  const news = useMemo(() => readNews(db), [db, world.day]);
 
   const offers = useMemo(
     () => (playerFighter && !booking ? getOffers(db, playerFighter) : []),
@@ -92,7 +96,11 @@ export function HubScreen() {
    * cooldown could never expire.
    */
   const waitWeeks = (weeks: number) => {
-    updateWorld({ day: world.day + weeks * 7 });
+    // Waiting has to move the *world*, not just the calendar. Skipping eight weeks with a
+    // frozen roster was how a stuck division stayed stuck forever.
+    const to = world.day + weeks * 7;
+    advanceWorld(db, world.day, to, fighter.id);
+    updateWorld({ day: to });
   };
 
   return (
@@ -297,7 +305,87 @@ export function HubScreen() {
           )}
         </Card>
       )}
+
+      {/*
+        The world, reported.
+
+        Everything below this point is what makes the hub a home rather than a booking form:
+        a player should be able to sit here, see what the sport did while they were in camp,
+        and reach everything else in one tap.
+      */}
+      <Card title="The sport" flush={false}>
+        <NewsFeed
+          items={news}
+          limit={8}
+          onFighterClick={(id) => navigate({ name: 'fighter', id })}
+          emptyMessage="Nothing yet. Train or fight, and the divisions will get on with themselves while you do."
+        />
+      </Card>
+
+      <Card title="Everywhere else">
+        <div className="hub-nav">
+          <HubLink
+            icon="🥊"
+            label="Training"
+            hint="Camps, gyms, weight class"
+            onClick={() => navigate({ name: 'training' })}
+          />
+          <HubLink
+            icon="📊"
+            label="Rankings"
+            hint="Who is above you"
+            onClick={() => navigate({ name: 'rankings' })}
+          />
+          <HubLink
+            icon="👤"
+            label="Your profile"
+            hint="Ratings, record, medical"
+            onClick={() => navigate({ name: 'fighter', id: fighter.id as string })}
+          />
+          <HubLink
+            icon="📋"
+            label="Roster"
+            hint="Everybody in the sport"
+            onClick={() => navigate({ name: 'roster' })}
+          />
+          <HubLink
+            icon="✏️"
+            label="Editor"
+            hint="Change anything"
+            onClick={() => navigate({ name: 'editor' })}
+          />
+          <HubLink
+            icon="⚙️"
+            label="Settings"
+            hint="Theme, save, reset"
+            onClick={() => navigate({ name: 'settings' })}
+          />
+        </div>
+      </Card>
     </div>
+  );
+}
+
+/** One tile on the hub's navigation grid. */
+function HubLink({
+  icon,
+  label,
+  hint,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  hint: string;
+  onClick(): void;
+}) {
+  return (
+    <button type="button" className="hub-nav__item" onClick={onClick}>
+      <span className="hub-nav__icon" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="hub-nav__label">{label}</span>
+      <span className="hub-nav__hint">{hint}</span>
+    </button>
   );
 }
 

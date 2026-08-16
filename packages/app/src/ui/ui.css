@@ -508,3 +508,47 @@ a.list__item:hover {
   color: var(--negative);
   font-weight: 600;
 }
+
+/* --- Hub navigation grid ---------------------------------------------------------------
+   The "sit here and go anywhere" grid. Two columns on a phone, more when there is room —
+   auto-fit rather than a fixed count so it never leaves a lone orphan tile on a wide
+   screen. Each tile carries an icon, a label and a line saying what is actually behind it,
+   because a grid of six icons is a memory test. */
+
+.hub-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: var(--space-2);
+}
+
+.hub-nav__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+  text-align: left;
+  min-height: var(--tap-target);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  transition: background var(--transition-fast);
+}
+
+.hub-nav__item:hover {
+  background: var(--surface-sunken);
+}
+
+.hub-nav__icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.hub-nav__label {
+  font-weight: 700;
+}
+
+.hub-nav__hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}

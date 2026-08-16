@@ -168,7 +168,7 @@ describe('the fight plan survives leaving the screen', () => {
     // Wander off — checking the rankings is an entirely reasonable thing to do mid-camp —
     // and come back. This used to reset the whole plan to a default nobody chose.
     goTo('#/rankings');
-    await screen.findByText(/Ranked on what the sport believes/i);
+    await screen.findByText(/not on ability/i);
     goTo('#/camp');
 
     const after = await screen.findAllByRole('button', { name: /Drill:/i });
@@ -188,7 +188,7 @@ describe('the fight plan survives leaving the screen', () => {
     await user.click(notSelected!);
 
     goTo('#/rankings');
-    await screen.findByText(/Ranked on what the sport believes/i);
+    await screen.findByText(/not on ability/i);
     goTo('#/camp');
 
     const after = await screen.findAllByRole('button', { name: /Counter|Grind|Pressure/i });

@@ -37,6 +37,7 @@ import {
   type TrainingFocus,
 } from '@mmasim/engine';
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
+import { advanceWorld } from './world';
 
 /** How much an existing injury is blunting a camp, 0-1. Surfaced on the training screen. */
 export function currentCampImpairment(fighter: Fighter, day: number): number {
@@ -231,17 +232,16 @@ export function runLayoff(db: GameDb, fighter: Fighter, weeks: number): Training
  * in-game years they are competing against a division frozen in 2020. Skipped for the player
  * themselves, who is aged explicitly by the caller.
  */
+/**
+ * Move everyone else on.
+ *
+ * This used to age the roster and nothing else, which left the division the player was
+ * climbing frozen at its seeded state forever. It now runs the world: other fighters are
+ * matched, fight, win, lose, improve, decline, take belts and retire while the player is in
+ * camp. See `world.ts` for why that loop is the long-sim's, moved rather than rewritten.
+ */
 function advanceRoster(db: GameDb, fromDay: number, toDay: number, exceptId: FighterId): void {
-  const world = getWorld(db);
-  // Only worth doing over a meaningful span; a two-week block moves nobody measurably.
-  if (toDay - fromDay < 30) return;
-
-  for (const fighter of db.fighters.findAll() as Fighter[]) {
-    if (fighter.id === exceptId || fighter.retiredDay !== undefined) continue;
-    const rng = createRng(`${world.seed}:roster:${fighter.id}:${fromDay}`);
-    const aged = applyAgeing(fighter, fromDay, toDay, rng);
-    if (aged.fighter !== fighter) db.fighters.upsert(aged.fighter);
-  }
+  advanceWorld(db, fromDay, toDay, exceptId);
 }
 
 /** Accept a promotional offer. Returns the updated fighter. */
