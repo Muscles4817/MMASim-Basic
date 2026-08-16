@@ -95,7 +95,10 @@ export const ATTRIBUTE_META: Readonly<Record<AttributeKey, AttributeMeta>> = {
     label: 'Durability',
     group: 'physical',
     blurb: 'Chin and body. Absorbing damage without being hurt.',
-    convexity: 1.2,
+    // Steeper than the other defensive attributes, and deliberately so: Power sits on a
+    // 1.6 curve, so a flatter chin curve would mean knockout rates climb as a division
+    // gets better, which is backwards. Elite chins have to keep pace with elite power.
+    convexity: 1.45,
   },
   strength: {
     key: 'strength',
