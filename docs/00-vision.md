@@ -139,6 +139,6 @@ A 20-year sim must not drift into nonsense: no ratings inflation, no division co
 | Fighter career mode             | Playable: create, train, climb, fight, retire    |
 | Editor                          | Fighters editable; organisations designed        |
 | Heat, rivalries, money          | Designed (doc 08)                                |
-| Attribute development in camp   | Designed (doc 06)                                |
-| Acute injuries                  | Designed (doc 07)                                |
+
+| Acute injuries                  | Built — recurrence, fighting hurt, aggravation    |
 | Coach & promoter modes          | Not started — both reuse the systems above       |

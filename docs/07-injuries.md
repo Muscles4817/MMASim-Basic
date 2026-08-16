@@ -1,7 +1,6 @@
 # 07 — Injuries & Health
 
-> Status: design. Accumulated damage, layoffs and trauma-driven trait acquisition are built;
-> discrete acute injuries are designed here and not yet implemented.
+> Status: built. Acute injuries, recurrence, fighting hurt and aggravation all ship.
 
 ## Three timescales
 
@@ -10,7 +9,7 @@ Injury in MMA is not one system. Conflating these is why a lot of sims get it wr
 | Timescale     | What it is                                    | Built?                    |
 | ------------- | --------------------------------------------- | ------------------------- |
 | **Tonight**   | Damage meters within a fight; the hurt state  | Yes (doc 03)              |
-| **Weeks**     | Acute injuries: breaks, tears, cuts, layoffs  | Layoffs yes; injuries no  |
+| **Weeks**     | Acute injuries: breaks, tears, cuts, layoffs  | Yes                       |
 | **Career**    | `headTrauma` and `bodyWear`; permanent erosion | Yes                       |
 
 ## Career damage (built)
@@ -49,7 +48,7 @@ lengthened by accumulated trauma and shortened by the `recovery` natural. A knoc
 carries a mandatory medical suspension regardless of how the fighter feels — realistic, and
 the mechanism that stops a career being a treadmill.
 
-## Acute injuries (designed)
+## Acute injuries (built)
 
 ### Where they happen
 

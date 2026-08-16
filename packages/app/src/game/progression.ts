@@ -9,11 +9,15 @@ import {
   applyAgeing,
   applyIdleDecay,
   applyTraining,
+  campImpairment,
+  campInjuryChance,
   careerProgress,
   createRng,
   promotionOffers,
+  describeInjury,
   rankDivision,
   rankOf,
+  rollInjury,
   setChampion,
   titleShotEligibility,
   type AttributeKey,
@@ -21,6 +25,7 @@ import {
   type Fighter,
   type FighterId,
   type Gym,
+  type Injury,
   type Promotion,
   type PromotionOffer,
   type RankedFighter,
@@ -28,6 +33,11 @@ import {
   type TrainingFocus,
 } from '@mmasim/engine';
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
+
+/** How much an existing injury is blunting a camp, 0-1. Surfaced on the training screen. */
+export function currentCampImpairment(fighter: Fighter, day: number): number {
+  return campImpairment(fighter.injuries ?? [], day);
+}
 
 /** Everything the hub needs to say where a fighter is on the ladder. */
 export interface LadderStatus {
@@ -94,6 +104,8 @@ export interface TrainingOutcome {
   notes: readonly string[];
   /** Days the calendar advanced. */
   days: number;
+  /** Set when this block produced a new injury. The camp report leads with it. */
+  injury?: Injury;
 }
 
 /**
@@ -118,6 +130,8 @@ export function runTraining(
     ? (db.coaches.findById(fighter.headCoachId) as Coach | undefined)
     : undefined;
 
+  const rng = createRng(`${world.seed}:train:${fighter.id}:${world.day}`);
+
   const trained = applyTraining({
     fighter,
     focuses,
@@ -125,8 +139,22 @@ export function runTraining(
     gym,
     coach,
     day: world.day,
-    rng: createRng(`${world.seed}:train:${fighter.id}:${world.day}`),
+    rng,
   });
+
+  // Camps are where most injuries actually happen, which is the opposite of most players'
+  // intuition and worth the system stating plainly.
+  const existing = fighter.injuries ?? [];
+  let injury: Injury | undefined;
+  if (rng.chance(campInjuryChance(fighter, weeks, world.day))) {
+    injury = rollInjury({
+      fighter,
+      source: 'camp',
+      day: toDay,
+      rng: rng.fork('injury'),
+      history: existing,
+    });
+  }
 
   const aged = applyAgeing(
     trained.fighter,
@@ -135,15 +163,24 @@ export function runTraining(
     createRng(`${world.seed}:age:${fighter.id}:${world.day}`),
   );
 
-  db.fighters.upsert(aged.fighter);
+  const withInjury: Fighter = injury
+    ? { ...aged.fighter, injuries: [...existing, injury] }
+    : aged.fighter;
+
+  db.fighters.upsert(withInjury);
   setWorld(db, { day: toDay });
   advanceRoster(db, world.day, toDay, fighter.id);
   db.save();
 
   return {
     gains: trained.gains,
-    notes: [...trained.notes, ...aged.notes],
+    notes: [
+      ...(injury ? [describeInjury(injury, toDay)] : []),
+      ...trained.notes,
+      ...aged.notes,
+    ],
     days,
+    injury,
   };
 }
 

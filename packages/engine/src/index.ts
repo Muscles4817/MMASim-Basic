@@ -33,6 +33,9 @@ export * from './fight/stamina.js';
 export * from './fight/scoring.js';
 export * from './fight/simulate.js';
 
+// Health
+export * from './health/injuries.js';
+
 // Progression
 export * from './progression/retirement.js';
 export * from './progression/generation.js';

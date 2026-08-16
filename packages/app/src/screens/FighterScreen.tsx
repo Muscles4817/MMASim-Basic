@@ -9,6 +9,8 @@ import {
   fighterAge,
   getDivision,
   overallRating,
+  activeInjuries,
+  describeInjury,
   recordString,
   type AttributeGroup,
   type Fighter,
@@ -233,6 +235,32 @@ export function FighterScreen({ id }: { id: string }) {
           tone={fighter.condition.confidence < 40 ? 'bad' : undefined}
         />
       </Card>
+
+      {(fighter.injuries?.length ?? 0) > 0 && (
+        <Card title="Medical history">
+          {activeInjuries(fighter.injuries ?? [], world.day).length > 0 && (
+            <div style={{ marginBottom: 'var(--space-3)' }}>
+              <Alert tone="warn" title="Currently injured">
+                {activeInjuries(fighter.injuries ?? [], world.day)
+                  .map((i) => describeInjury(i, world.day))
+                  .join(' ')}
+              </Alert>
+            </div>
+          )}
+          <ul>
+            {[...(fighter.injuries ?? [])].reverse().map((injury) => (
+              <li
+                key={injury.id}
+                className="muted"
+                style={{ fontSize: 'var(--text-sm)', marginBottom: 4 }}
+              >
+                <Icon name="injury" /> {describeInjury(injury, world.day)}
+                {injury.foughtThrough && ' Fought on it.'}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {fighter.notes && (
         <Card title="Rating notes">

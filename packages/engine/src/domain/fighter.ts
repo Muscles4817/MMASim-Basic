@@ -12,6 +12,7 @@ import type { CoachId, DivisionId, FighterId, GymId, PromotionId } from '../core
 import type { Attributes, Naturals } from '../ratings/attributes.js';
 import type { Personality } from './personality.js';
 import type { TraitId } from './traits.js';
+import type { Injury } from '../health/injuries.js';
 
 /** How a bout ended, from the winner's perspective. */
 export type FinishMethod =
@@ -130,6 +131,14 @@ export interface Fighter {
   gymId?: GymId;
   headCoachId?: CoachId;
   promotionId?: PromotionId;
+
+  /**
+   * Acute injuries, active and historical.
+   *
+   * Kept in full rather than pruned: a knee that has gone twice is far more likely to go a
+   * third time, and the recurrence system needs the history to know that.
+   */
+  injuries?: readonly Injury[];
 
   /** 1–100. What the market will pay to watch them. Independent of ability. */
   starPower: number;

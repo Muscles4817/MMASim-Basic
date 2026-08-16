@@ -3,6 +3,9 @@ import {
   ATTRIBUTE_META,
   TRAINING_FOCUSES,
   TRAINING_META,
+  activeInjuries,
+  campImpairment,
+  describeInjury,
   fighterAge,
   headroom,
   type AttributeKey,
@@ -14,6 +17,7 @@ import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented, Stat } from '../ui';
 import { joinGym, runLayoff, runTraining, type TrainingOutcome } from '../game/progression';
+import { Alert } from '../ui/signals';
 
 const WEEK_OPTIONS = [
   { value: '4', label: '4 weeks' },
@@ -50,6 +54,9 @@ export function TrainingScreen() {
   const coach = fighter.headCoachId
     ? (db.coaches.findById(fighter.headCoachId) as Coach | undefined)
     : undefined;
+
+  const carrying = activeInjuries(fighter.injuries ?? [], world.day);
+  const impairment = campImpairment(fighter.injuries ?? [], world.day);
 
   const toggleFocus = (focus: TrainingFocus) => {
     setOutcome(undefined);
@@ -91,6 +98,16 @@ export function TrainingScreen() {
           </p>
         )}
       </Card>
+
+      {carrying.length > 0 && (
+        <Alert
+          tone={impairment < 0.6 ? 'danger' : 'warn'}
+          title={carrying.length === 1 ? 'You are carrying an injury' : 'You are carrying injuries'}
+        >
+          {carrying.map((injury) => describeInjury(injury, world.day)).join(' ')} Training through
+          it costs you roughly {Math.round((1 - impairment) * 100)}% of the camp.
+        </Alert>
+      )}
 
       <Card title="What to work on">
         <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>

@@ -14,6 +14,12 @@ import {
   defaultGamePlan,
   offerOpponents,
   readinessDelay,
+  activeInjuries,
+  aggravate,
+  aggravationChance,
+  fightInjuryChance,
+  injuredAttributes,
+  rollInjury,
   setChampion,
   simulateFight,
   type Bout,
@@ -206,10 +212,23 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     ?.map((id) => db.judges.findById(id) as Judge | undefined)
     .filter((j): j is Judge => j !== undefined);
 
+  // Injured fighters compete with their real attributes, not their card. Nobody is told —
+  // the opponent's scouting report does not know, and the player finds out from how the
+  // fight looks. That is how it works in reality and it is the point of the system.
+  const day = booking.bout.day;
+  const redHurt: Fighter = {
+    ...red,
+    attributes: injuredAttributes(red.attributes, red.injuries ?? [], day),
+  };
+  const blueHurt: Fighter = {
+    ...blue,
+    attributes: injuredAttributes(blue.attributes, blue.injuries ?? [], day),
+  };
+
   const result = simulateFight({
     boutId: booking.bout.id,
-    red: { fighter: red, plan: booking.plan },
-    blue: { fighter: blue, plan: aiPlanFor(blue, red) },
+    red: { fighter: redHurt, plan: booking.plan },
+    blue: { fighter: blueHurt, plan: aiPlanFor(blueHurt, redHurt) },
     rounds: booking.bout.rounds,
     referee,
     judges: judges && judges.length === 3 ? judges : undefined,
@@ -227,8 +246,43 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     rng: createRng(`${world.seed}:aftermath:${booking.bout.id}`),
   });
 
-  db.fighters.upsert(aftermath.red);
-  db.fighters.upsert(aftermath.blue);
+  const injuryRng = createRng(`${world.seed}:injury:${booking.bout.id}`);
+  const injuryNotes: string[] = [];
+
+  const settleInjuries = (fighter: Fighter, corner: 'red' | 'blue'): Fighter => {
+    const damage = result.damage[corner];
+    const taken = damage.headDamage + damage.bodyDamage + damage.legDamage;
+    let injuries = [...(fighter.injuries ?? [])];
+
+    // Anything carried in can be made worse by competing on it.
+    injuries = injuries.map((injury) => {
+      if (!activeInjuries([injury], day).length) return injury;
+      if (!injuryRng.chance(aggravationChance(injury, taken))) {
+        return { ...injury, foughtThrough: true };
+      }
+      injuryNotes.push(
+        `${fighter.lastName} came in carrying that ${injury.type} and made it considerably worse.`,
+      );
+      return aggravate(injury, day, injuryRng);
+    });
+
+    if (injuryRng.chance(fightInjuryChance(fighter, taken, day))) {
+      const fresh = rollInjury({
+        fighter,
+        source: 'fight',
+        day,
+        rng: injuryRng.fork(fighter.id as string),
+        history: injuries,
+      });
+      injuries.push(fresh);
+      injuryNotes.push(`${fighter.lastName} leaves with a ${fresh.type} injury.`);
+    }
+
+    return { ...fighter, injuries };
+  };
+
+  db.fighters.upsert(settleInjuries(aftermath.red, 'red'));
+  db.fighters.upsert(settleInjuries(aftermath.blue, 'blue'));
 
   // The belt changes hands, or it does not. A draw leaves it with the champion, which is
   // the rule and also the source of a great deal of real-world grievance.
@@ -262,7 +316,7 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
 
   writeJson(RESULT_KEY, result);
   clearBooking();
-  return { result, notes: [...titleNotes, ...aftermath.notes] };
+  return { result, notes: [...titleNotes, ...injuryNotes, ...aftermath.notes] };
 }
 
 /**
