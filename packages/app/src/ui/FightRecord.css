@@ -1,0 +1,164 @@
+/*
+ * Fight records.
+ *
+ * The outcome of a bout is the single most-scanned fact on a profile, so it is carried by
+ * three independent channels — a letter, a colour and the method text. Colour alone would
+ * fail for a colour-blind reader; a letter alone is slow to scan.
+ */
+
+.record-summary__line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  margin-bottom: var(--space-2);
+}
+
+.record-summary__figure {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.record-summary__figure--win {
+  color: var(--positive);
+}
+
+.record-summary__figure--loss {
+  color: var(--negative);
+}
+
+.record-summary__figure--draw {
+  color: var(--text-muted);
+}
+
+.record-summary__label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  opacity: 0.75;
+}
+
+.record-summary__bar {
+  display: flex;
+  height: 8px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--surface-sunken);
+}
+
+.record-summary__bar-win {
+  background: var(--positive);
+}
+
+.record-summary__bar-loss {
+  background: var(--negative);
+}
+
+.record-summary__bar-draw {
+  background: var(--text-faint);
+}
+
+/* --- The list ------------------------------------------------------------------------ */
+
+.record-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.record-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  /* A colour flag on the leading edge, so a run of results reads as a shape from a distance. */
+  border-inline-start: 3px solid transparent;
+}
+
+.record-row:last-child {
+  border-bottom: none;
+}
+
+.record-row--win {
+  border-inline-start-color: var(--positive);
+}
+
+.record-row--loss {
+  border-inline-start-color: var(--negative);
+}
+
+.record-row--draw,
+.record-row--nc {
+  border-inline-start-color: var(--text-faint);
+}
+
+.record-row__outcome {
+  flex: 0 0 1.75rem;
+  height: 1.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  line-height: 1;
+}
+
+.record-row__outcome--win {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.record-row__outcome--loss {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.record-row__outcome--draw,
+.record-row__outcome--nc {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.record-row__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.record-row__opponent {
+  display: block;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.record-row__meta {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.record-row__link {
+  font: inherit;
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
+}
+
+.record-row__link:hover {
+  text-decoration-color: var(--accent);
+}
+
+.record-list__prior {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  border-top: 1px solid var(--border);
+}

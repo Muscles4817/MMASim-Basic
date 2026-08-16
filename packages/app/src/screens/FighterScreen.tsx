@@ -16,6 +16,8 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, RatingRow, Stat } from '../ui';
+import { FightRecordList, RecordSummaryBar } from '../ui/FightRecord';
+import { getLadderStatus } from '../game/progression';
 
 const GROUP_LABELS: Record<AttributeGroup, string> = {
   physical: 'Physical',
@@ -52,6 +54,21 @@ export function FighterScreen({ id }: { id: string }) {
   const gym = fighter.gymId ? db.gyms.findById(fighter.gymId) : undefined;
   const promotion = fighter.promotionId ? db.promotions.findById(fighter.promotionId) : undefined;
 
+  // Only the opponents this fighter actually faced, so the list can name and link them.
+  const opponents = new Map(
+    fighter.record
+      .map((entry) => db.fighters.findById(entry.opponentId as string) as Fighter | undefined)
+      .filter((f): f is Fighter => f !== undefined)
+      .map((f) => [f.id as string, f]),
+  );
+
+  // Bouts that happened before this save began have no round-by-round detail to show.
+  const priorBouts = fighter.priorRecord
+    ? fighter.priorRecord.wins + fighter.priorRecord.losses + fighter.priorRecord.draws
+    : 0;
+
+  const ladder = getLadderStatus(db, fighter);
+
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
       <Card raised>
@@ -67,10 +84,33 @@ export function FighterScreen({ id }: { id: string }) {
           <Stat value={Math.round(fighter.reputation)} label="Reputation" />
         </div>
         <div className="row" style={{ marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
+          {ladder.isChampion && (
+            <Chip tone="accent" title="Reigning divisional champion">
+              🏆 Champion
+            </Chip>
+          )}
+          {!ladder.isChampion && ladder.position !== undefined && (
+            <Chip tone="info" title="Divisional ranking">
+              #{ladder.position} contender
+            </Chip>
+          )}
           {promotion && <Chip tone="info">{promotion.shortName}</Chip>}
           {gym && <Chip>{gym.name}</Chip>}
           <Chip>{Math.round(fighter.heightInches)}″ · {Math.round(fighter.reachInches)}″ reach</Chip>
         </div>
+      </Card>
+
+      <Card title="Record">
+        <RecordSummaryBar summary={fighter.summary} />
+      </Card>
+
+      <Card title="Results" flush>
+        <FightRecordList
+          fighter={fighter}
+          opponents={opponents}
+          priorBouts={priorBouts}
+          onOpponentClick={(id) => navigate({ name: 'fighter', id })}
+        />
       </Card>
 
       {fighter.traits.length > 0 && (
