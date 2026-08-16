@@ -374,7 +374,21 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
   };
 
   db.fighters.upsert(settleInjuries(aftermath.red, 'red'));
-  db.fighters.upsert(settleInjuries(aftermath.blue, 'blue'));
+
+  /*
+   * The opponent's medical suspension.
+   *
+   * The player's own is handled by advancing the world clock below, but the fighter they just
+   * knocked out got nothing at all — so the game's most common suspension, the one the player
+   * personally caused, was the one that did not exist. They could be rebooked immediately.
+   */
+  const opponentLost = result.winnerId !== undefined && result.winnerId === red.id;
+  db.fighters.upsert({
+    ...settleInjuries(aftermath.blue, 'blue'),
+    readyOnDay:
+      booking.bout.day +
+      readinessDelay(aftermath.blue, opponentLost ? result.method : undefined),
+  } as Fighter & Entity);
 
   // Pay the man. Until this existed the purse was printed on two screens and discarded.
   const playerWon = result.winnerId === red.id;

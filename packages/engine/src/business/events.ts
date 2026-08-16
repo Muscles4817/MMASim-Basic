@@ -332,3 +332,90 @@ export function broadcastFor(promotion: Promotion, headlineDraw: number, rng: Rn
   }
   return 'streamed';
 }
+
+// --- What a night does to the promotion that ran it ------------------------------------------
+
+/**
+ * The consequence of a card.
+ *
+ * `eventRevenue()` existed and was correct, and both callers threw the answer away — the
+ * world's card runner did not even compute it (`void totalDraw`), and the player's night
+ * discarded it (`void revenue`). So promotions never earned, never lost, and their `buzz`
+ * never moved, despite the field being documented as "moves with cards delivered and stars
+ * built".
+ *
+ * That absence quietly removed the loop doc 12 is built around: *a promotion that runs bad
+ * cards sees demand fall for the next one*. Without it, matchmaking has no consequence, a
+ * promotion cannot be run into the ground or built up, and the budget that sets every purse
+ * on the roster is a constant. It is also the entire economic substrate promoter mode needs,
+ * so it is worth having right before that lands rather than after.
+ *
+ * Two things move:
+ *
+ * **Budget** takes the profit directly. A promotion that loses money on a card has less to
+ * pay with on the next one, which is the mechanism by which overspending on a marquee fight
+ * is a real decision rather than a free one.
+ *
+ * **Buzz** moves on how the night *delivered*, not on what it earned. This is deliberate and
+ * it is the more interesting half: a card that made money with three dull decisions should
+ * lose attention, and a card that lost money on a spectacular one should gain it. That gap
+ * between "profitable" and "good" is where promoter mode's central tension lives.
+ */
+export interface NightSettlement {
+  revenue: EventRevenue;
+  /** The promotion after the night. Callers persist it. */
+  promotion: Promotion;
+  budgetDelta: number;
+  buzzDelta: number;
+}
+
+/**
+ * Average excitement at which a card is judged to have met expectations.
+ *
+ * Below this the audience drifts, above it they come back. Calibrated against `excitement()`,
+ * where a competitive three-round decision scores roughly here and a one-sided early finish
+ * scores well under.
+ */
+export const EXPECTED_CARD_EXCITEMENT = 55;
+
+/** How far buzz can move on a single night, in points. Attention is sticky. */
+export const MAX_BUZZ_SWING = 3;
+
+export function settleNight(input: {
+  promotion: Promotion;
+  revenue: EventRevenue;
+  /** Every result on the card, in any order. */
+  results: readonly FightResult[];
+}): NightSettlement {
+  const { promotion, revenue, results } = input;
+
+  const delivered =
+    results.length === 0
+      ? EXPECTED_CARD_EXCITEMENT
+      : results.reduce((a, r) => a + excitement(r), 0) / results.length;
+
+  /*
+   * Scaled by prestige, so buzz is harder to hold at the top. A global promotion is judged
+   * against what it has already shown people; a regional one gains attention from a good
+   * night more easily than a major one does, which is how the bottom of the sport actually
+   * grows and why a breakout card matters more to a small promotion.
+   */
+  const missRatio = (delivered - EXPECTED_CARD_EXCITEMENT) / EXPECTED_CARD_EXCITEMENT;
+  const stickiness = 0.6 + (promotion.prestige / 100) * 0.8;
+  const buzzDelta =
+    Math.round(clamp(missRatio / stickiness, -1, 1) * MAX_BUZZ_SWING * 10) / 10;
+
+  return {
+    revenue,
+    budgetDelta: revenue.profit,
+    buzzDelta,
+    promotion: {
+      ...promotion,
+      // Floored at zero rather than allowed negative: an insolvent promotion is a different
+      // feature (it folds, and its roster hits free agency), and inventing it silently here
+      // as a negative number would produce nonsense purses across the whole roster.
+      budget: Math.max(0, Math.round(promotion.budget + revenue.profit)),
+      buzz: clamp(Math.round((promotion.buzz + buzzDelta) * 10) / 10, 1, 100),
+    },
+  };
+}

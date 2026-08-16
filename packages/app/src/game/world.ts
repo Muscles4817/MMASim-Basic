@@ -75,8 +75,11 @@ import {
   type PromotionalAgreement,
   type Venue,
   type Rng,
+  eventRevenue,
+  settleNight,
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
+import { currentPurse } from './money';
 
 type StoredNews = NewsItem & Entity;
 
@@ -199,7 +202,9 @@ export function advanceWorld(
      */
     const available = (db.fighters.findAll() as Fighter[]).filter((f) => {
       if (f.id === exceptId || f.retiredDay !== undefined) return false;
-      if ((readyOn.get(f.id as string) ?? 0) > day) return false;
+      // Both the in-call map and the persisted day, because a suspension handed out by the
+      // player's own card in a previous session is every bit as binding as one from this loop.
+      if (Math.max(readyOn.get(f.id as string) ?? 0, f.readyOnDay ?? 0) > day) return false;
       const inLastYear = f.record.filter((r) => day - r.day < 365).length;
       return inLastYear < MAX_BOUTS_PER_YEAR;
     });
@@ -416,7 +421,38 @@ function buildNight(ctx: {
 
   db.events.upsert(night as FightNight & Entity);
 
-  void totalDraw;
+  /*
+   * What the night did to the promotion that ran it.
+   *
+   * `totalDraw` was computed and thrown away here, so no card the world ran ever earned or
+   * cost a promotion anything and `buzz` never moved. Doc 12's central loop — a promotion
+   * that runs bad cards sees demand fall for the next one — did not exist.
+   */
+  /*
+   * Re-read rather than reusing the `promotion` captured at the top of this function.
+   *
+   * Bouts on this card may have changed a title, and `finalise` writes that to the stored
+   * promotion. Settling against the stale object and upserting it would silently roll the new
+   * champion back — which is exactly what happened when this was first written, and it showed
+   * up as belts that never changed hands across five simulated years.
+   */
+  const current =
+    (db.promotions.findById(promotion.id as string) as Promotion | undefined) ?? promotion;
+
+  const settled = settleNight({
+    promotion: current,
+    revenue: eventRevenue({
+      promotion,
+      venue: night.venue,
+      broadcast,
+      totalDraw,
+      purses: cardPurses(db, card),
+      bonuses: night.bonusPool,
+    }),
+    results: results.map((r) => r.result),
+  });
+  db.promotions.upsert(settled.promotion as Promotion & Entity);
+
   return { fights, news };
 }
 
@@ -543,10 +579,26 @@ function runCardBout(ctx: {
     db.fighters.upsert(finalised.fighter as Fighter & Entity);
   }
 
+  /*
+   * The medical suspension, now written down.
+   *
+   * This used to live only in the in-memory `readyOn` Map, which is rebuilt at the top of
+   * every `advanceWorld` call and discarded at the bottom of it — so a fighter knocked out
+   * cold could be booked again by the very next step. Persisting it on the fighter makes the
+   * suspension a property of the person rather than of whichever loop is running, and means
+   * the player's own card honours it too.
+   */
   const redLost = result.winnerId !== undefined && result.winnerId !== red.id;
   const blueLost = result.winnerId !== undefined && result.winnerId !== blue.id;
-  readyOn.set(red.id as string, day + readinessDelay(after.red, redLost ? result.method : undefined));
-  readyOn.set(blue.id as string, day + readinessDelay(after.blue, blueLost ? result.method : undefined));
+  for (const [fighter, lost] of [
+    [after.red, redLost],
+    [after.blue, blueLost],
+  ] as const) {
+    const until = day + readinessDelay(fighter, lost ? result.method : undefined);
+    readyOn.set(fighter.id as string, until);
+    const stored = db.fighters.findById(fighter.id as string) as Fighter | undefined;
+    if (stored) db.fighters.upsert({ ...stored, readyOnDay: until } as Fighter & Entity);
+  }
 
   return { news, result };
 }
@@ -888,3 +940,25 @@ export function divisionHealth(db: GameDb, divisionId: DivisionId): number {
 }
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+/**
+ * What the promotion paid the card, so the night's profit is a real number.
+ *
+ * Reads each fighter's signed terms rather than their market value, for the same reason
+ * `settleFight` does: the whole economic grievance of the sport is that terms are fixed while
+ * worth is not, and a promotion's costs are its contracts.
+ */
+function cardPurses(db: GameDb, card: readonly CardBout[]): number {
+  let total = 0;
+  for (const bout of card) {
+    for (const id of [bout.redId, bout.blueId]) {
+      const fighter = db.fighters.findById(id as string) as Fighter | undefined;
+      if (!fighter) continue;
+      const purse = currentPurse(db, fighter, bout.position);
+      // Show money is paid either way; the win bonus is paid once, so half the card collects
+      // it. Averaging is both correct in aggregate and cheaper than resolving who won here.
+      if (purse) total += purse.show + purse.win * 0.5;
+    }
+  }
+  return Math.round(total);
+}

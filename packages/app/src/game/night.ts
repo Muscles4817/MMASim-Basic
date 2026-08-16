@@ -23,6 +23,7 @@ import {
   eventId,
   eventName,
   eventRevenue,
+  settleNight,
   offerOpponents,
   readinessDelay,
   simulateFight,
@@ -36,6 +37,7 @@ import {
   type Venue,
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
+import { currentPurse } from './money';
 
 const VENUES: readonly Venue[] = [
   { name: 'The Arena', city: 'Las Vegas', country: 'USA', capacity: 18000 },
@@ -196,7 +198,18 @@ export function runSupportingCard(
     db.fighters.upsert(after.red as Fighter & Entity);
     db.fighters.upsert(after.blue as Fighter & Entity);
 
-    void readinessDelay;
+    // The suspension the undercard used to throw away outright.
+    const loserId = result.winnerId !== undefined && result.winnerId === red.id ? blue.id : red.id;
+    for (const f of [after.red, after.blue]) {
+      const stored = db.fighters.findById(f.id as string) as Fighter | undefined;
+      if (!stored) continue;
+      db.fighters.upsert({
+        ...stored,
+        readyOnDay:
+          day + readinessDelay(f, f.id === loserId && result.winnerId !== undefined ? result.method : undefined),
+      } as Fighter & Entity);
+    }
+
     undercard.push({ bout, result });
     results.push({ boutId: bout.boutId, result });
   }
@@ -229,15 +242,7 @@ export function runSupportingCard(
     } as Fighter & Entity);
   }
 
-  const revenue = eventRevenue({
-    promotion,
-    venue: rng.pick(VENUES),
-    broadcast,
-    totalDraw,
-    purses: 0,
-    bonuses: bonusPool,
-  });
-  void revenue;
+  const venue = rng.pick(VENUES);
 
   const night: FightNight = {
     id: eventId(promotion.id, day),
@@ -249,13 +254,46 @@ export function runSupportingCard(
       number: Math.floor(day / 14) + 1,
       mainEventNames: [displayName(player), displayName(opponent)],
     }),
-    venue: rng.pick(VENUES),
+    venue,
     broadcast,
     status: 'complete',
     bouts: card,
     bonusPool,
   };
   db.events.upsert(night as FightNight & Entity);
+
+  /*
+   * What the night did to the promotion. The revenue was computed here and discarded
+   * (`void revenue`), so the player's own cards — the ones they headline, the ones that sell
+   * — were the only events in the game with no effect on the promotion running them.
+   *
+   * Which meant a player could main-event a promotion for a decade and its budget, and so
+   * every purse it paid including their own, would not have moved once.
+   */
+  /*
+   * Re-read rather than reusing the `promotion` captured at the top of this function.
+   *
+   * Bouts on this card may have changed a title, and `finalise` writes that to the stored
+   * promotion. Settling against the stale object and upserting it would silently roll the new
+   * champion back — which is exactly what happened when this was first written, and it showed
+   * up as belts that never changed hands across five simulated years.
+   */
+  const current =
+    (db.promotions.findById(promotion.id as string) as Promotion | undefined) ?? promotion;
+
+  const settled = settleNight({
+    promotion: current,
+    revenue: eventRevenue({
+      promotion,
+      venue,
+      broadcast,
+      totalDraw,
+      purses: cardPurses(db, card),
+      bonuses: bonusPool,
+    }),
+    results: results.map((r) => r.result),
+  });
+  db.promotions.upsert(settled.promotion as Promotion & Entity);
 
   return { night, undercard, playerBonus, notes };
 }
@@ -291,3 +329,17 @@ export const positionLabel = (position: CardPosition): string =>
         : 'Preliminary card';
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+/** What the promotion paid the card. Mirrors the world's card runner. */
+function cardPurses(db: GameDb, card: readonly CardBout[]): number {
+  let total = 0;
+  for (const bout of card) {
+    for (const id of [bout.redId, bout.blueId]) {
+      const fighter = db.fighters.findById(id as string) as Fighter | undefined;
+      if (!fighter) continue;
+      const purse = currentPurse(db, fighter, bout.position);
+      if (purse) total += purse.show + purse.win * 0.5;
+    }
+  }
+  return Math.round(total);
+}

@@ -148,6 +148,21 @@ export interface Fighter {
   priorRecord?: RecordSummary;
   summary: RecordSummary;
 
+  /**
+   * The day this fighter is medically cleared to compete again.
+   *
+   * `readinessDelay()` computes this — a knockout carries a real suspension, and the model
+   * has always known it — but the world held the answer in a Map rebuilt on every call and
+   * discarded at the end of it, and the player's undercard threw it away outright
+   * (`void readinessDelay`). So a fighter knocked out cold on a Saturday could be booked
+   * again in the next world step, and the mandatory KO suspension that exists in every
+   * athletic commission in the sport existed nowhere in the game.
+   *
+   * Persisted on the fighter because that is what it is: a property of the person, not of
+   * whichever loop happens to be running.
+   */
+  readyOnDay?: GameDay;
+
   gymId?: GymId;
   headCoachId?: CoachId;
   promotionId?: PromotionId;
