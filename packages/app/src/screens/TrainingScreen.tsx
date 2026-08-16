@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import {
   ATTRIBUTE_META,
+  DANGEROUS_SEVERITY,
+  appraiseDivisionMove,
+  getDivision,
+  overallRating,
+  viableDivisions,
   TRAINING_FOCUSES,
   TRAINING_META,
   activeInjuries,
@@ -10,13 +15,21 @@ import {
   headroom,
   type AttributeKey,
   type Coach,
+  type DivisionId,
   type Gym,
   type TrainingFocus,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented, Stat } from '../ui';
-import { joinGym, runLayoff, runTraining, type TrainingOutcome } from '../game/progression';
+import {
+  changeDivision,
+  divisionField,
+  joinGym,
+  runLayoff,
+  runTraining,
+  type TrainingOutcome,
+} from '../game/progression';
 import { Alert } from '../ui/signals';
 
 const WEEK_OPTIONS = [
@@ -236,6 +249,8 @@ export function TrainingScreen() {
         </Button>
       </div>
 
+      <DivisionPicker />
+
       <GymPicker currentGymId={fighter.gymId} onJoin={(g) => {
         joinGym(db, fighter, g);
         commit();
@@ -309,6 +324,137 @@ function GymPicker({
           );
         })}
       </div>
+    </Card>
+  );
+}
+
+/**
+ * Changing weight class.
+ *
+ * The one screen in the game where the "ratings are absolute" decision becomes visible to
+ * the player: nothing about the fighter changes, and everything about the field does. So the
+ * appraisal leads with the field gap rather than with the cut, because the cut is the part a
+ * player will guess correctly and the field is the part they will not.
+ */
+function DivisionPicker() {
+  const { db, world, playerFighter, commit } = useGame();
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState<DivisionId | undefined>();
+
+  if (!playerFighter) return null;
+  const fighter = playerFighter;
+  const options = viableDivisions(fighter).filter((d) => d.id !== fighter.divisionId);
+
+  return (
+    <Card title="Weight class">
+      <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
+        You currently fight at {getDivision(fighter.divisionId).name}, walking around at{' '}
+        {fighter.walkingWeightLbs}lb. Your ratings do not change when you move — the people
+        across from you do.
+      </p>
+
+      {!open ? (
+        <Button onClick={() => setOpen(true)} disabled={options.length === 0}>
+          {options.length === 0 ? 'No other division you could make' : 'Consider a move'}
+        </Button>
+      ) : (
+        <div className="stack" style={{ gap: 'var(--space-2)' }}>
+          {options.map((division) => {
+            const appraisal = appraiseDivisionMove(
+              fighter,
+              division.id,
+              divisionField(db, division.id, fighter.id as string),
+              overallRating(fighter.attributes),
+            );
+            const selected = pending === division.id;
+
+            return (
+              <div
+                key={division.id}
+                style={{
+                  padding: 'var(--space-3)',
+                  borderRadius: 'var(--radius)',
+                  border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+                  background: selected ? 'var(--accent-soft)' : 'var(--surface)',
+                }}
+              >
+                <button
+                  type="button"
+                  aria-expanded={selected}
+                  onClick={() => setPending(selected ? undefined : division.id)}
+                  style={{ display: 'block', width: '100%', textAlign: 'left' }}
+                >
+                  <span className="row" style={{ justifyContent: 'space-between', gap: 'var(--space-2)' }}>
+                    <span style={{ fontWeight: 700 }}>
+                      {division.name}{' '}
+                      <span className="faint" style={{ fontWeight: 400 }}>
+                        {division.limitLbs}lb
+                      </span>
+                    </span>
+                    <span className="row" style={{ gap: 'var(--space-1)' }}>
+                      <Chip tone={appraisal.direction === 'up' ? 'info' : 'neutral'}>
+                        {appraisal.direction === 'up' ? '↑ Up' : '↓ Down'}
+                        {appraisal.steps > 1 ? ` ×${appraisal.steps}` : ''}
+                      </Chip>
+                      <Chip
+                        tone={
+                          appraisal.fieldGap > 4
+                            ? 'positive'
+                            : appraisal.fieldGap < -4
+                              ? 'negative'
+                              : 'neutral'
+                        }
+                        title="How you compare to the fighters already in that division"
+                      >
+                        {appraisal.fieldGap > 0 ? '+' : ''}
+                        {appraisal.fieldGap} vs field
+                      </Chip>
+                      {appraisal.severity >= DANGEROUS_SEVERITY && (
+                        <Chip tone="warning" title="A cut this size is genuinely risky">
+                          ⚠ Hard cut
+                        </Chip>
+                      )}
+                    </span>
+                  </span>
+                </button>
+
+                {selected && (
+                  <div style={{ marginTop: 'var(--space-3)' }}>
+                    {appraisal.notes.map((note) => (
+                      <p key={note} className="prose" style={{ fontSize: 'var(--text-sm)' }}>
+                        {note}
+                      </p>
+                    ))}
+                    <div className="row" style={{ flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
+                      <Button
+                        variant="primary"
+                        onClick={() => {
+                          changeDivision(db, fighter, division.id);
+                          commit();
+                          setPending(undefined);
+                          setOpen(false);
+                        }}
+                      >
+                        Move to {division.shortName}
+                      </Button>
+                      <Button variant="ghost" onClick={() => setPending(undefined)}>
+                        Not this one
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Stay where I am
+          </Button>
+        </div>
+      )}
+      <p className="faint prose" style={{ fontSize: 'var(--text-xs)', marginTop: 'var(--space-2)' }}>
+        Day {world.day}. Your body takes months to catch up with the move — you gain or lose
+        real weight over several camps, and that is a trade rather than an upgrade.
+      </p>
     </Card>
   );
 }

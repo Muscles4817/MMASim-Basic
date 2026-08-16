@@ -221,10 +221,8 @@ export function moveDivision(fighter: Fighter, targetId: DivisionId, day: GameDa
     divisionHistory: fighter.divisionHistory.includes(targetId)
       ? fighter.divisionHistory
       : [...fighter.divisionHistory, targetId],
-    // Kept for the record even though nothing reads it yet — a fighter's division history is
-    // exactly the sort of thing a profile page should show.
     lastDivisionChangeDay: day,
-  } as Fighter;
+  };
 }
 
 /**

@@ -106,6 +106,8 @@ export interface Fighter {
   divisionId: DivisionId;
   /** Divisions they have competed in, for career history display. */
   divisionHistory: readonly DivisionId[];
+  /** When they last changed weight class. Absent for a fighter who never has. */
+  lastDivisionChangeDay?: GameDay;
 
   attributes: Attributes;
   /** Hidden. Never rendered as numbers. */

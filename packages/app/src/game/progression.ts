@@ -13,7 +13,10 @@ import {
   campInjuryChance,
   careerProgress,
   createRng,
+  moveDivision,
+  overallRating,
   promotionOffers,
+  settleWeight,
   describeInjury,
   rankDivision,
   rankOf,
@@ -22,6 +25,7 @@ import {
   titleShotEligibility,
   type AttributeKey,
   type Coach,
+  type DivisionId,
   type Fighter,
   type FighterId,
   type Gym,
@@ -267,4 +271,25 @@ export function joinGym(db: GameDb, fighter: Fighter, gym: Gym): Fighter {
   db.fighters.upsert(updated);
   db.save();
   return updated;
+}
+
+/**
+ * Move the player's fighter to another weight class.
+ *
+ * The engine decides what the move means; this decides when the body starts catching up.
+ * One settle step is applied immediately so the change is visible rather than theoretical,
+ * and `runTraining` applies another each camp — a fighter who moves up is a different size
+ * six months later, not the same afternoon.
+ */
+export function changeDivision(db: GameDb, fighter: Fighter, divisionId: DivisionId): Fighter {
+  const moved = settleWeight(moveDivision(fighter, divisionId, getWorld(db).day));
+  db.fighters.upsert(moved as Fighter & { id: string });
+  return moved;
+}
+
+/** Everyone already in a division, for the honest "what am I walking into" appraisal. */
+export function divisionField(db: GameDb, divisionId: DivisionId, exclude: string): number[] {
+  return (db.fighters.findAll() as Fighter[])
+    .filter((f) => f.divisionId === divisionId && (f.id as string) !== exclude && !f.retiredDay)
+    .map((f) => overallRating(f.attributes));
 }
