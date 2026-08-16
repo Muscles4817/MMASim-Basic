@@ -5,6 +5,7 @@ import {
   overallRating,
   recordString,
   type Fighter,
+  type Promotion,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
@@ -57,6 +58,32 @@ export function StartScreen() {
    */
   const [pending, setPending] = useState<Fighter | undefined>();
 
+  /*
+   * The promotions a player can start at.
+   *
+   * Regional only. The plan's reasoning, kept here because it is a design decision rather than
+   * a filter: at the top of the sport phases three and four do not bite — a promotion with a
+   * £62m budget does not feel payroll and cannot plausibly lose its broadcaster — so starting
+   * there would mean shipping a mode whose pressure systems are inert.
+   */
+  const regionals = useMemo(
+    () =>
+      (db.promotions.findAll() as unknown as Promotion[])
+        .filter((p) => p.tier === 'regional')
+        .sort((a, b) => b.prestige - a.prestige),
+    [db],
+  );
+
+  const takeOver = (promotion: Promotion) => {
+    clearTransientCareerState();
+    updateWorld({
+      playerRole: 'promoter',
+      playerPromotionId: promotion.id as string,
+      playerFighterId: undefined,
+    });
+    navigate({ name: 'promotion' });
+  };
+
   const commitChoice = (fighter: Fighter) => {
     // Bookings and the last result are keyed to the previous fighter. Left behind, the hub
     // offers to send the new fighter into the old one’s booked bout.
@@ -94,6 +121,43 @@ export function StartScreen() {
         <Button variant="primary" block onClick={() => navigate({ name: 'create' })}>
           Create your own fighter
         </Button>
+      </Card>
+
+      {/*
+        The other side of the sport.
+        
+        `playerRole` has existed in the data layer since the beginning and was written twice,
+        always to 'fighter', and read nowhere. This is the first thing that reads it.
+        
+        Regional only, and stated as a choice about which problem you want rather than a
+        difficulty setting: at the top of the sport payroll does not bite and a broadcaster
+        cannot plausibly drop you, so the pressure systems that make the mode a game are inert
+        there.
+      */}
+      <Card>
+        <h2 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--space-2)' }}>
+          Or run a promotion
+        </h2>
+        <p className="muted prose" style={{ marginBottom: 'var(--space-3)' }}>
+          You decide who fights whom, who gets pushed and who gets cut. Make money or make the
+          sport — you will not do both.
+        </p>
+        <div className="stack" style={{ gap: 'var(--space-2)' }}>
+          {regionals.map((promotion) => (
+            <button
+              key={promotion.id}
+              type="button"
+              className="bout"
+              onClick={() => takeOver(promotion)}
+            >
+              <span className="bout__names">{promotion.name}</span>
+              <span className="list__secondary" style={{ display: 'block' }}>
+                {promotion.baseCountry} · £{Math.round(promotion.budget).toLocaleString()}k to
+                spend · {promotion.notes}
+              </span>
+            </button>
+          ))}
+        </div>
       </Card>
 
       <Card>

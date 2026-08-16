@@ -22,10 +22,12 @@ import {
   editorTypeLabel,
 } from './screens/EditorEntityScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { PromotionHubScreen } from './screens/PromotionHubScreen';
+import { CardBuilderScreen } from './screens/CardBuilderScreen';
 
 export function App() {
   const { route, replace } = useRouter();
-  const { db, playerFighter, saveError } = useGame();
+  const { db, world, playerFighter, saveError } = useGame();
 
   const fighterName = (id: string): string | undefined => {
     const fighter = db.fighters.findById(id) as Fighter | undefined;
@@ -35,8 +37,17 @@ export function App() {
   // A first-time visitor landing on the career hub with no fighter would see an empty
   // screen; send them to the one decision that has to be made first.
   useEffect(() => {
+    /*
+     * A promoter has no fighter, so the fighter hub's "you need to pick somebody" redirect
+     * would bounce them to the start screen forever. Send them to their own hub instead —
+     * `playerRole` finally deciding something is the whole of phase one's entry point.
+     */
+    if (route.name === 'hub' && world.playerRole === 'promoter') {
+      replace({ name: 'promotion' });
+      return;
+    }
     if (route.name === 'hub' && !playerFighter) replace({ name: 'start' });
-  }, [route.name, playerFighter, replace]);
+  }, [route.name, playerFighter, world.playerRole, replace]);
 
   return (
     <>
@@ -121,6 +132,19 @@ export function App() {
         return (
           <Shell title="Offers" showBack>
             <OffersScreen />
+          </Shell>
+        );
+      // --- Promoter mode ---------------------------------------------------------------
+      case 'promotion':
+        return (
+          <Shell title="Promotion">
+            <PromotionHubScreen />
+          </Shell>
+        );
+      case 'card':
+        return (
+          <Shell title="Build a card" showBack>
+            <CardBuilderScreen />
           </Shell>
         );
       case 'rankings':

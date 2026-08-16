@@ -35,7 +35,7 @@ interface NavItem {
   matches?: readonly Route['name'][];
 }
 
-const NAV_ITEMS: readonly NavItem[] = [
+const FIGHTER_NAV: readonly NavItem[] = [
   // `start` belongs to Career: picking a fighter is the first step of the career flow, and
   // without it the very first screen a new player sees has no tab marked current.
   {
@@ -43,6 +43,28 @@ const NAV_ITEMS: readonly NavItem[] = [
     label: 'Career',
     icon: '🥊',
     matches: ['hub', 'camp', 'fight', 'start', 'create', 'training'],
+  },
+  { route: { name: 'roster' }, label: 'Roster', icon: '👥', matches: ['roster', 'fighter'] },
+  { route: { name: 'rankings' }, label: 'Rankings', icon: '🏆' },
+  { route: { name: 'editor' }, label: 'Editor', icon: '✏️', matches: ['editor', 'editorFighter'] },
+  { route: { name: 'settings' }, label: 'Settings', icon: '⚙️' },
+];
+
+/**
+ * The same five tabs, pointed at the promoter's places.
+ *
+ * The shell is shared rather than forked, and the tab array is the only thing that changes.
+ * Forking would mean reimplementing the rail/tab-bar breakpoint, the safe-area insets, the
+ * skip link, focus-on-navigate and the live route announcement — and then fixing every future
+ * accessibility bug in two places. Roster, Rankings, Editor and Settings are genuinely the same
+ * screens in both modes; only the first tab differs.
+ */
+const PROMOTER_NAV: readonly NavItem[] = [
+  {
+    route: { name: 'promotion' },
+    label: 'Promotion',
+    icon: '🎪',
+    matches: ['promotion', 'card', 'hub', 'start'],
   },
   { route: { name: 'roster' }, label: 'Roster', icon: '👥', matches: ['roster', 'fighter'] },
   { route: { name: 'rankings' }, label: 'Rankings', icon: '🏆' },
@@ -65,6 +87,7 @@ export function Shell({
 }) {
   const { route, navigate, back } = useRouter();
   const { world } = useGame();
+  const NAV_ITEMS = world.playerRole === 'promoter' ? PROMOTER_NAV : FIGHTER_NAV;
   const mainRef = useRef<HTMLElement>(null);
 
   // Move focus to the content region on every navigation. Without this a screen-reader

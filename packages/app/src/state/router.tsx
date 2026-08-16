@@ -46,6 +46,10 @@ export type Route =
   | { name: 'fight'; boutId: string }
   | { name: 'rankings' }
   | { name: 'offers' }
+  // Promoter mode. Flat rather than nested under a role prefix, because a route is a place and
+  // the player is only ever in one mode at a time.
+  | { name: 'promotion' }
+  | { name: 'card' }
   | { name: 'editor' }
   | { name: 'editorFighter'; id: string }
   | { name: 'editorList'; kind: EditorEntityKind }
@@ -77,6 +81,10 @@ function parse(hash: string): Route {
       return { name: 'rankings' };
     case 'offers':
       return { name: 'offers' };
+    case 'promotion':
+      return { name: 'promotion' };
+    case 'card':
+      return { name: 'card' };
     case 'editor':
       return param ? { name: 'editorFighter', id: param } : { name: 'editor' };
     case 'edit': {

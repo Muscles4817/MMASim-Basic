@@ -617,3 +617,47 @@ a.list__item:hover {
 .offer-advice--against {
   border-inline-start-color: var(--warning);
 }
+
+/* --- Bout row ---------------------------------------------------------------------------
+   One fight on a card, or one option for a slot. A button rather than a row with a button in
+   it: the whole thing is the target, because on a phone a 44px strip beside a name is a
+   mis-tap waiting to happen. */
+
+.bout {
+  display: block;
+  width: 100%;
+  text-align: left;
+  min-height: var(--tap-target);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.bout:hover {
+  border-color: var(--border-strong);
+}
+
+/* An option being offered reads as a choice rather than as state, so it leans on the accent. */
+.bout--option {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.bout__names {
+  display: block;
+  font-weight: 700;
+  margin-bottom: var(--space-1);
+}
+
+.bout__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
