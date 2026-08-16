@@ -1,6 +1,7 @@
 # 12 — Events & Fight Cards
 
-> Status: design. Nothing in this document is built yet.
+> Status: design, revised after review. Nothing in this document is built yet.
+> Revisions follow [15 — Design Review Synthesis](./15-design-review-synthesis.md).
 
 ## Why cards exist
 
@@ -74,8 +75,23 @@ determined by their star power and the stakes. This replaces `advanceRoster` in
 
 ## Simulating a card
 
-Bouts resolve in reverse order — prelims first — so the play-by-play reads the way a real
-broadcast does, and so the player's own fight lands last with the building already hot.
+An earlier draft resolved bouts in reverse order — prelims first — so the night read like a
+broadcast. Both reviewers rejected it, from opposite directions: it means eight fights of
+dead time before the player's own, and it fails *worse* when the player is on the prelims,
+because then they watch their fight and spectate the entire main card.
+
+**The rule instead: the player's fight is the detailed one, wherever it sits.**
+
+| Position on the card | What the player gets |
+| -------------------- | -------------------- |
+| Bouts before theirs | Resolved first, delivered as readable results. The building fills up |
+| Their own bout | Full exchange-by-exchange play-by-play |
+| Bouts after theirs | Resolved once theirs is done, delivered as results |
+| Any bout, on request | Expandable into full play-by-play |
+
+That last row is the whole difference between *the game showed me eight fights* and *I chose
+to watch two of them*. A rival you have history with, or the fight that decides your next
+opponent, is worth watching. The other six are worth a line each.
 
 The card produces a **results feed**: every fight, its method, and any upsets. This is what
 makes the world feel alive rather than a static roster the player fights their way through.
@@ -85,7 +101,7 @@ makes the world feel alive rather than a static roster the player fights their w
 ```
 gate       = min(capacity, demand) × ticketPrice(prestige, main-event star power)
 broadcast  = model-specific: PPV buys × price, or a flat rights fee
-costs      = purses + production(venue, broadcast) + marketing
+costs      = purses + bonuses + production(venue, broadcast) + marketing
 profit     = gate + broadcast − costs
 ```
 
@@ -93,6 +109,30 @@ Demand is driven by the main event's combined star power and heat (doc 08), the 
 `buzz`, and how well the last few cards delivered. A promotion that runs bad cards sees
 demand fall for the next one — which is the feedback loop that makes matchmaking a real
 decision rather than a formality.
+
+**Purses are not set here.** They are contractual, agreed when the fighter signs (doc 13),
+which is both how the sport works and the only way the card builder stays playable — nobody
+wants to set fifteen purses a fortnight. Card position multiplies the contracted figure; it
+does not replace it.
+
+### The bonus pool
+
+Both reviewers arrived at this independently, which is about as strong a signal as design
+review produces.
+
+| Award | Awarded to | Driven by |
+| ----- | ---------- | --------- |
+| **Fight of the Night** | Both fighters in one bout | Combined significant strikes, lead changes, damage taken, whether it went the distance close |
+| **Performance of the Night** | Up to two individuals | Finish quality: speed, method, and the gap in ranking it closed |
+
+The promoter sets the pool size per card; the *simulation* decides who gets it, from what
+actually happened in the fight rather than a die roll. Two things fall out of this, and both
+are important:
+
+- A prelim fighter can double their night's pay by having the right kind of fight. That is
+  the real mechanism by which the bottom of a roster survives, and it belongs in the game.
+- **An exciting loss becomes worth something.** In a game that otherwise pays only the raised
+  hand, this is what stops the correct strategy being to fight safe and win boring.
 
 ## What the player sees
 
@@ -107,6 +147,12 @@ cards, so the division moves visibly.
 - How many cards per month per promotion tier? Too few and the world is static; too many and
   the roster is permanently injured. Probably 2/month for global, 1 for major, 1 per 6 weeks
   for regional.
-- Should the player be able to *decline* a card position? Refusing a prelim slot is a real
-  thing fighters do, and it should cost promotion relationship.
 - Co-promotion events. Interesting, rare, and probably a later addition.
+
+### Resolved by review
+
+- **Can the player decline a card position?** Yes — and it goes through their manager (doc
+  15), which is what makes it feel like a negotiation rather than a menu. Refusing a prelim
+  slot is a real thing fighters do; it costs promotion relationship and it sometimes works.
+- **Simulation order.** Settled above: detail follows the player, not the broadcast.
+- **Per-card purses.** Removed. Contracts, not cards.

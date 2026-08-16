@@ -1,6 +1,7 @@
 # 13 — Promoter Mode
 
-> Status: design. Nothing in this document is built yet.
+> Status: design, revised after review. Nothing in this document is built yet.
+> Revisions follow [15 — Design Review Synthesis](./15-design-review-synthesis.md).
 
 ## The fantasy
 
@@ -30,8 +31,8 @@ laughing stock and loses the audience.
 ```
   ┌─ Build a card ──────────────────────────────────────────┐
   │  pick a date, a venue, a broadcast model                │
-  │  offer bouts → fighters accept or refuse                │
-  │  set purses within a budget                             │
+  │  offer bouts → managers accept or refuse                │
+  │  set the bonus pool and where the marketing goes        │
   └──────────────────────┬──────────────────────────────────┘
                          ▼
   ┌─ Sell it ───────────────────────────────────────────────┐
@@ -58,11 +59,34 @@ less to stay, a `Mercenary` holds out.
 cut sometimes becomes a champion somewhere else. That should be visible in the news feed
 specifically so it stings.
 
+### Contracts — where the money is actually decided
+
+Review moved purse-setting off the card and into the contract, for two reasons that happen
+to agree: it is how the sport works, and setting fifteen purses a fortnight is unplayable.
+
+A contract negotiation is the mode's one genuinely adversarial conversation, and it happens
+perhaps twice a card rather than fifteen times:
+
+| Term | The tension |
+| ---- | ----------- |
+| Base purse | What you can afford against what their manager thinks they are worth |
+| Win bonus | Cheap if they lose. The lever for a fighter you are not sure about |
+| Fight count | Long deals are cheap now and ruinous if they become a star |
+| Champion's clause | Lets you keep a champion who wants out. Costs relationship the moment you use it |
+| Matching rights | You can match a rival's offer. Rivals know this and overbid to bleed you |
+
+The champion's clause is the sharpest object in the mode: it is entirely legal, entirely
+standard, and using it makes the fighter and the audience hate you. That is the correct
+feeling.
+
 ### Matchmaking
-Offering a bout is a negotiation, not a command. A fighter's `stepUpAcceptance` decides
-whether they take it; `shortNoticeWillingness` decides whether they save your card when
-someone pulls out. High-ego fighters refuse fights beneath them; ambitious ones take fights
-they should not.
+Offering a bout is a negotiation, not a command — and after review it is a negotiation with a
+**manager**, not with the fighter directly. A fighter's `stepUpAcceptance` decides whether
+they take it; `shortNoticeWillingness` decides whether they save your card when someone pulls
+out. High-ego fighters refuse fights beneath them; ambitious ones take fights they should not.
+
+Managers change the texture of this considerably. One who has four of your fighters can hold
+a card hostage over one of them, and knows it. See doc 15.
 
 ### Building stars
 The most interesting long-game system. A promotion's `narrativeControl` lets you *push*
@@ -72,7 +96,10 @@ exists for exactly this, and a pushed fighter who gets exposed takes the promoti
 down with them.
 
 ### Money
-Per doc 12. The pressure is that purses are committed before revenue is known.
+Per doc 12. The pressure is that purses are committed *seasons* before the revenue is known —
+you signed that contract eighteen months ago, and the fighter has since become either a star
+or a liability. At card time the only live money decisions are the bonus pool and the
+marketing spend.
 
 ### Rival promotions
 The other promotions run their own cards on their own schedule, sign fighters you let go,
@@ -84,10 +111,10 @@ and is a genuinely hostile act you can also commit.
 | Screen | The decision |
 | ------ | ------------ |
 | **Calendar** | When to run, where, and on what broadcast model |
-| **Card builder** | Which fights, in which order, at what purses |
+| **Card builder** | Which fights, in which order, and how big the bonus pool is |
 | **Roster** | Who to sign, cut, push, protect |
-| **Contracts** | Who is expiring and what it will cost to keep them |
-| **Finances** | Where the money went and whether the last card worked |
+| **Contracts** | Who is expiring, what their manager wants, and what it will cost |
+| **Finances** | Where the money went, whether the last card worked, and the state of the rights deal |
 | **News** | What rivals did, who got hurt, who left |
 
 ## Difficulty and starting position
@@ -100,9 +127,26 @@ You do not start at the top. Options:
 
 ## The failure state
 
-You can go bankrupt. That has to be genuinely possible or none of the money decisions
-matter. Warning signs are visible for several cards beforehand, and the recovery move —
-running cheap cards with no stars — visibly costs you buzz, which is the trap.
+Promotions do not really go bankrupt the way a shop does. **They lose their television deal**,
+and then they get bought, or they shrink, or the owner sells. That is the mechanism, and it is
+a better one than a balance hitting zero because it is visible, negotiable and survivable.
+
+```
+   rights deal healthy ──▶ under review ──▶ not renewed ──▶ acquired / demoted
+        ▲                       │
+        └── deliver ratings ────┘
+```
+
+Your broadcaster is a **counterparty with an opinion**. It wants ratings, stars, and cards
+that deliver what they promised; it does not care whether the fights were competitive. When
+the deal goes under review you can see it coming several cards out, and the recovery move —
+running cheap cards with no stars to save money — is exactly the thing that gets the deal
+cancelled. That is the trap, and it is a real one.
+
+If you fail to recover: acquisition or demotion to a lower tier, your best fighters stripped
+by the buyer. **You keep playing**, poorer and smaller, watching your former roster fight on
+television for the company that bought you. Worse than a game-over screen in every way that
+matters, which is the point.
 
 ## What must never happen
 
@@ -115,9 +159,15 @@ running cheap cards with no stars — visibly costs you buzz, which is the trap.
 
 ## Open questions
 
-- How much micro-management is too much? Setting fifteen individual purses per card is
-  probably tedious by card three.
-- Should the player be able to fix fights, or otherwise cheat? Interesting, dark, and a
-  large amount of work to model fairly.
-- Is bankruptcy a game over, or a demotion to a lower tier? The latter is probably kinder
-  and more interesting.
+- Should the player be able to fix fights, or otherwise cheat? Interesting, dark, and a large
+  amount of work to model *fairly* — and modelling it unfairly is worse than omitting it.
+  Deferred rather than rejected.
+- Co-promotion, and whether a rival can be persuaded into it rather than only fought.
+
+### Resolved by review
+
+- **How much micro-management is too much?** Answered by moving purses to contracts. The test
+  applied: a decision the player makes fifteen times a card had better be fifteen different
+  decisions, and purses were not.
+- **Bankruptcy or demotion?** Neither, quite — the rights deal is the failure state, and
+  acquisition or demotion is its consequence.
