@@ -58,6 +58,7 @@ export * from './business/contracts.js';
 export * from './business/managers.js';
 export * from './business/freeAgency.js';
 export * from './business/events.js';
+export * from './business/boutAgreements.js';
 export * from './business/news.js';
 
 // Testing helpers (shared across the out-of-package test suites)

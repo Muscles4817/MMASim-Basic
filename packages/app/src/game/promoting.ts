@@ -31,7 +31,12 @@ import {
   eventRevenue,
   offerOpponents,
   paperOdds,
+  acceptanceOf,
+  describePullOut,
+  displayName,
+  pullOutRisk,
   settleNight,
+  tollAgreement,
   venueFor,
   type BoutSeed,
   type CardBout,
@@ -40,8 +45,12 @@ import {
   type FightNight,
   type FightResult,
   type NewsItem,
+  type Manager,
   type NightSettlement,
+  type Notice,
   type Promotion,
+  type PromotionalAgreement,
+  type PullOut,
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
 import { appendNews, runCardBout } from './world';
@@ -505,3 +514,190 @@ function headlineDrawOfDraft(draft: CardDraft): number {
   const bouts = draftBouts(draft);
   return bouts.length === 0 ? 0 : Math.max(...bouts.map((b) => b.draw));
 }
+
+// --- Offers, refusals and pull-outs -------------------------------------------------------------
+
+/**
+ * Send the card out to the fighters, and find out who is actually taking it.
+ *
+ * The change that turns the builder from a form into matchmaking. Before this, offering a bout
+ * was a command and every slot said yes — which is exactly the spreadsheet doc 13's "what must
+ * never happen" section forbids, and it made `stepUpAcceptance`, `shortNoticeWillingness` and
+ * the `refusedBout` toll reason all unreachable.
+ *
+ * A bout needs *both* corners to accept. That asymmetry matters: the fight a promoter most
+ * wants is usually the one where one side has every reason to say no.
+ */
+export interface OfferResult {
+  position: CardPosition;
+  slot: number;
+  bout: ProposedBout;
+  accepted: boolean;
+  /** Who said no, and why, in their own terms. */
+  refusedBy?: string;
+  reason?: string;
+}
+
+export function sendOffers(input: {
+  db: GameDb;
+  promotion: Promotion;
+  draft: CardDraft;
+  day: number;
+  notice?: Notice;
+}): OfferResult[] {
+  const { db, promotion, draft, day, notice = 'full' } = input;
+  const world = getWorld(db);
+  const out: OfferResult[] = [];
+
+  for (const section of CARD_SECTIONS) {
+    draft[section.position].forEach((bout, slot) => {
+      if (!bout) return;
+
+      const red = db.fighters.findById(bout.redId) as Fighter | undefined;
+      const blue = db.fighters.findById(bout.blueId) as Fighter | undefined;
+      if (!red || !blue) return;
+
+      /*
+       * Seeded on the bout rather than on the call, so re-reading the same offer cannot reroll
+       * the answer. A promoter who could refresh until everybody said yes would be back to a
+       * card that always fills.
+       */
+      const rng = createRng(`${world.seed}:offer:${promotion.id}:${day}:${bout.redId}:${bout.blueId}`);
+
+      let accepted = true;
+      let refusedBy: string | undefined;
+      let reason: string | undefined;
+
+      for (const [fighter, opponent] of [
+        [red, blue],
+        [blue, red],
+      ] as const) {
+        const read = acceptanceOf({
+          fighter,
+          opponent,
+          promotion,
+          manager: managerOf(db, fighter),
+          notice,
+          isTitleFight: bout.isTitleFight,
+        });
+        if (!rng.fork(fighter.id as string).chance(read.chance)) {
+          accepted = false;
+          refusedBy = displayName(fighter);
+          reason = read.concern ?? 'Not interested in this one.';
+          break;
+        }
+      }
+
+      out.push({ position: section.position, slot, bout, accepted, refusedBy, reason });
+    });
+  }
+
+  return out;
+}
+
+/**
+ * Record a refusal against the contract, which is what makes saying no cost something.
+ *
+ * `TollReason: 'refusedBout'` has been in the type since contracts shipped and nothing could
+ * ever produce it, because nothing could refuse a bout. A refused fight stops the clock: the
+ * fighter is a fight further from free agency rather than a day closer, which is the whole
+ * design of a tolled contract and the reason holding out is a real decision rather than a free
+ * one.
+ */
+export function tollForRefusal(db: GameDb, fighterId: string, days = 30): void {
+  const fighter = db.fighters.findById(fighterId) as Fighter | undefined;
+  if (!fighter?.agreementId) return;
+  const agreement = db.agreements.findById(fighter.agreementId as string) as
+    | PromotionalAgreement
+    | undefined;
+  if (!agreement) return;
+  db.agreements.upsert(tollAgreement(agreement, days) as PromotionalAgreement & Entity);
+}
+
+/**
+ * Who has fallen out of the card between announcing it and fight night.
+ *
+ * The sport's defining operational fact, and the mode's signature scene: a main event losing a
+ * man at six weeks is the promoter's most authentic recurring emergency, and until now the game
+ * could not produce one. Injuries prevented a fighter being *booked* and never broke a booking
+ * that already existed.
+ */
+export function rollPullOuts(input: {
+  db: GameDb;
+  night: FightNight;
+  seed: string;
+}): PullOut[] {
+  const { db, night, seed } = input;
+  const out: PullOut[] = [];
+
+  for (const bout of night.bouts) {
+    for (const id of [bout.redId, bout.blueId]) {
+      const fighter = db.fighters.findById(id as string) as Fighter | undefined;
+      if (!fighter) continue;
+
+      const rng = createRng(`${seed}:pullout:${night.id}:${id}`);
+      if (!rng.chance(pullOutRisk(fighter))) continue;
+
+      const reason = rng.pickWeighted(
+        ['injury', 'illness', 'weight', 'personal'] as const,
+        (r) => (r === 'injury' ? 6 : r === 'illness' ? 2 : r === 'weight' ? 2 : 1),
+      );
+      out.push({
+        fighterId: fighter.id,
+        boutId: bout.boutId,
+        reason,
+        note: describePullOut(reason, fighter),
+      });
+      // One withdrawal per bout: the fight is already off, and a second is noise.
+      break;
+    }
+  }
+
+  return out;
+}
+
+/**
+ * Somebody who would step in on short notice.
+ *
+ * Ranked by whether they will actually say yes rather than by how good the fight is, which is
+ * the correct priority in a genuine emergency and is the first thing in the game to read
+ * `shortNoticeWillingness`. A `Gym Rat` who stays ready is worth more to a promoter in this
+ * moment than a better fighter who cannot make the weight in eleven days.
+ */
+export function replacementsFor(input: {
+  db: GameDb;
+  promotion: Promotion;
+  opponent: Fighter;
+  day: number;
+  exclude: readonly string[];
+  limit?: number;
+}): { fighter: Fighter; chance: number; concern?: string }[] {
+  const { db, promotion, opponent, day, exclude, limit = 5 } = input;
+
+  return (db.fighters.findAll() as Fighter[])
+    .filter(
+      (f) =>
+        f.promotionId === promotion.id &&
+        f.retiredDay === undefined &&
+        f.divisionId === opponent.divisionId &&
+        f.sex === opponent.sex &&
+        f.id !== opponent.id &&
+        (f.readyOnDay ?? 0) <= day &&
+        !exclude.includes(f.id as string),
+    )
+    .map((fighter) => {
+      const read = acceptanceOf({
+        fighter,
+        opponent,
+        promotion,
+        manager: managerOf(db, fighter),
+        notice: 'short',
+      });
+      return { fighter, chance: read.chance, concern: read.concern };
+    })
+    .sort((a, b) => b.chance - a.chance)
+    .slice(0, limit);
+}
+
+const managerOf = (db: GameDb, fighter: Fighter): Manager | undefined =>
+  fighter.managerId ? (db.managers.findById(fighter.managerId as string) as Manager | undefined) : undefined;

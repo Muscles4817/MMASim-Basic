@@ -162,18 +162,69 @@ describe('building a card', () => {
   });
 });
 
-describe('running the card', () => {
-  it('runs it and reports what the night did', async () => {
+describe('sending the card out', () => {
+  it('does not simply run it — both corners have to agree', async () => {
+    /*
+     * The change that turns the builder from a form into matchmaking. Offering a bout used to
+     * be a command and every slot said yes, which is exactly what doc 13's "what must never
+     * happen" section forbids.
+     */
     const user = userEvent.setup();
     await becomePromoter(user);
     await user.click(await screen.findByRole('button', { name: /Build a card/i }));
-    await user.click(await screen.findByRole('button', { name: /Announce and run the card/i }));
 
-    // The morning after: what it made, and what it did to how people see you.
-    await waitFor(
-      () => expect(screen.getByText(/The night (made|lost) money/i)).toBeTruthy(),
-      { timeout: 5000 },
-    );
+    expect(await screen.findByRole('button', { name: /Send it out/i })).toBeTruthy();
+    expect(screen.getByText(/Both corners have to agree/i)).toBeTruthy();
+  });
+
+  /**
+   * Walk a card all the way to a result, handling whatever the card throws up on the way.
+   *
+   * Deliberately tolerant of the middle: refusals and pull-outs are *supposed* to happen and
+   * are seeded per bout, so a test that demanded a clean run would be asserting that the
+   * feature does not work.
+   */
+  async function runToCompletion(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole('button', { name: /Send it out/i }));
+
+    for (let attempt = 0; attempt < 12; attempt++) {
+      // Somebody has pulled out: take the first replacement offered, or scratch it.
+      const replacement = document.querySelector('.bout--option') as HTMLElement | null;
+      if (screen.queryByText(/You have lost a fighter/i)) {
+        if (replacement) await user.click(replacement);
+        else
+          await user.click(
+            screen.getByRole('button', { name: /Scratch the fight and run a shorter card/i }),
+          );
+        continue;
+      }
+
+      const run = screen.queryByRole('button', { name: /^Run the card$/i });
+      if (run) {
+        await user.click(run);
+        continue;
+      }
+
+      // Somebody refused: the slots emptied, so refill and send it again.
+      const send = screen.queryByRole('button', { name: /Send it out/i });
+      if (send) {
+        await user.click(send);
+        continue;
+      }
+
+      if (screen.queryByText(/The night (made|lost) money/i)) return;
+    }
+  }
+
+  it('reports what the night did once it actually happens', async () => {
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    await user.click(await screen.findByRole('button', { name: /Build a card/i }));
+    await runToCompletion(user);
+
+    await waitFor(() => expect(screen.getByText(/The night (made|lost) money/i)).toBeTruthy(), {
+      timeout: 8000,
+    });
     expect(screen.getByText(/What happened/i)).toBeTruthy();
   });
 
@@ -181,10 +232,10 @@ describe('running the card', () => {
     const user = userEvent.setup();
     await becomePromoter(user);
     await user.click(await screen.findByRole('button', { name: /Build a card/i }));
-    await user.click(await screen.findByRole('button', { name: /Announce and run the card/i }));
+    await runToCompletion(user);
 
     await waitFor(() => expect(screen.getByText(/What happened/i)).toBeTruthy(), {
-      timeout: 5000,
+      timeout: 8000,
     });
     // Card position finally means something: before the 2026 roster there were never enough
     // fighters to fill more than two or three positions.

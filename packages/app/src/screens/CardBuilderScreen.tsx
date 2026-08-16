@@ -18,12 +18,14 @@
 
 import { useMemo, useState } from 'react';
 import {
+  describeAcceptance,
   displayName,
   recordString,
   type CardPosition,
   type Fighter,
   type FightNight,
   type Promotion,
+  type PullOut,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
@@ -34,6 +36,10 @@ import { currentPurse } from '../game/money';
 import {
   CARD_SECTIONS,
   autoFill,
+  replacementsFor,
+  rollPullOuts,
+  sendOffers,
+  tollForRefusal,
   draftBouts,
   emptyDraft,
   forecastCard,
@@ -41,6 +47,7 @@ import {
   runScheduledCard,
   scheduleCard,
   type CardDraft,
+  type OfferResult,
   type ProposedBout,
 } from '../game/promoting';
 
@@ -69,6 +76,8 @@ export function CardBuilderScreen() {
     () => new Set<CardPosition>(['mainEvent', 'coMain', 'mainCard']),
   );
   const [ran, setRan] = useState<{ night: FightNight; profit: number; buzz: number } | undefined>();
+  const [refused, setRefused] = useState<OfferResult[]>([]);
+  const [pullOuts, setPullOuts] = useState<{ night: FightNight; outs: PullOut[] } | undefined>();
 
   const forecast = useMemo(
     () =>
@@ -126,8 +135,61 @@ export function CardBuilderScreen() {
     setSwapping(undefined);
   };
 
+  /*
+   * Announcing sends the card out; it does not run it.
+   *
+   * This is the change that turns the builder from a form into matchmaking. Offering a bout used
+   * to be a command and every slot said yes, which is precisely the spreadsheet doc 13 forbids.
+   * Now both corners have to accept, refusals come back with a name and a reason, and the
+   * player has to fix the card before it can happen.
+   */
   const announce = () => {
+    const results = sendOffers({ db, promotion, draft, day });
+    const declined = results.filter((r) => !r.accepted);
+
+    if (declined.length > 0) {
+      // Saying no stops the contract clock, which is what makes holding out cost something.
+      for (const offer of declined) {
+        const refuser =
+          displayName(db.fighters.findById(offer.bout.redId) as Fighter) === offer.refusedBy
+            ? offer.bout.redId
+            : offer.bout.blueId;
+        tollForRefusal(db, refuser);
+      }
+      // Empty the slots that fell through, so the player is fixing holes rather than re-reading
+      // a card that looks complete and is not.
+      setDraft((current) => {
+        let next = current;
+        for (const offer of declined) {
+          const slots = [...next[offer.position]];
+          slots[offer.slot] = undefined;
+          next = { ...next, [offer.position]: slots };
+        }
+        return next;
+      });
+      setRefused(declined);
+      commit();
+      return;
+    }
+
     const night = scheduleCard({ db, promotion, draft, day, broadcast: broadcastFor(promotion) });
+
+    /*
+     * The weeks between announcing and fight night, which is where the mode's signature scene
+     * lives: a booked fight falling apart. Nothing in the game could produce one before —
+     * injuries stopped a fighter being *booked* and never broke a booking that existed.
+     */
+    const outs = rollPullOuts({ db, night, seed: `${world.seed}:${night.id}` });
+    if (outs.length > 0) {
+      setPullOuts({ night, outs });
+      commit();
+      return;
+    }
+
+    runNight(night);
+  };
+
+  const runNight = (night: FightNight) => {
     const outcome = runScheduledCard({ db, night, purses: forecast?.purses ?? 0 });
     if (outcome) {
       setRan({
@@ -141,10 +203,54 @@ export function CardBuilderScreen() {
 
   if (ran) return <TheMorningAfter ran={ran} db={db} onDone={() => navigate({ name: 'promotion' })} />;
 
+  /*
+   * Somebody has fallen out, and the card is in three weeks.
+   *
+   * The signature scene, and what the reviewers said turns this from a card builder into a
+   * game. The player is not choosing the best fight any more, they are choosing whoever will
+   * actually say yes.
+   */
+  if (pullOuts) {
+    return (
+      <PullOutScramble
+        db={db}
+        promotion={promotion}
+        night={pullOuts.night}
+        outs={pullOuts.outs}
+        day={day}
+        onResolved={(night) => {
+          setPullOuts(undefined);
+          runNight(night);
+        }}
+      />
+    );
+  }
+
   const booked = draftBouts(draft).length;
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
+      {refused.length > 0 && (
+        <Alert tone="warn" title={`${refused.length} turned it down`}>
+          <span className="prose" style={{ display: 'block', marginBottom: 'var(--space-2)' }}>
+            Those slots are empty again. Tap them to book somebody else — and every refusal
+            stopped that fighter&rsquo;s contract clock, so they are a fight further from free
+            agency than they were this morning.
+          </span>
+          <span className="stack" style={{ gap: 'var(--space-1)' }}>
+            {refused.map((offer) => (
+              <span
+                key={`${offer.position}-${offer.slot}`}
+                className="prose"
+                style={{ display: 'block', fontSize: 'var(--text-sm)' }}
+              >
+                <strong>{offer.refusedBy}</strong> — {offer.reason}
+              </span>
+            ))}
+          </span>
+        </Alert>
+      )}
+
       <Card raised>
         <KeyStat
           value={forecast ? forecast.expectedAttendance.toLocaleString() : '—'}
@@ -301,8 +407,12 @@ export function CardBuilderScreen() {
               </Alert>
             )}
             <Button variant="primary" block onClick={announce}>
-              Announce and run the card
+              Send it out
             </Button>
+            <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
+              Both corners have to agree. Anybody who turns it down leaves a hole you will have
+              to fill.
+            </p>
           </div>
         )}
       </Card>
@@ -398,3 +508,127 @@ const describeBuzz = (delta: number): string =>
 /** Broadcast model follows the promotion's platform, which is not yet a player decision. */
 const broadcastFor = (promotion: Promotion): FightNight['broadcast'] =>
   promotion.tier === 'global' ? 'ppv' : promotion.tier === 'major' ? 'televised' : 'streamed';
+
+
+/**
+ * Somebody has pulled out and the card is in three weeks.
+ *
+ * The promoter's most authentic recurring emergency, and the scene the whole phase exists for.
+ * The decision here is deliberately not "who is the best replacement" — it is "who will
+ * actually say yes", which is why the options are ranked by acceptance rather than by quality
+ * and why the concern is on every row. A better fighter who cannot make the weight in three
+ * weeks is worth nothing to you tonight.
+ */
+function PullOutScramble({
+  db,
+  promotion,
+  night,
+  outs,
+  day,
+  onResolved,
+}: {
+  db: ReturnType<typeof useGame>['db'];
+  promotion: Promotion;
+  night: FightNight;
+  outs: readonly PullOut[];
+  day: number;
+  onResolved(night: FightNight): void;
+}) {
+  const [card, setCard] = useState(night);
+  const [remaining, setRemaining] = useState(outs);
+
+  const current = remaining[0];
+  const bout = current ? card.bouts.find((b) => b.boutId === current.boutId) : undefined;
+  const opponentId =
+    bout && current ? (bout.redId === current.fighterId ? bout.blueId : bout.redId) : undefined;
+  const opponent = opponentId
+    ? (db.fighters.findById(opponentId as string) as Fighter | undefined)
+    : undefined;
+
+  if (!current || !bout || !opponent) {
+    return (
+      <div className="stack" style={{ gap: 'var(--space-4)' }}>
+        <Alert tone="good" title="The card is intact">
+          Every hole is filled. Time to run it.
+        </Alert>
+        <Button variant="primary" block onClick={() => onResolved(card)}>
+          Run the card
+        </Button>
+      </div>
+    );
+  }
+
+  const booked = card.bouts.flatMap((b) => [b.redId as string, b.blueId as string]);
+  const options = replacementsFor({ db, promotion, opponent, day, exclude: booked, limit: 5 });
+
+  const replace = (replacementId: string | undefined) => {
+    setCard((c) => ({
+      ...c,
+      bouts: replacementId
+        ? c.bouts.map((b) =>
+            b.boutId === current.boutId
+              ? {
+                  ...b,
+                  redId: (b.redId === current.fighterId ? replacementId : b.redId) as never,
+                  blueId: (b.blueId === current.fighterId ? replacementId : b.blueId) as never,
+                }
+              : b,
+          )
+        : // Scratched: the bout comes off the card entirely, which is what happens when nobody
+          // can be found. A short card is allowed, and it costs at the gate.
+          c.bouts.filter((b) => b.boutId !== current.boutId),
+    }));
+    setRemaining((r) => r.slice(1));
+  };
+
+  return (
+    <div className="stack" style={{ gap: 'var(--space-4)' }}>
+      <Alert tone="danger" title="You have lost a fighter">
+        <span className="prose" style={{ display: 'block' }}>
+          {current.note} {opponent.lastName} is still ready, and the card is in three weeks.
+        </span>
+      </Alert>
+
+      <Card title={`Who will fight ${displayName(opponent)}?`}>
+        <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginTop: 0 }}>
+          Ranked by who will actually take it, not by who is best. On this notice those are two
+          very different lists.
+        </p>
+        <div className="stack" style={{ gap: 'var(--space-2)' }}>
+          {options.length === 0 ? (
+            <Alert tone="warn" title="Nobody can take it">
+              There is nobody in the division who is fit, free, and not already on this card.
+            </Alert>
+          ) : (
+            options.map((option) => (
+              <button
+                key={option.fighter.id}
+                type="button"
+                className="bout bout--option"
+                onClick={() => replace(option.fighter.id as string)}
+              >
+                <span className="bout__names">{displayName(option.fighter)}</span>
+                <span className="list__secondary" style={{ display: 'block' }}>
+                  {recordString(option.fighter.summary)}
+                  {option.concern ? ` · ${option.concern}` : ''}
+                </span>
+                <span className="bout__chips">
+                  <Chip
+                    tone={
+                      option.chance > 0.6 ? 'positive' : option.chance > 0.3 ? 'warning' : 'negative'
+                    }
+                  >
+                    {describeAcceptance(option.chance)}
+                  </Chip>
+                </span>
+              </button>
+            ))
+          )}
+          <Button variant="ghost" block onClick={() => replace(undefined)}>
+            Scratch the fight and run a shorter card
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
