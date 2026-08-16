@@ -116,6 +116,9 @@ A 20-year sim must not drift into nonsense: no ratings inflation, no division co
 | [09 — Data Layer](./09-data-layer.md)                 | The light DB and its migration path           |
 | [10 — UX & Design System](./10-ux-and-design-system.md) | Theming, layout, mobile rules               |
 | [11 — Editor](./11-editor.md)                         | Editing the world, and why it warns not blocks |
+| [12 — Events & Cards](./12-events-and-cards.md)       | The unit that makes the business layer work   |
+| [13 — Promoter Mode](./13-promoter-mode.md)           | Money vs competition vs control               |
+| [14 — Coach Mode](./14-coach-mode.md)                 | Judged on outcomes you cannot control         |
 
 ## Build status
 
