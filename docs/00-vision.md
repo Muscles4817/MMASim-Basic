@@ -115,3 +115,23 @@ A 20-year sim must not drift into nonsense: no ratings inflation, no division co
 | [08 — Promotions, Marketing & Heat](./08-promotions-marketing-heat.md) | Business layer, rivalries |
 | [09 — Data Layer](./09-data-layer.md)                 | The light DB and its migration path           |
 | [10 — UX & Design System](./10-ux-and-design-system.md) | Theming, layout, mobile rules               |
+| [11 — Editor](./11-editor.md)                         | Editing the world, and why it warns not blocks |
+
+## Build status
+
+| System                          | State                                            |
+| ------------------------------- | ------------------------------------------------ |
+| Ratings, curves, derived stats  | Built                                            |
+| Personality & traits            | Built                                            |
+| Fight engine                    | Built and calibrated                             |
+| Scouting, game plans, prep      | Built                                            |
+| Matchmaking & aftermath         | Built                                            |
+| Retirement & fighter generation | Built                                            |
+| Light DB, save/load, migrations | Built                                            |
+| Seed roster (57 fighters)       | Built                                            |
+| Fighter career mode             | Playable end to end                              |
+| Editor                          | Fighters editable; organisations designed        |
+| Heat, rivalries, money          | Designed (doc 08)                                |
+| Attribute development in camp   | Designed (doc 06)                                |
+| Acute injuries                  | Designed (doc 07)                                |
+| Coach & promoter modes          | Not started — both reuse the systems above       |
