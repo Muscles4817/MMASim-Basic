@@ -66,7 +66,14 @@ const PROMOTER_NAV: readonly NavItem[] = [
     icon: '🎪',
     matches: ['promotion', 'card', 'hub', 'start'],
   },
-  { route: { name: 'roster' }, label: 'Roster', icon: '👥', matches: ['roster', 'fighter'] },
+  // A promoter's "roster" is their own stable with contracts attached, not the world's fighter
+  // list — which is still reachable, from the promotion hub.
+  {
+    route: { name: 'promoterRoster' },
+    label: 'Roster',
+    icon: '👥',
+    matches: ['promoterRoster', 'fighter', 'roster'],
+  },
   { route: { name: 'rankings' }, label: 'Rankings', icon: '🏆' },
   { route: { name: 'editor' }, label: 'Editor', icon: '✏️', matches: ['editor', 'editorFighter'] },
   { route: { name: 'settings' }, label: 'Settings', icon: '⚙️' },

@@ -30,7 +30,9 @@ import {
   CARD_SIZE,
   agreementStatus,
   awardBonuses,
+  activityBreach,
   bonusPoolFor,
+  chargeCosts,
   DELIVERY_MEMORY,
   broadcastFor,
   buildCard,
@@ -295,6 +297,23 @@ export function advanceWorld(
   // Everyone who never got booked still gets older. Without this, a fighter who sat out the
   // whole period would be returned to the player at exactly the age they were.
   ageEveryone(db, fromDay, toDay, exceptId, lastSeen);
+
+  /*
+   * The bill for existing.
+   *
+   * `budget` was written in exactly one place in the codebase — inside `settleNight`, from a
+   * card's profit — so a promotion that ran no cards had no outgoings at all. That made doing
+   * nothing strictly correct under pressure and made hoarding a roster free, which were two of
+   * the dominant strategies the design review found. Every cost in the model was incurred by
+   * *doing something*.
+   *
+   * Charged to every promotion including the player's: this is a rule of the sport rather than
+   * a difficulty applied to whoever is playing.
+   */
+  chargePromotions(db, toDay - fromDay);
+
+  // And the deals of anybody the world forgot to book. See `enforceActivity`.
+  news.push(...enforceActivity(db, toDay, rng.fork('breach')));
 
   const stored = appendNews(db, news);
   db.save();
@@ -1115,4 +1134,99 @@ function rememberDelivery(promotion: Promotion, delivered: number): Promotion {
  */
 function pickPromotion(promotions: readonly Promotion[], rng: Rng): Promotion {
   return rng.pickWeighted(promotions, (p) => Math.max(1, p.prestige) ** 1.6);
+}
+
+/**
+ * Charge every promotion for the time that has passed.
+ *
+ * See `periodCosts` for why this is overheads rather than a payroll: MMA fighters are paid per
+ * bout, and a monthly wage bill would be the wrong model dressed up as realism. What a
+ * promotion pays between cards is staff, premises and the administration of a roster, and those
+ * scale with the size of the operation rather than with how busy it is.
+ */
+function chargePromotions(db: GameDb, days: number): void {
+  if (days <= 0) return;
+  const all = db.fighters.findAll() as Fighter[];
+
+  for (const promotion of db.promotions.findAll() as unknown as Promotion[]) {
+    const rosterSize = all.filter(
+      (f) => f.promotionId === promotion.id && f.retiredDay === undefined,
+    ).length;
+    const { promotion: charged } = chargeCosts({ promotion, rosterSize, days });
+    db.promotions.upsert(charged as Promotion & Entity);
+  }
+}
+
+/**
+ * A fighter the promotion never books can walk.
+ *
+ * `activityBreach()` has been written since contracts shipped and had no caller anywhere, which
+ * left the most antagonistic move in the sport free: signing somebody purely to keep them off a
+ * rival's card cost nothing at all, and doc 16 names that as promoter mode's best trap while
+ * leaving the trap half unimplemented.
+ *
+ * The consequence is deliberately the deal voiding rather than a fine. A fine is a number; a
+ * fighter walking out of the door and turning up somewhere else is a story, and the news item
+ * that carries it is the same one that already exists for a release.
+ */
+function enforceActivity(db: GameDb, day: number, rng: Rng): NewsItem[] {
+  const news: NewsItem[] = [];
+
+  for (const fighter of db.fighters.findAll() as Fighter[]) {
+    if (fighter.retiredDay !== undefined || !fighter.promotionId || !fighter.agreementId) continue;
+
+    const agreement = db.agreements.findById(fighter.agreementId as string) as
+      | PromotionalAgreement
+      | undefined;
+    if (!agreement) continue;
+
+    /*
+     * Only once the deal has had a full year to be honoured. Checking from the day it was
+     * signed would void every contract in the world on the first tick, since nobody has fought
+     * yet — the guarantee is bouts *per twelve months*, not bouts immediately.
+     */
+    if (day - agreement.signedDay < 365) continue;
+
+    const boutsInLastYear = fighter.record.filter((r) => day - r.day < 365).length;
+    if (!activityBreach(agreement, boutsInLastYear)) continue;
+
+    /*
+     * A breach gives the fighter the *right* to walk. It does not make them walk.
+     *
+     * Enforcing it automatically was measurably wrong: on the thin 2020 roster it voided 62% of
+     * every contract in the world, because a small sport cannot give everybody three bouts a
+     * year and the guarantee is written as though it can. That is not a promotion being
+     * punished for shelving somebody, it is the whole sport dissolving.
+     *
+     * So it is a decision, and the thing that decides it is whether there is anywhere to go.
+     * A ranked fighter with a name walks and gets picked up; a prospect nobody has heard of
+     * stays, because a bad deal that exists beats free agency that does not lead anywhere.
+     * That is also simply what happens.
+     */
+    const leverage =
+      Math.min(1, fighter.starPower / 70) * Math.max(0, 1 - fighterAge(fighter, day) / 42);
+    if (!rng.fork(`breach:${fighter.id}:${day}`).chance(0.25 + leverage * 0.6)) continue;
+
+    const promotion = db.promotions.findById(fighter.promotionId) as Promotion | undefined;
+    db.agreements.upsert({ ...agreement, status: 'terminated' } as never);
+    db.fighters.upsert({
+      ...fighter,
+      promotionId: undefined,
+      agreementId: undefined,
+    } as Fighter & Entity);
+
+    news.push({
+      id: newsId(day, `breach:${fighter.id}`),
+      day,
+      kind: 'release',
+      weight: 'minor',
+      headline: `${displayName(fighter)} walks out on ${promotion?.shortName ?? 'their promotion'}`,
+      detail: `Owed ${agreement.activityGuarantee} bouts a year and given ${boutsInLastYear}. The deal is void and ${fighter.lastName} is a free agent.`,
+      fighterIds: [fighter.id],
+      divisionId: fighter.divisionId,
+      promotionId: promotion?.id,
+    });
+  }
+
+  return news;
 }

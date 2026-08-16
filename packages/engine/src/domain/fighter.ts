@@ -39,6 +39,19 @@ export type FinishMethod =
 export type FightOutcome = 'win' | 'loss' | 'draw' | 'noContest';
 
 /** One line of a fighter's record. Immutable once written. */
+/**
+ * What a promotion is trying to do with a fighter.
+ *
+ * - `push` — favourable matchmaking and a better card position than results justify. Builds a
+ *   star faster than they earn it, and creates the `Hype Merchant` trap: a pushed fighter who
+ *   gets exposed takes the promotion's standing down with them.
+ * - `test` — the opposite bet. Book them hard and find out early, which is cheaper than finding
+ *   out in a main event.
+ * - `protect` — keep them away from anybody who could beat them, usually because they are an
+ *   investment or a champion you are not ready to lose.
+ */
+export type FighterHandling = 'push' | 'test' | 'protect';
+
 export interface FightRecordEntry {
   boutId: string;
   opponentId: FighterId;
@@ -147,6 +160,19 @@ export interface Fighter {
    */
   priorRecord?: RecordSummary;
   summary: RecordSummary;
+
+  /**
+   * How the promotion is handling this fighter.
+   *
+   * `narrativeControl` exists on the promotion and doc 13 calls building stars the mode's most
+   * interesting long game — but a promotion-wide constant cannot express the thing that
+   * actually happens, which is a promotion pushing *this* fighter and protecting *that* one at
+   * the same time. This is that decision, per person.
+   *
+   * Absent means the promotion has no particular plan for them, which is the honest default and
+   * true of most of any roster.
+   */
+  handling?: FighterHandling;
 
   /**
    * The day this fighter is medically cleared to compete again.

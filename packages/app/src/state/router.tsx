@@ -50,6 +50,7 @@ export type Route =
   // the player is only ever in one mode at a time.
   | { name: 'promotion' }
   | { name: 'card' }
+  | { name: 'promoterRoster' }
   | { name: 'editor' }
   | { name: 'editorFighter'; id: string }
   | { name: 'editorList'; kind: EditorEntityKind }
@@ -85,6 +86,8 @@ function parse(hash: string): Route {
       return { name: 'promotion' };
     case 'card':
       return { name: 'card' };
+    case 'stable':
+      return { name: 'promoterRoster' };
     case 'editor':
       return param ? { name: 'editorFighter', id: param } : { name: 'editor' };
     case 'edit': {
@@ -113,6 +116,9 @@ export function toHash(route: Route): string {
       return `#/edit/${route.kind}`;
     case 'editorEntity':
       return `#/edit/${route.kind}/${route.id}`;
+    // Not `#/promoterRoster`: the URL a player sees should read like a place.
+    case 'promoterRoster':
+      return '#/stable';
     default:
       return `#/${route.name}`;
   }

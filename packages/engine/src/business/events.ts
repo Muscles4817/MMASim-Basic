@@ -341,15 +341,37 @@ export function eventRevenue(input: {
   // charged was a constant regardless of who was on top of the bill.
   const gate = Math.round((attendance * ticketPrice(promotion, headlineDraw)) / 1000);
 
+  /*
+   * Broadcast, and it has to be the dominant line at the top of the sport.
+   *
+   * It was not. Measured on the shipped roster, a global promotion's marquee card took 2,482 at
+   * the gate and 1,499 from pay-per-view — 30% of revenue from broadcast, against a real sport
+   * where media rights and PPV are 70–85% for the market leader and the live gate is 10–15%.
+   * The model was inverted at the top, and the consequence was concrete: **that card lost 315k**,
+   * so the biggest promotion in the game lost money every time it ran its best show.
+   *
+   * It also has to be true before a rights deal can be a failure state at all. Losing a
+   * television deal has to hurt, and taking away 21% of revenue is a bad quarter rather than an
+   * existential threat.
+   */
   const broadcastRevenue =
     broadcast === 'ppv'
-      ? Math.round(headlineDraw * 9 * (promotion.prestige / 100) ** 2)
+      ? Math.round(headlineDraw * 20 * (promotion.prestige / 100) ** 2)
       : broadcast === 'televised'
-        ? Math.round(promotion.prestige * 4)
-        : Math.round(promotion.prestige * 0.8);
+        ? Math.round(promotion.prestige * 12)
+        : Math.round(promotion.prestige * 2);
 
-  // Production scales with the venue and the broadcast; marketing with ambition.
-  const production = Math.round(venue.capacity / 120 + (broadcast === 'ppv' ? 260 : 60));
+  /*
+   * Production scales with the venue *and* with what is being made.
+   *
+   * The flat floor was 60 regardless of broadcast, which for a regional promotion streaming out
+   * of a 3,000-seat hall was more than half its total costs and made every card it ran a small
+   * loss. A stream is not a pay-per-view broadcast with fewer cameras; it is a fundamentally
+   * cheaper product, and the cost base has to say so or the bottom of the sport cannot exist.
+   */
+  const production = Math.round(
+    venue.capacity / 150 + (broadcast === 'ppv' ? 300 : broadcast === 'televised' ? 90 : 25),
+  );
   const costs = Math.round(purses + bonuses + production);
 
   return {

@@ -158,9 +158,18 @@ export function offerOpponents(
 
   const appraised = eligible.map(appraise);
 
-  // A protective promotion shades every offer toward safety; an aggressive one toward the
-  // fight that sells. This is the single number that makes promotions feel different.
-  const riskAppetite = promotion.matchmakingAggression / 100;
+  /*
+   * A protective promotion shades every offer toward safety; an aggressive one toward the fight
+   * that sells. This is the single number that makes promotions feel different.
+   *
+   * Shifted per fighter by how the promotion is handling *them*, which is what turns doc 13's
+   * "building stars" from a promotion-wide constant into the decision it actually is: a
+   * promotion pushes this fighter and protects that one at the same time, and a constant
+   * cannot say that.
+   */
+  const handlingShift =
+    subject.handling === 'test' ? 0.35 : subject.handling === 'protect' ? -0.35 : 0;
+  const riskAppetite = clamp01(promotion.matchmakingAggression / 100 + handlingShift);
 
   const pick = (predicate: (m: MatchupAppraisal) => boolean): MatchupAppraisal | undefined => {
     const candidates = appraised.filter(predicate);
@@ -168,11 +177,18 @@ export function offerOpponents(
     return rng.pickWeighted(candidates, (m) => m.baseHype ** (1 + riskAppetite));
   };
 
-  const offers = [
-    pick((m) => m.step >= 4),
-    pick((m) => Math.abs(m.step) < 4),
-    pick((m) => m.step <= -4),
-  ].filter((m): m is MatchupAppraisal => m !== undefined);
+  /*
+   * A pushed fighter is offered the winnable fight that still looks good, which is exactly what
+   * a push is: not protection, but a matchmaker choosing opponents who make somebody look like
+   * a star. `protect` skews harder toward safety and skips the step up entirely.
+   */
+  const offers = (
+    subject.handling === 'protect'
+      ? [pick((m) => m.step <= -4), pick((m) => Math.abs(m.step) < 4)]
+      : subject.handling === 'push'
+        ? [pick((m) => Math.abs(m.step) < 4), pick((m) => m.step <= -4), pick((m) => m.step >= 4)]
+        : [pick((m) => m.step >= 4), pick((m) => Math.abs(m.step) < 4), pick((m) => m.step <= -4)]
+  ).filter((m): m is MatchupAppraisal => m !== undefined);
 
   // Backfill from the rest of the pool when a tier has nobody in it — a thin division must
   // still produce a card.

@@ -243,3 +243,52 @@ describe('sending the card out', () => {
     expect(screen.getAllByText(/^Main event$/).length).toBeGreaterThan(0);
   });
 });
+
+describe('the roster, from the promotion’s chair', () => {
+  it('opens on who needs a decision rather than on an alphabetical list', async () => {
+    /*
+     * Doc 13 gave promoter mode a Roster screen *and* a Contracts screen, and they are the same
+     * screen: contract state is a property of a fighter, not a second population. One list
+     * sorted by who has a problem is a job; two hundred names in order is a database browser.
+     */
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    goTo('#/stable');
+
+    expect(await screen.findByText(/Under contract/i)).toBeTruthy();
+    expect(screen.getByText(/Need a decision/i)).toBeTruthy();
+  });
+
+  it('says what a roster costs to keep, whether or not it is fighting', async () => {
+    // The thing that makes hoarding cost something. Signing people purely to keep them off a
+    // rival's card used to be free.
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    goTo('#/stable');
+
+    expect(await screen.findByText(/to keep on the books, fighting or not/i)).toBeTruthy();
+  });
+
+  it('lets a fighter be pushed, tested or protected', async () => {
+    // `narrativeControl` is promotion-wide, and a constant cannot say that a promotion pushes
+    // one fighter and protects another at the same time — which is what actually happens.
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    goTo('#/stable');
+
+    expect((await screen.findAllByRole('radio', { name: /^Push/i })).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('radio', { name: /^Protect/i }).length).toBeGreaterThan(0);
+  });
+
+  it('does not release anybody on the first tap', async () => {
+    // Cutting is cheap and permanent, and doc 13 notes the fighter you cut sometimes becomes a
+    // champion somewhere else.
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    goTo('#/stable');
+
+    const release = (await screen.findAllByRole('button', { name: /^Release$/i }))[0]!;
+    await user.click(release);
+    expect(screen.getAllByRole('button', { name: /^Yes — release /i }).length).toBeGreaterThan(0);
+  });
+});

@@ -24,6 +24,7 @@ import {
 import { SettingsScreen } from './screens/SettingsScreen';
 import { PromotionHubScreen } from './screens/PromotionHubScreen';
 import { CardBuilderScreen } from './screens/CardBuilderScreen';
+import { PromoterRosterScreen } from './screens/PromoterRosterScreen';
 
 export function App() {
   const { route, replace } = useRouter();
@@ -145,6 +146,12 @@ export function App() {
         return (
           <Shell title="Build a card" showBack>
             <CardBuilderScreen />
+          </Shell>
+        );
+      case 'promoterRoster':
+        return (
+          <Shell title="Your roster">
+            <PromoterRosterScreen />
           </Shell>
         );
       case 'rankings':
