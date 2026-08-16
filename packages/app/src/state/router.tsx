@@ -20,6 +20,20 @@ import {
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
+import type { EditorEntityKind } from '../game/editorSchema';
+
+/**
+ * Editable types, duplicated here as a runtime list purely so a hand-typed URL cannot
+ * produce a route with a kind the editor has no schema for.
+ */
+const EDITOR_KINDS: readonly EditorEntityKind[] = [
+  'promotions',
+  'gyms',
+  'coaches',
+  'referees',
+  'judges',
+  'commentators',
+];
 
 export type Route =
   | { name: 'start' }
@@ -34,11 +48,13 @@ export type Route =
   | { name: 'promotions' }
   | { name: 'editor' }
   | { name: 'editorFighter'; id: string }
+  | { name: 'editorList'; kind: EditorEntityKind }
+  | { name: 'editorEntity'; kind: EditorEntityKind; id: string }
   | { name: 'settings' };
 
 function parse(hash: string): Route {
   const path = hash.replace(/^#\/?/, '');
-  const [head, param] = path.split('/');
+  const [head, param, rest] = path.split('/');
   switch (head) {
     case '':
     case 'start':
@@ -63,6 +79,13 @@ function parse(hash: string): Route {
       return { name: 'promotions' };
     case 'editor':
       return param ? { name: 'editorFighter', id: param } : { name: 'editor' };
+    case 'edit': {
+      // #/edit/<kind> and #/edit/<kind>/<id>. Kept off the `editor` prefix so the existing
+      // #/editor/<fighterId> links in the wild keep meaning what they meant.
+      const kind = param as EditorEntityKind | undefined;
+      if (!kind || !EDITOR_KINDS.includes(kind)) return { name: 'editor' };
+      return rest ? { name: 'editorEntity', kind, id: rest } : { name: 'editorList', kind };
+    }
     case 'settings':
       return { name: 'settings' };
     default:
@@ -78,6 +101,10 @@ export function toHash(route: Route): string {
       return `#/fight/${route.boutId}`;
     case 'editorFighter':
       return `#/editor/${route.id}`;
+    case 'editorList':
+      return `#/edit/${route.kind}`;
+    case 'editorEntity':
+      return `#/edit/${route.kind}/${route.id}`;
     default:
       return `#/${route.name}`;
   }

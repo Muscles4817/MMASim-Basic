@@ -22,6 +22,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { bandColour, Button, Card, Chip, Empty, ListItem } from '../ui';
+import { EDITOR_TYPES } from '../game/editorSchema';
 
 /**
  * The editor.
@@ -50,8 +51,9 @@ export function EditorScreen() {
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
       <Card>
         <p className="muted prose" style={{ marginBottom: 'var(--space-3)' }}>
-          Edit any fighter's ratings, hidden potential, personality and traits. Changes take
-          effect in the live world when you save them.
+          Edit anything in the world — fighters, promotions, gyms, coaches, referees, judges
+          and the commentary booth. Changes take effect in the live world when you save them.
+          The editor warns about combinations that do not add up; it never blocks them.
         </p>
         <label>
           <span className="visually-hidden">Search fighters to edit</span>
@@ -63,6 +65,20 @@ export function EditorScreen() {
             className="field"
           />
         </label>
+      </Card>
+
+      <Card flush title="Everything else in the world">
+        <div className="list">
+          {EDITOR_TYPES.map((type) => (
+            <ListItem
+              key={type.kind}
+              onClick={() => navigate({ name: 'editorList', kind: type.kind })}
+              primary={type.label}
+              secondary={type.blurb}
+              trailing={<span className="faint">Edit ›</span>}
+            />
+          ))}
+        </div>
       </Card>
 
       <Card flush title={`${fighters.length} fighters`}>

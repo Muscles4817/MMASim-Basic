@@ -13,6 +13,11 @@ import { CampScreen } from './screens/CampScreen';
 import { FightScreen } from './screens/FightScreen';
 import { RankingsScreen } from './screens/RankingsScreen';
 import { EditorFighterScreen, EditorScreen } from './screens/EditorScreen';
+import {
+  EditorEntityScreen,
+  EditorListScreen,
+  editorTypeLabel,
+} from './screens/EditorEntityScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 
 export function App() {
@@ -102,6 +107,20 @@ export function App() {
             {/* Keyed so navigating between two fighters remounts. Without it the component
                 reuses its draft state and Save writes the previously-loaded fighter. */}
             <EditorFighterScreen key={route.id} id={route.id} />
+          </Shell>
+        );
+      case 'editorList':
+        return (
+          <Shell title={editorTypeLabel(route.kind)} showBack>
+            <EditorListScreen key={route.kind} kind={route.kind} />
+          </Shell>
+        );
+      case 'editorEntity':
+        return (
+          <Shell title={editorTypeLabel(route.kind)} showBack>
+            {/* Keyed for the same reason the fighter editor is: without it the draft state
+                survives a navigation and Save writes the previously-loaded entity. */}
+            <EditorEntityScreen key={`${route.kind}:${route.id}`} kind={route.kind} id={route.id} />
           </Shell>
         );
       case 'settings':

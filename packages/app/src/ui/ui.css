@@ -376,3 +376,15 @@ a.list__item:hover {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* The editor's incoherence marker.
+
+   A symbol rather than a colour alone, because "this entity does not add up" must survive
+   both a colour-blind reader and a greyscale screenshot. The title attribute carries the
+   actual reason, and aria-label carries a count for anyone not using a pointer. */
+.editor-warning-dot {
+  flex: none;
+  color: var(--warning);
+  font-size: var(--text-base);
+  line-height: 1;
+}
