@@ -254,16 +254,96 @@ export function campCost(weeks: number, gymQuality: number): number {
   return round1(Math.max(0, weeks) * campWeeklyRate(gymQuality));
 }
 
-/** Purchasable one-shots. Each plugs into a system that is already built. */
+/**
+ * Purchasable one-shots, bought per camp.
+ *
+ * This table sat here with no callers and no effects — a price list for things that did not
+ * happen. It is worth having rather than deleting because it is the only place the player
+ * spends money on anything other than a gym, and a career where money can only be earned and
+ * never *used* is a scoreboard rather than a resource.
+ *
+ * Each one deliberately plugs into a system that already exists rather than adding a new
+ * mechanic, and each targets a different failure the player can actually feel: a camp that
+ * did not develop them, a read that turned out wrong, a fighter who arrived already worn, a
+ * game plan that was not drilled enough, a weight cut that emptied them.
+ *
+ * Priced against a camp rather than against a purse. The full set costs 58, which is more
+ * than a mid-tier eight-week camp — so buying everything every time is not affordable at the
+ * bottom of the sport, which is exactly where they would help most. That is the intended
+ * pressure and it is the same one doc 17 builds the whole money layer around.
+ */
 export const PURCHASES = {
-  specialistCoach: { cost: 25, label: 'Specialist coach for this camp' },
-  scoutingReport: { cost: 8, label: 'Full scouting report' },
-  recoveryBlock: { cost: 15, label: 'Recovery block' },
-  sparringPartner: { cost: 6, label: 'Imported sparring partner' },
-  nutritionist: { cost: 4, label: 'Nutritionist for the cut' },
+  specialistCoach: {
+    cost: 25,
+    label: 'Specialist coach for this camp',
+    effect: 'A better room for eight weeks. Raises what the camp develops.',
+  },
+  scoutingReport: {
+    cost: 8,
+    label: 'Full scouting report',
+    effect: 'Somebody watches all their tape. Your reads are far more likely to be right.',
+  },
+  recoveryBlock: {
+    cost: 15,
+    label: 'Recovery block',
+    effect: 'Physios, soft tissue work, time. You arrive fresher than you should be.',
+  },
+  sparringPartner: {
+    cost: 6,
+    label: 'Imported sparring partner',
+    effect: 'Somebody who actually moves like them. Your drilled answers hold up better.',
+  },
+  nutritionist: {
+    cost: 4,
+    label: 'Nutritionist for the cut',
+    effect: 'The cheapest thing on this list and the one most fighters skip. Softens the cut.',
+  },
 } as const;
 
 export type PurchaseKey = keyof typeof PURCHASES;
+
+export const PURCHASE_KEYS = Object.keys(PURCHASES) as readonly PurchaseKey[];
+
+/** What a set of purchases costs, in thousands. */
+export function purchaseCost(bought: readonly PurchaseKey[]): number {
+  return round1(bought.reduce((total, key) => total + PURCHASES[key].cost, 0));
+}
+
+/**
+ * What the purchases actually do, as multipliers on things the camp already computes.
+ *
+ * Returned as one object rather than applied piecemeal so there is a single place to read
+ * what money buys — and so the camp screen can show the player the effect before they commit
+ * rather than after, which is the difference between a decision and a slot machine.
+ *
+ * The magnitudes are deliberately modest. Every one of these multiplies something that is
+ * already the product of gym, coach, discipline and weeks, so a large coefficient here turns
+ * "did you buy the thing" into the dominant term and makes the four systems underneath it
+ * decorative.
+ */
+export interface CampPurchaseEffects {
+  /** Multiplier on camp quality, which drives development. */
+  campQuality: number;
+  /** Multiplier on drill quality, which drives how well a prepped read holds up. */
+  drillQuality: number;
+  /** Multiplier on scouting confidence — how likely a read is to be correct. */
+  scoutingAccuracy: number;
+  /** Multiplier on fatigue and wear carried into the fight. Below 1 is fresher. */
+  wear: number;
+  /** Multiplier on the weight-cut penalty. Below 1 is a softer cut. */
+  cutPenalty: number;
+}
+
+export function campPurchaseEffects(bought: readonly PurchaseKey[]): CampPurchaseEffects {
+  const has = (key: PurchaseKey) => bought.includes(key);
+  return {
+    campQuality: has('specialistCoach') ? 1.18 : 1,
+    drillQuality: has('sparringPartner') ? 1.15 : 1,
+    scoutingAccuracy: has('scoutingReport') ? 1.35 : 1,
+    wear: has('recoveryBlock') ? 0.78 : 1,
+    cutPenalty: has('nutritionist') ? 0.7 : 1,
+  };
+}
 
 // --- Sponsorship ------------------------------------------------------------------------------
 

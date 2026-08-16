@@ -108,7 +108,11 @@ describe('the game is playable', () => {
     await user.click(accept);
 
     // 4. Camp: the scouting report and the game plan are there to be used.
-    expect(await screen.findByText(/Scouting report/i)).toBeTruthy();
+    //
+    // Matched as a heading rather than by text: the camp screen now also sells a "Full
+    // scouting report" as a purchase, so a bare text match finds two things and cannot tell
+    // the section from the thing you can buy.
+    expect(await screen.findByRole('heading', { name: /Scouting report/i })).toBeTruthy();
     expect(await screen.findByText(/Game plan/i)).toBeTruthy();
     expectNoCrash();
 

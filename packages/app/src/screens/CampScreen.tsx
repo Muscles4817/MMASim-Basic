@@ -3,7 +3,12 @@ import {
   APPROACHES,
   APPROACH_META,
   MAX_PREPPED_READS,
+  PURCHASES,
+  PURCHASE_KEYS,
+  campPurchaseEffects,
   campQuality as computeCampQuality,
+  purchaseCost,
+  type PurchaseKey,
   createRng,
   currentHeat,
   deriveTendencies,
@@ -28,9 +33,14 @@ import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty } from '../ui';
 import { Alert, FighterRead, KeyStat } from '../ui/signals';
-import { getBooking, runBookedFight, saveBookingPlan } from '../game/career';
+import {
+  getBooking,
+  runBookedFight,
+  saveBookingPlan,
+  saveBookingPurchases,
+} from '../game/career';
 import { getRivalry } from '../game/rivalries';
-import { currentPurse } from '../game/money';
+import { currentPurse, payForCamp } from '../game/money';
 import { formatGameDay } from '../shell/Shell';
 
 /**
@@ -81,6 +91,17 @@ export function CampScreen() {
   const [selected, setSelected] = useState<ReadKey[]>(
     booking?.plan.preppedReads.map((r) => r.read) ?? [],
   );
+  /*
+   * What the player is buying for this camp.
+   *
+   * Held here rather than on the plan because it is spending, not tactics — it is debited
+   * when the camp is committed and never read again. `PURCHASES` was a price list in the
+   * engine with no callers and no effects, which meant money could be earned and never used
+   * on anything but a gym.
+   */
+  const [bought, setBought] = useState<PurchaseKey[]>([...(booking?.purchases ?? [])]);
+  const purchases = campPurchaseEffects(bought);
+  const spend = purchaseCost(bought);
 
   /**
    * Write the plan down as it is built, not when the fight starts.
@@ -128,13 +149,19 @@ export function CampScreen() {
   // ×1.5 on the base was cancelling the champion-versus-draw grievance doc 08 promises.
   const purse = currentPurse(db, playerFighter, booking.bout.isTitleFight ? 'mainEvent' : 'mainCard');
 
-  const camp = computeCampQuality(
+  const baseCamp = computeCampQuality(
     weeks,
     gym?.quality ?? 45,
     coach?.development ?? 45,
     playerFighter.personality.discipline,
   );
-  const drill = computeDrillQuality(camp, selected.length, coach?.gamePlanning ?? 45);
+  // Purchases multiply what the camp already computes rather than replacing it, so the gym,
+  // the coach, the discipline and the weeks all still matter underneath.
+  const camp = Math.min(1, baseCamp * purchases.campQuality);
+  const drill = Math.min(
+    1,
+    computeDrillQuality(camp, selected.length, coach?.gamePlanning ?? 45) * purchases.drillQuality,
+  );
   const targetingTotal = targeting.head + targeting.body + targeting.legs || 1;
 
   // aria-disabled rather than disabled: a disabled button leaves the tab order silently, so
@@ -161,11 +188,22 @@ export function CampScreen() {
       campQuality: camp,
       preppedReads: selected.map((read) => {
         const scouted = report?.reads.find((r) => r.read === read);
-        return { read, drillQuality: drill, confidence: scouted?.confidence ?? 0.5 };
+        return {
+          read,
+          drillQuality: drill,
+          // A scouting report does not change what is true about the opponent; it changes
+          // how likely the camp's read of them is to be the right one.
+          confidence: Math.min(1, (scouted?.confidence ?? 0.5) * purchases.scoutingAccuracy),
+        };
       }),
     };
     try {
-      const updated = saveBookingPlan(booking, plan);
+      // Pay for what was bought. Debited here rather than when each was ticked, so a player
+      // who changes their mind on this screen is not charged for a camp they did not run —
+      // and, like the camp itself, it is allowed to take the bank negative.
+      if (spend > 0) payForCamp(db, playerFighter, spend);
+
+      const updated = saveBookingPurchases(saveBookingPlan(booking, plan), bought);
       const outcome = runBookedFight(db, updated);
       commit();
       navigate({ name: 'fight', boutId: outcome.result.boutId });
@@ -437,6 +475,79 @@ export function CampScreen() {
             </label>
             <p className="faint" style={{ fontSize: 'var(--text-sm)' }}>
               {riskDescription(risk)}
+            </p>
+
+            {/*
+              What money can buy for this camp.
+
+              `PURCHASES` was a price list in the engine with no callers and no effects, which
+              meant money could be earned and never spent on anything but a gym — a career
+              where the bank is a scoreboard rather than a resource.
+
+              Each one multiplies something the camp already computes rather than adding a new
+              mechanic, and the effect is stated before the player commits rather than after,
+              which is the difference between a decision and a slot machine. The running total
+              sits against the bank on purpose: the full set costs more than a mid-tier camp,
+              so buying everything is not affordable at the bottom of the sport, which is
+              exactly where it would help most.
+            */}
+            <h3 className="section-title" style={{ marginTop: 'var(--space-4)' }}>
+              Spend on this camp
+            </h3>
+            <div className="stack" style={{ gap: 'var(--space-2)' }}>
+              {PURCHASE_KEYS.map((key) => {
+                const item = PURCHASES[key];
+                const on = bought.includes(key);
+                return (
+                  <label
+                    key={key}
+                    className="row"
+                    style={{
+                      gap: 'var(--space-2)',
+                      alignItems: 'flex-start',
+                      padding: 'var(--space-2)',
+                      border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                      background: on ? 'var(--accent-soft)' : 'var(--surface)',
+                      borderRadius: 'var(--radius-2)',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      onChange={() => {
+                        setBought((current) => {
+                          const next = current.includes(key)
+                            ? current.filter((k) => k !== key)
+                            : [...current, key];
+                          if (booking) saveBookingPurchases(booking, next);
+                          return next;
+                        });
+                      }}
+                      style={{ marginTop: 2, accentColor: 'var(--accent)' }}
+                    />
+                    <span style={{ flex: 1 }}>
+                      <span className="row" style={{ justifyContent: 'space-between' }}>
+                        <strong>{item.label}</strong>
+                        <span className="numeric muted">£{item.cost}k</span>
+                      </span>
+                      <span className="faint" style={{ fontSize: 'var(--text-sm)' }}>
+                        {item.effect}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <p
+              className={spend > playerFighter.bank ? 'prose' : 'faint prose'}
+              style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}
+            >
+              {spend === 0
+                ? `Nothing bought. You have £${Math.round(playerFighter.bank * 10) / 10}k.`
+                : spend > playerFighter.bank
+                  ? `£${spend}k against a bank of £${Math.round(playerFighter.bank * 10) / 10}k. You can run it anyway and go into the red — nothing stops you — but you will start taking fights you would otherwise refuse.`
+                  : `£${spend}k, leaving you £${Math.round((playerFighter.bank - spend) * 10) / 10}k.`}
             </p>
           </div>
         </div>

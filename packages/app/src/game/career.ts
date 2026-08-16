@@ -27,10 +27,12 @@ import {
   injuredAttributes,
   rollInjury,
   setChampion,
+  campPurchaseEffects,
   cutSeverity,
   simulateFight,
   traitMul,
   weightMissForfeit,
+  type PurchaseKey,
   weightMissRiskMultiplier,
   type Bout,
   type Commentator,
@@ -60,6 +62,14 @@ export interface Booking {
   plan: GamePlan;
   /** Day the camp started. Prep quality scales with how long the player has had. */
   campStartDay: number;
+  /**
+   * What the player bought for this camp.
+   *
+   * Kept beside the plan rather than on it because it is spending, not tactics: it is debited
+   * when the camp is committed and then only read to modify what the camp and the weigh-in
+   * already do.
+   */
+  purchases?: readonly PurchaseKey[];
 }
 
 /**
@@ -243,6 +253,19 @@ export function saveBookingPlan(booking: Booking, plan: GamePlan): Booking {
   return next;
 }
 
+/**
+ * Remember what was bought, for the same reason the plan is written down as it is built.
+ *
+ * Leaving the camp screen for any reason must not silently unbuy things — and since the bank
+ * is only debited when the camp is committed, a purchase that vanished on navigation would
+ * be a decision the player made twice and paid for once.
+ */
+export function saveBookingPurchases(booking: Booking, purchases: readonly PurchaseKey[]): Booking {
+  const next = { ...booking, purchases };
+  writeJson(BOOKING_KEY, next);
+  return next;
+}
+
 export interface FightOutcome {
   result: FightResult;
   notes: readonly string[];
@@ -270,9 +293,20 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
   // the opponent's scouting report does not know, and the player finds out from how the
   // fight looks. That is how it works in reality and it is the point of the system.
   const day = booking.bout.day;
+  const boughtEffects = campPurchaseEffects(booking.purchases ?? []);
+
   const redHurt: Fighter = {
     ...red,
     attributes: injuredAttributes(red.attributes, red.injuries ?? [], day),
+    // The recovery block. Applied to the condition the fighter *walks in with* rather than to
+    // anything inside the fight, because that is what it buys: physio, soft tissue work and
+    // time, so a body that would have arrived worn arrives closer to fresh. It cannot make
+    // anyone fresher than fresh.
+    condition: {
+      ...red.condition,
+      fatigue: Math.max(0, red.condition.fatigue * boughtEffects.wear),
+      bodyWear: Math.max(0, red.condition.bodyWear * boughtEffects.wear),
+    },
   };
   const blueHurt: Fighter = {
     ...blue,
@@ -294,7 +328,10 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     Math.pow(cutSeverity(red.walkingWeightLbs, red.divisionId), 2.2) *
       0.55 *
       weightMissRiskMultiplier(red.personality) *
-      traitMul(red.traits, 'weightMissRisk'),
+      traitMul(red.traits, 'weightMissRisk') *
+      // The nutritionist pays for itself here, which is the payback period the forfeit above
+      // was written to create.
+      boughtEffects.cutPenalty,
   );
   const missedWeight = weighInRng.chance(cutRisk);
   const weighInNotes: string[] = [];
