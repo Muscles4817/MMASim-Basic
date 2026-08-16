@@ -191,3 +191,44 @@
   text-align: left;
   font-weight: 600;
 }
+
+.scorecards__deduction {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text);
+  background: var(--warning-soft);
+  border-top: 1px solid var(--border);
+}
+
+/* --- Fouls ---------------------------------------------------------------------------
+   A foul is the one line in the feed a reader must not skim. It gets a symbol, a tinted
+   ground and (for a deduction) weight, because any one signal alone can fail: colour fails
+   for a colour-blind reader, a symbol fails at a glance in a dense feed, and weight alone
+   reads as emphasis rather than as a category. Together they do not.
+
+   Note what is *not* overridden: the corner stripe stays, because who committed the foul is
+   exactly the thing the reader wants to know next. */
+
+.fight-line--foul {
+  background: var(--warning-soft);
+  padding-block: var(--space-1);
+  border-radius: var(--radius-sm);
+}
+
+.fight-line--deduction {
+  background: var(--negative-soft);
+  font-weight: 600;
+}
+
+.fight-line__flag {
+  flex: none;
+  font-size: var(--text-sm);
+  color: var(--warning);
+}
+
+.fight-line--deduction .fight-line__flag {
+  color: var(--negative);
+}

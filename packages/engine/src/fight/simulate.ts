@@ -34,6 +34,15 @@ import {
   roundBiasMultiplier,
   type Combatant,
 } from './profile.js';
+import {
+  FOUL_META,
+  describeFoul,
+  recoveryBenefit,
+  refereeRuling,
+  rollFoul,
+  rollNoContest,
+  type FoulIncident,
+} from './fouls.js';
 import { buildScorecards, emptyTally, readDecision, type RoundTally } from './scoring.js';
 import { accrueFatigue, recoverBetweenRounds, workRate } from './stamina.js';
 import {
@@ -83,6 +92,10 @@ interface FightState {
   /** Cut severity 0–100 per corner. Feeds doctor stoppages. */
   cuts: Record<Corner, number>;
   deductions: Record<Corner, number>;
+  /** Every foul this fight, called or missed. */
+  fouls: FoulIncident[];
+  /** Fouls the referee actually *called* per corner. Drives escalating punishment. */
+  foulsCalled: Record<Corner, number>;
 }
 
 interface Ending {
@@ -147,6 +160,8 @@ export function simulateFight(config: FightConfig): FightResult {
     unanswered: { red: 0, blue: 0 },
     cuts: { red: 0, blue: 0 },
     deductions: { red: 0, blue: 0 },
+    fouls: [],
+    foulsCalled: { red: 0, blue: 0 },
   };
   resetToStanding(state);
 
@@ -188,6 +203,7 @@ export function simulateFight(config: FightConfig): FightResult {
         round,
         totalRounds: rounds,
         secondsRemaining: roundSeconds - clock,
+        clockSeconds: clock,
         emit,
         scoreSoFar: tallies,
       });
@@ -198,18 +214,22 @@ export function simulateFight(config: FightConfig): FightResult {
         ending = exchange.ending;
         endRound = round;
         endTime = Math.round(clock);
-        events.push({
-          round,
-          timeSeconds: endTime,
-          kind: 'finish',
-          emphasis: 'critical',
-          text: say.finishText(
-            exchange.ending.method as 'ko' | 'tko' | 'submission' | 'doctorStoppage' | 'retirement',
-            corners[exchange.ending.winner!],
-            corners[OTHER_CORNER[exchange.ending.winner!]],
-            exchange.ending.submissionName,
-          ),
-        });
+        // A disqualification or no contest has already announced itself in the foul line;
+        // running it through finishText would produce "…by knockout" for an eye poke.
+        if (ending.method !== 'dq' && ending.method !== 'noContest') {
+          events.push({
+            round,
+            timeSeconds: endTime,
+            kind: 'finish',
+            emphasis: 'critical',
+            text: say.finishText(
+              exchange.ending.method as 'ko' | 'tko' | 'submission' | 'doctorStoppage' | 'retirement',
+              corners[exchange.ending.winner!],
+              corners[OTHER_CORNER[exchange.ending.winner!]],
+              exchange.ending.submissionName,
+            ),
+          });
+        }
         break;
       }
     }
@@ -301,6 +321,8 @@ export function simulateFight(config: FightConfig): FightResult {
     scorecards,
     stats: { red: red.stats, blue: blue.stats },
     damage: { red: damageReport(red, method, winnerId), blue: damageReport(blue, method, winnerId) },
+    fouls: state.fouls,
+    deductions: { ...state.deductions },
   };
 }
 
@@ -337,6 +359,8 @@ interface ExchangeContext {
   round: number;
   totalRounds: number;
   secondsRemaining: number;
+  /** Seconds elapsed in the current round. */
+  clockSeconds: number;
   emit: (
     kind: FightEventKind,
     text: string,
@@ -371,7 +395,102 @@ function resolveExchange(ctx: ExchangeContext): ExchangeOutcome {
   const seconds = Math.min(outcome.seconds, Math.max(1, ctx.secondsRemaining));
   applyPassiveEffects(ctx, seconds);
 
+  // Fouls resolve after the exchange and after fatigue: it is the tired hand that pokes the
+  // eye. A finish already in hand is not overturned by a foul that came with it.
+  if (!outcome.ending) {
+    const foulEnding = resolveFoul(ctx, actor, target, seconds);
+    if (foulEnding) return { seconds, ending: foulEnding };
+  }
+
   return { seconds, ending: outcome.ending };
+}
+
+/**
+ * Fouls, and what they cost.
+ *
+ * The important part is `applyRecovery`: a foul stops the fight, and stopping the fight is
+ * worth something to whoever needed it stopped. A fighter three seconds from being finished
+ * gets two minutes and a doctor because their opponent's thumb was out. That is a real and
+ * infuriating feature of the sport, and modelling it is most of the reason this exists.
+ */
+function resolveFoul(
+  ctx: ExchangeContext,
+  actor: Combatant,
+  target: Combatant,
+  seconds: number,
+): Ending | undefined {
+  const { state, rng, referee, emit } = ctx;
+
+  const type = rollFoul({
+    rng,
+    position: state.position,
+    actorPersonality: actor.fighter.personality,
+    actorFatigue: actor.fatigue,
+    actorMomentum: actor.momentum,
+    seconds,
+  });
+  if (!type) return undefined;
+
+  const ruling = refereeRuling({
+    rng,
+    referee,
+    type,
+    priorCalled: state.foulsCalled[actor.corner],
+  });
+
+  const meta = FOUL_META[type];
+  // An unseen foul buys no recovery — the referee never stopped anything.
+  const recoverySeconds = ruling === 'unseen' ? 0 : meta.recoverySeconds;
+
+  if (ruling !== 'unseen') {
+    state.foulsCalled[actor.corner] += 1;
+    applyRecovery(target, recoverySeconds);
+  }
+  if (ruling === 'pointDeduction') state.deductions[actor.corner] += 1;
+
+  state.fouls.push({
+    type,
+    by: actor.corner,
+    round: ctx.round,
+    timeSeconds: Math.round(ctx.clockSeconds + seconds),
+    ruling,
+    recoverySeconds,
+  });
+
+  emit(
+    ruling === 'pointDeduction' || ruling === 'disqualification' ? 'pointDeduction' : 'foul',
+    describeFoul(type, actor.fighter.lastName, target.fighter.lastName, ruling),
+    actor.corner,
+    ruling === 'disqualification' ? 'critical' : ruling === 'pointDeduction' ? 'major' : 'minor',
+  );
+
+  if (ruling === 'disqualification') {
+    return { method: 'dq', winner: target.corner };
+  }
+
+  // A no contest is the worst outcome for everybody and has to stay rare enough to be a
+  // story rather than a nuisance.
+  if (rollNoContest(rng, type, ruling)) {
+    emit(
+      'finish',
+      `${target.fighter.lastName} cannot continue. That is a no contest — and nobody in the building is happy about it.`,
+      undefined,
+      'critical',
+    );
+    return { method: 'noContest' };
+  }
+
+  return undefined;
+}
+
+/** Hand back the fitness and clear-headedness a stoppage is worth. */
+function applyRecovery(c: Combatant, seconds: number): void {
+  if (seconds <= 0) return;
+  const benefit = recoveryBenefit(c.fighter.naturals.recovery, seconds);
+  // Being hurt is transient and a break clears most of it — this is the injustice.
+  c.hurtSeconds = Math.max(0, c.hurtSeconds * (1 - benefit));
+  // Fatigue only partially clears. Nobody gets their gas tank back from an eye poke.
+  c.fatigue = Math.max(0, c.fatigue - benefit * 0.22);
 }
 
 function applyPassiveEffects(ctx: ExchangeContext, seconds: number): void {

@@ -8,6 +8,7 @@
 
 import type { FighterId } from '../core/ids.js';
 import type { FinishMethod } from '../domain/fighter.js';
+import type { FoulIncident } from './fouls.js';
 
 export type Corner = 'red' | 'blue';
 
@@ -148,6 +149,10 @@ export interface FightResult {
   scorecards: readonly Scorecard[];
   stats: Record<Corner, FightStats>;
   damage: Record<Corner, DamageReport>;
+  /** Every foul called or missed, in order. Empty in the overwhelming majority of fights. */
+  fouls: readonly FoulIncident[];
+  /** Points deducted per corner, already applied to the scorecards. */
+  deductions: Record<Corner, number>;
   /** Set when the referee's tendencies materially changed the result. Used by commentary. */
   refereeNote?: string;
 }

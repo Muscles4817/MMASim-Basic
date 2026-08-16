@@ -199,11 +199,14 @@ function CornerName({
 function FeedLine({ event }: { event: FightEvent }) {
   const mm = Math.floor(event.timeSeconds / 60);
   const ss = String(event.timeSeconds % 60).padStart(2, '0');
+  const isFoul = event.kind === 'foul' || event.kind === 'pointDeduction';
   const classes = [
     'fight-line',
     event.emphasis && `fight-line--${event.emphasis}`,
     event.corner && `fight-line--${event.corner}`,
     (event.kind === 'roundStart' || event.kind === 'roundEnd') && 'fight-line--round',
+    isFoul && 'fight-line--foul',
+    event.kind === 'pointDeduction' && 'fight-line--deduction',
   ]
     .filter(Boolean)
     .join(' ');
@@ -217,7 +220,21 @@ function FeedLine({ event }: { event: FightEvent }) {
       <span className="fight-line__time numeric">
         R{event.round} {mm}:{ss}
       </span>
-      <span>{event.text}</span>
+      {isFoul && (
+        // A symbol *and* a colour *and* a label: the stoppage is the one thing in the feed
+        // a reader must not skim past, and colour alone would fail anyone who cannot see it.
+        <span className="fight-line__flag" aria-hidden="true">
+          {event.kind === 'pointDeduction' ? '⊖' : '⚠'}
+        </span>
+      )}
+      <span>
+        {isFoul && (
+          <span className="visually-hidden">
+            {event.kind === 'pointDeduction' ? 'Point deduction: ' : 'Foul: '}
+          </span>
+        )}
+        {event.text}
+      </span>
     </p>
   );
 }
@@ -245,7 +262,13 @@ function FightSummary({
           : result.method === 'decisionSplit'
             ? 'Split decision'
             : 'Majority decision'
-        : 'Draw';
+        : // Fouls can end a night without a winner, and falling through to "Draw" here
+          // would quietly misreport the single most contentious result in the sport.
+          result.method === 'dq'
+          ? 'Disqualification'
+          : result.method === 'noContest'
+            ? 'No contest'
+            : 'Draw';
 
   const mm = Math.floor(result.timeSeconds / 60);
   const ss = String(result.timeSeconds % 60).padStart(2, '0');
@@ -326,8 +349,27 @@ function FightSummary({
               </tbody>
             </table>
           </div>
+          {(result.deductions.red > 0 || result.deductions.blue > 0) && (
+            <p className="scorecards__deduction">
+              <span aria-hidden="true">&#8854;</span>{' '}
+              {result.deductions.red > 0 && (
+                <>
+                  <strong>{red?.lastName ?? 'Red'}</strong> lost{' '}
+                  {result.deductions.red === 1 ? 'a point' : `${result.deductions.red} points`}
+                  {result.deductions.blue > 0 && '; '}
+                </>
+              )}
+              {result.deductions.blue > 0 && (
+                <>
+                  <strong>{blue?.lastName ?? 'Blue'}</strong> lost{' '}
+                  {result.deductions.blue === 1 ? 'a point' : `${result.deductions.blue} points`}
+                </>
+              )}
+              . Already applied to the totals above &mdash; which is why they may not add up.
+            </p>
+          )}
           <p className="faint" style={{ padding: 'var(--space-3) var(--space-4)', fontSize: 'var(--text-sm)' }}>
-            Scores read {red?.lastName ?? 'red'}–{blue?.lastName ?? 'blue'}. Judges weigh damage,
+            Scores read {red?.lastName ?? 'red'}&ndash;{blue?.lastName ?? 'blue'}. Judges weigh damage,
             control and volume differently, which is why they disagree.
           </p>
         </Card>

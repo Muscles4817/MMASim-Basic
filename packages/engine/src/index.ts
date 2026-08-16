@@ -31,6 +31,7 @@ export * from './fight/profile.js';
 export * from './fight/damage.js';
 export * from './fight/stamina.js';
 export * from './fight/scoring.js';
+export * from './fight/fouls.js';
 export * from './fight/simulate.js';
 
 // Health

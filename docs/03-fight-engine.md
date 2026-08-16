@@ -162,7 +162,57 @@ The assigned referee is visible before the bout and materially changes it:
 | ------------------ | --------------------------------------------------------------------- |
 | `stoppageTrigger`  | Damage threshold at which a hurt fighter is saved. Low = careers saved, "he was fine!" complaints. High = highlight reels. |
 | `standUpSpeed`     | How long a stalled ground position runs before a stand-up. The single biggest external modifier on a control wrestler. |
-| `foulTolerance`    | Warning vs. point deduction for eye pokes, fence grabs, low blows.     |
+| `foulTolerance`    | Warning vs. point deduction for eye pokes, fence grabs, low blows. Also whether the foul is seen at all. |
+
+## Fouls (built)
+
+Six fouls, gated by position: eye poke and low blow on the feet or in the clinch, fence grab
+in the clinch or on the ground, illegal knee in the clinch, strikes to the back of the head
+and illegal upkicks on the ground.
+
+**Nobody chooses to foul.** The hazard falls out of Discipline (the dominant term),
+Professionalism, and fatigue — which is superlinear, because it is the last two minutes that
+produce the fence grabs. *Cynical* fouls (fence grab, illegal knee, upkick) carry a second
+multiplier from `desperation()`, which is exactly 1 while a fighter is winning: nobody grabs
+the fence from in front.
+
+### The point of the whole system
+
+**A foul stops the fight, and stopping the fight is worth something.** A fighter three
+seconds from being finished gets up to five minutes and a doctor because their opponent's
+thumb was out. That is not a bug to be balanced away; it is one of the genuine injustices of
+the sport, and it is the reason the module exists at all. `recoveryBenefit()` decides how
+much of the break is actually worth having, driven by the `recovery` natural — a second
+visible consequence for a hidden stat.
+
+It never fully resets: a five-minute break clears most of the hurt state and only a fraction
+of the fatigue. Being fouled while hurt must be *lucky*, never *better than not being fouled*.
+
+### The referee decides three things
+
+1. **Did he see it?** Driven by `foulTolerance` against how conspicuous the foul is. A
+   permissive official misses fouls outright, which is where "how did he not see that?"
+   comes from. An unseen foul buys no recovery, because nothing was stopped.
+2. **Warning or point?** The first foul is essentially always a warning — referees talk
+   before they take points, and a game where the first fence grab costs a point reads as a
+   bug. Cynical fouls are punished on *cheating* rather than harm, so a trivial fence grab
+   costs a point long before a far more damaging accidental eye poke does.
+3. **Is that enough?** A disqualification needs a severe foul, a repeat offender and a strict
+   official. It should be a career anecdote.
+
+### Calibrated rates
+
+Per-exchange hazards cannot be reasoned about by inspection. The first calibration looked
+entirely reasonable as a set of decimals and produced a point deduction in **13.6%** of
+fights and a no contest in **2.1%** — an absurd sport. `tests/statistical/fouls.test.ts` is
+the actual specification:
+
+| Measure                        | Shipped | Bound       |
+| ------------------------------ | ------- | ----------- |
+| Fights with any foul           | 25.1%   | 12–35%      |
+| Fights with a point deduction  | 1.4%    | 0.4–3.5%    |
+| No contest                     | 0.23%   | < 0.8%      |
+| Disqualification               | ~0      | < 0.5%      |
 
 ## Scoring
 
