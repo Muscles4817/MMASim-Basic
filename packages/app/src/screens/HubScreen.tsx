@@ -9,6 +9,7 @@ import {
   describeTrigger,
   releaseRisk,
   renegotiationTriggers,
+  type RepaperOffer,
   displayName,
   fighterAge,
   getDivision,
@@ -51,6 +52,8 @@ export function HubScreen() {
   const { db, world, playerFighter, commit, updateWorld } = useGame();
   const { navigate } = useRouter();
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [confirmingRepaper, setConfirmingRepaper] = useState(false);
+  const [signedRepaper, setSignedRepaper] = useState<RepaperOffer | undefined>();
   const [pendingOffer, setPendingOffer] = useState<MatchupAppraisal | undefined>();
   const [booking, setBooking] = useState(() => getBooking(playerFighter?.id as string | undefined));
 
@@ -398,17 +401,19 @@ export function HubScreen() {
               whole point is that it is a real decision and a fighter who says yes should
               know exactly what they said yes to.
             */}
-            {repaper && (
+            {repaper && !signedRepaper && (
               <Alert tone="good" title="They want to tear this up">
-                <p className="prose" style={{ marginBottom: 'var(--space-2)' }}>{repaper.reason}</p>
-                <p className="prose" style={{ marginBottom: 'var(--space-2)' }}>
+                <span className="prose" style={{ display: 'block', marginBottom: 'var(--space-2)' }}>
+                  {repaper.reason}
+                </span>
+                <span className="prose" style={{ display: 'block', marginBottom: 'var(--space-2)' }}>
                   <strong>
                     £{repaper.terms.showPurse}k to show, £{repaper.terms.winBonus}k to win
                   </strong>{' '}
                   — up from £{repaper.current.showPurse}k and £{repaper.current.winBonus}k, a{' '}
                   {Math.round(repaper.uplift * 100)}% rise starting with your next fight.
-                </p>
-                <p className="prose" style={{ marginBottom: 'var(--space-3)' }}>
+                </span>
+                <span className="prose" style={{ display: 'block', marginBottom: 'var(--space-3)' }}>
                   In exchange the deal restarts at{' '}
                   <strong>{repaper.terms.fightsOwed} fights</strong> owed, where you currently
                   owe {repaper.current.fightsRemaining}
@@ -416,15 +421,57 @@ export function HubScreen() {
                     ', and the championship extension is reattached'}
                   . Saying no costs you nothing today, but the offer may not come back at this
                   price.
-                </p>
-                <Button
-                  onClick={() => {
-                    acceptRepaperOffer(db, fighter, repaper);
-                    commit();
-                  }}
-                >
-                  Sign it
-                </Button>
+                </span>
+                {/*
+                  Two steps, and a confirmation that stays.
+                  
+                  This restarts the deal at N fights owed and can reattach the championship
+                  extension — the most binding thing a fighter can do — and it was one tap on
+                  a default button. Accepting a fight two-steps; committing a camp two-steps;
+                  resetting the save two-steps. This outranks all three.
+                  
+                  It also confirmed nothing: `standing` recomputes, the alert vanishes, and
+                  the player is left with no evidence anything happened. The receipt below is
+                  in a live region and persists until the next fight.
+                */}
+                {confirmingRepaper ? (
+                  <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                    <Button
+                      onClick={() => {
+                        acceptRepaperOffer(db, fighter, repaper);
+                        setSignedRepaper(repaper);
+                        setConfirmingRepaper(false);
+                        commit();
+                      }}
+                    >
+                      Yes — sign it
+                    </Button>
+                    <Button variant="ghost" onClick={() => setConfirmingRepaper(false)}>
+                      Not yet
+                    </Button>
+                  </div>
+                ) : (
+                  <Button variant="secondary" onClick={() => setConfirmingRepaper(true)}>
+                    Sign it
+                  </Button>
+                )}
+              </Alert>
+            )}
+
+            {/*
+              The receipt.
+
+              Its own region rather than a branch inside the alert, because the alert is gone
+              by then: `standing` recomputes on commit and the offer stops existing, which is
+              exactly why signing used to leave the player with no evidence anything happened.
+            */}
+            {signedRepaper && (
+              <Alert tone="good" title="Signed">
+                <span className="prose" style={{ display: 'block' }}>
+                  You now owe {signedRepaper.terms.fightsOwed} fights at £
+                  {signedRepaper.terms.showPurse}k to show and £{signedRepaper.terms.winBonus}k to
+                  win.
+                </span>
               </Alert>
             )}
 

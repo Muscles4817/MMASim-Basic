@@ -29,6 +29,7 @@ export function OffersScreen() {
   const { db, playerFighter, commit } = useGame();
   const { navigate } = useRouter();
   const [pending, setPending] = useState<string | undefined>();
+  const [confirmingManager, setConfirmingManager] = useState<string | undefined>();
 
   const offers = useMemo(
     () => (playerFighter ? offersOnTheTable(db, playerFighter) : []),
@@ -97,16 +98,43 @@ export function OffersScreen() {
                     <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginTop: 2 }}>
                       {manager.blurb}
                     </p>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        hire(db, playerFighter, manager);
-                        commit();
-                      }}
-                      style={{ marginTop: 'var(--space-2)' }}
-                    >
-                      Sign with {manager.name.split(' ')[1] ?? manager.name}
-                    </Button>
+                    {/*
+                      Hiring takes a permanent cut of every purse from here on. One tap on a
+                      list of six was the least reversible thing on the screen and the least
+                      guarded.
+                    */}
+                    {confirmingManager === (manager.id as string) ? (
+                      <div
+                        className="row"
+                        style={{ gap: 'var(--space-2)', marginTop: 'var(--space-2)', flexWrap: 'wrap' }}
+                      >
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            hire(db, playerFighter, manager);
+                            setConfirmingManager(undefined);
+                            commit();
+                          }}
+                        >
+                          Yes — {Math.round(manager.purseRate * 100)}% of every purse
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setConfirmingManager(undefined)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        onClick={() => setConfirmingManager(manager.id as string)}
+                        style={{ marginTop: 'var(--space-2)' }}
+                      >
+                        Sign with {manager.name.split(' ')[1] ?? manager.name}
+                      </Button>
+                    )}
                   </div>
                 ))
               )}
@@ -164,6 +192,7 @@ function OfferCard({
   onToggle(): void;
   onAccept(): void;
 }) {
+  const [confirming, setConfirming] = useState(false);
   const motive =
     offer.motive === 'reach'
       ? { label: 'A leap', tone: 'accent' as const }
@@ -239,10 +268,27 @@ function OfferCard({
             </div>
           )}
 
+          {/*
+            Two steps. Signing commits a multi-fight exclusive deal and then navigates away,
+            which is both the most consequential decision on this screen and the hardest to
+            notice you have made. The row already expands to reveal this button, so the first
+            step is deliberate; this makes the second one deliberate too.
+          */}
           {canSign ? (
-            <Button variant="primary" onClick={onAccept}>
-              Sign with {offer.promotion.shortName}
-            </Button>
+            confirming ? (
+              <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                <Button variant="primary" onClick={onAccept}>
+                  Yes — sign with {offer.promotion.shortName}
+                </Button>
+                <Button variant="ghost" onClick={() => setConfirming(false)}>
+                  Not yet
+                </Button>
+              </div>
+            ) : (
+              <Button variant="primary" onClick={() => setConfirming(true)}>
+                Sign with {offer.promotion.shortName}
+              </Button>
+            )
           ) : (
             <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
               You are under contract. This is what would be waiting if you were not.

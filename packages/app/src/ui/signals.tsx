@@ -313,10 +313,17 @@ export function Alert({
       <span className="alert__icon">
         <Icon name={icon} />
       </span>
-      <span>
+      {/*
+        `div`, not `span`. Callers legitimately pass paragraphs, lists and buttons into an
+        alert, and a `<p>` inside a `<span>` is invalid nesting the browser silently repairs
+        by closing the span early — which moves the content out of the styled body and, in the
+        worst case, out of the element carrying the role. It rendered acceptably by luck, and
+        it was a trap for the next caller.
+      */}
+      <div>
         <strong className="alert__title">{title}</strong>
-        {children && <span className="alert__body">{children}</span>}
-      </span>
+        {children && <div className="alert__body">{children}</div>}
+      </div>
     </div>
   );
 }

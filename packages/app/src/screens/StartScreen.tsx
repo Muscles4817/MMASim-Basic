@@ -9,6 +9,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, ListItem, Segmented } from '../ui';
+import { Alert, OverallRating } from '../ui/signals';
 import { activeDivisionPeers, clearTransientCareerState } from '../game/career';
 
 type Filter = 'contenders' | 'prospects' | 'all';
@@ -21,7 +22,7 @@ type Filter = 'contenders' | 'prospects' | 'all';
  * deliberately listed second and described honestly — it is the harder, better run.
  */
 export function StartScreen() {
-  const { db, updateWorld } = useGame();
+  const { db, world, updateWorld } = useGame();
   const { navigate } = useRouter();
   const [filter, setFilter] = useState<Filter>('contenders');
   const [search, setSearch] = useState('');
@@ -42,12 +43,34 @@ export function StartScreen() {
     return filtered.sort((a, b) => overallRating(b.attributes) - overallRating(a.attributes));
   }, [db, filter, search]);
 
-  const choose = (fighter: Fighter) => {
+  /*
+   * Taking over somebody is career-ending for whoever you were.
+   *
+   * The list reads as browsable — the card above it says "or take over an existing fighter",
+   * and it is reached from a plain button in Settings — but a single tap on any of hundreds
+   * of rows discarded the current booking and reassigned the player, with no confirmation and
+   * no undo. Settings gives its reset a full two-step; this is the same magnitude of action
+   * and had none.
+   *
+   * Only guarded when there *is* a career to lose: confirming this on a fresh save would be
+   * a dialog in front of the only thing the screen is for.
+   */
+  const [pending, setPending] = useState<Fighter | undefined>();
+
+  const commitChoice = (fighter: Fighter) => {
     // Bookings and the last result are keyed to the previous fighter. Left behind, the hub
     // offers to send the new fighter into the old one’s booked bout.
     clearTransientCareerState();
     updateWorld({ playerRole: 'fighter', playerFighterId: fighter.id as string });
     navigate({ name: 'hub' });
+  };
+
+  const choose = (fighter: Fighter) => {
+    if (world.playerFighterId && world.playerFighterId !== (fighter.id as string)) {
+      setPending(fighter);
+      return;
+    }
+    commitChoice(fighter);
   };
 
   return (
@@ -115,6 +138,31 @@ export function StartScreen() {
         </Button>
       </Card>
 
+      {pending && (
+        <Alert tone="warn" title={`Leave your current career for ${displayName(pending)}?`}>
+          <span className="prose" style={{ display: 'block', marginBottom: 'var(--space-3)' }}>
+            Your booked fight and your last result are discarded. The fighter you are leaving
+            stays in the world and carries on without you.
+          </span>
+          <span className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+            <Button variant="primary" onClick={() => commitChoice(pending)}>
+              Yes — take over {displayName(pending)}
+            </Button>
+            <Button variant="ghost" onClick={() => setPending(undefined)}>
+              Stay where I am
+            </Button>
+          </span>
+        </Alert>
+      )}
+
+      {/*
+        The count, announced. It changes as the player types into the search above it, and a
+        list that silently reorders under a filter tells a screen-reader user nothing at all.
+      */}
+      <p className="visually-hidden" aria-live="polite">
+        {fighters.length} fighter{fighters.length === 1 ? '' : 's'} match
+      </p>
+
       <Card flush title={`${fighters.length} fighter${fighters.length === 1 ? '' : 's'}`}>
         {fighters.length === 0 ? (
           <Empty title="Nobody matches that">Try a different filter or clear the search.</Empty>
@@ -150,10 +198,14 @@ export function StartScreen() {
                     <Chip tone={f.starPower >= 65 ? 'accent' : 'neutral'}>
                       <span className="visually-hidden">Star power </span>★ {f.starPower}
                     </Chip>
-                    <Chip tone="info">
-                      <span className="visually-hidden">Overall rating </span>
-                      {Math.round(overallRating(f.attributes))}
-                    </Chip>
+                    {/*
+                      `OverallRating`, not a bare number. A sighted player saw "81" with no
+                      scale, no band word and no legend anywhere on the screen — and the
+                      visually-hidden label meant the *visual* reader was the one left
+                      guessing. Roster and Rankings already use this; the first screen a new
+                      player sees did not.
+                    */}
+                    <OverallRating rating={overallRating(f.attributes)} />
                   </span>
                 }
               />

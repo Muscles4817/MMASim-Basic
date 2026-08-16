@@ -145,6 +145,20 @@ describe('free agency', () => {
   });
 });
 
+/**
+ * Hire the first manager on the offers screen.
+ *
+ * Two taps, not one: hiring takes a permanent cut of every purse from here on, which made it
+ * the least reversible thing on the screen and the least guarded. The confirm names the rate
+ * rather than saying "are you sure", so the second tap carries the information the first one
+ * was missing.
+ */
+async function hireFirstManager(user: ReturnType<typeof userEvent.setup>) {
+  const buttons = await screen.findAllByRole('button', { name: /^Sign with/i });
+  await user.click(buttons[0]!);
+  await user.click(await screen.findByRole('button', { name: /^Yes — \d+% of every purse/i }));
+}
+
 describe('hiring a manager', () => {
   it('changes who is negotiating, and says what they cost', async () => {
     const user = userEvent.setup();
@@ -152,9 +166,8 @@ describe('hiring a manager', () => {
     goTo('#/offers');
     renderApp();
 
-    const buttons = await screen.findAllByRole('button', { name: /^Sign with/i });
     // Managers appear before promotions on this screen, so the first is a manager.
-    await user.click(buttons[0]!);
+    await hireFirstManager(user);
 
     goTo('#/hub');
     expect(await screen.findByText(/manages you, on \d+% of the purse/i)).toBeTruthy();
@@ -166,10 +179,57 @@ describe('hiring a manager', () => {
     goTo('#/offers');
     renderApp();
 
-    const buttons = await screen.findAllByRole('button', { name: /^Sign with/i });
-    await user.click(buttons[0]!);
+    await hireFirstManager(user);
 
     goTo('#/hub');
     expect(await screen.findByText(/has not been tested yet/i)).toBeTruthy();
+  });
+});
+
+describe('nothing consequential happens on one tap', () => {
+  /*
+   * The rule this suite enforces: an action that cannot be undone gets two steps, and the
+   * second step states what it costs rather than asking "are you sure". Accepting a fight,
+   * committing a camp and resetting the save all did this already; the contract actions —
+   * which are the most binding things in the game — did not.
+   */
+
+  it('does not hire a manager on the first tap', async () => {
+    const user = userEvent.setup();
+    await createFighter(user);
+    goTo('#/offers');
+    renderApp();
+
+    const buttons = await screen.findAllByRole('button', { name: /^Sign with/i });
+    await user.click(buttons[0]!);
+
+    // Still nobody managing them.
+    goTo('#/hub');
+    expect(screen.queryByText(/manages you, on \d+% of the purse/i)).toBeNull();
+  });
+
+  it('names the manager’s cut in the confirm, not just “are you sure”', async () => {
+    const user = userEvent.setup();
+    await createFighter(user);
+    goTo('#/offers');
+    renderApp();
+
+    const buttons = await screen.findAllByRole('button', { name: /^Sign with/i });
+    await user.click(buttons[0]!);
+    expect(await screen.findByRole('button', { name: /Yes — \d+% of every purse/i })).toBeTruthy();
+  });
+
+  it('lets you back out of hiring', async () => {
+    const user = userEvent.setup();
+    await createFighter(user);
+    goTo('#/offers');
+    renderApp();
+
+    const buttons = await screen.findAllByRole('button', { name: /^Sign with/i });
+    await user.click(buttons[0]!);
+    await user.click(await screen.findByRole('button', { name: /^Cancel$/i }));
+
+    goTo('#/hub');
+    expect(screen.queryByText(/manages you, on \d+% of the purse/i)).toBeNull();
   });
 });
