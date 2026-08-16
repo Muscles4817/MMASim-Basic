@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MMA Sim">
+  <title>MMA Sim</title>
+  <rect width="512" height="512" rx="112" fill="#0e0f12"/>
+  <!-- A cage: five posts and two rails. Reads at 48px, which a glove does not. -->
+  <g stroke="#d8452f" stroke-width="26" stroke-linecap="round" fill="none">
+    <path d="M120 150v212M196 150v212M256 150v212M316 150v212M392 150v212"/>
+  </g>
+  <g stroke="#f2f2f3" stroke-width="30" stroke-linecap="round" fill="none">
+    <path d="M104 150h304M104 362h304"/>
+  </g>
+</svg>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="MMA Sim">
+  <title>MMA Sim</title>
+  <!-- Maskable: every meaningful mark sits inside the 40% safe circle, because Android
+       will crop this to a circle, a squircle or a teardrop depending on the launcher. -->
+  <rect width="512" height="512" fill="#0e0f12"/>
+  <g stroke="#d8452f" stroke-width="24" stroke-linecap="round" fill="none">
+    <path d="M170 190v132M213 190v132M256 190v132M299 190v132M342 190v132"/>
+  </g>
+  <g stroke="#f2f2f3" stroke-width="28" stroke-linecap="round" fill="none">
+    <path d="M158 190h196M158 322h196"/>
+  </g>
+</svg>

@@ -1,0 +1,60 @@
+/* The update bar.
+
+   Pinned to the bottom above the safe area rather than the top, because the top is where
+   the title and the back control live and covering those is worse than covering content.
+   It never traps focus and never blocks a tap: both buttons are real buttons and "Later"
+   is always available. */
+
+.update-prompt {
+  position: fixed;
+  left: var(--space-3);
+  right: var(--space-3);
+  bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm);
+
+  /* Never wider than a comfortable reading measure on a desktop. */
+  max-width: 34rem;
+  margin-inline: auto;
+}
+
+.update-prompt__text {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.update-prompt__action,
+.update-prompt__dismiss {
+  font: inherit;
+  min-height: var(--tap-target);
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.update-prompt__action {
+  font-weight: 700;
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.update-prompt__dismiss {
+  color: var(--text-muted);
+  background: transparent;
+  border-color: var(--border);
+}

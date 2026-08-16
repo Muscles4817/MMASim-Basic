@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useGame } from './state/GameProvider';
 import { useRouter } from './state/router';
 import { Shell } from './shell/Shell';
+import { UpdatePrompt } from './shell/UpdatePrompt';
 import { StartScreen } from './screens/StartScreen';
 import { CreateFighterScreen } from './screens/CreateFighterScreen';
 import { TrainingScreen } from './screens/TrainingScreen';
@@ -24,86 +25,97 @@ export function App() {
     if (route.name === 'hub' && !playerFighter) replace({ name: 'start' });
   }, [route.name, playerFighter, replace]);
 
-  switch (route.name) {
-    case 'start':
-      return (
-        <Shell title="New career">
-          <StartScreen />
-        </Shell>
-      );
-    case 'create':
-      return (
-        <Shell title="Create a fighter" showBack>
-          <CreateFighterScreen />
-        </Shell>
-      );
-    case 'training':
-      return (
-        <Shell title="Training" showBack>
-          <TrainingScreen />
-        </Shell>
-      );
-    case 'hub':
-      return (
-        <Shell title="Career">
-          <HubScreen />
-        </Shell>
-      );
-    case 'roster':
-      return (
-        <Shell title="Roster">
-          <RosterScreen />
-        </Shell>
-      );
-    case 'fighter':
-      return (
-        <Shell title="Fighter" showBack>
-          <FighterScreen key={route.id} id={route.id} />
-        </Shell>
-      );
-    case 'camp':
-      return (
-        <Shell title="Fight camp" showBack>
-          <CampScreen />
-        </Shell>
-      );
-    case 'fight':
-      return (
-        <Shell title="Fight night">
-          <FightScreen boutId={route.boutId} />
-        </Shell>
-      );
-    case 'rankings':
-      return (
-        <Shell title="Rankings">
-          <RankingsScreen />
-        </Shell>
-      );
-    case 'editor':
-      return (
-        <Shell title="Editor">
-          <EditorScreen />
-        </Shell>
-      );
-    case 'editorFighter':
-      return (
-        <Shell title="Edit fighter" showBack>
-          {/* Keyed so navigating between two fighters remounts. Without it the component
-              reuses its draft state and Save writes the previously-loaded fighter. */}
-          <EditorFighterScreen key={route.id} id={route.id} />
-        </Shell>
-      );
-    case 'settings':
-      return (
-        <Shell title="Settings">
-          <SettingsScreen />
-        </Shell>
-      );
-    default:
-      return (
-        <Shell title="Career">
-          <HubScreen />
-        </Shell>
-      );
+  return (
+    <>
+      {/* Renders nothing unless a newer build is genuinely waiting. Mounted here rather
+          than per-screen so a pending update survives navigation. */}
+      <UpdatePrompt />
+      {renderRoute()}
+    </>
+  );
+
+  function renderRoute() {
+    switch (route.name) {
+      case 'start':
+        return (
+          <Shell title="New career">
+            <StartScreen />
+          </Shell>
+        );
+      case 'create':
+        return (
+          <Shell title="Create a fighter" showBack>
+            <CreateFighterScreen />
+          </Shell>
+        );
+      case 'training':
+        return (
+          <Shell title="Training" showBack>
+            <TrainingScreen />
+          </Shell>
+        );
+      case 'hub':
+        return (
+          <Shell title="Career">
+            <HubScreen />
+          </Shell>
+        );
+      case 'roster':
+        return (
+          <Shell title="Roster">
+            <RosterScreen />
+          </Shell>
+        );
+      case 'fighter':
+        return (
+          <Shell title="Fighter" showBack>
+            <FighterScreen key={route.id} id={route.id} />
+          </Shell>
+        );
+      case 'camp':
+        return (
+          <Shell title="Fight camp" showBack>
+            <CampScreen />
+          </Shell>
+        );
+      case 'fight':
+        return (
+          <Shell title="Fight night">
+            <FightScreen boutId={route.boutId} />
+          </Shell>
+        );
+      case 'rankings':
+        return (
+          <Shell title="Rankings">
+            <RankingsScreen />
+          </Shell>
+        );
+      case 'editor':
+        return (
+          <Shell title="Editor">
+            <EditorScreen />
+          </Shell>
+        );
+      case 'editorFighter':
+        return (
+          <Shell title="Edit fighter" showBack>
+            {/* Keyed so navigating between two fighters remounts. Without it the component
+                reuses its draft state and Save writes the previously-loaded fighter. */}
+            <EditorFighterScreen key={route.id} id={route.id} />
+          </Shell>
+        );
+      case 'settings':
+        return (
+          <Shell title="Settings">
+            <SettingsScreen />
+          </Shell>
+        );
+      default:
+        return (
+          <Shell title="Career">
+            <HubScreen />
+          </Shell>
+        );
+    }
   }
 }

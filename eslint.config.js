@@ -34,6 +34,22 @@ export default tseslint.config(
     },
   },
   {
+    // The service worker runs in a worker global scope, not a window one. Without this it
+    // lints as if `self`, `caches` and `fetch` were typos.
+    files: ['packages/app/public/sw.js'],
+    languageOptions: {
+      globals: {
+        self: 'readonly',
+        caches: 'readonly',
+        fetch: 'readonly',
+        Response: 'readonly',
+        Request: 'readonly',
+        URL: 'readonly',
+        Promise: 'readonly',
+      },
+    },
+  },
+  {
     // The engine is the strictest layer: pure, no I/O, no ambient time, no upward imports.
     files: ['packages/engine/**/*.ts'],
     rules: {
