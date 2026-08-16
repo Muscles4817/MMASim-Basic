@@ -277,3 +277,68 @@ export function prepValue(
   // answer against someone who never kicks is wasted camp time, by design.
   return clamp01(opponentTendency) * prepped.drillQuality * clamp01(adherence) * clamp01(campQuality);
 }
+
+// --- Risk ---------------------------------------------------------------------------------
+
+/**
+ * What `riskLevel` actually does in a fight.
+ *
+ * The field existed on `GamePlan` from the start and was read exactly zero times by the
+ * simulator, while both the camp screen and the AI hardcoded it to 0.5. A dial the player
+ * cannot turn and the fight does not read is worse than no dial: it advertises a decision
+ * that is not being made.
+ *
+ * The trade it encodes is the oldest one in the sport — *you cannot hit hard without being
+ * hittable*. A fighter sitting down on their shots lands flusher and finishes more; they are
+ * also stationary at the moment of the counter, and the counter is where fights turn.
+ *
+ * Four effects, because three was not a trade. The first version moved commitment, exposure
+ * and exertion only — which gave the risk-averse setting no cost whatsoever, and it measured
+ * exactly as you would expect: careful won 53% against reckless 38.7%. Playing safe was
+ * simply correct, and the slider was a tax on anyone who moved it.
+ *
+ * `output` is the missing leg and the real one. A fighter hitting and moving throws less,
+ * lands less and *loses rounds*, which matters enormously in an engine where ~70% of even
+ * matchups reach the judges. Safety costs you on the scorecards; that is what makes it a
+ * decision.
+ *
+ * Deliberately kept to four effects and modest coefficients. Risk multiplies with Power,
+ * which is already superlinear, and flushness feeds knockdown hazard which feeds the hurt
+ * state which feeds hazard again — so a large number here compounds into "reckless always
+ * wins" or "reckless always dies" rather than a choice. At the extremes this is roughly a
+ * ±15% swing on how hard you land and ±30% on how much you throw, against a ±20% swing on
+ * how open you are and ±8% on what it costs you in the tank.
+ *
+ * That last coefficient is small for a measured reason. At ±20% the fatigue penalty was the
+ * dominant term by a distance: a reckless fighter was ahead on knockouts and still lost
+ * overall, because they were empty by the third and dropped both of the later rounds. In an
+ * engine where most fights reach the judges, anything that quietly costs rounds outweighs
+ * everything that ends fights. That makes recklessness a
+ * genuine gamble rather than a strictly better or worse setting — which
+ * tests/statistical/risk.test.ts asserts directly, by measuring both extremes against an
+ * identical neutral opponent and requiring neither to pull decisively ahead.
+ *
+ * The neutral 0.5 leaves every multiplier at exactly 1.0, so an unset plan behaves exactly
+ * as it did before this existed.
+ */
+export interface RiskProfile {
+  /** Multiplier on how flush this fighter's strikes land. */
+  commitment: number;
+  /** Multiplier on the opponent's counter opportunity against them. */
+  exposure: number;
+  /** Multiplier on the fatigue cost of throwing. Swinging hard is expensive. */
+  exertion: number;
+  /** Multiplier on how much this fighter throws. Staying safe means staying busy-less. */
+  output: number;
+}
+
+export function riskProfile(riskLevel: number): RiskProfile {
+  // −1 at fully risk-averse, 0 at neutral, +1 at reckless.
+  const r = clamp01(riskLevel) * 2 - 1;
+  return {
+    commitment: 1 + r * 0.15,
+    exposure: 1 + r * 0.20,
+    exertion: 1 + r * 0.08,
+    output: 1 + r * 0.30,
+  };
+}

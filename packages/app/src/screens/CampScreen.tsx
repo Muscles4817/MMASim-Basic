@@ -74,6 +74,7 @@ export function CampScreen() {
   }, [opponent, coach, world.seed, booking?.bout.id]);
 
   const [approach, setApproach] = useState<Approach>(booking?.plan.approach ?? 'pressure');
+  const [risk, setRisk] = useState<number>(booking?.plan.riskLevel ?? 0.5);
   const [targeting, setTargeting] = useState<Record<StrikeTarget, number>>(
     booking?.plan.targeting ?? { head: 0.6, body: 0.25, legs: 0.15 },
   );
@@ -92,6 +93,7 @@ export function CampScreen() {
    */
   const persist = (next: {
     approach?: Approach;
+    riskLevel?: number;
     targeting?: Record<StrikeTarget, number>;
     selected?: ReadKey[];
   }) => {
@@ -100,6 +102,7 @@ export function CampScreen() {
     saveBookingPlan(booking, {
       ...booking.plan,
       approach: next.approach ?? approach,
+      riskLevel: next.riskLevel ?? risk,
       targeting: normaliseTargeting(next.targeting ?? targeting),
       preppedReads: reads.map((read) => ({
         read,
@@ -154,7 +157,7 @@ export function CampScreen() {
     const plan = {
       approach,
       targeting: normaliseTargeting(targeting),
-      riskLevel: 0.5,
+      riskLevel: risk,
       campQuality: camp,
       preppedReads: selected.map((read) => {
         const scouted = report?.reads.find((r) => r.read === read);
@@ -400,6 +403,41 @@ export function CampScreen() {
               Legs cut mobility and takedown defence. Body drains the tank and stops them
               recovering between rounds. Head ends fights.
             </p>
+
+            {/*
+              How much to commit.
+
+              `riskLevel` sat on the game plan from the beginning, hardcoded to 0.5 here and
+              read zero times by the simulator. Now it trades three things at once, and the
+              readout below names all three because a slider whose effect you cannot predict
+              is a slider nobody moves.
+            */}
+            <h3 className="section-title" style={{ marginTop: 'var(--space-4)' }}>
+              How much to commit
+            </h3>
+            <label style={{ display: 'block' }}>
+              <span className="row" style={{ justifyContent: 'space-between' }}>
+                <span>{riskLabel(risk)}</span>
+                <span className="numeric muted">{Math.round(risk * 100)}</span>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(risk * 100)}
+                aria-label="How much to commit"
+                aria-valuetext={`${riskLabel(risk)}. ${riskDescription(risk)}`}
+                onChange={(e) => {
+                  const next = Number(e.target.value) / 100;
+                  setRisk(next);
+                  persist({ riskLevel: next });
+                }}
+                style={{ width: '100%', accentColor: 'var(--accent)' }}
+              />
+            </label>
+            <p className="faint" style={{ fontSize: 'var(--text-sm)' }}>
+              {riskDescription(risk)}
+            </p>
           </div>
         </div>
       </Card>
@@ -417,7 +455,9 @@ export function CampScreen() {
         <ul style={{ marginBottom: 'var(--space-3)' }}>
           <li className="row" style={{ justifyContent: 'space-between' }}>
             <span className="muted">Approach</span>
-            <strong>{APPROACH_META[approach].label}</strong>
+            <strong>
+              {APPROACH_META[approach].label} · {riskLabel(risk).toLowerCase()}
+            </strong>
           </li>
           <li className="row" style={{ justifyContent: 'space-between' }}>
             <span className="muted">Drilled</span>
@@ -529,4 +569,35 @@ function ExposureLine({
       {exposed ? ' — this one will hurt you.' : ' — you can live with this.'}
     </span>
   );
+}
+
+/**
+ * Naming the setting rather than the number.
+ *
+ * "0.72" tells a player nothing about what their fighter will do. These are the words a
+ * corner would actually use, and the description names the trade in both directions so the
+ * slider reads as a decision with a cost rather than a difficulty setting.
+ */
+function riskLabel(risk: number): string {
+  if (risk < 0.2) return 'Stay safe';
+  if (risk < 0.4) return 'Measured';
+  if (risk < 0.6) return 'Balanced';
+  if (risk < 0.8) return 'Sit down on it';
+  return 'Swing for it';
+}
+
+function riskDescription(risk: number): string {
+  if (risk < 0.2) {
+    return 'Hit and move. You will not hurt them much, but you will be hard to catch and you will still have your legs in the third.';
+  }
+  if (risk < 0.4) {
+    return 'Pick your moments. Slightly less on your shots, noticeably less coming back.';
+  }
+  if (risk < 0.6) {
+    return 'No particular gamble either way.';
+  }
+  if (risk < 0.8) {
+    return 'Plant your feet and mean it. Your shots land flusher — and you are standing still when theirs come back.';
+  }
+  return 'Everything into every shot. You will finish them or you will be finished, and either way you will be empty by the third.';
 }

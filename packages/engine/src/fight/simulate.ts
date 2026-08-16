@@ -15,7 +15,7 @@ import { createRng, type Rng } from '../core/rng.js';
 import type { FighterId } from '../core/ids.js';
 import type { Fighter, FinishMethod } from '../domain/fighter.js';
 import type { GamePlan, ReadKey } from '../domain/gameplan.js';
-import { PREP_MAX_BONUS, defaultGamePlan, normaliseGamePlan, prepValue } from '../domain/gameplan.js';
+import { PREP_MAX_BONUS, defaultGamePlan, normaliseGamePlan, prepValue, riskProfile } from '../domain/gameplan.js';
 import type { Judge, Referee } from '../domain/officials.js';
 import { defaultJudges, defaultReferee } from '../domain/officials.js';
 import { traitMul } from '../domain/traits.js';
@@ -715,7 +715,11 @@ function resolveStrikeExchange(
   // The counter. Smaller than the lead burst — you are reacting, not initiating — unless
   // countering is the whole plan, which is what makes the `counter` approach worth picking.
   if (ctx.state.position === 'distance' && target.hurtSeconds <= 0) {
-    const counterScale = target.plan.approach === 'counter' ? 0.9 : 0.55;
+    // The other half of `riskLevel`: how open the *leading* fighter left themselves. A
+    // fighter sitting down on their shots is stationary at the exact moment the counter
+    // comes back, which is where fights turn.
+    const counterScale =
+      (target.plan.approach === 'counter' ? 0.9 : 0.55) * riskProfile(actor.plan.riskLevel).exposure;
     const counter = throwBurst(ctx, target, actor, false, counterScale);
     if (counter.ending) return { seconds, ending: counter.ending };
   }
@@ -737,7 +741,15 @@ function throwBurst(
 ): BurstOutcome {
   const { rng, state, tally, emit, referee } = ctx;
 
-  const base = rng.int(2, actor.fighter.traits.includes('volumeMachine') ? 7 : 5);
+  // How much they let go. The fourth leg of the `riskLevel` trade, and the one that makes
+  // staying safe cost something: a fighter hitting and moving throws less and loses rounds.
+  const base = Math.max(
+    1,
+    Math.round(
+      rng.int(2, actor.fighter.traits.includes('volumeMachine') ? 7 : 5) *
+        riskProfile(actor.plan.riskLevel).output,
+    ),
+  );
   const burst = Math.max(1, Math.round(base * scale * workRate(actor, false)));
   let landedAny = false;
 

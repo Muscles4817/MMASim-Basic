@@ -10,6 +10,7 @@
  * "less damage": you are removing the base he shoots from.
  */
 
+import { riskProfile } from '../domain/gameplan.js';
 import { clamp, clamp01 } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import { traitMul } from '../domain/traits.js';
@@ -79,7 +80,11 @@ export function rollFlushness(rng: Rng, attacker: Combatant, defender: Combatant
   const evasion = fatiguedEffect(defender.attrs.strikingDefence, 'strikingDefence', defender.fatigue);
   const skew = clamp((accuracy / evasion) ** 0.18, 0.75, 1.35);
 
-  return clamp(base * skew, 0.15, 3.0);
+  // Sitting down on it. See `riskProfile` — a committed fighter lands flusher, and pays for
+  // it in the counter window rather than here.
+  const commitment = riskProfile(attacker.plan.riskLevel).commitment;
+
+  return clamp(base * skew * commitment, 0.15, 3.0);
 }
 
 /** Damage dealt by a landed strike, before it is applied. */
