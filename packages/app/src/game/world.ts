@@ -74,6 +74,7 @@ import {
   type FightResult,
   type Fighter,
   type FighterId,
+  type PromotionId,
   type Gym,
   type NewsItem,
   type Promotion,
@@ -176,12 +177,31 @@ export interface WorldAdvance {
  * `exceptId` is the player: their fights are their own business and are simulated by the
  * career loop, not here. Everything else in the sport carries on.
  */
+/**
+ * What the world must not touch, because the player is doing it themselves.
+ *
+ * Was a bare `FighterId`, which is the whole assumption of fighter mode: exactly one person is
+ * the player's and everything else is the world's. A promoter owns a *promotion* — the world
+ * must not book its cards, because the player books them, and it must still run everybody
+ * else's.
+ */
+export interface WorldExclusion {
+  /** The player's fighter, in fighter mode. Never booked by the world. */
+  fighterId?: FighterId;
+  /** The player's promotion, in promoter mode. The world runs no cards for it. */
+  promotionId?: PromotionId;
+}
+
 export function advanceWorld(
   db: GameDb,
   fromDay: number,
   toDay: number,
-  exceptId: FighterId,
+  except: FighterId | WorldExclusion,
 ): WorldAdvance {
+  // Accepts a bare id so fighter mode's dozens of call sites and tests stay as they are; the
+  // object form is what promoter mode passes.
+  const exclusion: WorldExclusion = typeof except === 'object' ? except : { fighterId: except };
+  const exceptId = exclusion.fighterId;
   const world = getWorld(db);
   const news: NewsItem[] = [];
   let fights = 0;
@@ -251,7 +271,9 @@ export function advanceWorld(
        * attach to an *event* — could never pay out. Bouts are collected, ordered by draw
        * weight with a title fight always headlining, and then run as one card.
        */
-      const promotion = pickPromotion(promotions, rng.fork(`who:${day}:${card}`));
+      const bookable = promotions.filter((p) => p.id !== exclusion.promotionId);
+      if (bookable.length === 0) break;
+      const promotion = pickPromotion(bookable, rng.fork(`who:${day}:${card}`));
       const built = buildNight({
         db,
         day,
@@ -294,7 +316,7 @@ function buildNight(ctx: {
   available: Fighter[];
   readyOn: Map<string, number>;
   lastSeen: Map<string, number>;
-  exceptId: FighterId;
+  exceptId: FighterId | undefined;
 }): { fights: number; news: NewsItem[] } | undefined {
   const { db, day, rng, promotion, available, readyOn, lastSeen } = ctx;
 
@@ -485,8 +507,14 @@ function buildNight(ctx: {
   return { fights, news };
 }
 
-/** One bout on a card, start to finish, including everything it changes. */
-function runCardBout(ctx: {
+/**
+ * One bout on a card, start to finish, including everything it changes.
+ *
+ * Exported for promoter mode, which runs the player's own cards and must produce exactly the
+ * same consequences as the world does — ranks, belts, ageing, retirement, suspensions and pay.
+ * A second implementation would drift within a week and the divergence would be invisible.
+ */
+export function runCardBout(ctx: {
   db: GameDb;
   day: number;
   rng: Rng;
@@ -987,7 +1015,8 @@ function ageEveryone(
   db: GameDb,
   fromDay: number,
   toDay: number,
-  exceptId: FighterId,
+  // Optional: in promoter mode there is no player fighter to leave alone.
+  exceptId: FighterId | undefined,
   lastSeen?: Map<string, number>,
 ): void {
   const world = getWorld(db);
