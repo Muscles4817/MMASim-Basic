@@ -1,13 +1,17 @@
 import { useMemo, useState } from 'react';
 import {
+  currentHeat,
+  describeHeat,
   displayName,
   fighterAge,
   getDivision,
   overallRating,
+  purseFor,
   recordString,
   type Fighter,
   type MatchupAppraisal,
   type Promotion,
+  type Rivalry,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
@@ -15,6 +19,7 @@ import { Button, Card, Chip, Empty } from '../ui';
 import { Alert, Fact, FighterRead, Icon, KeyStat, StreakBadge } from '../ui/signals';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
 import { getLadderStatus, signWith, type LadderStatus } from '../game/progression';
+import { getRivalry, previousMeetings } from '../game/rivalries';
 import { formatGameDay } from '../shell/Shell';
 
 /**
@@ -56,6 +61,11 @@ export function HubScreen() {
 
   const fighter = playerFighter;
   const division = getDivision(fighter.divisionId);
+  // Purses scale with the promotion's prestige, so a fighter with no contract is quoted
+  // against a nominal regional shop rather than crashing or quoting a global figure.
+  const promotion = fighter.promotionId
+    ? (db.promotions.findById(fighter.promotionId) as Promotion | undefined)
+    : undefined;
   const opponent = booking
     ? (db.fighters.findById(booking.opponentId) as Fighter | undefined)
     : undefined;
@@ -276,6 +286,10 @@ export function HubScreen() {
                     )
                   }
                   onAccept={() => accept(offer)}
+                  history={previousMeetings(fighter, offer.opponent.id)}
+                  rivalry={getRivalry(db, fighter.id, offer.opponent.id, world.day)}
+                  day={world.day}
+                  purse={promotion ? purseFor(fighter, promotion, false) : 0}
                 />
               ))}
             </div>
@@ -291,13 +305,22 @@ function OfferRow({
   expanded,
   onSelect,
   onAccept,
+  history,
+  rivalry,
+  day,
+  purse,
 }: {
   offer: MatchupAppraisal;
   expanded: boolean;
   onSelect: () => void;
   onAccept: () => void;
+  history: { wins: number; losses: number; total: number };
+  rivalry: Rivalry;
+  day: number;
+  purse: number;
 }) {
   const { opponent, step, winChance } = offer;
+  const heat = currentHeat(rivalry, day);
 
   // Framed as difficulty rather than as a win percentage. A precise number would be false
   // precision — the paper odds cannot see style, preparation or the power curve, which are
@@ -330,7 +353,30 @@ function OfferRow({
                 : 'A coin flip'}
           </span>
         </span>
-        <Chip tone={difficulty.tone}>{difficulty.label}</Chip>
+        <span className="row" style={{ gap: 'var(--space-1)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {/* A grudge is the single most important thing about an offer and has to be
+              visible before the row is opened, not two taps in. */}
+          {rivalry.isRivalry ? (
+            <Chip tone="negative" title="You two have history. This one is personal.">
+              Grudge
+            </Chip>
+          ) : (
+            heat >= 40 && (
+              <Chip tone="warning" title="The audience wants this fight.">
+                Heat
+              </Chip>
+            )
+          )}
+          {history.total > 0 && (
+            <Chip
+              tone="neutral"
+              title={`You have fought ${history.total === 1 ? 'once' : `${history.total} times`} before: ${history.wins}W-${history.losses}L`}
+            >
+              Rematch
+            </Chip>
+          )}
+          <Chip tone={difficulty.tone}>{difficulty.label}</Chip>
+        </span>
       </button>
 
       {expanded && (
@@ -354,7 +400,32 @@ function OfferRow({
               icon="star"
               emphasis="tertiary"
             />
+            {/* Money, plainly. A heated fight pays more, which is what makes building a
+                rivalry worth doing rather than just something that happens to you. An
+                unsigned fighter has no contract to quote, so nothing is shown. */}
+            {purse > 0 && <Fact label="Your purse" value={`$${purse}k`} emphasis="secondary" />}
           </div>
+
+          {(heat >= 20 || history.total > 0) && (
+            <p
+              className="prose"
+              style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}
+            >
+              {history.total > 0 && (
+                <>
+                  <strong>
+                    You have met {history.total === 1 ? 'once' : `${history.total} times`}
+                  </strong>
+                  {history.wins > history.losses
+                    ? ` and you won ${history.wins === 1 ? 'it' : `${history.wins} of them`}.`
+                    : history.losses > history.wins
+                      ? ` and he has your number — ${history.losses}–${history.wins}.`
+                      : ` and you are level at ${history.wins}–${history.losses}.`}{' '}
+                </>
+              )}
+              {describeHeat(rivalry, day)}
+            </p>
+          )}
           <p
             className="muted prose"
             style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}

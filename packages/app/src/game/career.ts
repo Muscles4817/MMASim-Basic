@@ -33,6 +33,7 @@ import {
   type Referee,
 } from '@mmasim/engine';
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
+import { accrueHeatFromFight } from './rivalries';
 
 const BOOKING_KEY = 'mmasim:booking';
 const RESULT_KEY = 'mmasim:lastResult';
@@ -304,6 +305,18 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
   db.fighters.upsert(settleInjuries(aftermath.red, 'red'));
   db.fighters.upsert(settleInjuries(aftermath.blue, 'blue'));
 
+  // The fight builds its own rematch. A close, controversial or brutal night generates heat
+  // between these two specifically, which is what makes a division produce grudges without
+  // anybody scripting them. See engine `business/heat.ts`.
+  const heatNotes = accrueHeatFromFight(db, {
+    result,
+    red,
+    blue,
+    day,
+    isTitleFight: booking.bout.isTitleFight,
+    seed: `${world.seed}:heat:${booking.bout.id}`,
+  });
+
   // The belt changes hands, or it does not. A draw leaves it with the champion, which is
   // the rule and also the source of a great deal of real-world grievance.
   const titleNotes: string[] = [];
@@ -336,7 +349,7 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
 
   writeJson(RESULT_KEY, { result, commentatorId: booking.bout.commentatorId });
   clearBooking();
-  return { result, notes: [...titleNotes, ...injuryNotes, ...aftermath.notes] };
+  return { result, notes: [...titleNotes, ...injuryNotes, ...heatNotes, ...aftermath.notes] };
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   getDivision,
   overallRating,
   activeInjuries,
+  describeHeat,
   describeInjury,
   recordString,
   type AttributeGroup,
@@ -21,6 +22,7 @@ import { Button, Card, Chip, Empty, RatingRow } from '../ui';
 import { Alert, Fact, FighterRead, Icon, KeyStat } from '../ui/signals';
 import { FightRecordList, RecordSummaryBar } from '../ui/FightRecord';
 import { getLadderStatus } from '../game/progression';
+import { rivalriesFor } from '../game/rivalries';
 
 const GROUP_LABELS: Record<AttributeGroup, string> = {
   physical: 'Physical',
@@ -56,6 +58,10 @@ export function FighterScreen({ id }: { id: string }) {
   const derived = deriveRatings(fighter.attributes);
   const gym = fighter.gymId ? db.gyms.findById(fighter.gymId) : undefined;
   const promotion = fighter.promotionId ? db.promotions.findById(fighter.promotionId) : undefined;
+
+  // Grudges, hottest first. Cold pairings are filtered out by `rivalriesFor` — a list of
+  // every fighter they ever met with heat 3 would be noise, not history.
+  const rivalries = rivalriesFor(db, fighter.id, world.day);
 
   // Only the opponents this fighter actually faced, so the list can name and link them.
   const opponents = new Map(
@@ -137,6 +143,55 @@ export function FighterScreen({ id }: { id: string }) {
           onOpponentClick={(id) => navigate({ name: 'fighter', id })}
         />
       </Card>
+
+      {rivalries.length > 0 && (
+        <Card title="Bad blood">
+          <p
+            className="muted prose"
+            style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}
+          >
+            Heat is per-pair: how badly the audience wants to see <em>these two</em>, which is
+            a different thing from how big either of them is. It pays, and it changes how the
+            fight gets fought.
+          </p>
+          <div className="stack" style={{ gap: 'var(--space-2)' }}>
+            {rivalries.map(({ rivalry, heat, otherId }) => {
+              const other = db.fighters.findById(otherId as string) as Fighter | undefined;
+              return (
+                <div
+                  key={rivalry.id as string}
+                  className="row"
+                  style={{
+                    justifyContent: 'space-between',
+                    gap: 'var(--space-3)',
+                    padding: 'var(--space-3)',
+                    borderRadius: 'var(--radius)',
+                    border: '1px solid var(--border)',
+                    background: rivalry.isRivalry ? 'var(--negative-soft)' : 'var(--surface)',
+                  }}
+                >
+                  <span style={{ minWidth: 0 }}>
+                    <button
+                      type="button"
+                      className="record-row__link"
+                      onClick={() => other && navigate({ name: 'fighter', id: other.id as string })}
+                      style={{ fontWeight: 600, display: 'block', textAlign: 'left' }}
+                    >
+                      {other ? displayName(other) : 'A former opponent'}
+                    </button>
+                    <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
+                      {describeHeat(rivalry, world.day)}
+                    </span>
+                  </span>
+                  <Chip tone={rivalry.isRivalry ? 'negative' : heat > 45 ? 'warning' : 'neutral'}>
+                    {rivalry.isRivalry ? 'Grudge' : `Heat ${Math.round(heat)}`}
+                  </Chip>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       {fighter.traits.length > 0 && (
         <Card title="Traits">

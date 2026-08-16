@@ -318,15 +318,25 @@ describe(`${YEARS}-year world integrity`, () => {
       .filter(([m]) => isDecisionMethod(m as FinishMethod))
       .reduce((a, [, n]) => a + n, 0);
     const draw = sim.methods.draw ?? 0;
+    // Fouls can end a night without a result. These are deliberately their own bucket
+    // rather than folded into "draw": a no contest is not a draw, and lumping them would
+    // hide a regression in the foul system behind a bound that was set for draws.
+    const noResult = (sim.methods.noContest ?? 0) + (sim.methods.dq ?? 0);
 
-    const describe_ = `KO ${((ko / total) * 100).toFixed(1)}% SUB ${((sub / total) * 100).toFixed(1)}% DEC ${((dec / total) * 100).toFixed(1)}% DRAW ${((draw / total) * 100).toFixed(1)}%`;
+    const describe_ = `KO ${((ko / total) * 100).toFixed(1)}% SUB ${((sub / total) * 100).toFixed(1)}% DEC ${((dec / total) * 100).toFixed(1)}% DRAW ${((draw / total) * 100).toFixed(1)}% NR ${((noResult / total) * 100).toFixed(1)}%`;
 
     expect(ko / total, describe_).toBeGreaterThan(0.15);
     expect(ko / total, describe_).toBeLessThan(0.6);
     expect(sub / total, describe_).toBeGreaterThan(0.03);
     expect(dec / total, describe_).toBeGreaterThan(0.2);
     expect(draw / total, describe_).toBeLessThan(0.06);
-    expect(ko + sub + dec + draw).toBe(total);
+    // A world where 5% of fights are waved off is not a sport anybody would watch.
+    expect(noResult / total, describe_).toBeLessThan(0.015);
+
+    // Exhaustiveness. This is the assertion that caught fouls being added: every finish
+    // method must land in exactly one bucket, so a new one cannot be introduced without
+    // somebody deciding, here, what it means for the world.
+    expect(ko + sub + dec + draw + noResult, describe_).toBe(total);
   });
 
   it('accumulates career damage without letting it run away', () => {

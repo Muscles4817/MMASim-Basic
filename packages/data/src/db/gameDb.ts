@@ -14,6 +14,7 @@ import type {
   Judge,
   Promotion,
   Referee,
+  Rivalry,
 } from '@mmasim/engine';
 import { createRepository } from './repository.js';
 import type { Entity, Repository, StorageAdapter } from './types.js';
@@ -32,6 +33,7 @@ export const COLLECTIONS = [
   'referees',
   'judges',
   'commentators',
+  'rivalries',
   'world',
 ] as const;
 
@@ -63,6 +65,7 @@ export interface GameDb {
   referees: Repository<Referee & Entity>;
   judges: Repository<Judge & Entity>;
   commentators: Repository<Commentator & Entity>;
+  rivalries: Repository<Rivalry & Entity>;
   world: Repository<WorldMeta>;
   /** Persist every dirty collection. Call at save points, not on every mutation. */
   save(): void;
@@ -83,6 +86,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
   const referees = make<Referee & Entity>('referees');
   const judges = make<Judge & Entity>('judges');
   const commentators = make<Commentator & Entity>('commentators');
+  const rivalries = make<Rivalry & Entity>('rivalries');
   const world = make<WorldMeta>('world');
 
   const all: Flushable[] = [
@@ -93,6 +97,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
     referees,
     judges,
     commentators,
+    rivalries,
     world,
   ];
 
@@ -104,6 +109,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
     referees,
     judges,
     commentators,
+    rivalries,
     world,
     save: () => {
       for (const repo of all) repo.flush();
