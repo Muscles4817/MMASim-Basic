@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { NewsItem, NewsWeight } from '@mmasim/engine';
+import type { NewsItem, NewsKind, NewsWeight } from '@mmasim/engine';
 import { formatGameDay } from '../shell/Shell';
 import './NewsFeed.css';
 
@@ -16,7 +16,13 @@ import './NewsFeed.css';
  * open. That way the sport is demonstrably busy without the belt moving being buried.
  */
 
-const KIND_ICON: Readonly<Record<string, string>> = {
+/*
+ * Keyed by `NewsKind` rather than by `string`, so adding a kind to the engine fails the build
+ * here instead of falling through to a bare `·` and the raw lowercase enum. That is exactly
+ * what happened when `release` was added: every release item rendered "release" in a column
+ * where every other row read "Title change" or "Injury".
+ */
+const KIND_ICON: Readonly<Record<NewsKind, string>> = {
   titleChange: '🏆',
   titleDefence: '🏆',
   upset: '⚡',
@@ -27,9 +33,10 @@ const KIND_ICON: Readonly<Record<string, string>> = {
   result: '·',
   injury: '🩹',
   debut: '✍️',
+  release: '✂️',
 };
 
-const KIND_LABEL: Readonly<Record<string, string>> = {
+const KIND_LABEL: Readonly<Record<NewsKind, string>> = {
   titleChange: 'Title change',
   titleDefence: 'Title defence',
   upset: 'Upset',
@@ -40,6 +47,7 @@ const KIND_LABEL: Readonly<Record<string, string>> = {
   result: 'Result',
   injury: 'Injury',
   debut: 'Debut',
+  release: 'Released',
 };
 
 export function NewsFeed({

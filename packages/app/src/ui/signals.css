@@ -74,6 +74,19 @@
   text-align: right;
 }
 
+/*
+ * The explanation, on the page. See `Fact` for why this is not a tooltip.
+ *
+ * Muted and small so the value still leads, and allowed to wrap: these are sentences, and a
+ * sentence you cannot finish reading is no better than one you cannot see.
+ */
+.fact__hint {
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
 .fact--primary {
   font-size: var(--text-lg);
 }

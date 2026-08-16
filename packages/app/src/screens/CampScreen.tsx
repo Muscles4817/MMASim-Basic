@@ -55,7 +55,20 @@ import { formatGameDay } from '../shell/Shell';
 export function CampScreen() {
   const { db, world, playerFighter, commit } = useGame();
   const { navigate } = useRouter();
-  const [booking] = useState(() => getBooking());
+  /*
+   * Stateful, not a mount-time snapshot.
+   *
+   * It was `const [booking] = useState(...)` with no setter, which was harmless while the plan
+   * was the only thing written. Adding purchases gave the screen a second writer, and both
+   * spread the same stale object over the whole record — so ticking a purchase and then moving
+   * a slider erased the purchase, and picking four reads and then ticking a purchase reverted
+   * all four reads to whatever they were when the screen loaded.
+   *
+   * Both save functions already return the updated booking; the return value was simply being
+   * dropped. On the one screen whose entire purpose is a considered decision, and which
+   * promises in its own copy that the plan is saved as you build it.
+   */
+  const [booking, setBooking] = useState(() => getBooking());
   const [running, setRunning] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -120,17 +133,19 @@ export function CampScreen() {
   }) => {
     if (!booking) return;
     const reads = next.selected ?? selected;
-    saveBookingPlan(booking, {
-      ...booking.plan,
-      approach: next.approach ?? approach,
-      riskLevel: next.riskLevel ?? risk,
-      targeting: normaliseTargeting(next.targeting ?? targeting),
-      preppedReads: reads.map((read) => ({
-        read,
-        drillQuality: 0,
-        confidence: report?.reads.find((r) => r.read === read)?.confidence ?? 0.5,
-      })),
-    });
+    setBooking(
+      saveBookingPlan(booking, {
+        ...booking.plan,
+        approach: next.approach ?? approach,
+        riskLevel: next.riskLevel ?? risk,
+        targeting: normaliseTargeting(next.targeting ?? targeting),
+        preppedReads: reads.map((read) => ({
+          read,
+          drillQuality: 0,
+          confidence: report?.reads.find((r) => r.read === read)?.confidence ?? 0.5,
+        })),
+      }),
+    );
   };
 
   if (!booking || !opponent || !playerFighter) {
@@ -520,7 +535,7 @@ export function CampScreen() {
                           const next = current.includes(key)
                             ? current.filter((k) => k !== key)
                             : [...current, key];
-                          if (booking) saveBookingPurchases(booking, next);
+                          if (booking) setBooking(saveBookingPurchases(booking, next));
                           return next;
                         });
                       }}

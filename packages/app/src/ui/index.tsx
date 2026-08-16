@@ -249,8 +249,16 @@ export function Segmented<T extends string>({
             }}
             onClick={() => onChange(option.value)}
           >
-            {option.label}
-            {option.hint && <span className="visually-hidden">. {option.hint}</span>}
+            {/*
+              The hint is rendered *visibly*, not in a visually-hidden span.
+              
+              It used to reach only screen readers, which silently nullified both consumers.
+              The worst case was the start screen: Contenders versus Prospects is the first
+              decision a new player makes and the hints are the only explanation of it
+              anywhere, so sighted players chose blind.
+            */}
+            <span className="segmented__label">{option.label}</span>
+            {option.hint && <span className="segmented__hint">{option.hint}</span>}
           </button>
         );
       })}

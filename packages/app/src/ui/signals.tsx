@@ -134,12 +134,21 @@ export function Fact({
   hint?: string;
 }) {
   return (
-    <div className={`fact fact--${emphasis}${tone ? ` fact--${tone}` : ''}`} title={hint}>
+    /*
+     * The hint is on the page, not in a `title`.
+     *
+     * It used to be `title={hint}` plus a visually-hidden copy, which reaches a pointer and a
+     * screen reader and never a phone — and this is the game's own teaching material. It
+     * silently blanked the explanations behind Star power, Bank, Reputation and Purse, which
+     * are exactly the numbers a new player has no way to interpret. `RatingRow` already
+     * renders its hint visibly; this is the same fix.
+     */
+    <div className={`fact fact--${emphasis}${tone ? ` fact--${tone}` : ''}`}>
       <span className="fact__label">
         {icon && <Icon name={icon} />} {label}
       </span>
       <span className="fact__value">{value}</span>
-      {hint && <span className="visually-hidden">. {hint}</span>}
+      {hint && <span className="fact__hint">{hint}</span>}
     </div>
   );
 }

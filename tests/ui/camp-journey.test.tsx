@@ -240,3 +240,51 @@ describe('fight camp tells the player what is at stake and who they are', () => 
     expect(await screen.findByText(/You have drilled nothing/i)).toBeTruthy();
   });
 });
+
+describe('the camp screen does not lose what you built', () => {
+  it('keeps a purchase when the plan is changed afterwards', async () => {
+    /*
+     * `booking` was a mount-time snapshot with no setter, and the screen has two writers —
+     * the plan and the purchases. Each spread that stale object over the whole stored record,
+     * so whichever was written second erased the other.
+     *
+     * Harmless while the plan was the only writer; introduced the moment purchases landed.
+     */
+    const user = userEvent.setup();
+    await startCareer(user);
+    await bookAFight(user);
+
+    const nutritionist = await screen.findByRole('checkbox', { name: /Nutritionist/i });
+    await user.click(nutritionist);
+    expect((nutritionist as HTMLInputElement).checked).toBe(true);
+
+    // Now touch the plan, which is the other writer.
+    const approach = await screen.findAllByRole('button', { name: /Counter|Grind|Pressure/i });
+    await user.click(approach[0]!);
+
+    const stored = JSON.parse(sessionStorage.getItem('mmasim:booking') ?? '{}');
+    expect(stored.purchases, 'the purchase was erased by writing the plan').toContain(
+      'nutritionist',
+    );
+  });
+
+  it('keeps the plan when a purchase is ticked afterwards', async () => {
+    const user = userEvent.setup();
+    await startCareer(user);
+    await bookAFight(user);
+
+    // Drill a read first, which writes the plan.
+    const reads = await screen.findAllByRole('button', { name: /Drill/i });
+    await user.click(reads[0]!);
+    const afterRead = JSON.parse(sessionStorage.getItem('mmasim:booking') ?? '{}');
+    expect(afterRead.plan.preppedReads.length).toBeGreaterThan(0);
+
+    // Then buy something, which is the other writer.
+    await user.click(await screen.findByRole('checkbox', { name: /Nutritionist/i }));
+
+    const stored = JSON.parse(sessionStorage.getItem('mmasim:booking') ?? '{}');
+    expect(stored.plan.preppedReads.length, 'the drilled read was erased by a purchase').toBe(
+      afterRead.plan.preppedReads.length,
+    );
+  });
+});

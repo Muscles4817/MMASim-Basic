@@ -385,11 +385,25 @@ export function TrainingScreen() {
           >
             Train for {weeks} weeks
           </Button>
-          <Button onClick={rest}>Rest for {weeks} weeks</Button>
+          {/*
+            Rest needs the same guard. `runLayoff` advances the clock exactly as `runTraining`
+            does, so this button walked straight past a booked fight — the very bug the alert
+            below says was fixed. It was fixed for one of the two buttons.
+          */}
+          <Button onClick={() => !overrunsFight && rest()} aria-disabled={overrunsFight}>
+            Rest for {weeks} weeks
+          </Button>
           <Button variant="ghost" onClick={() => navigate({ name: 'hub' })}>
             Back to career
           </Button>
         </div>
+
+        {overrunsFight && (
+          <p className="prose" style={{ fontSize: 'var(--text-sm)', color: 'var(--negative)' }}>
+            Neither block will run: you fight in {weeksToFight} week
+            {weeksToFight === 1 ? '' : 's'}. Shorten it above.
+          </p>
+        )}
 
         {/*
           Rest was labelled "Rest instead" and explained nowhere, which made it the most

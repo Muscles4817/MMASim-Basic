@@ -425,7 +425,7 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     readyOnDay:
       booking.bout.day +
       readinessDelay(aftermath.blue, opponentLost ? result.method : undefined),
-  } as Fighter & Entity);
+  } as Fighter & { id: string });
 
   // Pay the man. Until this existed the purse was printed on two screens and discarded.
   const playerWon = result.winnerId === red.id;
