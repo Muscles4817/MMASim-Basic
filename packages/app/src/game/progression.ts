@@ -36,7 +36,11 @@ export interface LadderStatus {
   /** 0 = champion, 1..n = contender, undefined = unranked. */
   position?: number;
   isChampion: boolean;
+  /** The reigning champion, if there is one. The opponent in a title fight. */
+  champion?: Fighter;
   titleShot: TitleShotVerdict;
+  /** True when the belt is vacant and the top contender can claim it. */
+  titleVacant: boolean;
   offers: readonly PromotionOffer[];
   /** 0–1 toward being global champion. Drives the progress bar. */
   progress: number;
@@ -57,6 +61,9 @@ export function getLadderStatus(db: GameDb, fighter: Fighter): LadderStatus {
 
   const position = rankOf(ranked, fighter.id);
   const isChampion = championId === fighter.id;
+  const champion = championId
+    ? (db.fighters.findById(championId) as Fighter | undefined)
+    : undefined;
 
   const titleShot = promotion
     ? titleShotEligibility(fighter, ranked, promotion)
@@ -74,6 +81,8 @@ export function getLadderStatus(db: GameDb, fighter: Fighter): LadderStatus {
     ranked,
     position,
     isChampion,
+    champion,
+    titleVacant: champion === undefined,
     titleShot,
     offers,
     progress: careerProgress(fighter, promotion, position, isChampion),

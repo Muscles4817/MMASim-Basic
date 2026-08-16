@@ -122,7 +122,7 @@ export function titleShotEligibility(
   const position = rankOf(ranked, fighter.id);
 
   if (position === 0) {
-    return { eligible: false, reason: 'You are the champion. Defend it.' };
+    return { eligible: false, reason: 'You are the champion. Someone has to come and take it.' };
   }
   if (position === undefined) {
     return { eligible: false, reason: 'You are unranked in this division.' };

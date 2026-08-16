@@ -126,6 +126,11 @@ export function HubScreen() {
               Taking damage
             </Chip>
           )}
+          {ladder?.isChampion && (
+            <Chip tone="accent" title="Reigning divisional champion">
+              🏆 Champion
+            </Chip>
+          )}
           {fighter.summary.streak >= 3 && <Chip tone="positive">{fighter.summary.streak}-fight win streak</Chip>}
           {fighter.summary.streak <= -2 && (
             <Chip tone="negative">{Math.abs(fighter.summary.streak)}-fight skid</Chip>
@@ -134,6 +139,38 @@ export function HubScreen() {
       </Card>
 
       {ladder && <LadderCard ladder={ladder} onSign={(p) => { signWith(db, fighter, p); commit(); }} />}
+
+      {!booking && ladder?.titleShot.eligible && (ladder.champion || ladder.position === 1) && (
+        <Card title="Title fight" raised>
+          <div className="row" style={{ gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
+            <span aria-hidden="true" style={{ fontSize: '1.5rem' }}>
+              🏆
+            </span>
+            <p style={{ fontSize: 'var(--text-xl)', fontWeight: 700 }}>
+              {ladder.champion
+                ? `For the belt, against ${displayName(ladder.champion)}`
+                : 'For the vacant title'}
+            </p>
+          </div>
+          <p className="muted prose" style={{ marginBottom: 'var(--space-3)' }}>
+            Five rounds, a ten-week camp, and the {getDivision(fighter.divisionId).name} title on
+            the line. This is what the climb was for.
+          </p>
+          <Button
+            variant="primary"
+            block
+            onClick={() => {
+              const opponent = ladder.champion ?? ladder.ranked[1]?.fighter;
+              if (!opponent) return;
+              setBooking(bookFight(db, fighter, opponent, { isTitleFight: true }));
+              commit();
+              navigate({ name: 'camp' });
+            }}
+          >
+            Take the title fight
+          </Button>
+        </Card>
+      )}
 
       {!booking && (
         <Card title="Between fights">
@@ -148,9 +185,11 @@ export function HubScreen() {
       )}
 
       {booking && opponent ? (
-        <Card title="Next fight" raised>
+        <Card title={booking.bout.isTitleFight ? 'Next fight — for the title' : 'Next fight'} raised>
           <p style={{ fontSize: 'var(--text-xl)', fontWeight: 700, marginBottom: 'var(--space-1)' }}>
+            {booking.bout.isTitleFight && <span aria-hidden="true">🏆 </span>}
             vs {displayName(opponent)}
+            {booking.bout.isTitleFight && <span className="visually-hidden"> for the title</span>}
           </p>
           <p className="muted" style={{ marginBottom: 'var(--space-4)' }}>
             {formatGameDay(booking.bout.day)} · {booking.bout.rounds} rounds ·{' '}

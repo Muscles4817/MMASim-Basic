@@ -14,6 +14,7 @@ import {
   defaultGamePlan,
   offerOpponents,
   readinessDelay,
+  setChampion,
   simulateFight,
   type Bout,
   type Fighter,
@@ -21,6 +22,7 @@ import {
   type GamePlan,
   type Judge,
   type MatchupAppraisal,
+  type Promotion,
   type Referee,
 } from '@mmasim/engine';
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
@@ -127,8 +129,21 @@ export function activeDivisionPeers(db: GameDb, fighter: Fighter): number {
   ).length;
 }
 
+export interface BookingOptions {
+  weeks?: number;
+  /** A championship bout: five rounds, a belt on the line, and a different kind of camp. */
+  isTitleFight?: boolean;
+}
+
 /** Book a fight. The camp screen then builds the plan against this opponent. */
-export function bookFight(db: GameDb, fighter: Fighter, opponent: Fighter, weeks = 8): Booking {
+export function bookFight(
+  db: GameDb,
+  fighter: Fighter,
+  opponent: Fighter,
+  options: BookingOptions = {},
+): Booking {
+  const weeks = options.weeks ?? (options.isTitleFight ? 10 : 8);
+  const isTitleFight = options.isTitleFight ?? false;
   const world = getWorld(db);
   const rng = createRng(`${world.seed}:booking:${fighter.id}:${world.day}`);
   const referees = db.referees.findAll() as Referee[];
@@ -141,8 +156,10 @@ export function bookFight(db: GameDb, fighter: Fighter, opponent: Fighter, weeks
     divisionId: fighter.divisionId,
     promotionId: (fighter.promotionId ?? asPromotionId('p_apex')) as string,
     day: world.day + weeks * 7,
-    rounds: 3,
-    isTitleFight: false,
+    // Championship bouts are five rounds. That is not cosmetic: it is where a gas tank and
+    // a late-round game plan stop being a nice-to-have.
+    rounds: isTitleFight ? 5 : 3,
+    isTitleFight,
     // Officials are assigned at booking and shown before the fight, so a prepared player can
     // factor a stand-up-happy referee into their game plan. That is the point of showing it.
     refereeId: referees.length ? rng.pick(referees).id : undefined,
@@ -206,11 +223,36 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     day: booking.bout.day,
     divisionId: booking.bout.divisionId,
     promotionId: red.promotionId ?? asPromotionId('p_apex'),
+    isTitleFight: booking.bout.isTitleFight,
     rng: createRng(`${world.seed}:aftermath:${booking.bout.id}`),
   });
 
   db.fighters.upsert(aftermath.red);
   db.fighters.upsert(aftermath.blue);
+
+  // The belt changes hands, or it does not. A draw leaves it with the champion, which is
+  // the rule and also the source of a great deal of real-world grievance.
+  const titleNotes: string[] = [];
+  if (booking.bout.isTitleFight && result.winnerId) {
+    const promotion = db.promotions.findById(booking.bout.promotionId) as Promotion | undefined;
+    if (promotion) {
+      const previousChampion = promotion.champions[booking.bout.divisionId];
+      const winner = result.winnerId === red.id ? aftermath.red : aftermath.blue;
+
+      if (previousChampion !== winner.id) {
+        db.promotions.upsert(
+          setChampion(promotion, booking.bout.divisionId, winner.id) as never,
+        );
+        titleNotes.push(
+          previousChampion
+            ? `${winner.lastName} is the new champion.`
+            : `${winner.lastName} claims the vacant title.`,
+        );
+      } else {
+        titleNotes.push(`${winner.lastName} retains the title.`);
+      }
+    }
+  }
   // The player only sits out a suspension if they were the one stopped.
   const playerLost = result.winnerId !== undefined && result.winnerId !== red.id;
   setWorld(db, {
@@ -220,7 +262,7 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
 
   writeJson(RESULT_KEY, result);
   clearBooking();
-  return { result, notes: aftermath.notes };
+  return { result, notes: [...titleNotes, ...aftermath.notes] };
 }
 
 /**
