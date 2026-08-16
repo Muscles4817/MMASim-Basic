@@ -1,0 +1,16 @@
+{
+  // Use the workspace TypeScript so editor errors match `npm run typecheck` exactly.
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "files.eol": "\n",
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/.chrome-profile": true,
+    "**/.edge-profile": true
+  }
+}

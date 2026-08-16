@@ -36,7 +36,14 @@ interface NavItem {
 }
 
 const NAV_ITEMS: readonly NavItem[] = [
-  { route: { name: 'hub' }, label: 'Career', icon: '🥊', matches: ['hub', 'camp', 'fight'] },
+  // `start` belongs to Career: picking a fighter is the first step of the career flow, and
+  // without it the very first screen a new player sees has no tab marked current.
+  {
+    route: { name: 'hub' },
+    label: 'Career',
+    icon: '🥊',
+    matches: ['hub', 'camp', 'fight', 'start'],
+  },
   { route: { name: 'roster' }, label: 'Roster', icon: '👥', matches: ['roster', 'fighter'] },
   { route: { name: 'rankings' }, label: 'Rankings', icon: '🏆' },
   { route: { name: 'editor' }, label: 'Editor', icon: '✏️', matches: ['editor', 'editorFighter'] },

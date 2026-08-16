@@ -100,10 +100,18 @@ result. That exception is documented at the call site.
 | Unit               | `*.test.ts` beside source    | every commit| Pure functions, curves, invariants         |
 | Integration        | `tests/integration/`         | every commit| A full fight, a full camp, a full event    |
 | Statistical        | `tests/statistical/`         | every commit| 10k-fight distributions: KO rates, decisions, upset frequency |
+| Playability        | `tests/ui/`                  | every commit| Mounts the real app in jsdom and drives it with real clicks |
 | Long-sim regression| `tests/long-sim/`            | on demand + CI | 20 in-game years: no ratings inflation, sane career lengths, division health |
 
 Statistical tests assert on *distributions with tolerances*, never on single outcomes.
 Every one of them is seeded, so a failure is reproducible.
+
+The **playability tier** exists because "it typechecks" and "the dev server returns 200"
+answer neither of the questions that actually matter: does the UI render, and can a player
+get from a cold start to a finished fight? It uses no mocks — real providers, real database,
+real engine — and runs under `StrictMode`, so double-invoked effects and initialisers are
+exercised too. It covers the full career loop, every screen, theme switching, save
+persistence, corrupt-save recovery and the accessibility basics.
 
 ## Editor
 

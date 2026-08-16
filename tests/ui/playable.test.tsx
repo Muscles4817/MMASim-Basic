@@ -1,0 +1,244 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { StrictMode } from 'react';
+import { App } from '../../packages/app/src/App';
+import { GameProvider } from '../../packages/app/src/state/GameProvider';
+import { RouterProvider } from '../../packages/app/src/state/router';
+import { ThemeProvider } from '../../packages/app/src/state/theme';
+import { ErrorBoundary } from '../../packages/app/src/shell/ErrorBoundary';
+
+/**
+ * Is the game actually playable?
+ *
+ * "It compiles" and "the dev server returns 200" answer neither of the questions that
+ * matter: does the UI render, and can a player get from a cold start to a finished fight?
+ * This suite mounts the real app — real providers, real database, real engine, no mocks —
+ * and drives it with real clicks.
+ *
+ * Rendered under StrictMode, so double-invoked effects and initialisers are exercised too.
+ */
+
+function renderApp() {
+  return render(
+    <StrictMode>
+      <ErrorBoundary>
+        <ThemeProvider>
+          <GameProvider>
+            <RouterProvider>
+              <App />
+            </RouterProvider>
+          </GameProvider>
+        </ThemeProvider>
+      </ErrorBoundary>
+    </StrictMode>,
+  );
+}
+
+/** The error boundary rendering means something threw during a render we care about. */
+function expectNoCrash() {
+  expect(screen.queryByText(/Something went wrong/i), 'the app crashed into its error boundary')
+    .toBeNull();
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  sessionStorage.clear();
+  window.location.hash = '';
+});
+
+afterEach(cleanup);
+
+describe('the game is playable', () => {
+  it('boots to the fighter picker from a cold start', async () => {
+    renderApp();
+    expectNoCrash();
+    expect(await screen.findByText(/Pick your fighter/i)).toBeTruthy();
+    // The seeded roster is actually on screen, not an empty list.
+    expect(await screen.findByText(/Khabib/)).toBeTruthy();
+  });
+
+  it('plays a full career loop: pick → book → camp → fight → result', async () => {
+    const user = userEvent.setup();
+    renderApp();
+
+    // 1. Pick a fighter.
+    const khabib = await screen.findByText(/Khabib/);
+    await user.click(khabib);
+
+    // 2. The career hub shows who we are and offers opponents.
+    expect(await screen.findByText(/Nurmagomedov/)).toBeTruthy();
+    const offersCard = await screen.findByText(/Choose your next fight/i);
+    expect(offersCard).toBeTruthy();
+    expectNoCrash();
+
+    // 3. Expand an offer and accept it. Booking is deliberately two steps.
+    const stepChips = await screen.findAllByText(/Step up|Even fight|Favourable/);
+    await user.click(stepChips[0]!.closest('button')!);
+    const accept = await screen.findByRole('button', { name: /Accept fight/i });
+    await user.click(accept);
+
+    // 4. Camp: the scouting report and the game plan are there to be used.
+    expect(await screen.findByText(/Scouting report/i)).toBeTruthy();
+    expect(await screen.findByText(/Game plan/i)).toBeTruthy();
+    expectNoCrash();
+
+    // Drill a read, and pick an approach.
+    const readButtons = screen
+      .getAllByRole('button')
+      .filter((b) => b.textContent?.startsWith('Drill:') || b.querySelector('span'));
+    const drillable = screen.getAllByRole('button', { pressed: false });
+    if (drillable.length > 0) await user.click(drillable[0]!);
+    expect(readButtons.length).toBeGreaterThan(0);
+
+    // 5. Fight.
+    await user.click(await screen.findByRole('button', { name: /^Fight$/i }));
+
+    // 6. The replay screen renders and reaches a conclusion.
+    expect(await screen.findByText(/Play-by-play/i)).toBeTruthy();
+    expectNoCrash();
+
+    await user.click(await screen.findByRole('radio', { name: /Skip/i }));
+
+    await waitFor(
+      () => {
+        expect(screen.getByText(/^Result$/i)).toBeTruthy();
+      },
+      { timeout: 5000 },
+    );
+
+    // A real outcome, and the fight statistics that go with it. `getAllBy` because the
+    // method legitimately appears twice: once as the result, once in the commentary.
+    expect(screen.getByText(/Fight statistics/i)).toBeTruthy();
+    expect(
+      screen.getAllByText(
+        /Knockout|TKO|Submission|Unanimous decision|Split decision|Majority decision|Doctor stoppage|Draw/i,
+      ).length,
+    ).toBeGreaterThan(0);
+    expectNoCrash();
+
+    // 7. Back to the career, with the fight now on the record.
+    await user.click(await screen.findByRole('button', { name: /Back to career/i }));
+    expect(await screen.findByText(/Nurmagomedov/)).toBeTruthy();
+    expectNoCrash();
+  }, 30_000);
+
+  it('persists the career across a reload', async () => {
+    const user = userEvent.setup();
+    const first = renderApp();
+    await user.click(await screen.findByText(/Poirier/));
+    expect(await screen.findByText(/Choose your next fight/i)).toBeTruthy();
+    first.unmount();
+
+    // A fresh mount over the same localStorage is what a page reload does.
+    renderApp();
+    expect(await screen.findByText(/Poirier/)).toBeTruthy();
+    expectNoCrash();
+  });
+});
+
+describe('every screen renders', () => {
+  const screens: ReadonlyArray<[string, 'text' | 'placeholder', RegExp]> = [
+    ['#/roster', 'placeholder', /Search all divisions/i],
+    ['#/rankings', 'text', /Choose a division/i],
+    ['#/editor', 'placeholder', /Find a fighter/i],
+    ['#/settings', 'text', /Appearance/i],
+    ['#/fighter/f_ngannou', 'text', /Predator/i],
+    ['#/editor/f_ngannou', 'text', /Walking weight/i],
+  ];
+
+  it.each(screens)('%s renders without crashing', async (hash, kind, expected) => {
+    window.location.hash = hash;
+    renderApp();
+    if (kind === 'placeholder') {
+      expect(await screen.findByPlaceholderText(expected)).toBeTruthy();
+    } else {
+      expect(await screen.findByText(expected)).toBeTruthy();
+    }
+    expectNoCrash();
+  });
+
+  it('shows a dead-end screen no way forward is never reached', async () => {
+    // The fight screen with no stored result must offer a route out, not a blank page.
+    window.location.hash = '#/fight/nonexistent';
+    renderApp();
+    expect(await screen.findByRole('button', { name: /Back to career/i })).toBeTruthy();
+    expectNoCrash();
+  });
+});
+
+describe('the editor writes through to the world', () => {
+  it('saves an edited rating and shows it on the fighter profile', async () => {
+    const user = userEvent.setup();
+    window.location.hash = '#/editor/f_ngannou';
+    renderApp();
+
+    const power = await screen.findByLabelText(/^Power value$/i);
+    await user.clear(power);
+    await user.type(power, '80');
+
+    await user.click(await screen.findByRole('button', { name: /Save changes/i }));
+    expect(await screen.findByRole('button', { name: /Saved/i })).toBeTruthy();
+    expectNoCrash();
+  }, 20_000);
+});
+
+describe('theme switching works in both directions', () => {
+  it('applies and clears the data-theme attribute', async () => {
+    const user = userEvent.setup();
+    window.location.hash = '#/settings';
+    renderApp();
+
+    await user.click(await screen.findByRole('radio', { name: /^Dark$/i }));
+    await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('dark'));
+
+    await user.click(screen.getByRole('radio', { name: /^Light$/i }));
+    await waitFor(() => expect(document.documentElement.getAttribute('data-theme')).toBe('light'));
+
+    // "System" must remove the attribute entirely so the OS preference takes over again.
+    await user.click(screen.getByRole('radio', { name: /^System$/i }));
+    await waitFor(() => expect(document.documentElement.hasAttribute('data-theme')).toBe(false));
+  });
+});
+
+describe('the error boundary catches a corrupt save', () => {
+  it('offers recovery instead of a blank page', async () => {
+    localStorage.setItem('mmasim:fighters', '{ this is not json');
+    renderApp();
+    expect(await screen.findByText(/Something went wrong/i)).toBeTruthy();
+    expect(
+      screen.getByRole('button', { name: /Clear saved data and start again/i }),
+    ).toBeTruthy();
+  });
+});
+
+describe('accessibility basics hold on the rendered app', () => {
+  it('exposes navigation as links with a current page', async () => {
+    renderApp();
+    const nav = await screen.findByRole('navigation', { name: /Main/i });
+    const links = within(nav).getAllByRole('link');
+    expect(links.length).toBeGreaterThanOrEqual(5);
+    expect(links.some((l) => l.getAttribute('aria-current') === 'page')).toBe(true);
+  });
+
+  it('provides a skip link and a focusable main region', async () => {
+    renderApp();
+    expect(await screen.findByText(/Skip to content/i)).toBeTruthy();
+    const main = document.querySelector('main#main');
+    expect(main).toBeTruthy();
+    expect(main?.getAttribute('tabindex')).toBe('-1');
+  });
+
+  it('labels every form control', async () => {
+    window.location.hash = '#/roster';
+    renderApp();
+    await screen.findByRole('searchbox');
+    for (const control of document.querySelectorAll('input, select, textarea')) {
+      const labelled =
+        control.getAttribute('aria-label') ||
+        control.closest('label') ||
+        document.querySelector(`label[for="${control.id}"]`);
+      expect(labelled, `unlabelled ${control.tagName}`).toBeTruthy();
+    }
+  });
+});

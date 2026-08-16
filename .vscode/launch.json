@@ -1,0 +1,85 @@
+{
+  // Hit F5 (or pick a config in Run and Debug) to play the game with breakpoints working.
+  //
+  // "Play MMA Sim" starts the Vite dev server via the preLaunchTask, waits for it to be
+  // listening, then opens a browser attached to the debugger. Breakpoints in .tsx files work
+  // directly because Vite serves source maps.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Play MMA Sim",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/packages/app",
+      "preLaunchTask": "dev server",
+      // Keeps the dev server running when you stop debugging, so restarting is instant.
+      "postDebugTask": "",
+      "sourceMaps": true,
+      "sourceMapPathOverrides": {
+        "/@fs/*": "/*",
+        "webpack:///./src/*": "${workspaceFolder}/packages/app/src/*"
+      },
+      // A dedicated profile keeps your normal browser session and extensions out of the way.
+      "userDataDir": "${workspaceFolder}/.vscode/.chrome-profile"
+    },
+    {
+      "name": "Play MMA Sim (Edge)",
+      "type": "msedge",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/packages/app",
+      "preLaunchTask": "dev server",
+      "sourceMaps": true,
+      "sourceMapPathOverrides": {
+        "/@fs/*": "/*"
+      },
+      "userDataDir": "${workspaceFolder}/.vscode/.edge-profile"
+    },
+    {
+      // Attach to a browser you started yourself with remote debugging enabled, or to the
+      // dev server started from an integrated terminal.
+      "name": "Attach to running browser",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9222,
+      "url": "http://localhost:5173/*",
+      "webRoot": "${workspaceFolder}/packages/app"
+    },
+    {
+      // Debug the fast test tiers. Breakpoints work in both test files and engine source.
+      "name": "Debug tests (unit + integration)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
+      "args": ["run", "--project", "unit", "--project", "integration"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "smartStep": true,
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      // Debug whichever test file is open and focused.
+      "name": "Debug current test file",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
+      "args": ["run", "${relativeFile}"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "smartStep": true,
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      // The 20-year regression suite. Slow by design; give it a generous timeout.
+      "name": "Debug long-sim suite",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
+      "args": ["run", "--project", "long-sim"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}
