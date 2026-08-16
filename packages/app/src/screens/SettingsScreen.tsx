@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { displayName, type Fighter } from '@mmasim/engine';
+import { isPersistent } from '@mmasim/data';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { useTheme } from '../state/theme';
@@ -8,7 +9,7 @@ import { formatGameDay } from '../shell/Shell';
 
 export function SettingsScreen() {
   const { choice, resolved, setChoice } = useTheme();
-  const { db, world, playerFighter, restart } = useGame();
+  const { db, world, playerFighter, restart, saveError } = useGame();
   const { navigate } = useRouter();
   const [confirmingRestart, setConfirmingRestart] = useState(false);
 
@@ -60,9 +61,28 @@ export function SettingsScreen() {
           <Chip tone="info">{db.gyms.count()} gyms</Chip>
           <Chip>Seed: {world.seed}</Chip>
         </div>
-        <p className="faint" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
-          Saved to this browser. The same seed and day always reproduce the same world.
-        </p>
+        {saveError ? (
+          <p
+            role="alert"
+            style={{
+              padding: 'var(--space-3)',
+              borderRadius: 'var(--radius)',
+              background: 'var(--negative-soft)',
+              color: 'var(--negative)',
+              fontSize: 'var(--text-sm)',
+              marginBottom: 'var(--space-3)',
+            }}
+          >
+            <strong>Your last save did not go through.</strong> {saveError.message} Progress made
+            since then will be lost if you close this tab.
+          </p>
+        ) : (
+          <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
+            {isPersistent()
+              ? 'Saved to this browser. The same seed and day always reproduce the same world.'
+              : 'This browser is not allowing storage, so progress will be lost when you close the tab.'}
+          </p>
+        )}
 
         {confirmingRestart ? (
           <div className="stack">
@@ -93,7 +113,7 @@ export function SettingsScreen() {
       </Card>
 
       <Card title="About">
-        <p className="muted" style={{ fontSize: 'var(--text-sm)' }}>
+        <p className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
           Ratings are absolute, not weight-class relative: Power 78 is the same force at
           flyweight and at heavyweight. Every rating in the seed roster is a critical
           judgement, and each fighter carries a note explaining the ones you would argue with.

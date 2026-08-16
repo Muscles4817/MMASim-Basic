@@ -10,7 +10,15 @@
  * primary navigation control and a state-machine "router" that ignores it feels broken.
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ReactNode } from 'react';
 
 export type Route =
@@ -81,6 +89,15 @@ const RouterContext = createContext<RouterValue | undefined>(undefined);
 
 export function RouterProvider({ children }: { children: ReactNode }) {
   const [route, setRoute] = useState<Route>(() => parse(window.location.hash));
+  /**
+   * How many entries deep into the app we are.
+   *
+   * A bare `history.back()` walks out of the app entirely when the current screen was the
+   * entry point — deep-linking to a fighter, or refreshing on one, would leave the back
+   * control pointing at whatever site the user was on before. Counting our own pushes lets
+   * us fall back to a sensible in-app destination instead.
+   */
+  const depth = useRef(0);
 
   useEffect(() => {
     const onHashChange = () => setRoute(parse(window.location.hash));
@@ -89,6 +106,7 @@ export function RouterProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const navigate = useCallback((next: Route) => {
+    depth.current += 1;
     window.location.hash = toHash(next);
     // Every navigation starts at the top: carrying scroll position across screens is one of
     // the most disorienting things a mobile app can do.
@@ -101,7 +119,16 @@ export function RouterProvider({ children }: { children: ReactNode }) {
     window.scrollTo({ top: 0 });
   }, []);
 
-  const back = useCallback(() => window.history.back(), []);
+  const back = useCallback(() => {
+    if (depth.current > 0) {
+      depth.current -= 1;
+      window.history.back();
+      return;
+    }
+    window.history.replaceState(null, '', toHash({ name: 'hub' }));
+    setRoute({ name: 'hub' });
+    window.scrollTo({ top: 0 });
+  }, []);
 
   const value = useMemo(() => ({ route, navigate, replace, back }), [route, navigate, replace, back]);
   return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>;

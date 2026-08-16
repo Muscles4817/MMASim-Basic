@@ -12,6 +12,7 @@ import type { GameDay } from '../core/clock.js';
 import type { DivisionId, FighterId } from '../core/ids.js';
 import type { Fighter } from '../domain/fighter.js';
 import { isActive } from '../domain/fighter.js';
+import type { FinishMethod } from '../domain/fighter.js';
 import type { Promotion } from '../domain/organisations.js';
 import { overallRating } from '../ratings/attributes.js';
 
@@ -150,12 +151,20 @@ export function offerOpponents(
 /**
  * Days until a fighter is ready to compete again.
  *
- * A knockout loss carries a mandatory medical suspension regardless of how good the fighter
- * feels, which is both realistic and the mechanism that stops a career being a treadmill.
+ * A knockout loss carries a **mandatory medical suspension** — a floor that ignores how good
+ * the fighter's recovery is and how they feel, because that is how the sport works and it is
+ * what stops a career being a treadmill. Pass the method they lost by; omit it for a fighter
+ * who was not stopped.
  */
-export function readinessDelay(fighter: Fighter): number {
+export function readinessDelay(fighter: Fighter, lostBy?: FinishMethod): number {
   const base = 70;
   const traumaDrag = (fighter.condition.headTrauma / 100) * 40;
   const recovery = fighter.naturals.recovery / 50;
-  return Math.round(clamp((base + traumaDrag) / recovery, 35, 260));
+  const natural = (base + traumaDrag) / recovery;
+
+  // Suspension floors. Applied after the recovery divisor precisely so recovery cannot
+  // shorten them.
+  const floor = lostBy === 'ko' ? 180 : lostBy === 'tko' || lostBy === 'doctorStoppage' ? 60 : 35;
+
+  return Math.round(clamp(Math.max(natural, floor), 35, 260));
 }

@@ -52,9 +52,16 @@ export function createNewGame(options: NewGameOptions = {}): GameDb {
   return db;
 }
 
-/** Load an existing world, or create a fresh one if the storage is empty. */
+/**
+ * Load an existing world, or create a fresh one if the storage is empty.
+ *
+ * Probes the `world` row rather than the fighter count. "No fighters" is not the same
+ * question as "no save": `Repository.clear()` is public and documented for the editor, so a
+ * player who cleared the roster to author their own would have their clock, seed, promotions
+ * and gyms silently destroyed and re-seeded on the next reload.
+ */
 export function loadOrCreateGame(adapter: StorageAdapter, options: NewGameOptions = {}): GameDb {
   const db = createGameDb(adapter);
-  if (db.fighters.count() > 0) return db;
+  if (db.world.findById('world') !== undefined) return db;
   return createNewGame({ ...options, adapter });
 }

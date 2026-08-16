@@ -13,7 +13,7 @@ import type { DivisionId, PromotionId } from '../core/ids.js';
 import type { Fighter, FightRecordEntry, FinishMethod } from '../domain/fighter.js';
 import { careerSummary, isKoMethod } from '../domain/fighter.js';
 import { lossImpactMultiplier, starPowerGrowthMultiplier } from '../domain/personality.js';
-import { traitMul, type TraitId } from '../domain/traits.js';
+import { findTraitConflicts, traitMul, type TraitId } from '../domain/traits.js';
 import type { Corner, FightResult } from '../fight/types.js';
 
 export interface AftermathInput {
@@ -51,7 +51,7 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
       promotionId,
       day,
       outcome: drew ? 'draw' : won ? 'win' : 'loss',
-      method: methodFor(result.method, won, drew),
+      method: methodFor(result.method, drew),
       round: result.round,
       timeSeconds: result.timeSeconds,
       divisionId,
@@ -91,9 +91,13 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
     let traits = [...fighter.traits];
 
     // Gun-Shy: a bad knockout loss on a fighter without the resilience to shake it off.
+    // The conflict check matters: Durable Mind means "came back exactly the same fighter"
+    // and is declared mutually exclusive with Gun-Shy. Generation already refuses that pair;
+    // without this check aftermath was creating it on nearly half of qualifying KO losses.
     if (
       damage.wasFinishedByStrikes &&
       !traits.includes('gunShy') &&
+      findTraitConflicts([...traits, 'gunShy']).length === 0 &&
       fighter.personality.resilience < 55 &&
       rng.chance(0.45)
     ) {
@@ -169,9 +173,8 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
   return { red: apply(input.red, 'red'), blue: apply(input.blue, 'blue'), notes };
 }
 
-/** The method as it appears on *this* fighter's record. */
-function methodFor(method: FinishMethod, won: boolean, drew: boolean): FinishMethod {
+/** The method as it appears on *this* fighter's record. Both corners record the same one. */
+function methodFor(method: FinishMethod, drew: boolean): FinishMethod {
   if (drew) return method === 'noContest' ? 'noContest' : 'draw';
-  // Both fighters record the same method; only the outcome differs.
-  return won ? method : method;
+  return method;
 }

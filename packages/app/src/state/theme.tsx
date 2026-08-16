@@ -6,7 +6,15 @@
  * default genuinely tracks the OS rather than snapshotting it once at load.
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from 'react';
 import type { ReactNode } from 'react';
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
@@ -45,7 +53,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return () => query.removeEventListener('change', onChange);
   }, []);
 
-  useEffect(() => {
+  // useLayoutEffect, not useEffect: stamping after paint means a light-mode user on a
+  // dark-mode device sees a dark flash on every cold start.
+  useLayoutEffect(() => {
     const root = document.documentElement;
     if (choice === 'system') root.removeAttribute('data-theme');
     else root.setAttribute('data-theme', choice);
@@ -60,13 +70,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const resolved: 'light' | 'dark' = choice === 'system' ? (systemDark ? 'dark' : 'light') : choice;
+
+  // The theme-color meta tags key off prefers-color-scheme, which does not follow an
+  // explicit in-app choice. Setting it imperatively keeps the browser chrome in step.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]:not([media])');
+    const tag = meta ?? document.head.appendChild(Object.assign(document.createElement('meta'), { name: 'theme-color' }));
+    tag.setAttribute('content', resolved === 'dark' ? '#0e0f12' : '#f6f6f7');
+  }, [resolved]);
+
   const value = useMemo<ThemeContextValue>(
     () => ({
       choice,
-      resolved: choice === 'system' ? (systemDark ? 'dark' : 'light') : choice,
+      resolved,
       setChoice,
     }),
-    [choice, systemDark, setChoice],
+    [choice, resolved, setChoice],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

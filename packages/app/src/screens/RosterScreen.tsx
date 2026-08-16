@@ -62,14 +62,7 @@ export function RosterScreen() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search all divisions…"
-              style={{
-                width: '100%',
-                minHeight: 'var(--tap-target)',
-                padding: '0 var(--space-3)',
-                borderRadius: 'var(--radius)',
-                border: '1px solid var(--border-strong)',
-                background: 'var(--surface)',
-              }}
+              className="field"
             />
           </label>
 
@@ -89,14 +82,7 @@ export function RosterScreen() {
                 <select
                   value={divisionId}
                   onChange={(e) => setDivisionId(e.target.value)}
-                  style={{
-                    width: '100%',
-                    minHeight: 'var(--tap-target)',
-                    padding: '0 var(--space-3)',
-                    borderRadius: 'var(--radius)',
-                    border: '1px solid var(--border-strong)',
-                    background: 'var(--surface)',
-                  }}
+                  className="field"
                 >
                   {divisions.map((d) => (
                     <option key={d.id} value={d.id as string}>
@@ -143,7 +129,12 @@ export function RosterScreen() {
                     {search && ` · ${getDivision(f.divisionId).shortName}`}
                   </>
                 }
-                trailing={<Chip tone="info">{Math.round(overallRating(f.attributes))}</Chip>}
+                trailing={
+                  <Chip tone="info">
+                    <span className="visually-hidden">Overall rating </span>
+                    {Math.round(overallRating(f.attributes))}
+                  </Chip>
+                }
               />
             ))}
           </div>

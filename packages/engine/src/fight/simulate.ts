@@ -112,6 +112,15 @@ const SUBMISSION_FINISH_RATE = 0.34;
  */
 const SUBMISSION_REPEAT_DECAY = 0.4;
 
+/** Put the fighters back in the centre, on their feet. Used at the opening bell and each round. */
+function resetToStanding(state: FightState): void {
+  state.position = 'distance';
+  state.groundTop = undefined;
+  state.groundPosition = 'guard';
+  state.clinchControl = undefined;
+  state.stalledSeconds = 0;
+}
+
 export function simulateFight(config: FightConfig): FightResult {
   const rounds = config.rounds ?? 3;
   const roundSeconds = config.roundSeconds ?? DEFAULT_ROUND_SECONDS;
@@ -139,6 +148,7 @@ export function simulateFight(config: FightConfig): FightResult {
     cuts: { red: 0, blue: 0 },
     deductions: { red: 0, blue: 0 },
   };
+  resetToStanding(state);
 
   const events: FightEvent[] = [];
   const tallies: Record<Corner, RoundTally>[] = [];
@@ -208,29 +218,36 @@ export function simulateFight(config: FightConfig): FightResult {
 
     events.push({ round, timeSeconds: roundSeconds, kind: 'roundEnd', text: `End of round ${round}.` });
 
-    // Between rounds: recover, then the doctor takes a look at anything serious.
+    // The doctor looks at every round, including the last: a cut opened in round three is
+    // still a cut, and only checking between rounds meant final-round cuts were ignored.
+    const doctorVerdict = checkDoctor(rng.fork(`doctor:${round}`), state);
+    if (doctorVerdict) {
+      ending = doctorVerdict;
+      endRound = round;
+      endTime = roundSeconds;
+      events.push({
+        round,
+        timeSeconds: roundSeconds,
+        kind: 'finish',
+        emphasis: 'critical',
+        text: say.finishText(
+          'doctorStoppage',
+          corners[doctorVerdict.winner!],
+          corners[OTHER_CORNER[doctorVerdict.winner!]],
+        ),
+      });
+      break;
+    }
+
+    // Between rounds: recover and reset to standing.
     if (round < rounds) {
       recoverBetweenRounds(red);
       recoverBetweenRounds(blue);
       state.unanswered = { red: 0, blue: 0 };
-
-      const doctorStop = checkDoctor(rng.fork(`doctor:${round}`), state);
-      if (doctorStop) {
-        ending = doctorStop;
-        endRound = round;
-        endTime = roundSeconds;
-        events.push({
-          round,
-          timeSeconds: roundSeconds,
-          kind: 'finish',
-          emphasis: 'critical',
-          text: say.finishText(
-            'doctorStoppage',
-            corners[doctorStop.winner!],
-            corners[OTHER_CORNER[doctorStop.winner!]],
-          ),
-        });
-      }
+      // Every round starts standing, in the centre. Carrying position across the bell is a
+      // rules violation and a large one: without this, a round that ended in mount *begins*
+      // in mount, and a control grappler never has to earn the position again.
+      resetToStanding(state);
     }
   }
 
@@ -606,7 +623,7 @@ function throwBurst(
   let landedAny = false;
 
   for (let i = 0; i < burst; i++) {
-    const strikeTarget = isKick ? pickTarget(rng, actor) : pickTarget(rng, actor);
+    const strikeTarget = pickTarget(rng, actor);
     const reads: ReadKey[] = isKick
       ? strikeTarget === 'legs'
         ? ['calfKick']
@@ -728,17 +745,26 @@ function resolveKnockdown(
     fatiguedEffect(target.fighter.naturals.recovery, 'cardio', target.fatigue) ** 0.5;
 
   // Follow-up flurry: each landed shot on a hurt fighter pushes the referee closer.
+  //
+  // These shots must reach the scorecards. They are the most decisive sequence in a fight,
+  // and if they only touch `stats` and not `tally` the judges score the round as though the
+  // knockdown flurry never happened — which also puts 10-7 (two tallied knockdowns) out of
+  // reach even in a total mismatch.
   const attempts = rng.int(3, 8);
   for (let i = 0; i < attempts; i++) {
     if (target.hurtSeconds <= 0) break;
+    ctx.tally[actor.corner].strikesAttempted++;
+    actor.stats.significantStrikesAttempted++;
     if (!rng.chance(clamp01(instinct / (instinct + survival)))) continue;
 
     const result = applyStrike(rng, actor, target, 'head');
     actor.stats.significantStrikesLanded++;
-    actor.stats.significantStrikesAttempted++;
+    ctx.tally[actor.corner].significantStrikes++;
+    ctx.tally[actor.corner].damageDealt += result.damage;
     state.unanswered[target.corner]++;
 
     if (result.knockdown) {
+      ctx.tally[actor.corner].knockdowns++;
       emit('knockdown', say.knockdownText(rng, actor, target), actor.corner, 'critical');
       if (rng.chance(0.4)) return { method: 'ko', winner: actor.corner };
     }
@@ -1000,6 +1026,15 @@ function resolveGroundTop(
       actor.stats.significantStrikesLanded++;
       tally[actor.corner].significantStrikes++;
       tally[actor.corner].damageDealt += result.damage;
+
+      // A knockdown from top position counts exactly as much as one on the feet: it is the
+      // most legible evidence of damage a judge has, and the 10-8 gate reads this field.
+      // Without it a fighter could drop someone twice from mount and lose the round.
+      if (result.knockdown) {
+        tally[actor.corner].knockdowns++;
+        shiftMomentum(actor, target, 0.4);
+        emit('knockdown', say.knockdownText(rng, actor, target), actor.corner, 'critical');
+      }
 
       if (result.knockdown || target.hurtSeconds > 0) {
         state.unanswered[target.corner]++;

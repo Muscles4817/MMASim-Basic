@@ -162,7 +162,7 @@ export function buildFighter(spec: FighterSpec): Fighter {
     condition: { ...freshCondition(), headTrauma: spec.trauma ?? 0, confidence: 60 },
     record: [],
     priorRecord: summary,
-    summary,
+    summary: { ...summary },
 
     starPower: spec.star,
     reputation: spec.rep,

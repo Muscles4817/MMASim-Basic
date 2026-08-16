@@ -92,7 +92,7 @@
 }
 
 .btn--sm {
-  min-height: 2.25rem;
+  min-height: var(--tap-target);
   padding: 0 var(--space-3);
   font-size: var(--text-sm);
 }
@@ -180,21 +180,35 @@
   overflow: hidden;
 }
 
+/* Explanatory line beneath an attribute. On a touch device a title attribute shows nothing,
+   so the game’s own teaching material has to be on the page. */
+.rating__hint {
+  grid-column: 1 / -1;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
 .rating__fill {
   height: 100%;
   border-radius: var(--radius-full);
   transition: width var(--transition);
 }
 
-/* A second, fainter bar showing scouted potential behind the current rating. */
+/* A tick marking the scouted potential ceiling. Deliberately a thin marker rather than a
+   second filled bar: the current rating is what the player acts on, and two bars of similar
+   weight are easy to confuse at a glance. */
 .rating__ceiling {
   position: relative;
+  /* Not hidden: the marker sits at the far right at ceiling 100 and would be clipped. */
+  overflow: visible;
 }
 
 .rating__ceiling::after {
   content: '';
   position: absolute;
-  inset-block: 0;
+  inset-block: -2px;
+  left: clamp(0px, var(--ceiling-pos), calc(100% - 2px));
   width: 2px;
   background: var(--text-faint);
   border-radius: 1px;
@@ -203,6 +217,7 @@
 /* --- Section & list ------------------------------------------------------------------ */
 
 .section-title {
+  display: block;
   font-size: var(--text-sm);
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -233,7 +248,13 @@
   border-bottom: none;
 }
 
-button.list__item:hover {
+.list__item {
+  color: inherit;
+  text-decoration: none;
+}
+
+button.list__item:hover,
+a.list__item:hover {
   background: var(--surface-sunken);
 }
 
@@ -273,7 +294,7 @@ button.list__item:hover {
 
 .segmented__option {
   flex: 1;
-  min-height: 2.25rem;
+  min-height: 2.5rem;
   padding: 0 var(--space-2);
   border-radius: calc(var(--radius) - 3px);
   font-size: var(--text-sm);
@@ -284,7 +305,7 @@ button.list__item:hover {
     color var(--transition-fast);
 }
 
-.segmented__option[aria-pressed='true'] {
+.segmented__option[aria-checked='true'] {
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-sm);

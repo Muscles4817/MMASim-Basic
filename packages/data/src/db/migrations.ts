@@ -32,6 +32,18 @@ export interface Migration {
  */
 export const MIGRATIONS: readonly Migration[] = [];
 
+/** A save that cannot be read at all: truncated, hand-edited, or written by another app. */
+export class SaveCorruptError extends Error {
+  constructor(
+    readonly collection: string,
+    reason: string,
+    cause?: unknown,
+  ) {
+    super(`The saved "${collection}" data could not be read because ${reason}.`, { cause });
+    this.name = 'SaveCorruptError';
+  }
+}
+
 export class SaveTooNewError extends Error {
   constructor(
     readonly found: number,
@@ -45,8 +57,24 @@ export class SaveTooNewError extends Error {
   }
 }
 
-/** Walk one collection forward to {@link CURRENT_SCHEMA_VERSION}. */
-export function migrateCollection<T extends Entity>(envelope: CollectionEnvelope<T>): T[] {
+/**
+ * Walk one collection forward to {@link CURRENT_SCHEMA_VERSION}.
+ *
+ * `expectedCollection` is what makes the envelope's `collection` field earn its place: it
+ * exists so a blob stored under the wrong key is caught here rather than loading silently
+ * and being laundered into a permanent corruption by the next save.
+ */
+export function migrateCollection<T extends Entity>(
+  envelope: CollectionEnvelope<T>,
+  expectedCollection?: string,
+): T[] {
+  if (expectedCollection !== undefined && envelope.collection !== expectedCollection) {
+    throw new SaveCorruptError(
+      expectedCollection,
+      `it contains "${envelope.collection}" data instead`,
+    );
+  }
+
   const found = envelope.schemaVersion ?? 0;
   if (found > CURRENT_SCHEMA_VERSION) {
     throw new SaveTooNewError(found, CURRENT_SCHEMA_VERSION);
@@ -62,6 +90,11 @@ export function migrateCollection<T extends Entity>(envelope: CollectionEnvelope
         `No migration from schema ${version} to ${version + 1} for collection "${envelope.collection}".`,
       );
     }
+    // Guards against a mis-authored step that does not advance the version, which would
+    // otherwise spin forever inside a render.
+    if (step.to <= version) {
+      throw new Error(`Migration ${step.from} -> ${step.to} does not advance the schema version.`);
+    }
     rows = step.migrate(envelope.collection, rows);
     version = step.to;
   }
@@ -69,13 +102,22 @@ export function migrateCollection<T extends Entity>(envelope: CollectionEnvelope
   return rows as T[];
 }
 
-/** Migrations that would run for a given save version. Used by the save screen. */
+/**
+ * Migrations that would run for a given save version. Used by the save screen.
+ *
+ * Throws on a too-new save for the same reason the loader does: returning an empty list
+ * would have the UI report "ready to load" for a save the loader is about to refuse.
+ */
 export function pendingMigrations(fromVersion: number): readonly Migration[] {
+  if (fromVersion > CURRENT_SCHEMA_VERSION) {
+    throw new SaveTooNewError(fromVersion, CURRENT_SCHEMA_VERSION);
+  }
   const out: Migration[] = [];
   let version = fromVersion;
   while (version < CURRENT_SCHEMA_VERSION) {
     const step = MIGRATIONS.find((m) => m.from === version);
-    if (!step) break;
+    // A mis-authored step that does not advance the version would loop forever.
+    if (!step || step.to <= version) break;
     out.push(step);
     version = step.to;
   }

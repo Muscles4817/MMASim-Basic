@@ -18,6 +18,11 @@ import { createRepository } from './repository.js';
 import type { Entity, Repository, StorageAdapter } from './types.js';
 import { CURRENT_SCHEMA_VERSION } from './migrations.js';
 
+/**
+ * Every persisted key. Must match the repositories `createGameDb` actually builds — any
+ * future export, import or delete that iterates this list would otherwise silently skip the
+ * world clock and RNG seed, or look for collections that do not exist.
+ */
 export const COLLECTIONS = [
   'fighters',
   'coaches',
@@ -25,8 +30,7 @@ export const COLLECTIONS = [
   'promotions',
   'referees',
   'judges',
-  'bouts',
-  'events',
+  'world',
 ] as const;
 
 export type CollectionName = (typeof COLLECTIONS)[number];

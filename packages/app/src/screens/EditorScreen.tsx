@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   ATTRIBUTES_BY_GROUP,
   ATTRIBUTE_GROUPS,
+  ATTRIBUTE_KEYS,
   ATTRIBUTE_META,
   ALL_TRAITS,
   DIVISIONS,
@@ -48,9 +49,9 @@ export function EditorScreen() {
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
       <Card>
-        <p className="muted" style={{ marginBottom: 'var(--space-3)' }}>
-          Edit any fighter's ratings, hidden potential, personality and traits. Changes save
-          immediately and affect the live world.
+        <p className="muted prose" style={{ marginBottom: 'var(--space-3)' }}>
+          Edit any fighter's ratings, hidden potential, personality and traits. Changes take
+          effect in the live world when you save them.
         </p>
         <label>
           <span className="visually-hidden">Search fighters to edit</span>
@@ -59,14 +60,7 @@ export function EditorScreen() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Find a fighter…"
-            style={{
-              width: '100%',
-              minHeight: 'var(--tap-target)',
-              padding: '0 var(--space-3)',
-              borderRadius: 'var(--radius)',
-              border: '1px solid var(--border-strong)',
-              background: 'var(--surface)',
-            }}
+            className="field"
           />
         </label>
       </Card>
@@ -107,22 +101,16 @@ export function EditorFighterScreen({ id }: { id: string }) {
 
   const conflicts = findTraitConflicts(draft.traits);
   const dirty = JSON.stringify(draft) !== JSON.stringify(original);
+  // Derived, not a timer: a setTimeout with no cleanup fires after unmount, and the label
+  // should revert the moment the player edits again anyway.
+  const showSaved = saved && !dirty;
 
+  // Only the attribute moves here. Raising the ceiling on every onChange ratchets it
+  // permanently: dragging Power 60 -> 95 -> back to 60 would leave a hidden growth ceiling of
+  // 95 that the player never intended to touch and cannot see. The invariant is enforced once,
+  // at save time, where it is a correction rather than a side effect.
   const setAttribute = (key: AttributeKey, value: number) =>
-    setDraft((d) =>
-      d
-        ? {
-            ...d,
-            attributes: { ...d.attributes, [key]: toRating(value) },
-            // A ceiling below the current rating is nonsense, so raise it with the rating
-            // rather than letting the editor produce an impossible fighter.
-            potential: {
-              ...d.potential,
-              [key]: Math.max(d.potential[key], toRating(value)),
-            },
-          }
-        : d,
-    );
+    setDraft((d) => (d ? { ...d, attributes: { ...d.attributes, [key]: toRating(value) } } : d));
 
   const setPotential = (key: AttributeKey, value: number) =>
     setDraft((d) =>
@@ -152,10 +140,17 @@ export function EditorFighterScreen({ id }: { id: string }) {
     );
 
   const save = () => {
-    db.fighters.upsert(draft);
+    // A ceiling below the current rating is not a creative choice, it is a value the rest of
+    // the engine treats as impossible. Corrected here, once.
+    const potential = { ...draft.potential };
+    for (const key of ATTRIBUTE_KEYS) {
+      potential[key] = Math.max(potential[key], draft.attributes[key]);
+    }
+    const corrected = { ...draft, potential };
+    db.fighters.upsert(corrected);
+    setDraft(corrected);
     commit();
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   };
 
   return (
@@ -167,14 +162,14 @@ export function EditorFighterScreen({ id }: { id: string }) {
           {Math.round(overallRating(draft.attributes))}
         </p>
         <div className="row" style={{ marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
-          <label style={{ flex: '1 1 12rem' }}>
+          <label style={{ flex: '1 1 14rem' }}>
             <span className="section-title">Division</span>
             <select
               value={draft.divisionId as string}
               onChange={(e) =>
                 setDraft((d) => (d ? { ...d, divisionId: e.target.value as never } : d))
               }
-              style={fieldStyle}
+              className="field"
             >
               {DIVISIONS.filter((x) => x.sex === draft.sex).map((division) => (
                 <option key={division.id} value={division.id as string}>
@@ -187,11 +182,20 @@ export function EditorFighterScreen({ id }: { id: string }) {
             <span className="section-title">Walking weight (lb)</span>
             <input
               type="number"
+              inputMode="numeric"
+              min={95}
+              max={400}
               value={draft.walkingWeightLbs}
-              onChange={(e) =>
-                setDraft((d) => (d ? { ...d, walkingWeightLbs: Number(e.target.value) } : d))
-              }
-              style={fieldStyle}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                if (!Number.isFinite(next)) return;
+                // Bounded: an unvalidated field trivially produces a 0lb fighter, and the
+                // cut-severity maths has no defence against that.
+                setDraft((d) =>
+                  d ? { ...d, walkingWeightLbs: Math.min(400, Math.max(95, next)) } : d,
+                );
+              }}
+              className="field"
             />
           </label>
         </div>
@@ -281,8 +285,10 @@ export function EditorFighterScreen({ id }: { id: string }) {
       </Card>
 
       <div className="row" style={{ gap: 'var(--space-2)' }}>
-        <Button variant="primary" block onClick={save} disabled={!dirty}>
-          {saved ? 'Saved' : dirty ? 'Save changes' : 'No changes'}
+        {/* Deliberately not disabled on save: disabling the control the user just activated
+            destroys focus and dumps a keyboard user back to the top of the document. */}
+        <Button variant="primary" block onClick={save}>
+          {showSaved ? 'Saved' : 'Save changes'}
         </Button>
         <Button variant="secondary" onClick={() => setDraft(original)} disabled={!dirty}>
           Revert
@@ -291,15 +297,6 @@ export function EditorFighterScreen({ id }: { id: string }) {
     </div>
   );
 }
-
-const fieldStyle: React.CSSProperties = {
-  width: '100%',
-  minHeight: 'var(--tap-target)',
-  padding: '0 var(--space-3)',
-  borderRadius: 'var(--radius)',
-  border: '1px solid var(--border-strong)',
-  background: 'var(--surface)',
-};
 
 /**
  * A slider with a number field beside it.
@@ -323,6 +320,7 @@ function EditorSlider({
   onChange(value: number): void;
   onCeilingChange?(value: number): void;
 }) {
+  const [typed, setTyped] = useState<string | undefined>();
   return (
     <div style={{ marginBottom: 'var(--space-3)' }}>
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 2 }}>
@@ -343,17 +341,28 @@ function EditorSlider({
           onChange={(e) => onChange(Number(e.target.value))}
           style={{ flex: 1, accentColor: bandColour(value) }}
         />
+        {/*
+          The field holds a raw string while focused. Coercing on every keystroke makes it
+          unusable: backspacing "60" to type "45" passes through '' → 0 → clamped to 1, and
+          the next keypress produces "145" → 100. This control is billed as the only way to
+          set an exact value, so it has to actually permit one.
+        */}
         <input
           type="number"
+          inputMode="numeric"
           min={1}
           max={100}
-          value={value}
+          value={typed ?? value}
           aria-label={`${label} value`}
-          onChange={(e) => onChange(Number(e.target.value))}
+          onChange={(e) => {
+            setTyped(e.target.value);
+            if (e.target.value !== '') onChange(Number(e.target.value));
+          }}
+          onBlur={() => setTyped(undefined)}
           className="numeric"
           style={{
-            width: '4rem',
-            minHeight: '2.25rem',
+            width: '4.5rem',
+            minHeight: 'var(--tap-target)',
             textAlign: 'center',
             borderRadius: 'var(--radius-sm)',
             border: '1px solid var(--border-strong)',

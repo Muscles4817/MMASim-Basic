@@ -108,7 +108,11 @@ describe('style matchups behave the way the sport does', () => {
       fights: 1000,
       seedPrefix: 'grappler-vs-striker',
     });
-    expect(s.redWinRate, describeSummary(s)).toBeGreaterThan(0.6);
+    // The threshold moved down from 0.60 when rounds started resetting to standing, as they
+    // must. Position used to carry across the bell, so a round that ended in mount *began*
+    // in mount and the grappler never had to earn it again. Every point of that edge was
+    // coming from a rules violation.
+    expect(s.redWinRate, describeSummary(s)).toBeGreaterThan(0.55);
   });
 
   it('lets a bottomless gas tank grind down a better but less durable fighter', () => {

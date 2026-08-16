@@ -25,7 +25,7 @@ export function App() {
   switch (route.name) {
     case 'start':
       return (
-        <Shell title="New career" subtitle="January 2020">
+        <Shell title="New career">
           <StartScreen />
         </Shell>
       );
@@ -44,7 +44,7 @@ export function App() {
     case 'fighter':
       return (
         <Shell title="Fighter" showBack>
-          <FighterScreen id={route.id} />
+          <FighterScreen key={route.id} id={route.id} />
         </Shell>
       );
     case 'camp':
@@ -55,8 +55,8 @@ export function App() {
       );
     case 'fight':
       return (
-        <Shell title="Fight night" subtitle="Live">
-          <FightScreen />
+        <Shell title="Fight night">
+          <FightScreen boutId={route.boutId} />
         </Shell>
       );
     case 'rankings':
@@ -74,7 +74,9 @@ export function App() {
     case 'editorFighter':
       return (
         <Shell title="Edit fighter" showBack>
-          <EditorFighterScreen id={route.id} />
+          {/* Keyed so navigating between two fighters remounts. Without it the component
+              reuses its draft state and Save writes the previously-loaded fighter. */}
+          <EditorFighterScreen key={route.id} id={route.id} />
         </Shell>
       );
     case 'settings':

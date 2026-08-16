@@ -9,6 +9,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, ListItem, Segmented } from '../ui';
+import { activeDivisionPeers, clearTransientCareerState } from '../game/career';
 
 type Filter = 'contenders' | 'prospects' | 'all';
 
@@ -42,6 +43,9 @@ export function StartScreen() {
   }, [db, filter, search]);
 
   const choose = (fighter: Fighter) => {
+    // Bookings and the last result are keyed to the previous fighter. Left behind, the hub
+    // offers to send the new fighter into the old one’s booked bout.
+    clearTransientCareerState();
     updateWorld({ playerRole: 'fighter', playerFighterId: fighter.id as string });
     navigate({ name: 'hub' });
   };
@@ -52,7 +56,7 @@ export function StartScreen() {
         <h2 style={{ fontSize: 'var(--text-2xl)', marginBottom: 'var(--space-2)' }}>
           Pick your fighter
         </h2>
-        <p className="muted" style={{ marginBottom: 'var(--space-4)' }}>
+        <p className="muted prose" style={{ marginBottom: 'var(--space-4)' }}>
           January 2020. Every rating here is a judgement call, and every fighter has something
           an opponent can build a game plan around — including you.
         </p>
@@ -75,17 +79,19 @@ export function StartScreen() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search by name…"
-              style={{
-                width: '100%',
-                minHeight: 'var(--tap-target)',
-                padding: '0 var(--space-3)',
-                borderRadius: 'var(--radius)',
-                border: '1px solid var(--border-strong)',
-                background: 'var(--surface)',
-              }}
+              className="field"
             />
           </label>
         </div>
+
+        <Button
+          variant="ghost"
+          block
+          onClick={() => navigate({ name: 'roster' })}
+          style={{ marginTop: 'var(--space-3)' }}
+        >
+          Just browse the roster instead
+        </Button>
       </Card>
 
       <Card flush title={`${fighters.length} fighter${fighters.length === 1 ? '' : 's'}`}>
@@ -106,10 +112,14 @@ export function StartScreen() {
                 }
                 trailing={
                   <span className="row" style={{ gap: 'var(--space-2)' }}>
-                    <Chip tone={f.starPower >= 65 ? 'accent' : 'neutral'} title="Star power">
-                      ★ {f.starPower}
+                    {activeDivisionPeers(db, f) < 3 && (
+                      <Chip tone="warning">Thin division</Chip>
+                    )}
+                    <Chip tone={f.starPower >= 65 ? 'accent' : 'neutral'}>
+                      <span className="visually-hidden">Star power </span>★ {f.starPower}
                     </Chip>
-                    <Chip tone="info" title="Overall rating">
+                    <Chip tone="info">
+                      <span className="visually-hidden">Overall rating </span>
                       {Math.round(overallRating(f.attributes))}
                     </Chip>
                   </span>
@@ -120,9 +130,6 @@ export function StartScreen() {
         )}
       </Card>
 
-      <Button variant="ghost" onClick={() => navigate({ name: 'roster' })}>
-        Just browse the roster instead
-      </Button>
     </div>
   );
 }

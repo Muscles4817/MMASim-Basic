@@ -177,7 +177,11 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     // is already fast and strong, and is not yet a good wrestler.
     const physical: AttributeKey[] = ['power', 'speed', 'cardio', 'durability', 'strength'];
     const factor = physical.includes(key) ? development + 0.1 : development;
-    attributes[key] = toRating(potential[key] * clamp(factor, 0.35, 0.98) + rng.range(-3, 3));
+    // Clamped to the ceiling: the jitter could otherwise push a starting attribute a point
+    // or two above its own potential, an invariant the seed roster is tested for.
+    attributes[key] = toRating(
+      Math.min(potential[key], potential[key] * clamp(factor, 0.35, 0.98) + rng.range(-3, 3)),
+    );
   }
 
   const proBouts = Math.max(0, Math.round((age - 20) * rng.range(1.2, 2.8)));
@@ -210,7 +214,9 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     condition: freshCondition(),
     record: [],
     priorRecord: summary,
-    summary,
+    // A copy, not the same reference: aliasing these two is a trap waiting for the first
+    // caller that mutates one of them.
+    summary: { ...summary },
 
     promotionId: options.promotionId,
 

@@ -90,15 +90,17 @@ export function CampScreen() {
     playerFighter.personality.discipline,
   );
   const drill = computeDrillQuality(camp, selected.length, coach?.gamePlanning ?? 45);
+  const targetingTotal = targeting.head + targeting.body + targeting.legs || 1;
 
+  // aria-disabled rather than disabled: a disabled button leaves the tab order silently, so
+  // a keyboard user at the cap would find the remaining options simply vanish with no
+  // explanation. They stay focusable and say why instead.
   const toggleRead = (read: ReadKey) => {
-    setSelected((current) =>
-      current.includes(read)
-        ? current.filter((r) => r !== read)
-        : current.length >= MAX_PREPPED_READS
-          ? current
-          : [...current, read],
-    );
+    setSelected((current) => {
+      if (current.includes(read)) return current.filter((r) => r !== read);
+      if (current.length >= MAX_PREPPED_READS) return current;
+      return [...current, read];
+    });
   };
 
   const startFight = () => {
@@ -113,16 +115,20 @@ export function CampScreen() {
         return { read, drillQuality: drill, confidence: scouted?.confidence ?? 0.5 };
       }),
     };
-    const updated = saveBookingPlan(booking, plan);
-    const outcome = runBookedFight(db, updated);
-    commit();
-    navigate({ name: 'fight', boutId: outcome.result.boutId });
+    try {
+      const updated = saveBookingPlan(booking, plan);
+      const outcome = runBookedFight(db, updated);
+      commit();
+      navigate({ name: 'fight', boutId: outcome.result.boutId });
+    } finally {
+      setRunning(false);
+    }
   };
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
       <Card raised>
-        <p className="section-title">Fight week</p>
+        <h3 className="section-title">Fight week</h3>
         <h2 style={{ fontSize: 'var(--text-xl)' }}>vs {displayName(opponent)}</h2>
         <p className="muted">
           {formatGameDay(booking.bout.day)} · {getDivision(opponent.divisionId).shortName} ·{' '}
@@ -159,7 +165,7 @@ export function CampScreen() {
                 key={r.read}
                 type="button"
                 onClick={() => toggleRead(r.read)}
-                disabled={atLimit}
+                aria-disabled={atLimit}
                 aria-pressed={isSelected}
                 style={{
                   display: 'block',
@@ -198,7 +204,7 @@ export function CampScreen() {
       <Card title="Game plan">
         <div className="stack">
           <div>
-            <p className="section-title">Approach</p>
+            <h3 className="section-title">Approach</h3>
             <div
               style={{
                 display: 'grid',
@@ -231,16 +237,17 @@ export function CampScreen() {
           </div>
 
           <div>
-            <p className="section-title">Where to attack</p>
+            <h3 className="section-title">Where to attack</h3>
             {(['head', 'body', 'legs'] as const).map((target) => (
               <label key={target} style={{ display: 'block', marginBottom: 'var(--space-2)' }}>
                 <span className="row" style={{ justifyContent: 'space-between' }}>
                   <span style={{ textTransform: 'capitalize' }}>{target}</span>
                   <span className="numeric muted">
-                    {Math.round(
-                      (targeting[target] / (targeting.head + targeting.body + targeting.legs)) * 100,
-                    )}
-                    %
+                    {/* Guarded divisor: three sliders at zero produced a literal NaN%, and
+                        the engine then silently substituted a 60/25/15 plan the player never
+                        chose. Showing the normalised share keeps the label honest about what
+                        will actually be fought. */}
+                    {Math.round((targeting[target] / targetingTotal) * 100)}%
                   </span>
                 </span>
                 <input

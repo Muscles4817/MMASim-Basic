@@ -166,7 +166,20 @@ describe('career loop', () => {
       condition: { ...fresh.condition, headTrauma: 85 },
     };
     expect(readinessDelay(battered)).toBeGreaterThan(readinessDelay(fresh));
-    expect(readinessDelay(fresh)).toBeGreaterThan(30);
+    // A real layoff even for an undamaged fighter with an excellent recovery natural.
+    expect(readinessDelay(fresh)).toBeGreaterThan(35);
+    expect(readinessDelay(battered)).toBeGreaterThan(readinessDelay(fresh) * 1.3);
+  });
+
+  it('imposes a medical suspension that recovery cannot shorten', () => {
+    const fresh = db.fighters.getById('f_yan') as Fighter;
+    // An outstanding recovery natural must not buy a way out of a knockout suspension.
+    const superhuman: Fighter = { ...fresh, naturals: { ...fresh.naturals, recovery: 99 } };
+    expect(readinessDelay(superhuman, 'ko')).toBeGreaterThanOrEqual(180);
+    expect(readinessDelay(superhuman, 'tko')).toBeGreaterThanOrEqual(60);
+    expect(readinessDelay(superhuman, 'decisionUnanimous')).toBeLessThan(
+      readinessDelay(superhuman, 'ko'),
+    );
   });
 
   it('persists a career across a save and reload', () => {

@@ -100,7 +100,11 @@ function isTrulyEven(red: RoundTally, blue: RoundTally): boolean {
     red.controlSeconds === blue.controlSeconds &&
     red.takedowns === blue.takedowns &&
     red.knockdowns === blue.knockdowns &&
-    red.strikesAttempted === blue.strikesAttempted
+    red.strikesAttempted === blue.strikesAttempted &&
+    // Must cover every field roundMargin scores. Omitting this one made a round where one
+    // fighter attempted four submissions and nothing else differed score 10-10 on all three
+    // cards, and the fight a draw.
+    red.submissionAttempts === blue.submissionAttempts
   );
 }
 

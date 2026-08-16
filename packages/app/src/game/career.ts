@@ -62,21 +62,69 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
-export const getBooking = (): Booking | undefined => readJson<Booking>(BOOKING_KEY);
+/**
+ * The booking for a given fighter.
+ *
+ * Validated against who the player actually controls. Without the check, switching fighters
+ * or resetting the world leaves a booking naming the *previous* fighter in session storage —
+ * and the hub will happily offer to send someone else's career into it.
+ */
+export function getBooking(playerFighterId?: string): Booking | undefined {
+  const booking = readJson<Booking>(BOOKING_KEY);
+  if (!booking) return undefined;
+  if (playerFighterId !== undefined && (booking.bout.redId as string) !== playerFighterId) {
+    clearBooking();
+    return undefined;
+  }
+  return booking;
+}
+
 export const clearBooking = (): void => sessionStorage.removeItem(BOOKING_KEY);
+export const clearResult = (): void => sessionStorage.removeItem(RESULT_KEY);
+
+/** Clear all transient career state. Call when switching fighters or resetting the world. */
+export function clearTransientCareerState(): void {
+  clearBooking();
+  clearResult();
+}
+
 export const getLastResult = (): FightResult | undefined => readJson<FightResult>(RESULT_KEY);
 
-/** Opponent options for the player's next fight. */
+/**
+ * Opponent options for the player's next fight.
+ *
+ * Falls back progressively rather than returning nothing. A thin division — women's
+ * featherweight seeds with a single fighter — would otherwise hand the player a terminal
+ * screen at fight zero, with no way out because the calendar only advances by fighting.
+ * A cross-promotional bout or a rematch is always better than a locked career.
+ */
 export function getOffers(db: GameDb, fighter: Fighter): MatchupAppraisal[] {
   const world = getWorld(db);
   const promotion = db.promotions.findById(fighter.promotionId ?? 'p_apex');
   if (!promotion) return [];
 
   const pool = db.fighters.findAll() as Fighter[];
-  const rng = createRng(`${world.seed}:offers:${fighter.id}:${world.day}`);
-  return offerOpponents(fighter, pool, promotion, world.day, rng, {
+  const seed = `${world.seed}:offers:${fighter.id}:${world.day}`;
+
+  const samePromotion = offerOpponents(fighter, pool, promotion, world.day, createRng(seed), {
     promotionId: fighter.promotionId as string | undefined,
   });
+  if (samePromotion.length > 0) return samePromotion;
+
+  const anyPromotion = offerOpponents(fighter, pool, promotion, world.day, createRng(seed));
+  if (anyPromotion.length > 0) return anyPromotion;
+
+  // Last resort: allow an immediate rematch rather than stranding the career.
+  return offerOpponents(fighter, pool, promotion, world.day, createRng(seed), {
+    rematchCooldownDays: 0,
+  });
+}
+
+/** Divisions with too few active fighters to sustain a career. Surfaced on the start screen. */
+export function activeDivisionPeers(db: GameDb, fighter: Fighter): number {
+  return (db.fighters.findAll() as Fighter[]).filter(
+    (f) => f.id !== fighter.id && f.divisionId === fighter.divisionId && f.retiredDay === undefined,
+  ).length;
 }
 
 /** Book a fight. The camp screen then builds the plan against this opponent. */
@@ -163,7 +211,11 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
 
   db.fighters.upsert(aftermath.red);
   db.fighters.upsert(aftermath.blue);
-  setWorld(db, { day: booking.bout.day + readinessDelay(aftermath.red) });
+  // The player only sits out a suspension if they were the one stopped.
+  const playerLost = result.winnerId !== undefined && result.winnerId !== red.id;
+  setWorld(db, {
+    day: booking.bout.day + readinessDelay(aftermath.red, playerLost ? result.method : undefined),
+  });
   db.save();
 
   writeJson(RESULT_KEY, result);

@@ -158,7 +158,9 @@ export function applyStrike(
   if (knockdown) {
     defender.knockdownsSuffered++;
     attacker.stats.knockdowns++;
-    defender.hurtSeconds = hurtDuration(defender) * 1.4;
+    // Max, not assignment: a second knockdown on a fighter who is already badly hurt must
+    // never shorten the window they are in.
+    defender.hurtSeconds = Math.max(defender.hurtSeconds, hurtDuration(defender) * 1.4);
   } else if (hurt) {
     defender.hurtSeconds = Math.max(defender.hurtSeconds, hurtDuration(defender));
   }

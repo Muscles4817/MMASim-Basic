@@ -10,8 +10,8 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Button, Card, Chip, Empty, ListItem, Stat } from '../ui';
-import { bookFight, getBooking, getOffers } from '../game/career';
+import { Button, Card, Chip, Empty, Stat } from '../ui';
+import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
 import { formatGameDay } from '../shell/Shell';
 
 /**
@@ -22,9 +22,11 @@ import { formatGameDay } from '../shell/Shell';
  * element on the screen and there is never more than one of it.
  */
 export function HubScreen() {
-  const { db, world, playerFighter, commit } = useGame();
+  const { db, world, playerFighter, commit, updateWorld } = useGame();
   const { navigate } = useRouter();
-  const [booking, setBooking] = useState(() => getBooking());
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [pendingOffer, setPendingOffer] = useState<MatchupAppraisal | undefined>();
+  const [booking, setBooking] = useState(() => getBooking(playerFighter?.id as string | undefined));
 
   const offers = useMemo(
     () => (playerFighter && !booking ? getOffers(db, playerFighter) : []),
@@ -52,6 +54,23 @@ export function HubScreen() {
     setBooking(next);
     commit();
     navigate({ name: 'camp' });
+  };
+
+  const cancelBooking = () => {
+    clearBooking();
+    setBooking(undefined);
+    setConfirmCancel(false);
+  };
+
+  /**
+   * Sit out and let the calendar move.
+   *
+   * Fighting was originally the only thing that advanced time, which meant a fighter in a
+   * thin division with nobody left to face had a permanently locked career — the rematch
+   * cooldown could never expire.
+   */
+  const waitWeeks = (weeks: number) => {
+    updateWorld({ day: world.day + weeks * 7 });
   };
 
   return (
@@ -116,17 +135,64 @@ export function HubScreen() {
           <Button variant="primary" block onClick={() => navigate({ name: 'camp' })}>
             Go to camp
           </Button>
+          {confirmCancel ? (
+            <div className="stack" style={{ marginTop: 'var(--space-3)' }}>
+              <p className="muted" style={{ fontSize: 'var(--text-sm)' }}>
+                Withdrawing loses the camp you have built for this fight.
+              </p>
+              <div className="row" style={{ flexWrap: 'wrap' }}>
+                <Button variant="danger" size="sm" onClick={cancelBooking}>
+                  Withdraw
+                </Button>
+                <Button size="sm" onClick={() => setConfirmCancel(false)}>
+                  Keep the fight
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              block
+              onClick={() => setConfirmCancel(true)}
+              style={{ marginTop: 'var(--space-2)' }}
+            >
+              Withdraw from this fight
+            </Button>
+          )}
         </Card>
       ) : (
         <Card title="Choose your next fight" flush>
           {offers.length === 0 ? (
-            <Empty title="No available opponents">
-              Everyone in the division has been fought recently.
-            </Empty>
+            <div className="empty">
+              <p className="empty__title">No opponents available right now</p>
+              <p style={{ marginBottom: 'var(--space-4)' }}>
+                Everyone available in {division.name} has been fought recently. Sit out a few
+                weeks and the picture will change.
+              </p>
+              <div className="row" style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
+                <Button variant="primary" size="sm" onClick={() => waitWeeks(8)}>
+                  Wait 8 weeks
+                </Button>
+                <Button size="sm" onClick={() => waitWeeks(26)}>
+                  Wait 6 months
+                </Button>
+              </div>
+            </div>
           ) : (
             <div className="list">
               {offers.map((offer) => (
-                <OfferRow key={offer.opponent.id} offer={offer} onAccept={() => accept(offer)} />
+                <OfferRow
+                  key={offer.opponent.id}
+                  offer={offer}
+                  expanded={pendingOffer?.opponent.id === offer.opponent.id}
+                  onSelect={() =>
+                    setPendingOffer((current) =>
+                      current?.opponent.id === offer.opponent.id ? undefined : offer,
+                    )
+                  }
+                  onAccept={() => accept(offer)}
+                />
               ))}
             </div>
           )}
@@ -136,7 +202,17 @@ export function HubScreen() {
   );
 }
 
-function OfferRow({ offer, onAccept }: { offer: MatchupAppraisal; onAccept: () => void }) {
+function OfferRow({
+  offer,
+  expanded,
+  onSelect,
+  onAccept,
+}: {
+  offer: MatchupAppraisal;
+  expanded: boolean;
+  onSelect: () => void;
+  onAccept: () => void;
+}) {
   const { opponent, step, winChance } = offer;
 
   // Framed as difficulty rather than as a win percentage. A precise number would be false
@@ -150,16 +226,58 @@ function OfferRow({ offer, onAccept }: { offer: MatchupAppraisal; onAccept: () =
         : { label: 'Even fight', tone: 'info' as const };
 
   return (
-    <ListItem
-      onClick={onAccept}
-      primary={displayName(opponent)}
-      secondary={
-        <>
-          {recordString(opponent.summary)} · ★ {Math.round(opponent.starPower)} ·{' '}
-          {winChance >= 0.6 ? 'You are favoured' : winChance <= 0.4 ? 'You are the underdog' : 'A coin flip'}
-        </>
-      }
-      trailing={<Chip tone={difficulty.tone}>{difficulty.label}</Chip>}
-    />
+    <div>
+      {/*
+        Two steps, not one. Accepting determines the next two months of a career, and a
+        full-width row that books on a single tap makes a mis-tap permanent. Settings already
+        two-steps its destructive action; this is the more consequential one.
+      */}
+      <button type="button" className="list__item" aria-expanded={expanded} onClick={onSelect}>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span className="list__primary" style={{ display: 'block' }}>
+            {displayName(opponent)}
+          </span>
+          <span className="list__secondary" style={{ display: 'block' }}>
+            {recordString(opponent.summary)} · star power {Math.round(opponent.starPower)} ·{' '}
+            {winChance >= 0.6
+              ? 'You are favoured'
+              : winChance <= 0.4
+                ? 'You are the underdog'
+                : 'A coin flip'}
+          </span>
+        </span>
+        <Chip tone={difficulty.tone}>{difficulty.label}</Chip>
+      </button>
+
+      {expanded && (
+        <div
+          style={{
+            padding: 'var(--space-4)',
+            background: 'var(--surface-sunken)',
+            borderBottom: '1px solid var(--border)',
+          }}
+        >
+          <div className="stat-grid" style={{ marginBottom: 'var(--space-3)' }}>
+            <Stat value={recordString(opponent.summary)} label="Record" />
+            <Stat value={Math.round(overallRating(opponent.attributes))} label="Overall" />
+            <Stat value={Math.round(opponent.starPower)} label="Star power" />
+            <Stat value={getDivision(opponent.divisionId).shortName} label="Division" />
+          </div>
+          <p
+            className="muted prose"
+            style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}
+          >
+            Accepting books the fight for eight weeks time. You can withdraw before fight
+            night, but you will lose the camp.
+          </p>
+          <div className="row" style={{ flexWrap: 'wrap' }}>
+            <Button variant="primary" onClick={onAccept}>
+              Accept fight
+            </Button>
+            <Button onClick={onSelect}>Not this one</Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

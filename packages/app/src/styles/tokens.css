@@ -9,6 +9,11 @@
  */
 
 :root {
+  /* Tells the UA which theme its own controls belong to: select popups, range grooves,
+     number spinners, the search field clear button, and scrollbars. Without it these all
+     render light on a dark page. */
+  color-scheme: light;
+
   /* --- Surfaces ------------------------------------------------------------------- */
   --bg: #f6f6f7;
   --surface: #ffffff;
@@ -20,7 +25,9 @@
   /* --- Text ----------------------------------------------------------------------- */
   --text: #16171a;
   --text-muted: #5c5f68;
-  --text-faint: #8b8e98;
+  /* 5.09:1 on --surface. This colours the inactive nav labels and every explanatory
+     line in the app, so it has to clear AA rather than merely look quiet. */
+  --text-faint: #6b6e78;
   --text-inverse: #ffffff;
 
   /* --- Brand & intent -------------------------------------------------------------- */
@@ -104,6 +111,7 @@
 /* Dark palette. Applied for the system preference unless the user explicitly chose light. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
+    color-scheme: dark;
     --bg: #0e0f12;
     --surface: #17191e;
     --surface-raised: #1e2127;
@@ -113,7 +121,7 @@
 
     --text: #eceef2;
     --text-muted: #a2a7b4;
-    --text-faint: #71778a;
+    --text-faint: #8d93a3;
     --text-inverse: #0e0f12;
 
     --accent: #e4574c;
@@ -141,7 +149,7 @@
     --band-avg: #969bab;
     --band-weak: #e0a05e;
     --band-poor: #f0736a;
-    --band-none: #d4564d;
+    --band-none: #dd6a61;
 
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow: 0 2px 10px rgb(0 0 0 / 0.5);
@@ -151,6 +159,7 @@
 
 /* The explicit toggle. Duplicated rather than shared so it wins in both directions. */
 :root[data-theme='dark'] {
+  color-scheme: dark;
   --bg: #0e0f12;
   --surface: #17191e;
   --surface-raised: #1e2127;
@@ -160,7 +169,7 @@
 
   --text: #eceef2;
   --text-muted: #a2a7b4;
-  --text-faint: #71778a;
+  --text-faint: #8d93a3;
   --text-inverse: #0e0f12;
 
   --accent: #e4574c;
@@ -188,7 +197,7 @@
   --band-avg: #969bab;
   --band-weak: #e0a05e;
   --band-poor: #f0736a;
-  --band-none: #d4564d;
+  --band-none: #dd6a61;
 
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow: 0 2px 10px rgb(0 0 0 / 0.5);

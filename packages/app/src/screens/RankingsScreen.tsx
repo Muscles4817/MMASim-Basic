@@ -29,23 +29,48 @@ export function RankingsScreen() {
   const { db } = useGame();
   const { navigate } = useRouter();
   const [sex, setSex] = useState<Sex>('male');
-
   const divisions = useMemo(() => divisionsFor(sex), [sex]);
+  const [divisionId, setDivisionId] = useState<string>(divisions[3]?.id as string);
   const all = db.fighters.findAll() as Fighter[];
+
+  const onSexChange = (next: Sex) => {
+    setSex(next);
+    const first = divisionsFor(next)[0];
+    if (first) setDivisionId(first.id as string);
+  };
+
+  // One division at a time. Eight divisions of ten rows is sixty rows with no jump
+  // navigation, which the roster screen already correctly refuses to do.
+  const shown = divisions.filter((d) => (d.id as string) === divisionId);
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
       <Segmented
         label="Filter by sex"
         value={sex}
-        onChange={setSex}
+        onChange={onSexChange}
         options={[
-          { value: 'male', label: "Men's divisions" },
-          { value: 'female', label: "Women's divisions" },
+          { value: 'male', label: "Men's" },
+          { value: 'female', label: "Women's" },
         ]}
       />
 
-      {divisions.map((division) => {
+      <label>
+        <span className="visually-hidden">Choose a division</span>
+        <select
+          className="field"
+          value={divisionId}
+          onChange={(e) => setDivisionId(e.target.value)}
+        >
+          {divisions.map((d) => (
+            <option key={d.id} value={d.id as string}>
+              {d.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {shown.map((division) => {
         const ranked = all
           .filter((f) => f.divisionId === division.id)
           .sort((a, b) => rankingScore(b) - rankingScore(a))
@@ -72,6 +97,9 @@ export function RankingsScreen() {
                         }}
                       >
                         {i === 0 ? 'C' : i}
+                        <span className="visually-hidden">
+                          {i === 0 ? 'Champion' : ` Ranked number ${i}`}
+                        </span>
                       </span>
                     }
                     primary={displayName(f)}

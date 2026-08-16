@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   displayName,
   isDecisionMethod,
@@ -28,13 +28,24 @@ type Speed = (typeof SPEEDS)[number]['value'];
  * not simulation. That means "Skip" is instant and honest rather than fast-forwarding a
  * running process, and re-watching costs nothing.
  */
-export function FightScreen() {
+export function FightScreen({ boutId }: { boutId?: string }) {
   const { db } = useGame();
   const { navigate } = useRouter();
-  const result = useMemo(() => getLastResult(), []);
-  const [speed, setSpeed] = useState<Speed>('fast');
+  // Only shows the stored result if it is the bout that was asked for. Navigating back to an
+  // older #/fight/<id> should not silently render a different fight’s scorecards.
+  const stored = useMemo(() => getLastResult(), []);
+  const result = boutId === undefined || stored?.boutId === boutId ? stored : undefined;
+  const prefersReducedMotion = useMemo(
+    () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
+    [],
+  );
+  // A timed drip-feed with auto-scrolling is precisely what reduced-motion is for, so the
+  // default has to respect it rather than only softening the CSS transitions.
+  const [speed, setSpeed] = useState<Speed>(prefersReducedMotion ? 'instant' : 'fast');
   const [shown, setShown] = useState(0);
   const feedRef = useRef<HTMLDivElement>(null);
+  /** Whether the reader is following the feed, or has scrolled up to re-read something. */
+  const following = useRef(true);
 
   const total = result?.events.length ?? 0;
   const finished = shown >= total;
@@ -55,10 +66,23 @@ export function FightScreen() {
     return () => clearTimeout(timer);
   }, [shown, total, delay, result]);
 
+  // Only auto-scroll while the reader is actually at the bottom. Yanking them back every
+  // 900ms because they scrolled up to re-read the knockdown is a genuine scroll trap.
+  const onFeedScroll = useCallback(() => {
+    const el = feedRef.current;
+    if (!el) return;
+    following.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  }, []);
+
   useEffect(() => {
-    if (delay === 0) return;
-    feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight, behavior: 'smooth' });
-  }, [shown, delay]);
+    if (delay === 0 || !following.current) return;
+    feedRef.current?.scrollTo({
+      top: feedRef.current.scrollHeight,
+      // An explicit 'smooth' argument is NOT overridden by scroll-behavior in CSS, so the
+      // preference has to be honoured here in JS.
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    });
+  }, [shown, delay, prefersReducedMotion]);
 
   if (!result) {
     return (
@@ -73,6 +97,11 @@ export function FightScreen() {
   const red = db.fighters.findById(result.redId as string) as Fighter | undefined;
   const blue = db.fighters.findById(result.blueId as string) as Fighter | undefined;
   const visible = result.events.slice(0, shown);
+  // Only round transitions and decisive moments reach the live region, so the narration
+  // stays followable instead of queueing a hundred announcements behind the visuals.
+  const lastMajorEvent = [...visible]
+    .reverse()
+    .find((e) => e.emphasis === 'critical' || e.emphasis === 'major' || e.kind === 'roundStart');
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
@@ -88,7 +117,21 @@ export function FightScreen() {
       </Card>
 
       <Card title="Play-by-play" flush>
-        <div className="fight-feed" ref={feedRef} aria-live="polite" aria-atomic="false">
+        {/*
+          tabIndex makes the scroll container reachable by keyboard — without it a keyboard
+          user physically cannot read past the first screenful. role=log rather than an
+          aria-live region on the container itself: announcing every one of a hundred events
+          at 260ms intervals puts assistive tech minutes behind the visuals, and Skip would
+          dump the entire fight at once.
+        */}
+        <div
+          className="fight-feed"
+          ref={feedRef}
+          onScroll={onFeedScroll}
+          tabIndex={0}
+          role="log"
+          aria-label="Play-by-play commentary"
+        >
           {visible.map((event, i) => (
             <FeedLine key={i} event={event} />
           ))}
@@ -100,12 +143,32 @@ export function FightScreen() {
         </div>
       </Card>
 
+      {/* Only the moments that matter are announced, so the narration stays followable. */}
+      <p className="visually-hidden" aria-live="polite">
+        {lastMajorEvent?.text}
+      </p>
+
+      {/* The outcome is announced once, when it lands. */}
+      <p className="visually-hidden" aria-live="assertive">
+        {finished ? resultSentence(result, red, blue) : ''}
+      </p>
+
       {finished && <FightSummary result={result} red={red} blue={blue} />}
 
       {finished && (
-        <Button variant="primary" block onClick={() => navigate({ name: 'hub' })}>
-          Back to career
-        </Button>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <Button variant="primary" onClick={() => navigate({ name: 'hub' })}>
+            Back to career
+          </Button>
+          <Button
+            onClick={() => {
+              following.current = true;
+              setShown(0);
+            }}
+          >
+            Watch again
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -308,4 +371,12 @@ function StatComparison({
       </div>
     </div>
   );
+}
+
+/** One-line spoken summary of the outcome, for the assertive live region. */
+function resultSentence(result: FightResult, red?: Fighter, blue?: Fighter): string {
+  const winner =
+    result.winnerId === result.redId ? red : result.winnerId === result.blueId ? blue : undefined;
+  if (!winner) return 'The fight is a draw.';
+  return `${displayName(winner)} wins in round ${result.round}.`;
 }

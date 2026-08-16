@@ -123,9 +123,14 @@ export function RatingRow({
   const band = ratingBand(value);
   const showCeiling = ceiling !== undefined && ceiling > value;
   return (
-    <div className="rating" title={hint}>
-      <span className="rating__label">{label}</span>
-      <span className="rating__value" style={{ color: bandColour(value) }}>
+    <div className="rating">
+      {/* The visible label and value carry the information; the meter repeats it for AT.
+          Hiding the spans stops every attribute being announced twice — 44 announcements
+          on a fighter profile. */}
+      <span className="rating__label" aria-hidden="true">
+        {label}
+      </span>
+      <span className="rating__value" style={{ color: bandColour(value) }} aria-hidden="true">
         {value}
       </span>
       <div
@@ -134,31 +139,21 @@ export function RatingRow({
         aria-valuenow={value}
         aria-valuemin={1}
         aria-valuemax={100}
-        aria-label={`${label}: ${value} out of 100, ${band.label}`}
-        style={
-          showCeiling
-            ? ({ '--ceiling-pos': `${ceiling}%` } as React.CSSProperties)
-            : undefined
-        }
+        aria-label={`${label}: ${value} out of 100, ${band.label}${
+          showCeiling ? `, scouted ceiling ${ceiling}` : ''
+        }${hint ? `. ${hint}` : ''}`}
+        style={showCeiling ? ({ '--ceiling-pos': `${ceiling}%` } as React.CSSProperties) : undefined}
       >
         <div
           className="rating__fill"
           style={{ width: `${value}%`, background: bandColour(value) }}
         />
-        {showCeiling && (
-          <span
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              left: `calc(${ceiling}% - 1px)`,
-              top: 0,
-              bottom: 0,
-              width: 2,
-              background: 'var(--text-faint)',
-            }}
-          />
-        )}
       </div>
+      {hint && (
+        <span className="rating__hint" aria-hidden="true">
+          {hint}
+        </span>
+      )}
     </div>
   );
 }
@@ -180,20 +175,48 @@ export function Segmented<T extends string>({
   onChange(value: NoInfer<T>): void;
   label: string;
 }) {
+  // A radiogroup, not a group of toggle buttons: these options are mutually exclusive, so
+  // AT should say "selected, 1 of 3" rather than "toggle button, pressed". The roving
+  // tabindex keeps the whole control to a single tab stop, with arrows moving between
+  // options — which is what a keyboard user expects from a segmented control.
+  const move = (delta: number) => {
+    const index = options.findIndex((o) => o.value === value);
+    const next = options[(index + delta + options.length) % options.length];
+    if (next) onChange(next.value);
+  };
+
   return (
-    <div className="segmented" role="group" aria-label={label}>
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          className="segmented__option"
-          aria-pressed={option.value === value}
-          title={option.hint}
-          onClick={() => onChange(option.value)}
-        >
-          {option.label}
-        </button>
-      ))}
+    <div
+      className="segmented"
+      role="radiogroup"
+      aria-label={label}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          move(1);
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          move(-1);
+        }
+      }}
+    >
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            tabIndex={selected ? 0 : -1}
+            className="segmented__option"
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+            {option.hint && <span className="visually-hidden">. {option.hint}</span>}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -206,12 +229,15 @@ export function ListItem({
   trailing,
   leading,
   onClick,
+  href,
 }: {
   primary: ReactNode;
   secondary?: ReactNode;
   trailing?: ReactNode;
   leading?: ReactNode;
   onClick?: () => void;
+  /** When the row navigates, pass the target URL so it behaves like a link. */
+  href?: string;
 }) {
   const content = (
     <>
@@ -230,7 +256,27 @@ export function ListItem({
     </>
   );
 
-  // A row that does something is a button; a row that does not must not look like one.
+  // A row that navigates is a link, so middle-click, ⌘-click and the links rotor all work.
+  // A row that performs an action is a button. A row that does neither must not look like
+  // either of them.
+  if (href) {
+    return (
+      <a
+        className="list__item"
+        href={href}
+        onClick={(e) => {
+          if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+          if (onClick) {
+            e.preventDefault();
+            onClick();
+          }
+        }}
+      >
+        {content}
+      </a>
+    );
+  }
+
   return onClick ? (
     <button type="button" className="list__item" onClick={onClick}>
       {content}

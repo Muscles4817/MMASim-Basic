@@ -145,8 +145,11 @@ function runLongSim(seed: string): SimSummary {
       db.fighters.upsert(finalise(after.red));
       db.fighters.upsert(finalise(after.blue));
 
-      readyOn.set(red.id as string, day + readinessDelay(after.red));
-      readyOn.set(blue.id as string, day + readinessDelay(after.blue));
+      // Whoever lost by stoppage serves the medical suspension.
+      const redLost = result.winnerId !== undefined && result.winnerId !== red.id;
+      const blueLost = result.winnerId !== undefined && result.winnerId !== blue.id;
+      readyOn.set(red.id as string, day + readinessDelay(after.red, redLost ? result.method : undefined));
+      readyOn.set(blue.id as string, day + readinessDelay(after.blue, blueLost ? result.method : undefined));
 
       methods[result.method] = (methods[result.method] ?? 0) + 1;
       divisionFights[red.divisionId as string] = (divisionFights[red.divisionId as string] ?? 0) + 1;

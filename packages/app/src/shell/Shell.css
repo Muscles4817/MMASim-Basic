@@ -55,6 +55,7 @@
 }
 
 .shell__back {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -107,6 +108,7 @@
 }
 
 .shell__nav-item {
+  text-decoration: none;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -138,6 +140,9 @@
   }
 
   .shell__nav {
+    /* Content comes first in source for keyboard/SR order; order puts the rail back on
+       the left where a pointer expects it. */
+    order: -1;
     position: sticky;
     top: 0;
     bottom: auto;
@@ -206,4 +211,10 @@
   .shell__brand span {
     color: var(--accent);
   }
+}
+
+/* Focused programmatically on navigation so screen readers land in the content. It is not
+   a keyboard tab stop, so it must not paint a focus ring. */
+.shell__main:focus {
+  outline: none;
 }

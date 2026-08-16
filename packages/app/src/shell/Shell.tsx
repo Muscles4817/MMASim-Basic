@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { gameDayToIso, toCalendar } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
-import { useRouter, type Route } from '../state/router';
+import { toHash, useRouter, type Route } from '../state/router';
 import './Shell.css';
 
 const MONTHS = [
@@ -58,37 +58,74 @@ export function Shell({
 }) {
   const { route, navigate, back } = useRouter();
   const { world } = useGame();
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Move focus to the content region on every navigation. Without this a screen-reader
+  // user's virtual cursor stays on the control they activated while the entire page swaps
+  // underneath them, and they are given no indication anything happened.
+  useEffect(() => {
+    mainRef.current?.focus({ preventScroll: true });
+  }, [route]);
 
   const isCurrent = (item: NavItem) =>
     item.matches ? item.matches.includes(route.name) : route.name === item.route.name;
 
+  const nav = (
+    <nav className="shell__nav" aria-label="Main">
+      <div className="shell__brand">
+        MMA<span>SIM</span>
+      </div>
+      {NAV_ITEMS.map((item) => (
+        // Real links, not buttons: the router is hash-based and already has a URL for each
+        // of these, so rendering buttons would throw away middle-click, open-in-new-tab and
+        // the screen-reader links rotor for nothing.
+        <a
+          key={item.label}
+          className="shell__nav-item"
+          href={toHash(item.route)}
+          aria-current={isCurrent(item) ? 'page' : undefined}
+          onClick={(e) => {
+            // Let the browser handle modified clicks so "open in new tab" still works.
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+            e.preventDefault();
+            navigate(item.route);
+          }}
+        >
+          <span className="shell__nav-icon" aria-hidden="true">
+            {item.icon}
+          </span>
+          {item.label}
+        </a>
+      ))}
+    </nav>
+  );
+
   return (
     <div className="shell">
-      <nav className="shell__nav" aria-label="Main">
-        <div className="shell__brand">
-          MMA<span>SIM</span>
-        </div>
-        {NAV_ITEMS.map((item) => (
-          <button
-            key={item.label}
-            type="button"
-            className="shell__nav-item"
-            aria-current={isCurrent(item) ? 'page' : undefined}
-            onClick={() => navigate(item.route)}
-          >
-            <span className="shell__nav-icon" aria-hidden="true">
-              {item.icon}
-            </span>
-            {item.label}
-          </button>
-        ))}
-      </nav>
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
 
+      {/*
+        Content comes first in the DOM. On phones the nav is visually pinned to the bottom,
+        so putting it first in source would force keyboard and screen-reader users through
+        five tab stops before reaching anything, on every screen — and would contradict the
+        visual reading order. CSS `order` puts it back on the left for the desktop rail.
+      */}
       <div className="shell__body">
         <header className="shell__header">
           {showBack && (
             <button type="button" className="shell__back" onClick={back} aria-label="Go back">
-              ‹
+              <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+                <path
+                  d="M15 5l-7 7 7 7"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
           )}
           <div style={{ minWidth: 0 }}>
@@ -103,8 +140,18 @@ export function Shell({
           {actions}
         </header>
 
-        <main className="shell__main">{children}</main>
+        {/* tabIndex -1 makes this focusable programmatically without adding a tab stop. */}
+        <main className="shell__main" id="main" ref={mainRef} tabIndex={-1}>
+          {children}
+        </main>
       </div>
+
+      {nav}
+
+      {/* Announces the screen change to assistive tech, which focus alone does not do. */}
+      <p className="visually-hidden" aria-live="polite">
+        {title}
+      </p>
     </div>
   );
 }
