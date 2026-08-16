@@ -99,7 +99,7 @@ export const TRAINING_META: Readonly<Record<TrainingFocus, TrainingFocusMeta>> =
  * makes the whole rating scale meaningless inside a season. Guarded by a test that asserts
  * both ends of that.
  */
-const BASE_GAIN_PER_BLOCK = 2.8;
+const BASE_GAIN_PER_BLOCK = 3.474;
 
 /**
  * How camp length converts into training blocks.
@@ -134,6 +134,13 @@ const BLOCK_CURVE = 0.75;
  * At two weeks the arithmetic inverts and stays inverted: 3 × 4wk = 1.78 blocks against
  * 1 × 12wk = 1.99. A four-week camp is now worth about 0.59 blocks rather than 1.00 — it is
  * a sharpening camp, not a development camp, which is exactly what four weeks is.
+ *
+ * `BASE_GAIN_PER_BLOCK` was raised from 2.8 to 3.474 alongside this, by exactly the ratio
+ * that holds the standard eight-week camp where it was (2^0.75 / 1.5^0.75 = 1.2408) — the
+ * same correction the original curve change made for the same reason. Without it this is a
+ * 24% cut to all development rather than a change in shape, and the long-sim caught precisely
+ * that: the best of forty simulated careers peaked at 75.1 against a champion bar of 78.4,
+ * so a created fighter could no longer become champion at all.
  */
 const CAMP_RAMP_WEEKS = 2;
 
