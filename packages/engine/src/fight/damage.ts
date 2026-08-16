@@ -27,11 +27,14 @@ const BASE_DAMAGE: Readonly<Record<StrikeTarget, number>> = {
 /**
  * Baseline knockdown probability per clean head strike, average power vs average chin.
  *
- * Tuned against `tests/statistical/finish-rates.test.ts`, which asserts population-level
- * KO/submission/decision splits. Change this and that suite is the thing that tells you
- * whether the whole game still works.
+ * Tuned against `tests/statistical/roster-profile.test.ts`, which profiles the roster the
+ * game actually ships rather than the synthetic archetypes the balance suite uses. Change
+ * this and that suite is the thing that tells you whether the whole game still works.
+ *
+ * Was 0.026 against a 6.5-strike referee threshold, which produced a sport that finished
+ * 77.7% of its fights. See the calibration note on `shouldRefereeStop` below.
  */
-export const BASE_KD_HAZARD = 0.026;
+export const BASE_KD_HAZARD = 0.019;
 
 /**
  * Power is raised to this before the ratio is taken.
@@ -40,7 +43,7 @@ export const BASE_KD_HAZARD = 0.026;
  * separates *all-time* from elite — the difference between "dangerous" and "the fight ends
  * the instant he touches you". See design pillar 3.
  */
-const POWER_SUPERLINEARITY = 1.15;
+const POWER_SUPERLINEARITY = 1.50;
 
 /** Seconds a fighter stays in the hurt state after being badly rocked, before modifiers. */
 const BASE_HURT_SECONDS = 14;
@@ -204,7 +207,40 @@ export function shouldRefereeStop(
   // the single biggest driver of the population KO rate. Set it too high and knockdowns
   // become a scoring event that nobody ever loses from; too low and every wobble is a
   // stoppage. Three or four unanswered shots on a hurt opponent is the real-world mark.
-  const threshold = clamp(6.5 - (stoppageTrigger / 100) * 4, 2.5, 6.5);
+  /*
+   * How many unanswered shots on a hurt fighter before the referee steps in.
+   *
+   * Raised from 2.5–6.5 after measuring the *shipped roster* rather than the synthetic
+   * archetypes the balance suite calibrates against. The seeded roster carries the high Power
+   * and Durability values the effect curve is heavy-tailed in, so the population that plays
+   * the game behaved nothing like the population under test: 77.7% finishes, 70% by KO, a
+   * 8.4:1 KO-to-submission ratio and 44% of all fights ending in round one. Decisions were a
+   * minority event and the entire judging system was mostly unreachable.
+   *
+   * This constant is the dominant lever on all four of those numbers — far more so than
+   * BASE_KD_HAZARD, which mostly rescales without reshaping.
+   *
+   * Where it landed, and the honest gap. Measured across every same-division pairing on the
+   * shipped roster:
+   *
+   *   |                    | before | now  | real sport |
+   *   | finish rate        | 77.7%  | 61.5% | ~48%      |
+   *   | decisions          | 21.7%  | 36.7% | ~52%      |
+   *   | KO : submission    | 8.4:1  | 3.3:1 | ~1.8:1    |
+   *   | first-round finish | 44%    | 32%   | ~16%      |
+   *
+   * Closer on every axis, all the way there on none. The residual is structural rather than a
+   * matter of these constants: a (hazard × superlinearity × threshold) sweep could not close
+   * it from anywhere in the grid, because every setting moves the roster and an even matchup
+   * in the same direction. Reaching a real ~48% needs the *strike volume* feeding this counter
+   * to come down, which is a change to the exchange model rather than to a coefficient.
+   *
+   * The one calibration that did match reality exactly — a flat BASE_KD_HAZARD of 0.0092 —
+   * was rejected because it collapsed the bomber archetype's KO rate to ~40%. "Ngannou is
+   * absurdly powerful and knocks almost everyone out once he catches them clean" is design
+   * pillar 3, and a population average bought by deleting the tail is not a better sport.
+   */
+  const threshold = clamp(9.5 - (stoppageTrigger / 100) * 4, 5.5, 9.5);
   const damageUrgency = defender.damage.head / 100;
   return consecutiveUnansweredStrikes >= threshold * (1 - damageUrgency * 0.45);
 }

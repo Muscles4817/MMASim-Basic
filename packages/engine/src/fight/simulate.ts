@@ -113,7 +113,7 @@ const DEFAULT_ROUND_SECONDS = 300;
  * the whole engine to over-tune, because attempts recur every ground exchange: a rate that
  * looks reasonable per attempt compounds into an implausible population sub rate.
  */
-const SUBMISSION_FINISH_RATE = 0.34;
+const SUBMISSION_FINISH_RATE = 0.47;
 
 /**
  * How much each previous submission attempt by the same fighter dulls the next one.

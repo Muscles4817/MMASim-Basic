@@ -60,8 +60,12 @@ describe('foul rates across a population', () => {
   it('has a foul in a minority of fights, not most of them', () => {
     // Most of these are a verbal warning for the fence or the back of the head, which is
     // roughly how often a referee actually says something.
+    // Ceiling nudged 35 → 40: fights now last longer on average (fewer early stoppages), and
+    // a foul is a per-exchange hazard, so the share of fights containing one rises with
+    // fight time without the underlying rate having changed. `averages well under one foul
+    // per fight` below is the assertion that would catch a real regression here.
     expect(stats.pctWithAnyFoul).toBeGreaterThan(12);
-    expect(stats.pctWithAnyFoul).toBeLessThan(35);
+    expect(stats.pctWithAnyFoul).toBeLessThan(40);
   });
 
   it('deducts a point at roughly the rate the sport does', () => {
@@ -105,7 +109,21 @@ describe('fouls do not distort the result', () => {
       if (r.method === 'ko' || r.method === 'tko') ko++;
       if (r.method.startsWith('decision')) decision++;
     }
-    expect((100 * ko) / n).toBeGreaterThan(15);
-    expect((100 * decision) / n).toBeGreaterThan(40);
+    /*
+     * Rebased with the referee-threshold recalibration (see `shouldRefereeStop`). Two
+     * identical, wholly average fighters now go to a decision ~70% of the time and KO each
+     * other ~7.6%, where they used to KO at ~18%.
+     *
+     * That is the intended reading rather than a regression: the ~48% real-world finish rate
+     * is a population average over mismatches and heavy hitters, and two evenly-matched
+     * fighters with average power are exactly the case that *should* sit far below it. The
+     * shipped-roster profile in roster-profile.test.ts is what guards the population number.
+     *
+     * The property this test actually exists for is unchanged: fouls must not become a
+     * fight-ending mechanic. If recovery breaks were rescuing hurt fighters at scale the KO
+     * rate would sag below this floor.
+     */
+    expect((100 * ko) / n).toBeGreaterThan(5);
+    expect((100 * decision) / n).toBeGreaterThan(55);
   });
 });
