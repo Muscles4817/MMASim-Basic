@@ -8,7 +8,15 @@
 
 import type { GameDay } from '../core/clock.js';
 import { ageOn } from '../core/clock.js';
-import type { CoachId, DivisionId, FighterId, GymId, PromotionId } from '../core/ids.js';
+import type {
+  AgreementId,
+  CoachId,
+  DivisionId,
+  FighterId,
+  GymId,
+  ManagerId,
+  PromotionId,
+} from '../core/ids.js';
 import type { AttributeKey, Attributes, Naturals } from '../ratings/attributes.js';
 import type { Personality } from './personality.js';
 import type { TraitId } from './traits.js';
@@ -173,6 +181,10 @@ export interface Fighter {
    * grievance of the sport and falls straight out of arithmetic rather than a script.
    */
   resentment: number;
+  /** The promotional agreement they are under, if any. Unsigned is a real state. */
+  agreementId?: AgreementId;
+  /** Who negotiates for them. Unmanaged is a real state, and the debutant default. */
+  managerId?: ManagerId;
   /** 1–100. How the media and fans rate them, which is not the same as how good they are. */
   reputation: number;
 

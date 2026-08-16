@@ -19,6 +19,8 @@ export type BoutId = Brand<string, 'BoutId'>;
 export type ContractId = Brand<string, 'ContractId'>;
 export type RivalryId = Brand<string, 'RivalryId'>;
 export type NewsId = Brand<string, 'NewsId'>;
+export type AgreementId = Brand<string, 'AgreementId'>;
+export type ManagerId = Brand<string, 'ManagerId'>;
 export type InjuryId = Brand<string, 'InjuryId'>;
 export type CampId = Brand<string, 'CampId'>;
 export type OfficialId = Brand<string, 'OfficialId'>;
@@ -34,6 +36,8 @@ export type EntityId =
   | ContractId
   | RivalryId
   | NewsId
+  | AgreementId
+  | ManagerId
   | InjuryId
   | CampId
   | OfficialId
@@ -53,6 +57,8 @@ export const asGymId = (raw: string): GymId => raw as GymId;
 export const asDivisionId = (raw: string): DivisionId => raw as DivisionId;
 export const asCoachId = (raw: string): CoachId => raw as CoachId;
 export const asOfficialId = (raw: string): OfficialId => raw as OfficialId;
+export const asManagerId = (raw: string): ManagerId => raw as ManagerId;
+export const asAgreementId = (raw: string): AgreementId => raw as AgreementId;
 export const asBoutId = (raw: string): BoutId => raw as BoutId;
 export const asEventId = (raw: string): EventId => raw as EventId;
 
