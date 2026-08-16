@@ -197,3 +197,42 @@ describe('determinism', () => {
     expect(run('alpha')).not.toBe(run('beta'));
   });
 });
+
+describe('the roster lives in the same economy the player does', () => {
+  it('pays the fighters it simulates', () => {
+    // The world used to simulate fights, ageing, belts and retirement while every fighter in
+    // it had no money and no contract — so the player was the only person in the sport whose
+    // deal could expire, and the market they negotiated in was one-sided.
+    const db = game('economy');
+    const me = fighters(db)[0]!;
+    advanceWorld(db, 0, 365, me.id);
+
+    const earners = fighters(db).filter((f) => f.id !== me.id && f.lifetimeGross > 0);
+    expect(earners.length).toBeGreaterThan(20);
+  });
+
+  it('puts the roster under contract, and moves people when deals end', () => {
+    const db = game('deals');
+    const me = fighters(db)[0]!;
+    for (let year = 0; year < 3; year++) {
+      advanceWorld(db, year * 365, (year + 1) * 365, me.id);
+    }
+
+    const contracted = fighters(db).filter((f) => f.agreementId !== undefined);
+    expect(contracted.length).toBeGreaterThan(30);
+
+    // And somebody, somewhere, changed promotions.
+    expect(readNews(db).some((n) => /leaves .* for /i.test(n.headline))).toBe(true);
+  });
+
+  it('leaves the bottom of the sport poor', () => {
+    // The shape of the economy has to survive contact with the roster, not just the player.
+    const db = game('poor');
+    const me = fighters(db)[0]!;
+    advanceWorld(db, 0, 365 * 2, me.id);
+
+    const active = fighters(db).filter((f) => f.id !== me.id && f.retiredDay === undefined);
+    const broke = active.filter((f) => f.bank <= 0);
+    expect(broke.length).toBeGreaterThan(0);
+  });
+});

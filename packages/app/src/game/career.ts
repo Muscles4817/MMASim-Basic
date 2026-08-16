@@ -21,7 +21,11 @@ import {
   injuredAttributes,
   rollInjury,
   setChampion,
+  cutSeverity,
   simulateFight,
+  traitMul,
+  weightMissForfeit,
+  weightMissRiskMultiplier,
   type Bout,
   type Commentator,
   type Fighter,
@@ -35,8 +39,8 @@ import {
 } from '@mmasim/engine';
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
 import { accrueHeatFromFight } from './rivalries';
-import { campCostFor, settleFight } from './money';
-import { afterFight, settleManagerAdvice } from './contracts';
+import { campCostFor, currentPurse, settleFight } from './money';
+import { afterFight, recordAdviceFor, settleManagerAdvice, type ManagerAdvice } from './contracts';
 
 const BOOKING_KEY = 'mmasim:booking';
 const RESULT_KEY = 'mmasim:lastResult';
@@ -159,6 +163,8 @@ export interface BookingOptions {
   weeks?: number;
   /** A championship bout: five rounds, a belt on the line, and a different kind of camp. */
   isTitleFight?: boolean;
+  /** What the manager said about this one, so it can be checked against the result later. */
+  advice?: ManagerAdvice;
 }
 
 /** Book a fight. The camp screen then builds the plan against this opponent. */
@@ -196,6 +202,11 @@ export function bookFight(
     commentatorId: commentators.length ? rng.pick(commentators).id : undefined,
     hype: 0,
   };
+
+  // Put the manager on the record. He has an opinion about every fight and until now he
+  // never went on record with it, which made the advice track — the entire mechanism by
+  // which he is held to account — unreachable.
+  if (options.advice) recordAdviceFor(db, fighter, bout.id, options.advice);
 
   const booking: Booking = {
     bout,
@@ -248,6 +259,44 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     ...blue,
     attributes: injuredAttributes(blue.attributes, blue.injuries ?? [], day),
   };
+
+  /*
+   * The scales, before the cage.
+   *
+   * `weightMissRisk` has been computed since weight classes shipped, the trait hook has
+   * existed since the domain was written, and the game warned about it and then nothing ever
+   * happened. Missing weight now costs 20% of the show purse to the opponent — which is what
+   * makes `Weight-Cut Gambler` a business trait as well as a fight-night one, and gives the
+   * nutritionist a payback period.
+   */
+  const weighInRng = createRng(`${world.seed}:weigh:${booking.bout.id}`);
+  const cutRisk = Math.min(
+    1,
+    Math.pow(cutSeverity(red.walkingWeightLbs, red.divisionId), 2.2) *
+      0.55 *
+      weightMissRiskMultiplier(red.personality) *
+      traitMul(red.traits, 'weightMissRisk'),
+  );
+  const missedWeight = weighInRng.chance(cutRisk);
+  const weighInNotes: string[] = [];
+
+  if (missedWeight) {
+    const promotion = db.promotions.findById(
+      (red.promotionId ?? asPromotionId('p_apex')) as string,
+    ) as Promotion | undefined;
+    const purse = promotion ? currentPurse(db, red) : undefined;
+    const forfeit = purse ? weightMissForfeit(purse.show) : 0;
+
+    if (forfeit > 0) {
+      db.fighters.upsert({
+        ...(db.fighters.getById(red.id as string) as Fighter),
+        bank: Math.round(((db.fighters.getById(red.id as string) as Fighter).bank - forfeit) * 10) / 10,
+      } as Fighter & { id: string });
+    }
+    weighInNotes.push(
+      `You missed weight. £${forfeit}k of your show purse goes to ${blue.lastName}, the fight is at catchweight, and everybody now knows you cannot make the division.`,
+    );
+  }
 
   const result = simulateFight({
     boutId: booking.bout.id,
@@ -375,6 +424,7 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     result,
     notes: [
       ...titleNotes,
+      ...weighInNotes,
       ...(earnings?.notes ?? []),
       ...injuryNotes,
       ...heatNotes,

@@ -29,7 +29,7 @@ import { advanceWorld, readNews } from '../game/world';
 import { NewsFeed } from '../ui/NewsFeed';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 import { campCostFor, currentPurse, solvencyOf } from '../game/money';
-import { contractStanding } from '../game/contracts';
+import { adviceOn, boutMerit, contractStanding } from '../game/contracts';
 import { formatGameDay } from '../shell/Shell';
 
 /**
@@ -91,7 +91,12 @@ export function HubScreen() {
     : undefined;
 
   const accept = (offer: MatchupAppraisal) => {
-    const next = bookFight(db, fighter, offer.opponent);
+    const next = bookFight(db, fighter, offer.opponent, {
+      advice: adviceOn(db, fighter, offer.opponent.id as string, {
+        merit: boutMerit(offer),
+        purse: currentPurse(db, fighter)?.total ?? 0,
+      }),
+    });
     setBooking(next);
     commit();
     navigate({ name: 'camp' });
@@ -320,6 +325,11 @@ export function HubScreen() {
                   rivalry={getRivalry(db, fighter.id, offer.opponent.id, world.day)}
                   day={world.day}
                   purse={currentPurse(db, fighter)}
+                  advice={adviceOn(db, fighter, offer.opponent.id as string, {
+                    merit: boutMerit(offer),
+                    purse: currentPurse(db, fighter)?.total ?? 0,
+                  })}
+                  managerName={standing.manager?.name}
                 />
               ))}
             </div>
@@ -487,6 +497,8 @@ function OfferRow({
   rivalry,
   day,
   purse,
+  advice,
+  managerName,
 }: {
   offer: MatchupAppraisal;
   expanded: boolean;
@@ -496,6 +508,8 @@ function OfferRow({
   rivalry: Rivalry;
   day: number;
   purse?: { show: number; win: number; total: number };
+  advice: { recommended: boolean; line: string };
+  managerName?: string;
 }) {
   const { opponent, step, winChance } = offer;
   const heat = currentHeat(rivalry, day);
@@ -613,6 +627,17 @@ function OfferRow({
               {describeHeat(rivalry, day)}
             </p>
           )}
+          {/* What he said, quoted, and logged against the result the moment you accept. */}
+          {managerName && (
+            <p
+              className={`offer-advice ${advice.recommended ? '' : 'offer-advice--against'}`}
+              style={{ marginBottom: 'var(--space-3)' }}
+            >
+              <span aria-hidden="true">{advice.recommended ? '👍' : '✋'}</span>{' '}
+              <strong>{managerName}:</strong> &ldquo;{advice.line}&rdquo;
+            </p>
+          )}
+
           <p
             className="muted prose"
             style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}

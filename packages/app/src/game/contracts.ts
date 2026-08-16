@@ -242,35 +242,75 @@ export function hire(db: GameDb, fighter: Fighter, manager: Manager): Fighter {
  * The mechanic that saves the role: the advice is falsifiable, the outcome is logged, and the
  * hub shows one number. Overruling him becomes a bet with a scoreboard.
  */
-export function adviseAndRecord(
+export interface ManagerAdvice {
+  recommended: boolean;
+  line: string;
+}
+
+/**
+ * What the manager thinks of a proposed opponent.
+ *
+ * Pure and deterministic on the pairing, so the line shown on the offer row is the same line
+ * that gets recorded if the fight is booked. A manager whose displayed opinion differed from
+ * his logged one would make the advice record — the whole mechanism by which he is held to
+ * account — quietly meaningless.
+ */
+export function adviceOn(
   db: GameDb,
   fighter: Fighter,
-  input: { boutId: string; merit: number; purse: number },
-): { recommended: boolean; line: string } {
-  const manager = managerOf(db, fighter);
+  opponentId: string,
+  input: { merit: number; purse: number },
+): ManagerAdvice {
   const world = getWorld(db);
   const standing = contractStanding(db, fighter);
 
-  const advice = adviseOnBout({
-    manager,
+  return adviseOnBout({
+    manager: standing.manager,
     merit: input.merit,
-    promotionId: standing.promotion?.id ?? fighter.promotionId!,
+    promotionId: standing.promotion?.id ?? (fighter.promotionId as never),
     purse: input.purse,
-    rng: createRng(`${world.seed}:advice:${input.boutId}`),
+    rng: createRng(`${world.seed}:advice:${fighter.id}:${opponentId}`),
   });
+}
 
-  if (manager && !manager.advice.some((a) => a.boutId === input.boutId)) {
-    db.managers.upsert(
-      recordAdvice(manager, {
-        day: world.day,
-        boutId: input.boutId,
-        recommended: advice.recommended,
-        line: advice.line,
-      }) as StoredManager,
-    );
-  }
+/**
+ * Write down what he said, at the moment the fight is booked.
+ *
+ * This is the half that was missing: the advice existed, was tested, and nothing ever called
+ * it — so the manager took his percentage and never went on record. A prediction nobody
+ * writes down cannot be checked, and the checking is the entire mechanic.
+ */
+export function recordAdviceFor(
+  db: GameDb,
+  fighter: Fighter,
+  boutId: string,
+  advice: ManagerAdvice,
+): void {
+  const manager = managerOf(db, fighter);
+  if (!manager) return;
+  if (manager.advice.some((a) => a.boutId === boutId)) return;
 
-  return advice;
+  const world = getWorld(db);
+  db.managers.upsert(
+    recordAdvice(manager, {
+      day: world.day,
+      boutId,
+      recommended: advice.recommended,
+      line: advice.line,
+    }) as StoredManager,
+  );
+}
+
+/**
+ * How good an idea a fight is, −1 to +1.
+ *
+ * From the game's own appraisal rather than a second opinion: a big step up you are unlikely
+ * to win is a bad idea, a favourable matchup against somebody ranked is a good one.
+ */
+export function boutMerit(appraisal: { winChance: number; step: number }): number {
+  const odds = (appraisal.winChance - 0.5) * 1.6;
+  const stretch = -appraisal.step / 14;
+  return Math.max(-1, Math.min(1, odds + stretch));
 }
 
 /** Mark the manager right or wrong, once the fight has happened. */

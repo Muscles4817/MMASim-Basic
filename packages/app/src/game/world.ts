@@ -27,8 +27,14 @@ import {
   applyAgeing,
   applyTraining,
   createRng,
+  agreementStatus,
+  campCost,
+  consumeFight,
+  contractFairness,
+  createAgreement,
   debutNews,
   defaultGamePlan,
+  defaultTerms,
   displayName,
   fightNews,
   generateFighter,
@@ -36,8 +42,12 @@ import {
   rankDivision,
   readinessDelay,
   recordString,
+  marketValue,
+  purseFor,
+  resentmentFrom,
   retirementNews,
   retirementReason,
+  signingNews,
   setChampion,
   shouldRetire,
   simulateFight,
@@ -50,6 +60,7 @@ import {
   type Gym,
   type NewsItem,
   type Promotion,
+  type PromotionalAgreement,
   type Rng,
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
@@ -128,6 +139,8 @@ export function advanceWorld(
     // Quarterly intake, matching how a promotion actually signs people.
     if (Math.floor(day / 91) !== Math.floor((day - STEP_DAYS) / 91)) {
       news.push(...replenish(db, day, rng, promotions));
+      // Deals run out across the roster too, so the market has other people in it.
+      news.push(...resolveFreeAgency(db, day, rng, promotions));
     }
 
     const available = (db.fighters.findAll() as Fighter[]).filter(
@@ -250,9 +263,20 @@ function runOneBout(ctx: BoutContext): { news: NewsItem[] } | undefined {
     titleChangedHands = true;
   }
 
+  const redWon = result.winnerId === red.id;
   const developed = {
-    red: develop(db, after.red, day, rng.fork(`dev:${red.id}`), lastSeen),
-    blue: develop(db, after.blue, day, rng.fork(`dev:${blue.id}`), lastSeen),
+    red: settleRosterFighter(
+      db,
+      develop(db, after.red, day, rng.fork(`dev:${red.id}`), lastSeen),
+      redWon,
+      day,
+    ),
+    blue: settleRosterFighter(
+      db,
+      develop(db, after.blue, day, rng.fork(`dev:${blue.id}`), lastSeen),
+      result.winnerId === blue.id,
+      day,
+    ),
   };
 
   const news: NewsItem[] = [];
@@ -303,6 +327,146 @@ function runOneBout(ctx: BoutContext): { news: NewsItem[] } | undefined {
   readyOn.set(blue.id as string, day + readinessDelay(after.blue, blueLost ? result.method : undefined));
 
   return { news };
+}
+
+/**
+ * Pay an AI fighter, and move their deal on.
+ *
+ * The world simulated fights, ageing, belts and retirement while every fighter in it had no
+ * contract, no manager and no money — so the player was the only person in the sport whose
+ * deal could expire, and the market they negotiated in was one-sided. This closes it.
+ *
+ * Deliberately lightweight. The player's economy is itemised because a player reads it; the
+ * roster's is a single net figure, because four hundred fighters of full bookkeeping every
+ * tick is the thing doc 17 flagged as the reason not to do this naively.
+ */
+function settleRosterFighter(
+  db: GameDb,
+  fighter: Fighter,
+  won: boolean,
+  day: number,
+): Fighter {
+  const promotion = fighter.promotionId
+    ? (db.promotions.findById(fighter.promotionId) as Promotion | undefined)
+    : undefined;
+  if (!promotion) return fighter;
+
+  const terms = defaultTerms(fighter, promotion);
+  const purse = purseFor(terms, promotion);
+  const gross = purse.show + (won ? purse.win : 0);
+
+  // One multiplier rather than the full chain: roughly what is left after everybody's cut and
+  // a camp. The shape is what matters here, not the itemisation.
+  const net = gross * 0.35 - campCost(8, 55);
+
+  const agreement = fighter.agreementId
+    ? (db.agreements.findById(fighter.agreementId as string) as
+        | (PromotionalAgreement & Entity)
+        | undefined)
+    : undefined;
+
+  if (agreement) {
+    db.agreements.upsert(consumeFight(agreement) as PromotionalAgreement & Entity);
+  }
+
+  return {
+    ...fighter,
+    bank: round1(fighter.bank + net),
+    lifetimeGross: round1(fighter.lifetimeGross + gross),
+    lifetimeNet: round1(fighter.lifetimeNet + net),
+    resentment: agreement
+      ? resentmentFrom(contractFairness(agreement, fighter, promotion))
+      : fighter.resentment,
+  };
+  void day;
+}
+
+/**
+ * Contracts end, and somebody signs them next.
+ *
+ * Without this the roster would drift into a world where every deal had run out and nobody
+ * was under contract to anybody. A free agent takes the best offer on the table, which is
+ * usually the promotion they were already at — a monopsony rehiring its own.
+ */
+function resolveFreeAgency(db: GameDb, day: number, rng: Rng, promotions: readonly Promotion[]): NewsItem[] {
+  const news: NewsItem[] = [];
+  const fighters = db.fighters.findAll() as Fighter[];
+
+  for (const fighter of fighters) {
+    if (fighter.retiredDay !== undefined) continue;
+
+    const agreement = fighter.agreementId
+      ? (db.agreements.findById(fighter.agreementId as string) as
+          | (PromotionalAgreement & Entity)
+          | undefined)
+      : undefined;
+
+    const promotion = fighter.promotionId
+      ? (db.promotions.findById(fighter.promotionId) as Promotion | undefined)
+      : undefined;
+
+    // Under contract with fights left: nothing to do.
+    if (agreement && promotion) {
+      const isChampion = promotion.champions[fighter.divisionId] === fighter.id;
+      if (!agreementStatus(agreement, day, { isChampion }).expired) continue;
+    }
+
+    // Cut, or out of contract. Where do they land?
+    const fRng = rng.fork(`fa:${fighter.id}:${day}`);
+    const candidates = promotions.filter((p) => p.divisions.includes(fighter.divisionId));
+    if (candidates.length === 0) continue;
+
+    // Weighted toward whoever they were already with, then by prestige they can justify.
+    const worth = marketValue(fighter, candidates[0]!);
+    const affordable = candidates.filter(
+      (p) => marketValue(fighter, p) <= p.budget * 0.06 || p.tier === 'developmental',
+    );
+    const pool = affordable.length > 0 ? affordable : candidates;
+    const next = promotion && fRng.chance(0.55) && pool.includes(promotion) ? promotion : fRng.pick(pool);
+
+    const terms = defaultTerms(fighter, next);
+    const signed = createAgreement({
+      fighter,
+      promotion: next,
+      terms: {
+        showPurse: terms.showPurse,
+        winBonus: terms.winBonus,
+        signingBonus: 0,
+        revenuePoints: 0,
+        fightsOwed: fRng.int(3, 5),
+        championshipExtension: next.tier === 'global' || next.tier === 'major' ? 'standard' : 'none',
+        matchingRights: fRng.chance(0.5),
+        exclusive: next.tier !== 'regional' && next.tier !== 'developmental',
+        outsideBouts: next.tier === 'regional' || next.tier === 'developmental' ? 2 : 0,
+      },
+      day,
+    });
+    db.agreements.upsert(signed as PromotionalAgreement & Entity);
+    db.fighters.upsert({
+      ...fighter,
+      promotionId: next.id,
+      agreementId: signed.id,
+      resentment: 0,
+    } as Fighter & { id: string });
+
+    // Only worth reporting when somebody actually moved.
+    if (promotion && next.id !== promotion.id) {
+      news.push(
+        signingNews({
+          day,
+          fighterId: fighter.id,
+          name: displayName(fighter),
+          divisionId: fighter.divisionId,
+          promotionId: next.id,
+          fromName: promotion.shortName,
+          toName: next.shortName,
+        }),
+      );
+    }
+    void worth;
+  }
+
+  return news;
 }
 
 /** Between fights, fighters train and age — the same loop the player is in. */
@@ -459,3 +623,5 @@ export function divisionHealth(db: GameDb, divisionId: DivisionId): number {
     (f) => f.divisionId === divisionId && f.retiredDay === undefined,
   ).length;
 }
+
+const round1 = (n: number): number => Math.round(n * 10) / 10;

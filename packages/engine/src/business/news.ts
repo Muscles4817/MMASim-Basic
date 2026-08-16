@@ -232,6 +232,34 @@ export function debutNews(input: {
   };
 }
 
+/**
+ * Somebody changed promotions.
+ *
+ * Worth a line because it is the visible half of free agency: a division thinning out, a
+ * rival picking up somebody the leader let go, and — when it is a fighter the player just
+ * lost to — a reason to care where they went.
+ */
+export function signingNews(input: {
+  day: GameDay;
+  fighterId: FighterId;
+  name: string;
+  divisionId: DivisionId;
+  promotionId: PromotionId;
+  fromName: string;
+  toName: string;
+}): NewsItem {
+  return {
+    id: newsId(input.day, `move_${input.fighterId}`),
+    day: input.day,
+    kind: 'signing',
+    weight: 'minor',
+    headline: `${input.name} leaves ${input.fromName} for ${input.toName}.`,
+    fighterIds: [input.fighterId],
+    divisionId: input.divisionId,
+    promotionId: input.promotionId,
+  };
+}
+
 export function streakNews(input: {
   day: GameDay;
   fighterId: FighterId;
