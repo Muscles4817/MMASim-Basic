@@ -23,7 +23,10 @@ import {
   drawWeight,
   eventId,
   eventName,
+  DELIVERY_MEMORY,
   eventRevenue,
+  expectedDemand,
+  venueFor,
   settleNight,
   offerOpponents,
   readinessDelay,
@@ -35,18 +38,9 @@ import {
   type FightNight,
   type FightResult,
   type Promotion,
-  type Venue,
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
 import { currentPurse } from './money';
-
-const VENUES: readonly Venue[] = [
-  { name: 'The Arena', city: 'Las Vegas', country: 'USA', capacity: 18000 },
-  { name: 'Riverside Hall', city: 'Manchester', country: 'UK', capacity: 12000 },
-  { name: 'Metro Dome', city: 'Tokyo', country: 'Japan', capacity: 15000 },
-  { name: 'Civic Centre', city: 'Sacramento', country: 'USA', capacity: 6000 },
-  { name: 'The Warehouse', city: 'Rotterdam', country: 'Netherlands', capacity: 3000 },
-];
 
 /**
  * Where the player sits on the card, decided before the night rather than after.
@@ -163,7 +157,6 @@ export function runSupportingCard(
   }
 
   const card = buildCard(seeds);
-  const totalDraw = seeds.reduce((a, s) => a + s.draw, 0);
   const broadcast = broadcastFor(promotion, playerDraw, rng.fork('broadcast'));
 
   // --- Run the undercard as results -----------------------------------------------------------
@@ -243,7 +236,12 @@ export function runSupportingCard(
     } as Fighter & Entity);
   }
 
-  const venue = rng.pick(VENUES);
+  const headlineDraw = headlineDrawOf(card, seeds, playerDraw);
+  const venue = venueFor(
+    promotion,
+    expectedDemand(promotion, headlineDraw, card.length),
+    rng.fork('venue'),
+  );
 
   const night: FightNight = {
     id: eventId(promotion.id, day),
@@ -288,13 +286,20 @@ export function runSupportingCard(
       promotion,
       venue,
       broadcast,
-      totalDraw,
+      // The player's own bout is not necessarily the headline — `playerCardPosition` decides
+      // that — so this reads the draw of whatever actually tops the card.
+      headlineDraw,
+      bouts: card.length,
       purses: cardPurses(db, card),
       bonuses: bonusPool,
     }),
     results: results.map((r) => r.result),
+    recentDelivery: current.recentDelivery,
   });
-  db.promotions.upsert(settled.promotion as Promotion & Entity);
+  db.promotions.upsert({
+    ...settled.promotion,
+    recentDelivery: [...(current.recentDelivery ?? []), settled.delivered].slice(-DELIVERY_MEMORY),
+  } as Promotion & Entity);
 
   return { night, undercard, playerBonus, notes };
 }
@@ -343,4 +348,15 @@ function cardPurses(db: GameDb, card: readonly CardBout[]): number {
     }
   }
   return Math.round(total);
+}
+
+/** Draw weight of whatever bout actually tops the card. */
+function headlineDrawOf(
+  card: readonly CardBout[],
+  seeds: readonly BoutSeed[],
+  fallback: number,
+): number {
+  const top = card[0];
+  if (!top) return fallback;
+  return seeds.find((s) => s.boutId === top.boutId)?.draw ?? fallback;
 }

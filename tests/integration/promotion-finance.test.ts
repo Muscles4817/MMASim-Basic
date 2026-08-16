@@ -15,7 +15,6 @@
 import { describe, expect, it } from 'vitest';
 import { createNewGame } from '@mmasim/data';
 import {
-  EXPECTED_CARD_EXCITEMENT,
   MAX_BUZZ_SWING,
   settleNight,
   type EventRevenue,
@@ -60,9 +59,7 @@ describe('settling a night', () => {
 
   it('holds buzz steady when a card delivers exactly what was expected', () => {
     const p = promotion();
-    const par = { stats: { red: {}, blue: {} } } as unknown as FightResult;
     const settled = settleNight({ promotion: p, revenue: revenue(0), results: [] });
-    void par;
     expect(settled.buzzDelta).toBe(0);
     expect(settled.promotion.buzz).toBe(p.buzz);
   });
@@ -71,8 +68,8 @@ describe('settling a night', () => {
     // Attention is sticky. A single card cannot make or break a promotion, or the buzz-driven
     // demand term turns into a feedback loop that runs away in a handful of events.
     const p = promotion();
-    const spectacular = Array.from({ length: 5 }, () => fakeResult(400));
-    const dire = Array.from({ length: 5 }, () => fakeResult(0));
+    const spectacular = Array.from({ length: 5 }, () => aFinish());
+    const dire = Array.from({ length: 5 }, () => aShutout());
     expect(
       settleNight({ promotion: p, revenue: revenue(0), results: spectacular }).buzzDelta,
     ).toBeLessThanOrEqual(MAX_BUZZ_SWING);
@@ -83,16 +80,12 @@ describe('settling a night', () => {
 
   it('rewards a good night and punishes a dull one', () => {
     const p = promotion();
-    const good = settleNight({
-      promotion: p,
-      revenue: revenue(0),
-      results: [fakeResult(EXPECTED_CARD_EXCITEMENT * 3)],
-    });
-    const bad = settleNight({
-      promotion: p,
-      revenue: revenue(0),
-      results: [fakeResult(1)],
-    });
+    const good = settleNight({ promotion: p, revenue: revenue(0), results: [aFinish()] });
+    const bad = settleNight({ promotion: p, revenue: revenue(0), results: [aShutout()] });
+    // A competitive decision is a good night too, which is the case the old metric got most
+    // wrong — it rated a grinding decision above a knockout.
+    const close = settleNight({ promotion: p, revenue: revenue(0), results: [aCloseDecision()] });
+    expect(close.buzzDelta).toBeGreaterThan(0);
     expect(good.buzzDelta).toBeGreaterThan(0);
     expect(bad.buzzDelta).toBeLessThan(0);
   });
@@ -107,12 +100,12 @@ describe('settling a night', () => {
     const profitableAndDull = settleNight({
       promotion: p,
       revenue: revenue(2000),
-      results: [fakeResult(1)],
+      results: [aShutout()],
     });
     const ruinousAndGreat = settleNight({
       promotion: p,
       revenue: revenue(-2000),
-      results: [fakeResult(EXPECTED_CARD_EXCITEMENT * 3)],
+      results: [aFinish()],
     });
 
     expect(profitableAndDull.budgetDelta).toBeGreaterThan(0);
@@ -152,15 +145,47 @@ describe('the world moves promotion finances', () => {
   });
 });
 
-/** A result with a chosen excitement, built by hand so the buzz maths is tested directly. */
-function fakeResult(strikes: number): FightResult {
+/*
+ * Results built by hand so the buzz maths is tested directly.
+ *
+ * These used to vary strike *volume*, which `deliveryScore` deliberately ignores — a close
+ * decision is a close decision at twenty strikes or two hundred, and rewarding volume is how
+ * the old metric ended up rating a grinding decision above a knockout. What matters now is
+ * whether it finished and whether it was close, so those are what the fixtures vary.
+ */
+function aFinish(round = 2): FightResult {
+  return {
+    method: 'ko',
+    round,
+    timeSeconds: 120,
+    winnerId: 'f_red',
+    stats: {
+      red: { significantStrikesLanded: 22, knockdowns: 1, submissionAttempts: 0 },
+      blue: { significantStrikesLanded: 14, knockdowns: 0, submissionAttempts: 0 },
+    },
+  } as unknown as FightResult;
+}
+
+function aCloseDecision(): FightResult {
+  return {
+    method: 'decisionSplit',
+    round: 3,
+    timeSeconds: 900,
+    stats: {
+      red: { significantStrikesLanded: 78, knockdowns: 0, submissionAttempts: 1 },
+      blue: { significantStrikesLanded: 71, knockdowns: 0, submissionAttempts: 0 },
+    },
+  } as unknown as FightResult;
+}
+
+function aShutout(): FightResult {
   return {
     method: 'decisionUnanimous',
     round: 3,
     timeSeconds: 900,
     stats: {
-      red: { significantStrikesLanded: strikes / 2, knockdowns: 0, submissionAttempts: 0 },
-      blue: { significantStrikesLanded: strikes / 2, knockdowns: 0, submissionAttempts: 0 },
+      red: { significantStrikesLanded: 95, knockdowns: 0, submissionAttempts: 0 },
+      blue: { significantStrikesLanded: 11, knockdowns: 0, submissionAttempts: 0 },
     },
   } as unknown as FightResult;
 }

@@ -54,6 +54,19 @@ export interface Promotion {
   activityGuarantee: number;
   /** 1–100. Current audience attention. Moves with cards delivered and stars built. */
   buzz: number;
+  /**
+   * Delivery scores of this promotion's last few cards, newest last.
+   *
+   * The memory that makes `buzz` a judgement rather than a ratchet. Without it every
+   * promotion was measured against a fixed global par, met it forever, and pinned at 100 —
+   * measured across eight simulated years, the whole sport saturated and the signal stopped
+   * telling the player anything. A promotion is judged against its own recent standard, which
+   * is both how an audience actually works and the only version where a good night at the
+   * bottom of the sport counts for something.
+   *
+   * Absent for a promotion that has not run a card yet. Capped at `DELIVERY_MEMORY`.
+   */
+  recentDelivery?: readonly number[];
   /** Divisions this promotion actually runs. */
   divisions: readonly DivisionId[];
   /** Reigning champion per division. Absent = vacant. */

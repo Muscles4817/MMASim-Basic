@@ -189,12 +189,13 @@ describe('the bonus pool is decided by what happened', () => {
 describe('what a night makes', () => {
   const apex = () => makePromotion({ prestige: 95, buzz: 80, revenueShareCapable: true });
 
-  it('sells more tickets for a bigger card', () => {
+  it('sells more tickets for a bigger main event', () => {
     const small = eventRevenue({
       promotion: apex(),
       venue,
       broadcast: 'televised',
-      totalDraw: 200,
+      headlineDraw: 200,
+      bouts: 9,
       purses: 100,
       bonuses: 0,
     });
@@ -202,7 +203,8 @@ describe('what a night makes', () => {
       promotion: apex(),
       venue,
       broadcast: 'televised',
-      totalDraw: 900,
+      headlineDraw: 900,
+      bouts: 9,
       purses: 100,
       bonuses: 0,
     });
@@ -214,7 +216,8 @@ describe('what a night makes', () => {
       promotion: apex(),
       venue: { ...venue, capacity: 3000 },
       broadcast: 'ppv',
-      totalDraw: 5000,
+      headlineDraw: 5000,
+      bouts: 9,
       purses: 0,
       bonuses: 0,
     });
@@ -222,7 +225,14 @@ describe('what a night makes', () => {
   });
 
   it('makes a pay-per-view worth far more than a stream', () => {
-    const base = { promotion: apex(), venue, totalDraw: 600, purses: 200, bonuses: 20 } as const;
+    const base = {
+      promotion: apex(),
+      venue,
+      headlineDraw: 600,
+      bouts: 9,
+      purses: 200,
+      bonuses: 20,
+    } as const;
     expect(eventRevenue({ ...base, broadcast: 'ppv' }).broadcast).toBeGreaterThan(
       eventRevenue({ ...base, broadcast: 'streamed' }).broadcast * 3,
     );
@@ -235,7 +245,8 @@ describe('what a night makes', () => {
       promotion: makePromotion({ prestige: 30, buzz: 15 }),
       venue,
       broadcast: 'ppv',
-      totalDraw: 40,
+      headlineDraw: 40,
+      bouts: 9,
       purses: 400,
       bonuses: 50,
     });
@@ -249,7 +260,8 @@ describe('what a night makes', () => {
       promotion: apex(),
       venue,
       broadcast: 'ppv',
-      totalDraw: 800,
+      headlineDraw: 800,
+      bouts: 9,
       purses: 200,
       bonuses: 20,
     });

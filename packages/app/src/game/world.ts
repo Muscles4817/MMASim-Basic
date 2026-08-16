@@ -31,6 +31,7 @@ import {
   agreementStatus,
   awardBonuses,
   bonusPoolFor,
+  DELIVERY_MEMORY,
   broadcastFor,
   buildCard,
   campCost,
@@ -77,9 +78,10 @@ import {
   type NewsItem,
   type Promotion,
   type PromotionalAgreement,
-  type Venue,
   type Rng,
   eventRevenue,
+  expectedDemand,
+  venueFor,
   settleNight,
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
@@ -228,7 +230,7 @@ export function advanceWorld(
        * attach to an *event* — could never pay out. Bouts are collected, ordered by draw
        * weight with a title fight always headlining, and then run as one card.
        */
-      const promotion = rng.pick(promotions);
+      const promotion = pickPromotion(promotions, rng.fork(`who:${day}:${card}`));
       const built = buildNight({
         db,
         day,
@@ -256,14 +258,6 @@ export function advanceWorld(
 
   return { fights, news: stored, truncated };
 }
-
-const VENUES: readonly Venue[] = [
-  { name: 'The Arena', city: 'Las Vegas', country: 'USA', capacity: 18000 },
-  { name: 'Riverside Hall', city: 'Manchester', country: 'UK', capacity: 12000 },
-  { name: 'Metro Dome', city: 'Tokyo', country: 'Japan', capacity: 15000 },
-  { name: 'Civic Centre', city: 'Sacramento', country: 'USA', capacity: 6000 },
-  { name: 'The Warehouse', city: 'Rotterdam', country: 'Netherlands', capacity: 3000 },
-];
 
 /**
  * Build and run one night.
@@ -360,7 +354,6 @@ function buildNight(ctx: {
   if (seeds.length === 0) return undefined;
 
   const card = buildCard(seeds);
-  const totalDraw = seeds.reduce((a, s) => a + s.draw, 0);
   const headlineDraw = card[0] ? (seeds.find((s) => s.boutId === card[0]!.boutId)?.draw ?? 0) : 0;
   const broadcast = broadcastFor(promotion, headlineDraw, rng.fork('broadcast'));
 
@@ -373,7 +366,15 @@ function buildNight(ctx: {
       broadcast,
       number: Math.floor(day / 14) + 1,
     }),
-    venue: rng.pick(VENUES),
+    // Booked to the crowd it will actually draw. See `venueFor`: both card runners used to
+    // pick uniformly from one list, so the smallest promotion in the game took an
+    // 18,000-seat arena as often as the global one and paid arena overheads to put four
+    // hundred people in it.
+    venue: venueFor(
+      promotion,
+      expectedDemand(promotion, headlineDraw, card.length),
+      rng.fork('venue'),
+    ),
     broadcast,
     status: 'complete',
     bouts: card,
@@ -449,13 +450,16 @@ function buildNight(ctx: {
       promotion,
       venue: night.venue,
       broadcast,
-      totalDraw,
+      // The headline sells the night; the depth of the card stops it being discounted.
+      headlineDraw,
+      bouts: card.length,
       purses: cardPurses(db, card),
       bonuses: night.bonusPool,
     }),
     results: results.map((r) => r.result),
+    recentDelivery: current.recentDelivery,
   });
-  db.promotions.upsert(settled.promotion as Promotion & Entity);
+  db.promotions.upsert(rememberDelivery(settled.promotion, settled.delivered) as Promotion & Entity);
 
   return { fights, news };
 }
@@ -1030,4 +1034,35 @@ function cardPurses(db: GameDb, card: readonly CardBout[]): number {
     }
   }
   return Math.round(total);
+}
+
+/**
+ * Keep the last few cards' delivery scores on the promotion.
+ *
+ * This is what makes `buzz` a judgement against a moving standard rather than a ratchet
+ * against a fixed one. Newest last, capped, and stored on the promotion because it is a
+ * property of the promotion's reputation rather than of any one night.
+ */
+function rememberDelivery(promotion: Promotion, delivered: number): Promotion {
+  return {
+    ...promotion,
+    recentDelivery: [...(promotion.recentDelivery ?? []), delivered].slice(-DELIVERY_MEMORY),
+  };
+}
+
+/**
+ * Whose night this is.
+ *
+ * Was `rng.pick(promotions)`, i.e. uniform — so the smallest promotion in the game ran as many
+ * cards a year as the global one. Two things went wrong with that. A developmental promotion
+ * putting on twenty-odd shows a year is not a thing that happens, and it drained the bottom of
+ * the sport: measured, the two smallest promotions were insolvent inside eight simulated
+ * years, on a schedule they could never have afforded.
+ *
+ * Weighted by prestige, which gives roughly the cadence doc 12 asks for — around two cards a
+ * month for a global promotion down to one every six weeks for a regional one — without
+ * hard-coding a calendar that would then have to be kept in step with the tiers.
+ */
+function pickPromotion(promotions: readonly Promotion[], rng: Rng): Promotion {
+  return rng.pickWeighted(promotions, (p) => Math.max(1, p.prestige) ** 1.6);
 }

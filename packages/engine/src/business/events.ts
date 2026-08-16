@@ -278,6 +278,27 @@ export function ticketPrice(promotion: Promotion, headlineDraw: number): number 
 }
 
 /**
+ * How much of a card's demand comes from its depth rather than its headline.
+ *
+ * Saturating, and that shape is the whole point. `eventRevenue` used to key demand off the
+ * *sum* of draw weight across the card, which had a consequence nobody intended: since
+ * `marketValue()` is a 2.6-power law in star power while `drawWeight()` is linear in it,
+ * costs were superlinear and demand was linear, so a card of nine anonymous mid-carders
+ * out-earned one built around a marquee main event. Measured on the shipped seed: 3,573
+ * profit against 2,878. The correct strategy was to never sign anybody famous.
+ *
+ * Depth should prevent a discount, not create a gate. Nobody buys a ticket because the card
+ * is nine fights long rather than six; they refuse to buy one because it is three. So this
+ * runs from a real penalty at two bouts up to 1.0, and is flat past a full card — the fifth
+ * bout matters and the ninth does not.
+ */
+export function depthMultiplier(bouts: number): number {
+  if (bouts <= 0) return 0;
+  // Saturating by design: ~0.72 at two bouts, ~0.93 at five, 1.0 from eight.
+  return clamp(0.6 + 0.4 * (1 - Math.exp(-(bouts - 1) / 2.6)), 0.6, 1);
+}
+
+/**
  * What the night made.
  *
  * This — not `drawWeight()` — is the promotion's revenue. The two were previously in
@@ -289,21 +310,40 @@ export function eventRevenue(input: {
   promotion: Promotion;
   venue: Venue;
   broadcast: Broadcast;
-  /** Summed draw weight across the card. */
-  totalDraw: number;
+  /**
+   * Draw weight of the *headline* bout — the fight that sells the night.
+   *
+   * Was `totalDraw`, the sum across the card, and that single choice inverted the economics.
+   * See `depthMultiplier` for the measurement and the reasoning.
+   */
+  headlineDraw: number;
+  /** How many bouts are on the card. Prevents a discount; does not create a gate. */
+  bouts: number;
   /** Thousands. */
   purses: number;
   bonuses: number;
 }): EventRevenue {
-  const { promotion, venue, broadcast, totalDraw, purses, bonuses } = input;
+  const { promotion, venue, broadcast, headlineDraw, bouts, purses, bonuses } = input;
 
-  const demand = Math.round(totalDraw * 12 * (0.5 + promotion.buzz / 100));
+  /*
+   * Demand is what the main event sells, discounted if the card beneath it is thin.
+   *
+   * The multiplier is larger than the old `× 12` because it now multiplies one bout's draw
+   * rather than nine, and it is tuned so a full card headlined by a genuine star fills a big
+   * building while the same card with a nobody on top does not.
+   */
+  const demand = Math.round(
+    headlineDraw * 62 * depthMultiplier(bouts) * (0.5 + promotion.buzz / 100),
+  );
   const attendance = Math.min(venue.capacity, demand);
-  const gate = Math.round((attendance * ticketPrice(promotion, totalDraw)) / 1000);
+  // `ticketPrice` is declared to take the *headline* draw and was being handed the card total,
+  // which sails past its internal clamp of 400 for every real card — so the price a promotion
+  // charged was a constant regardless of who was on top of the bill.
+  const gate = Math.round((attendance * ticketPrice(promotion, headlineDraw)) / 1000);
 
   const broadcastRevenue =
     broadcast === 'ppv'
-      ? Math.round(totalDraw * 1.8 * (promotion.prestige / 100) ** 2)
+      ? Math.round(headlineDraw * 9 * (promotion.prestige / 100) ** 2)
       : broadcast === 'televised'
         ? Math.round(promotion.prestige * 4)
         : Math.round(promotion.prestige * 0.8);
@@ -392,6 +432,8 @@ export interface NightSettlement {
   promotion: Promotion;
   budgetDelta: number;
   buzzDelta: number;
+  /** What this card scored, so the caller can feed it back as future history. */
+  delivered: number;
 }
 
 /**
@@ -403,6 +445,75 @@ export interface NightSettlement {
  */
 export const EXPECTED_CARD_EXCITEMENT = 55;
 
+/**
+ * Delivery score a card is judged against when a promotion has no history yet.
+ *
+ * Roughly what a competitive three-round decision scores, so a promotion's first card is
+ * measured against "a decent night" rather than against a war.
+ */
+export const PAR_CARD_DELIVERY = 62;
+
+/** How many past cards the relative baseline averages over. */
+export const DELIVERY_MEMORY = 6;
+
+/**
+ * How well one fight served the *promotion*, as opposed to how good a fight it was.
+ *
+ * These are two different questions and `settleNight` used one function for both. Measured
+ * against `excitement()`'s own par of 55: a first-round knockout scored 27 and a first-round
+ * submission 16, while a dull 44–30 decision scored 60. **So finishes lowered a promotion's
+ * buzz and forgettable decisions raised it** — the single number a promoter-mode player would
+ * spend forty hours optimising against, pointing backwards.
+ *
+ * `excitement()` is not wrong; it is the right metric for Fight of the Night, where a
+ * three-round war genuinely is the answer. It is the wrong metric for "did this card deliver",
+ * because an audience that watched four highlight-reel knockouts did not have a bad night.
+ *
+ * This scores the two things an audience actually goes home talking about — **something
+ * ended, or it was close** — and refuses to reward the thing that flatters a volume metric
+ * without entertaining anybody: a wide, one-sided decision.
+ */
+export function deliveryScore(result: FightResult): number {
+  const red = result.stats.red;
+  const blue = result.stats.blue;
+  const strikes = red.significantStrikesLanded + blue.significantStrikesLanded;
+
+  // How close it was, on the scorecard rather than on volume alone.
+  const oneSided =
+    Math.abs(red.significantStrikesLanded - blue.significantStrikesLanded) / Math.max(1, strikes);
+  const contested = 1 - clamp01(oneSided);
+
+  const finished = !result.method.startsWith('decision');
+  const knockdowns = red.knockdowns + blue.knockdowns;
+  const subAttempts = red.submissionAttempts + blue.submissionAttempts;
+
+  /*
+   * A finish is worth a lot and worth slightly *more* when it comes late, because a fight that
+   * built to it entertained for longer than one that ended before the crowd sat down. That is
+   * the opposite of `performanceScore`, which rewards speed — correctly, because it is
+   * answering "how good was that finish" rather than "did the audience get a night out".
+   */
+  const finishValue = finished ? 55 + Math.min(25, result.round * 8) : 0;
+
+  // Near-finishes count even when they do not land. A round somebody nearly ended is the
+  // reason people come back.
+  const jeopardy = Math.min(30, knockdowns * 11 + subAttempts * 6);
+
+  /*
+   * A competitive decision is a good night; a wide one is the thing this metric exists to stop
+   * rewarding, so the contested term is squared rather than applied linearly.
+   *
+   * The coefficient sits above `PAR_CARD_DELIVERY` on purpose. At 62 a decision could at best
+   * exactly meet par, which meant a card of genuine three-round wars was scored as merely
+   * adequate and could never move a promotion forward — the same failure as the metric this
+   * replaces, one notch less severe. A fight people argue about afterwards is a good night
+   * even though nobody got finished.
+   */
+  const contestValue = finished ? contested * 15 : contested * contested * 90;
+
+  return finishValue + jeopardy + contestValue;
+}
+
 /** How far buzz can move on a single night, in points. Attention is sticky. */
 export const MAX_BUZZ_SWING = 3;
 
@@ -411,21 +522,45 @@ export function settleNight(input: {
   revenue: EventRevenue;
   /** Every result on the card, in any order. */
   results: readonly FightResult[];
+  /**
+   * Delivery scores of this promotion's recent cards, for the relative baseline.
+   *
+   * Empty for a promotion with no history, which is then judged against par.
+   */
+  recentDelivery?: readonly number[];
 }): NightSettlement {
-  const { promotion, revenue, results } = input;
+  const { promotion, revenue, results, recentDelivery = [] } = input;
 
   const delivered =
     results.length === 0
-      ? EXPECTED_CARD_EXCITEMENT
-      : results.reduce((a, r) => a + excitement(r), 0) / results.length;
+      ? PAR_CARD_DELIVERY
+      : results.reduce((a, r) => a + deliveryScore(r), 0) / results.length;
 
   /*
-   * Scaled by prestige, so buzz is harder to hold at the top. A global promotion is judged
+   * Judged against its own recent form, not against a fixed constant.
+   *
+   * With a global par, every promotion's buzz ratcheted monotonically to 100 and stayed there
+   * — measured across eight simulated years, the top three all pinned at maximum by year
+   * eight, at which point the sole feedback signal in the whole model stopped discriminating
+   * between them. A promotion that has been putting on great cards for two years is *expected*
+   * to put on another one, and gets no credit for meeting its own standard.
+   *
+   * Relative expectation makes "you are only as good as your last card" literally true, gives
+   * a breakout night at the bottom of the sport somewhere to go, and removes the ratchet.
+   * A promotion with no history is judged against par, which is the only fair thing to do.
+   */
+  const baseline =
+    recentDelivery.length > 0
+      ? recentDelivery.reduce((a, n) => a + n, 0) / recentDelivery.length
+      : PAR_CARD_DELIVERY;
+
+  /*
+   * Scaled by prestige, so buzz is harder to move at the top. A global promotion is judged
    * against what it has already shown people; a regional one gains attention from a good
    * night more easily than a major one does, which is how the bottom of the sport actually
    * grows and why a breakout card matters more to a small promotion.
    */
-  const missRatio = (delivered - EXPECTED_CARD_EXCITEMENT) / EXPECTED_CARD_EXCITEMENT;
+  const missRatio = (delivered - baseline) / Math.max(1, baseline);
   const stickiness = 0.6 + (promotion.prestige / 100) * 0.8;
   const buzzDelta =
     Math.round(clamp(missRatio / stickiness, -1, 1) * MAX_BUZZ_SWING * 10) / 10;
@@ -434,6 +569,7 @@ export function settleNight(input: {
     revenue,
     budgetDelta: revenue.profit,
     buzzDelta,
+    delivered: Math.round(delivered * 10) / 10,
     promotion: {
       ...promotion,
       // Floored at zero rather than allowed negative: an insolvent promotion is a different
@@ -443,4 +579,63 @@ export function settleNight(input: {
       buzz: clamp(Math.round((promotion.buzz + buzzDelta) * 10) / 10, 1, 100),
     },
   };
+}
+
+// --- Venues ------------------------------------------------------------------------------------
+
+/**
+ * The buildings the sport runs in, smallest first.
+ *
+ * Lived as a duplicated const in both card runners, and both picked from it uniformly at
+ * random — so the smallest promotion in the game booked an 18,000-seat arena as often as the
+ * global one. Since production cost scales with capacity, a regional promotion was paying
+ * arena overheads to put four hundred people in the building, and it is the largest single
+ * reason the bottom two promotions went insolvent inside eight simulated years.
+ */
+export const VENUES: readonly Venue[] = [
+  { name: 'The Warehouse', city: 'Rotterdam', country: 'Netherlands', capacity: 3000 },
+  { name: 'Civic Centre', city: 'Sacramento', country: 'USA', capacity: 6000 },
+  { name: 'Riverside Hall', city: 'Manchester', country: 'UK', capacity: 12000 },
+  { name: 'Metro Dome', city: 'Tokyo', country: 'Japan', capacity: 15000 },
+  { name: 'The Arena', city: 'Las Vegas', country: 'USA', capacity: 18000 },
+];
+
+/**
+ * A building this promotion could plausibly fill, given what it is drawing.
+ *
+ * Real promoters book to demand. Nobody takes an arena for a card that will sell four
+ * thousand seats, because the empty seats cost money *and* look worse on television than a
+ * full small room — which is why a regional show in a packed 3,000-seat hall is a better night
+ * than the same show rattling around an arena.
+ *
+ * Picks the smallest venue that comfortably holds the expected crowd, so a promotion grows
+ * into bigger buildings as its draw grows rather than being handed one at random.
+ */
+export function venueFor(promotion: Promotion, expectedDemand: number, rng: Rng): Venue {
+  // A little headroom, so a good night is not capped by the room rather than by the draw.
+  const wanted = expectedDemand * 1.15;
+
+  /*
+   * The smallest room that fits, with no randomness among the ones that do.
+   *
+   * An earlier version picked at random between the two smallest that fit, for variety. That
+   * is wrong in a way worth recording: the venue list steps steeply — 3k, 6k, 12k, 15k, 18k —
+   * so "the second smallest that fits" is routinely double the crowd, and a promotion drawing
+   * four thousand ended up booking a twelve-thousand-seat hall. Variety is not worth a
+   * two-thirds-empty building, and the interesting variation belongs in the *draw*, not in a
+   * die roll over rooms.
+   */
+  void rng;
+  return VENUES.find((v) => v.capacity >= wanted) ?? VENUES[VENUES.length - 1]!;
+}
+
+/**
+ * Roughly how many people this promotion will draw, before a venue is chosen.
+ *
+ * Deliberately the same shape as the demand term in `eventRevenue` so the venue decision and
+ * the gate agree with each other. Duplicating the arithmetic would let them drift, and a
+ * promotion booking a building it cannot fill is exactly the failure this exists to prevent.
+ */
+export function expectedDemand(promotion: Promotion, headlineDraw: number, bouts: number): number {
+  return Math.round(headlineDraw * 62 * depthMultiplier(bouts) * (0.5 + promotion.buzz / 100));
 }
