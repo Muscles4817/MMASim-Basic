@@ -286,6 +286,23 @@
   border-bottom: none;
 }
 
+/*
+  Focus on a list row, drawn *inside* the row.
+
+  The global :focus-visible uses outline-offset: 2px, which paints the ring outside the
+  element's box — and a list row is flush to the edge of a .card--flush, which sets
+  overflow: hidden. The ring was therefore clipped away on the left and right of every row
+  in the app, and on the top and bottom of the first and last. That is the primary
+  interactive element on six screens, invisible to a keyboard user.
+
+  An inset ring cannot be clipped by definition, and it reads better on an edge-to-edge row
+  than a floating outline does.
+*/
+.list__item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
 .list__item {
   color: inherit;
   text-decoration: none;

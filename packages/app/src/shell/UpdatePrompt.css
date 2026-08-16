@@ -9,7 +9,10 @@
   position: fixed;
   left: var(--space-3);
   right: var(--space-3);
-  bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  /* Above the tab bar, not on top of it. The nav is fixed at bottom: 0 with a 3.75rem
+     height, and sitting at space-3 buried four of its five tabs — worse at 320px, where
+     this wraps to two lines and covered the lot. */
+  bottom: calc(var(--nav-height) + env(safe-area-inset-bottom, 0px) + var(--space-2));
   z-index: 50;
 
   display: flex;
@@ -57,4 +60,11 @@
   color: var(--text-muted);
   background: transparent;
   border-color: var(--border);
+}
+
+/* The desktop rail is on the side, so there is nothing down there to clear. */
+@media (min-width: 48rem) {
+  .update-prompt {
+    bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  }
 }

@@ -53,9 +53,38 @@ describe('the game is playable', () => {
   it('boots to the fighter picker from a cold start', async () => {
     renderApp();
     expectNoCrash();
-    expect(await screen.findByText(/Pick your fighter/i)).toBeTruthy();
+    expect(await screen.findByText(/Or take over an existing fighter/i)).toBeTruthy();
     // The seeded roster is actually on screen, not an empty list.
     expect(await screen.findByText(/Khabib/)).toBeTruthy();
+  });
+
+  it('offers to create your own fighter from the landing screen', async () => {
+    // This was unreachable: App.tsx redirects the hub to this screen when there is no player
+    // fighter, and the only link to the creator lived in the hub's empty state. Creating a
+    // fighter and climbing with them is the point of the mode, so this guards the route.
+    const user = userEvent.setup();
+    renderApp();
+
+    const create = await screen.findByRole('button', { name: /Create your own fighter/i });
+    await user.click(create);
+
+    expect(await screen.findByRole('button', { name: /Turn pro/i })).toBeTruthy();
+    expectNoCrash();
+  });
+
+  it('explains why it will not let an unfinished fighter turn pro', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(await screen.findByRole('button', { name: /Create your own fighter/i }));
+
+    // Nothing filled in. The button must stay reachable and say why rather than sit greyed
+    // out and swallow the tap.
+    const turnPro = await screen.findByRole('button', { name: /Turn pro/i });
+    expect(turnPro.hasAttribute('disabled')).toBe(false);
+    expect(turnPro.getAttribute('aria-disabled')).toBe('true');
+
+    await user.click(turnPro);
+    expect(await screen.findByText(/Not ready to turn pro yet/i)).toBeTruthy();
   });
 
   it('plays a full career loop: pick → book → camp → fight → result', async () => {

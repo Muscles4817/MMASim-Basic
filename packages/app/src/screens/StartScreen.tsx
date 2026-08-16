@@ -52,9 +52,30 @@ export function StartScreen() {
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
-      <Card>
+      {/*
+        The primary path, and it was previously unreachable.
+
+        App.tsx redirects the hub to this screen whenever there is no player fighter, and the
+        only link to the creator lived in the hub's empty state — which that redirect
+        guarantees nobody ever sees. Creating your own fighter and climbing with them is the
+        point of the mode, so it is the largest thing on the landing screen.
+      */}
+      <Card raised>
         <h2 style={{ fontSize: 'var(--text-2xl)', marginBottom: 'var(--space-2)' }}>
-          Pick your fighter
+          Start a career
+        </h2>
+        <p className="muted prose" style={{ marginBottom: 'var(--space-4)' }}>
+          Build a fighter from nothing and take them as far as they can go — or take over
+          somebody who already exists and see if you can do better with them.
+        </p>
+        <Button variant="primary" block onClick={() => navigate({ name: 'create' })}>
+          Create your own fighter
+        </Button>
+      </Card>
+
+      <Card>
+        <h2 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--space-2)' }}>
+          Or take over an existing fighter
         </h2>
         <p className="muted prose" style={{ marginBottom: 'var(--space-4)' }}>
           January 2020. Every rating here is a judgement call, and every fighter has something

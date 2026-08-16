@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   ATTRIBUTES_BY_GROUP,
   ATTRIBUTE_GROUPS,
@@ -24,6 +24,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, RatingRow, Segmented } from '../ui';
+import { Alert } from '../ui/signals';
 import { clearTransientCareerState } from '../game/career';
 
 /**
@@ -42,6 +43,7 @@ export function CreateFighterScreen() {
   const { db, updateWorld, commit } = useGame();
   const { navigate } = useRouter();
 
+  const issuesRef = useRef<HTMLDivElement>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [nickname, setNickname] = useState('');
@@ -371,16 +373,39 @@ export function CreateFighterScreen() {
       )}
 
       {issues.length > 0 && (
-        <Card>
-          <ul className="muted" style={{ fontSize: 'var(--text-sm)' }}>
-            {issues.map((issue) => (
-              <li key={`${issue.field}-${issue.message}`}>{issue.message}</li>
-            ))}
-          </ul>
-        </Card>
+        <div ref={issuesRef} tabIndex={-1} style={{ outline: 'none' }}>
+          <Alert tone="danger" title="Not ready to turn pro yet">
+            <ul style={{ margin: 0, paddingInlineStart: '1.1rem' }}>
+              {issues.map((issue) => (
+                <li key={`${issue.field}-${issue.message}`}>{issue.message}</li>
+              ))}
+            </ul>
+          </Alert>
+        </div>
       )}
 
-      <Button variant="primary" block onClick={start} disabled={issues.length > 0}>
+      {/*
+        Deliberately not `disabled`.
+
+        A truly disabled button is not focusable, so a keyboard user tabs straight past the
+        one control on the screen and never learns why nothing happened — and on touch, a
+        greyed button that silently swallows a tap is the same dead end. aria-disabled says
+        the same thing to assistive tech while leaving the control reachable, so pressing it
+        can explain itself by sending the reader to the reasons.
+      */}
+      <Button
+        variant="primary"
+        block
+        onClick={() => {
+          if (issues.length > 0) {
+            issuesRef.current?.focus();
+            issuesRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+            return;
+          }
+          start();
+        }}
+        aria-disabled={issues.length > 0}
+      >
         Turn pro
       </Button>
     </div>
