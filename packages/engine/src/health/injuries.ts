@@ -316,6 +316,36 @@ export function describeInjury(injury: Injury, day: GameDay): string {
  * gets a fraction of the camp they think they are getting, which is the quiet way this
  * system decides fights.
  */
+/**
+ * Weeks until every current injury has healed. 0 when fit.
+ *
+ * The camp-impairment number told a player *that* training hurt and never *how long* to wait,
+ * so "should I rest?" had no answerable form. This gives the question an answer.
+ */
+export function weeksUntilFit(injuries: readonly Injury[], day: GameDay): number {
+  const active = activeInjuries(injuries, day);
+  if (active.length === 0) return 0;
+  const latest = Math.max(...active.map((i) => i.healedDay));
+  return Math.ceil((latest - day) / 7);
+}
+
+/**
+ * A plain sentence about resting, given what the fighter is carrying.
+ *
+ * Rest is the most misread control in the game: it looks like recovery and it is also skill
+ * decay, so a healthy fighter who rests is simply getting worse. Saying which situation the
+ * player is in is the whole job.
+ */
+export function restAdvice(injuries: readonly Injury[], day: GameDay): string {
+  const weeks = weeksUntilFit(injuries, day);
+  if (weeks === 0) {
+    return 'You are fit. Resting now just lets sharpness bleed away — there is nothing to heal.';
+  }
+  return weeks === 1
+    ? 'About a week until you are fully healed. Resting through it is usually the cheaper option.'
+    : `About ${weeks} weeks until you are fully healed. Training through it costs you most of the camp, and risks making it worse.`;
+}
+
 export function campImpairment(injuries: readonly Injury[], day: GameDay): number {
   const active = activeInjuries(injuries, day);
   if (active.length === 0) return 1;

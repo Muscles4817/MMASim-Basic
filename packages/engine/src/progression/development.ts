@@ -99,7 +99,23 @@ export const TRAINING_META: Readonly<Record<TrainingFocus, TrainingFocusMeta>> =
  * makes the whole rating scale meaningless inside a season. Guarded by a test that asserts
  * both ends of that.
  */
-const BASE_GAIN_PER_BLOCK = 0.55;
+const BASE_GAIN_PER_BLOCK = 0.654;
+
+/**
+ * How camp length converts into training blocks.
+ *
+ * Sub-linear, at `(weeks / 4) ^ 0.75`. The training screen has always told the player that
+ * longer camps give more "with diminishing returns", doc 05 says the same about camp weeks,
+ * and the formula was strictly linear in weeks — so the interface was describing behaviour
+ * the engine did not have, and 4 / 8 / 12 was a false choice: three four-week camps and one
+ * twelve-week camp came to precisely the same thing.
+ *
+ * With this, a short camp is more efficient per week and a long one is worth more in total,
+ * which is what makes the duration an actual decision against ageing and injury risk. The
+ * base gain above was raised from 0.55 to hold the common eight-week camp exactly where it
+ * was, so this is a change in the *shape* of the curve rather than in its overall level.
+ */
+const BLOCK_CURVE = 0.75;
 
 /** Peak age by ageing curve. Learning slows toward it; the body declines after it. */
 const PEAK_AGE: Readonly<Record<AgeCurve, number>> = {
@@ -160,6 +176,57 @@ export interface TrainingResult {
  * years of camps should be transformative. A system where a single camp adds five points
  * makes ratings meaningless within a season.
  */
+/** Weeks of camp, as effective training blocks. See `BLOCK_CURVE`. */
+export const trainingBlocks = (weeks: number): number =>
+  Math.pow(Math.max(0, weeks) / 4, BLOCK_CURVE);
+
+/** The luck a camp can have, either way. Applied once per attribute per focus. */
+const CAMP_LUCK: [min: number, max: number] = [0.75, 1.3];
+
+/**
+ * The deterministic core of a training gain, before luck.
+ *
+ * Extracted so `applyTraining` and `forecastTraining` are mathematically the same function.
+ * A forecast computed from a second copy of this formula would drift the first time either
+ * was tuned, and a forecast that lies is worse than no forecast at all.
+ */
+function rawGain(input: {
+  fighter: Fighter;
+  focus: TrainingFocus;
+  key: AttributeKey;
+  weight: number;
+  current: number;
+  blocks: number;
+  focusShare: number;
+  gym?: Gym;
+  coach?: Coach;
+  age: number;
+}): number {
+  const { fighter, focus, key, weight, current, blocks, focusShare, gym, coach, age } = input;
+
+  const room = headroom(current, fighter.potential[key]);
+  if (room <= 0) return 0;
+
+  const meta = TRAINING_META[focus];
+  const coachFactor = coach
+    ? clamp(coachEffectiveness(coach, meta.specialism) / 60, 0.4, 1.6)
+    : 0.55; // Training yourself works, badly.
+
+  return (
+    BASE_GAIN_PER_BLOCK *
+    blocks *
+    weight *
+    focusShare *
+    clamp(remap(fighter.naturals.motorLearning, 20, 95, 0.4, 1.8), 0.35, 1.9) *
+    coachFactor *
+    clamp(remap(gym?.quality ?? 40, 20, 95, 0.55, 1.3), 0.5, 1.35) *
+    campGainMultiplier(fighter.personality) *
+    traitMul(fighter.traits, 'developmentRate') *
+    learningRate(age, fighter.naturals.ageCurve) *
+    room
+  );
+}
+
 export function applyTraining(input: TrainingInput): TrainingResult {
   const { fighter, weeks, gym, coach, day, rng } = input;
   const focuses = input.focuses.slice(0, 2);
@@ -167,46 +234,35 @@ export function applyTraining(input: TrainingInput): TrainingResult {
   const gains: Partial<Record<AttributeKey, number>> = {};
 
   const age = ageOn(fighter.birthDay, day);
-  const blocks = weeks / 4;
+  const blocks = trainingBlocks(weeks);
 
   // Splitting focus costs: two focuses get 65% each, not 100% each.
   const focusShare = focuses.length > 1 ? 0.65 : 1;
-
-  const motorFactor = clamp(remap(fighter.naturals.motorLearning, 20, 95, 0.4, 1.8), 0.35, 1.9);
-  const gymFactor = clamp(remap(gym?.quality ?? 40, 20, 95, 0.55, 1.3), 0.5, 1.35);
-  const personalityFactor = campGainMultiplier(fighter.personality);
-  const traitFactor = traitMul(fighter.traits, 'developmentRate');
-  const ageFactor = learningRate(age, fighter.naturals.ageCurve);
 
   const attributes: Attributes = { ...fighter.attributes };
 
   for (const focus of focuses) {
     const meta = TRAINING_META[focus];
-    const coachFactor = coach
-      ? clamp(coachEffectiveness(coach, meta.specialism) / 60, 0.4, 1.6)
-      : 0.55; // Training yourself works, badly.
 
     for (const [key, weight] of Object.entries(meta.attributes) as [AttributeKey, number][]) {
       const current = attributes[key];
-      const room = headroom(current, fighter.potential[key]);
-      if (room <= 0) continue;
-
-      const raw =
-        BASE_GAIN_PER_BLOCK *
-        blocks *
-        weight *
-        focusShare *
-        motorFactor *
-        coachFactor *
-        gymFactor *
-        personalityFactor *
-        traitFactor *
-        ageFactor *
-        room;
+      const raw = rawGain({
+        fighter,
+        focus,
+        key,
+        weight,
+        current,
+        blocks,
+        focusShare,
+        gym,
+        coach,
+        age,
+      });
+      if (raw <= 0) continue;
 
       // A little noise so two identical camps are not identical. Never negative: a camp can
       // be wasted, but it cannot make you worse at the thing you drilled.
-      const gain = Math.max(0, raw * rng.range(0.75, 1.3));
+      const gain = Math.max(0, raw * rng.range(CAMP_LUCK[0], CAMP_LUCK[1]));
       if (gain <= 0) continue;
 
       attributes[key] = toRating(current + gain);
@@ -235,6 +291,81 @@ export function applyTraining(input: TrainingInput): TrainingResult {
     fighter: { ...fighter, attributes },
     gains,
     notes,
+  };
+}
+
+/**
+ * What a camp is likely to be worth, before it is run.
+ *
+ * The player was previously choosing a focus and a duration completely blind — the screen
+ * offered "4 / 8 / 12 weeks" with a sentence about diminishing returns and no way to see
+ * them. That is a decision with no information in it.
+ *
+ * This is deliberately a *range* rather than a number, computed from the same formula the
+ * camp actually runs and the same luck bounds. A camp is not a purchase and should not read
+ * like one — but "roughly +1.4 to +2.4 Striking Offence" is a real basis for choosing
+ * between eight weeks and twelve, and it cannot drift from the truth because it shares the
+ * arithmetic.
+ */
+export interface TrainingForecast {
+  /** Per-attribute expected gain, at average luck. Only non-zero entries. */
+  expected: Partial<Record<AttributeKey, number>>;
+  /** Same attributes, at worst and best luck. */
+  low: Partial<Record<AttributeKey, number>>;
+  high: Partial<Record<AttributeKey, number>>;
+  /** Summed expected gain across everything. The headline number. */
+  totalExpected: number;
+  /** True when every attribute the chosen focuses train is already at its ceiling. */
+  atCeiling: boolean;
+}
+
+export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingForecast {
+  const { fighter, weeks, gym, coach, day } = input;
+  const focuses = input.focuses.slice(0, 2);
+
+  const age = ageOn(fighter.birthDay, day);
+  const blocks = trainingBlocks(weeks);
+  const focusShare = focuses.length > 1 ? 0.65 : 1;
+
+  const expected: Partial<Record<AttributeKey, number>> = {};
+  const low: Partial<Record<AttributeKey, number>> = {};
+  const high: Partial<Record<AttributeKey, number>> = {};
+
+  for (const focus of focuses) {
+    for (const [key, weight] of Object.entries(TRAINING_META[focus].attributes) as [
+      AttributeKey,
+      number,
+    ][]) {
+      const raw = rawGain({
+        fighter,
+        focus,
+        key,
+        weight,
+        current: fighter.attributes[key],
+        blocks,
+        focusShare,
+        gym,
+        coach,
+        age,
+      });
+      if (raw <= 0) continue;
+
+      const mid = (CAMP_LUCK[0] + CAMP_LUCK[1]) / 2;
+      expected[key] = round((expected[key] ?? 0) + raw * mid, 2);
+      low[key] = round((low[key] ?? 0) + raw * CAMP_LUCK[0], 2);
+      high[key] = round((high[key] ?? 0) + raw * CAMP_LUCK[1], 2);
+    }
+  }
+
+  return {
+    expected,
+    low,
+    high,
+    totalExpected: round(
+      Object.values(expected).reduce((a, v) => a + v, 0),
+      2,
+    ),
+    atCeiling: focuses.length > 0 && focuses.every((f) => headroomExhausted(fighter, f)),
   };
 }
 

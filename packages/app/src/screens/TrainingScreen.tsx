@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ATTRIBUTE_META,
   DANGEROUS_SEVERITY,
@@ -12,7 +12,10 @@ import {
   campImpairment,
   describeInjury,
   fighterAge,
+  forecastTraining,
   headroom,
+  restAdvice,
+  weeksUntilFit,
   type AttributeKey,
   type Coach,
   type DivisionId,
@@ -21,7 +24,7 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Button, Card, Chip, Empty, Segmented, Stat } from '../ui';
+import { Button, Card, Chip, Empty, Segmented } from '../ui';
 import {
   changeDivision,
   divisionField,
@@ -30,7 +33,9 @@ import {
   runTraining,
   type TrainingOutcome,
 } from '../game/progression';
-import { Alert, Trend } from '../ui/signals';
+import { Alert, FighterRead, KeyStat, Trend } from '../ui/signals';
+import { getBooking } from '../game/career';
+import { formatGameDay } from '../shell/Shell';
 
 const WEEK_OPTIONS = [
   { value: '4', label: '4 weeks' },
@@ -70,6 +75,30 @@ export function TrainingScreen() {
 
   const carrying = activeInjuries(fighter.injuries ?? [], world.day);
   const impairment = campImpairment(fighter.injuries ?? [], world.day);
+  const fitInWeeks = weeksUntilFit(fighter.injuries ?? [], world.day);
+
+  // A booked fight is the single most important thing about this screen and it was not
+  // mentioned anywhere: training twelve weeks with a fight booked in eight walked the world
+  // clock straight past fight night.
+  const booking = getBooking(fighter.id as string);
+  const weeksToFight = booking
+    ? Math.max(0, Math.ceil((booking.bout.day - world.day) / 7))
+    : undefined;
+  const overrunsFight = weeksToFight !== undefined && Number(weeks) > weeksToFight;
+
+  // What this camp is likely to be worth, from the same arithmetic the camp itself runs.
+  const forecast = useMemo(
+    () =>
+      forecastTraining({
+        fighter,
+        focuses,
+        weeks: Number(weeks),
+        gym,
+        coach,
+        day: world.day,
+      }),
+    [fighter, focuses, weeks, gym, coach, world.day],
+  );
 
   const toggleFocus = (focus: TrainingFocus) => {
     setOutcome(undefined);
@@ -94,31 +123,80 @@ export function TrainingScreen() {
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
+      {/*
+        Who you are, before what to do about it.
+
+        This card used to be three bare numbers — Age, Gym quality, and a figure labelled
+        only "Coach" — on a screen that never once showed the player their own ratings. You
+        were choosing what to train without being shown what you had, which meant leaving
+        for the profile screen and coming back holding it in your head. FighterRead already
+        existed and was used on the *opponent* in fight camp; it belongs here first.
+      */}
       <Card raised>
-        <div className="stat-grid">
-          <Stat value={fighterAge(fighter, world.day)} label="Age" />
-          <Stat value={gym ? gym.quality : '—'} label="Gym quality" />
-          <Stat value={coach ? coach.development : '—'} label="Coach" />
+        <div className="row" style={{ justifyContent: 'space-between', gap: 'var(--space-3)' }}>
+          <span>
+            <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, display: 'block' }}>
+              Age {fighterAge(fighter, world.day)}
+            </span>
+            <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
+              {formatGameDay(world.day)}
+            </span>
+          </span>
+          {weeksToFight !== undefined && (
+            <Chip tone={weeksToFight <= 4 ? 'warning' : 'info'}>
+              Fight in {weeksToFight === 0 ? 'days' : `${weeksToFight}w`}
+            </Chip>
+          )}
         </div>
-        {coach ? (
-          <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
-            {coach.firstName} {coach.lastName} at {gym?.name}. Specialises in{' '}
-            {coach.specialisms.join(', ')} — camps outside that get markedly less out of you.
-          </p>
-        ) : (
-          <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
-            You have no head coach. Training alone costs most of your progress.
-          </p>
-        )}
+
+        <div style={{ marginTop: 'var(--space-3)' }}>
+          <FighterRead attributes={fighter.attributes} />
+        </div>
+
+        <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
+          {coach ? (
+            <>
+              <strong>
+                {coach.firstName} {coach.lastName}
+              </strong>{' '}
+              at {gym?.name}. Specialises in {coach.specialisms.join(', ')} — camps outside
+              that get markedly less out of you.
+            </>
+          ) : (
+            <>You have no head coach. Training alone costs most of your progress.</>
+          )}
+        </p>
       </Card>
+
+      {/*
+        The guard that was missing entirely. runTraining advances the world clock by the full
+        block, so a twelve-week camp with a fight booked in eight walked straight past fight
+        night — verified, and silent.
+      */}
+      {overrunsFight && (
+        <Alert tone="danger" title="That is longer than you have">
+          You fight in {weeksToFight} week{weeksToFight === 1 ? '' : 's'}. A {weeks}-week block
+          would run past fight night. Shorten the camp, or go to fight week and prepare for
+          the opponent you already have.
+        </Alert>
+      )}
 
       {carrying.length > 0 && (
         <Alert
           tone={impairment < 0.6 ? 'danger' : 'warn'}
-          title={carrying.length === 1 ? 'You are carrying an injury' : 'You are carrying injuries'}
+          title={
+            carrying.length === 1
+              ? `You are carrying an injury — about ${fitInWeeks} week${fitInWeeks === 1 ? '' : 's'} until you are fit`
+              : `You are carrying injuries — about ${fitInWeeks} week${fitInWeeks === 1 ? '' : 's'} until you are fit`
+          }
         >
-          {carrying.map((injury) => describeInjury(injury, world.day)).join(' ')} Training through
-          it costs you roughly {Math.round((1 - impairment) * 100)}% of the camp.
+          {/*
+            The timeline is the addition. The old alert said training cost X% of the camp and
+            never said how long to wait, so "should I rest?" had no answerable form and the
+            player was left guessing at a number the game already knew.
+          */}
+          {carrying.map((injury) => describeInjury(injury, world.day)).join(' ')} Training
+          through it costs you roughly {Math.round((1 - impairment) * 100)}% of the camp.
         </Alert>
       )}
 
@@ -196,20 +274,101 @@ export function TrainingScreen() {
             options={WEEK_OPTIONS}
           />
           <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
-            Longer blocks give more, with diminishing returns — and every week spent training
-            is a week older.
+            Longer blocks give more in total, but less per week — and every week spent
+            training is a week older. You return on{' '}
+            <strong>{formatGameDay(world.day + Number(weeks) * 7)}</strong>.
           </p>
+        </div>
+
+        {/*
+          The forecast.
+
+          The duration choice was previously blind: three buttons and a sentence claiming
+          diminishing returns that the engine did not actually implement. It does now, and
+          this shows it — computed from the same arithmetic the camp runs, so it cannot
+          promise something the simulation will not honour. A range rather than a number,
+          because a camp is not a purchase.
+        */}
+        <div
+          style={{
+            marginTop: 'var(--space-4)',
+            paddingTop: 'var(--space-3)',
+            borderTop: '1px solid var(--border)',
+          }}
+        >
+          {forecast.atCeiling ? (
+            <Alert tone="warn" title="Nothing left to gain here">
+              Every attribute this focus trains is already at your ceiling. The weeks will
+              pass and nothing will move — pick something else, or accept that this part of
+              your game is finished.
+            </Alert>
+          ) : (
+            <>
+              <KeyStat
+                value={`+${forecast.totalExpected.toFixed(1)}`}
+                label="Expected from this camp"
+                tone={
+                  forecast.totalExpected >= 2.5
+                    ? 'good'
+                    : forecast.totalExpected >= 1
+                      ? 'neutral'
+                      : 'bad'
+                }
+                detail={
+                  forecast.totalExpected < 1
+                    ? 'Barely worth the weeks. A better room, a better coach, or more headroom would all help.'
+                    : 'Rating points across everything this focus builds. Camps are meant to be small and to compound.'
+                }
+              />
+              <ul style={{ marginTop: 'var(--space-3)' }}>
+                {(Object.entries(forecast.expected) as [AttributeKey, number][])
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([key, value]) => (
+                    <li
+                      key={key}
+                      className="row"
+                      style={{ justifyContent: 'space-between', fontSize: 'var(--text-sm)' }}
+                    >
+                      <span>{ATTRIBUTE_META[key].label}</span>
+                      <span className="numeric muted">
+                        +{(forecast.low[key] ?? 0).toFixed(1)} to +
+                        {(forecast.high[key] ?? 0).toFixed(1)}
+                        <span className="visually-hidden">
+                          , expected {value.toFixed(1)}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </>
+          )}
         </div>
       </Card>
 
-      <div className="row" style={{ flexWrap: 'wrap' }}>
-        <Button variant="primary" onClick={train}>
-          Train for {weeks} weeks
-        </Button>
-        <Button onClick={rest}>Rest instead</Button>
-        <Button variant="ghost" onClick={() => navigate({ name: 'hub' })}>
-          Back to career
-        </Button>
+      <div className="stack" style={{ gap: 'var(--space-2)' }}>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <Button
+            variant="primary"
+            onClick={() => !overrunsFight && train()}
+            aria-disabled={overrunsFight}
+          >
+            Train for {weeks} weeks
+          </Button>
+          <Button onClick={rest}>Rest for {weeks} weeks</Button>
+          <Button variant="ghost" onClick={() => navigate({ name: 'hub' })}>
+            Back to career
+          </Button>
+        </div>
+
+        {/*
+          Rest was labelled "Rest instead" and explained nowhere, which made it the most
+          misread control in the game: it looks like recovery and it is *also* skill decay,
+          so a healthy fighter who presses it simply gets worse. Which situation the player
+          is in is the entire content of this line.
+        */}
+        <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
+          {restAdvice(fighter.injuries ?? [], world.day)}
+        </p>
       </div>
 
       {/*
@@ -220,6 +379,15 @@ export function TrainingScreen() {
       */}
       {outcome && (
         <Card title="Camp report" role="status">
+          {/*
+            What happened to the calendar. The report listed attribute deltas and never once
+            said that months had passed, how old the fighter now was, or what the date was —
+            on the only screen in the game that moves the world clock.
+          */}
+          <p style={{ marginBottom: 'var(--space-3)', fontWeight: 600 }}>
+            {Math.round(outcome.days / 7)} weeks passed. It is {formatGameDay(world.day)} and
+            you are {fighterAge(fighter, world.day)}.
+          </p>
           {Object.keys(outcome.gains).length === 0 ? (
             <p className="muted">Nothing measurable changed.</p>
           ) : (

@@ -120,8 +120,10 @@ describe('the game is playable', () => {
     if (drillable.length > 0) await user.click(drillable[0]!);
     expect(readButtons.length).toBeGreaterThan(0);
 
-    // 5. Fight.
-    await user.click(await screen.findByRole('button', { name: /^Fight$/i }));
+    // 5. Fight — now a two-step commit, because walking out is irreversible and the button
+    // sat at the bottom of a long scroll with no restatement of the plan above it.
+    await user.click(await screen.findByRole('button', { name: /^Fight /i }));
+    await user.click(await screen.findByRole('button', { name: /walk out/i }));
 
     // 6. The replay screen renders and reaches a conclusion.
     expect(await screen.findByText(/Play-by-play/i)).toBeTruthy();

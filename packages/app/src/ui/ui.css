@@ -480,3 +480,31 @@ a.list__item:hover {
   display: block;
   font-size: var(--text-sm);
 }
+
+/* --- Camp: the two fighters side by side -----------------------------------------------
+   Stacked on a phone and paired on anything wider. The comparison is the decision, so on a
+   narrow screen they sit one above the other rather than being squeezed into two unreadable
+   columns. */
+
+.camp-reads {
+  display: grid;
+  gap: var(--space-4);
+  margin-block: var(--space-3);
+}
+
+@media (min-width: 34rem) {
+  .camp-reads {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Exposure line on a scouting read. A glyph and a word, not a colour — the row it sits in
+   is already tinted by selection state, so hue is spoken for. */
+.exposure {
+  color: var(--text-muted);
+}
+
+.exposure--weak {
+  color: var(--negative);
+  font-weight: 600;
+}

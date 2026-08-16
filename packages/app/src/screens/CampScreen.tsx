@@ -5,18 +5,24 @@ import {
   MAX_PREPPED_READS,
   campQuality as computeCampQuality,
   createRng,
+  currentHeat,
+  purseFor,
   deriveTendencies,
   displayName,
   drillQuality as computeDrillQuality,
   footageAvailable,
   getDivision,
   normaliseTargeting,
+  ratingBand,
   recordString,
+  READ_META,
   scoutOpponent,
   type Approach,
+  type Attributes,
   type Coach,
   type Fighter,
   type Gym,
+  type Promotion,
   type ReadKey,
   type StrikeTarget,
 } from '@mmasim/engine';
@@ -25,6 +31,7 @@ import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty } from '../ui';
 import { Alert, FighterRead, KeyStat } from '../ui/signals';
 import { getBooking, runBookedFight, saveBookingPlan } from '../game/career';
+import { getRivalry } from '../game/rivalries';
 import { formatGameDay } from '../shell/Shell';
 
 /**
@@ -41,6 +48,7 @@ export function CampScreen() {
   const { navigate } = useRouter();
   const [booking] = useState(() => getBooking());
   const [running, setRunning] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   const opponent = booking
     ? (db.fighters.findById(booking.opponentId) as Fighter | undefined)
@@ -74,6 +82,34 @@ export function CampScreen() {
     booking?.plan.preppedReads.map((r) => r.read) ?? [],
   );
 
+  /**
+   * Write the plan down as it is built, not when the fight starts.
+   *
+   * The plan was only persisted inside `startFight`, so leaving the screen for any reason —
+   * checking the opponent's profile, looking at the rankings, an accidental back gesture on
+   * a phone — silently threw away every read, the approach and all three sliders, and
+   * returned you to the default plan you never chose. On the screen whose entire purpose is
+   * a considered decision.
+   */
+  const persist = (next: {
+    approach?: Approach;
+    targeting?: Record<StrikeTarget, number>;
+    selected?: ReadKey[];
+  }) => {
+    if (!booking) return;
+    const reads = next.selected ?? selected;
+    saveBookingPlan(booking, {
+      ...booking.plan,
+      approach: next.approach ?? approach,
+      targeting: normaliseTargeting(next.targeting ?? targeting),
+      preppedReads: reads.map((read) => ({
+        read,
+        drillQuality: 0,
+        confidence: report?.reads.find((r) => r.read === read)?.confidence ?? 0.5,
+      })),
+    });
+  };
+
   if (!booking || !opponent || !playerFighter) {
     return (
       <Empty title="No fight booked">
@@ -83,6 +119,15 @@ export function CampScreen() {
       </Empty>
     );
   }
+
+  const rivalry = getRivalry(db, playerFighter.id, opponent.id, world.day);
+  const heat = currentHeat(rivalry, world.day);
+  const promotion = playerFighter.promotionId
+    ? (db.promotions.findById(playerFighter.promotionId) as Promotion | undefined)
+    : undefined;
+  const purse = promotion
+    ? purseFor(playerFighter, promotion, booking.bout.isTitleFight)
+    : 0;
 
   const camp = computeCampQuality(
     weeks,
@@ -98,9 +143,13 @@ export function CampScreen() {
   // explanation. They stay focusable and say why instead.
   const toggleRead = (read: ReadKey) => {
     setSelected((current) => {
-      if (current.includes(read)) return current.filter((r) => r !== read);
-      if (current.length >= MAX_PREPPED_READS) return current;
-      return [...current, read];
+      const next = current.includes(read)
+        ? current.filter((r) => r !== read)
+        : current.length >= MAX_PREPPED_READS
+          ? current
+          : [...current, read];
+      persist({ selected: next });
+      return next;
     });
   };
 
@@ -129,14 +178,46 @@ export function CampScreen() {
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
       <Card raised>
-        <h3 className="section-title">Fight week</h3>
+        {/*
+          h2 first, then the label. The old order put a section-title h3 ("Fight week") above
+          the h2 naming the opponent, so document order ran h1 → h3 → h2 — and "Fight week"
+          was the wrong frame anyway for a screen where you plan the whole camp.
+        */}
         <h2 style={{ fontSize: 'var(--text-xl)' }}>vs {displayName(opponent)}</h2>
         <p className="muted">
           {formatGameDay(booking.bout.day)} · {getDivision(opponent.divisionId).shortName} ·{' '}
           {recordString(opponent.summary)}
         </p>
-        <div style={{ marginTop: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
-          <FighterRead attributes={opponent.attributes} />
+
+        {/*
+          What is at stake. Purses, titles and heat all ship, and the screen where a player
+          decides how hard to prepare mentioned none of them.
+        */}
+        <div className="row" style={{ flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
+          {booking.bout.isTitleFight && <Chip tone="accent">🏆 Championship bout</Chip>}
+          {rivalry.isRivalry ? (
+            <Chip tone="negative">🔥 Grudge — he wants this one badly</Chip>
+          ) : (
+            heat >= 40 && <Chip tone="warning">🔥 The audience wants this</Chip>
+          )}
+          {purse > 0 && <Chip tone="info">Purse ${purse}k</Chip>}
+          <Chip tone="neutral">{booking.bout.rounds} rounds</Chip>
+        </div>
+
+        {/*
+          Both fighters, side by side. The opponent's read was here and yours was not, so
+          "should I pressure him or stay long?" had to be answered from memory of a screen
+          two taps away.
+        */}
+        <div className="camp-reads">
+          <div>
+            <h3 className="section-title">Him</h3>
+            <FighterRead attributes={opponent.attributes} />
+          </div>
+          <div>
+            <h3 className="section-title">You</h3>
+            <FighterRead attributes={playerFighter.attributes} />
+          </div>
         </div>
 
         {camp < 0.45 && (
@@ -206,6 +287,16 @@ export function CampScreen() {
                 >
                   Drill: {r.counter}
                 </span>
+                {/*
+                  Whether the threat is a threat *to you*.
+
+                  "He shoots early, constantly, certain" is terrifying with takedown defence
+                  of 40 and irrelevant at 85 — and the report said the same thing either
+                  way, leaving the player to hold their own ratings in their head and do the
+                  comparison. Four reads out of eight is a real budget and this is the
+                  information that makes spending it a decision rather than a guess.
+                */}
+                <ExposureLine phase={READ_META[r.read].phase} attributes={playerFighter.attributes} />
                 {atLimit && (
                   <span style={{ display: 'block', marginTop: 'var(--space-2)' }}>
                     <Chip tone="warning">⚠ Camp is full — drop one of your reads first</Chip>
@@ -253,7 +344,10 @@ export function CampScreen() {
                   key={key}
                   type="button"
                   aria-pressed={approach === key}
-                  onClick={() => setApproach(key)}
+                  onClick={() => {
+                    setApproach(key);
+                    persist({ approach: key });
+                  }}
                   style={{
                     padding: 'var(--space-3)',
                     minHeight: 'var(--tap-target)',
@@ -292,7 +386,11 @@ export function CampScreen() {
                   max={100}
                   value={Math.round(targeting[target] * 100)}
                   onChange={(e) =>
-                    setTargeting((t) => ({ ...t, [target]: Number(e.target.value) / 100 }))
+                    setTargeting((t) => {
+                      const next = { ...t, [target]: Number(e.target.value) / 100 };
+                      persist({ targeting: next });
+                      return next;
+                    })
                   }
                   style={{ width: '100%', accentColor: 'var(--accent)' }}
                 />
@@ -306,9 +404,67 @@ export function CampScreen() {
         </div>
       </Card>
 
-      <Button variant="primary" block onClick={startFight} disabled={running}>
-        {running ? 'Fight in progress…' : 'Fight'}
-      </Button>
+      {/*
+        The commit step.
+
+        "Fight" was a single unlabelled tap at the bottom of eight read buttons, four
+        approach cards and three sliders — irreversible, and with no restatement of what was
+        actually being committed to. A player who scrolled past the top of the screen had no
+        way to check their own plan without scrolling back up. This is the same two-step the
+        rest of the app already uses for consequential actions.
+      */}
+      <Card title="Ready?" raised>
+        <ul style={{ marginBottom: 'var(--space-3)' }}>
+          <li className="row" style={{ justifyContent: 'space-between' }}>
+            <span className="muted">Approach</span>
+            <strong>{APPROACH_META[approach].label}</strong>
+          </li>
+          <li className="row" style={{ justifyContent: 'space-between' }}>
+            <span className="muted">Drilled</span>
+            <strong>
+              {selected.length === 0
+                ? 'Nothing'
+                : `${selected.length} read${selected.length === 1 ? '' : 's'}`}
+            </strong>
+          </li>
+          <li className="row" style={{ justifyContent: 'space-between' }}>
+            <span className="muted">Targeting</span>
+            <strong>
+              {(['head', 'body', 'legs'] as const)
+                .map((t) => `${Math.round((targeting[t] / targetingTotal) * 100)}% ${t}`)
+                .join(' · ')}
+            </strong>
+          </li>
+        </ul>
+
+        {selected.length === 0 && (
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <Alert tone="warn" title="You have drilled nothing">
+              You can absolutely walk in cold, and against a fighter you clearly outclass it
+              costs you little. Against anyone else you are giving away the one advantage
+              preparation buys.
+            </Alert>
+          </div>
+        )}
+
+        {!confirming ? (
+          <Button variant="primary" block onClick={() => setConfirming(true)}>
+            Fight {displayName(opponent)}
+          </Button>
+        ) : (
+          <div className="row" style={{ flexWrap: 'wrap' }}>
+            <Button variant="primary" onClick={startFight} disabled={running}>
+              {running ? 'Fight in progress…' : 'Yes — walk out'}
+            </Button>
+            <Button variant="ghost" onClick={() => setConfirming(false)}>
+              Not yet, let me change something
+            </Button>
+          </div>
+        )}
+        <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
+          Your plan is saved as you build it, so you can leave this screen and come back.
+        </p>
+      </Card>
     </div>
   );
 }
@@ -329,5 +485,48 @@ function ConfidenceChip({ estimate, confidence }: { estimate: number; confidence
     <Chip tone={tone} title={`Coach is ${sureness} about this read`}>
       {frequency} · {sureness}
     </Chip>
+  );
+}
+
+/**
+ * How exposed the player is to one kind of threat.
+ *
+ * The mapping from a read's resolution phase to the attribute that answers it is the honest
+ * one: a takedown read is answered by takedown defence and nothing else, a submission read
+ * by your own submission grappling. Deliberately one attribute rather than a blend — a
+ * composite would be more accurate and far less actionable, and the player is choosing what
+ * to drill, not auditing the engine.
+ */
+const PHASE_DEFENCE: Readonly<Record<ReadMetaPhase, { key: keyof Attributes; label: string }>> = {
+  striking: { key: 'strikingDefence', label: 'striking defence' },
+  takedown: { key: 'takedownDefence', label: 'takedown defence' },
+  clinch: { key: 'strength', label: 'strength in the clinch' },
+  ground: { key: 'scrambling', label: 'scrambling' },
+  submission: { key: 'submissions', label: 'submission grappling' },
+};
+
+type ReadMetaPhase = 'striking' | 'takedown' | 'clinch' | 'ground' | 'submission';
+
+function ExposureLine({
+  phase,
+  attributes,
+}: {
+  phase: ReadMetaPhase;
+  attributes: Attributes;
+}) {
+  const defence = PHASE_DEFENCE[phase];
+  const value = attributes[defence.key];
+  const band = ratingBand(value);
+  const exposed = value < 55;
+
+  return (
+    <span
+      className={`exposure ${exposed ? 'exposure--weak' : ''}`}
+      style={{ display: 'block', fontSize: 'var(--text-xs)', marginTop: 4 }}
+    >
+      <span aria-hidden="true">{exposed ? '⚠' : '✓'}</span> Your {defence.label} is{' '}
+      <strong>{band.label.toLowerCase()}</strong> ({value})
+      {exposed ? ' — this one will hurt you.' : ' — you can live with this.'}
+    </span>
   );
 }

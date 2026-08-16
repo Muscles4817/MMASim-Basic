@@ -138,7 +138,16 @@ describe('training moves attributes', () => {
       expect(fighter.attributes[key], key).toBeLessThanOrEqual(fighter.potential[key]);
     }
     // And it should get genuinely close, or the ceiling is decorative.
-    expect(fighter.attributes.strikingOffence).toBeGreaterThan(78);
+    //
+    // Expressed as the share of available room closed rather than as an absolute rating.
+    // The old `> 78` was picked when gains were linear in camp weeks, so it sat on an
+    // asymptote and moved the moment the block curve was tuned — measuring the thing the
+    // claim is actually about survives that.
+    const start = prospect();
+    const closed =
+      (fighter.attributes.strikingOffence - start.attributes.strikingOffence) /
+      (start.potential.strikingOffence - start.attributes.strikingOffence);
+    expect(closed).toBeGreaterThan(0.8);
   });
 
   it('makes one camp barely visible and two years transformative', () => {

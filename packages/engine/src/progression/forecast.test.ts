@@ -1,0 +1,213 @@
+import { describe, expect, it } from 'vitest';
+import { createRng } from '../core/rng.js';
+import { asCoachId, asGymId } from '../core/ids.js';
+import type { Coach, Gym } from '../domain/organisations.js';
+import { uniformPersonality } from '../domain/personality.js';
+import { makeFighter, TEST_DAY } from '../testing/fixtures.js';
+import { applyTraining, forecastTraining, TRAINING_FOCUSES } from './development.js';
+import type { AttributeKey } from '../ratings/attributes.js';
+
+const gym = (quality = 70): Gym => ({
+  id: asGymId('g'),
+  name: 'Test Gym',
+  city: 'Nowhere',
+  country: 'USA',
+  quality,
+  prestige: 60,
+  specialisms: ['striking'],
+  monthlyCost: 20,
+});
+
+const coach = (): Coach => ({
+  id: asCoachId('c'),
+  firstName: 'Test',
+  lastName: 'Coach',
+  nationality: 'USA',
+  birthDay: 0,
+  scouting: 70,
+  gamePlanning: 70,
+  development: 70,
+  cornering: 70,
+  specialisms: ['striking'],
+  personality: uniformPersonality(50),
+  reputation: 60,
+  salary: 10,
+});
+
+/** A fighter with real room to grow, so a camp has something to work with. */
+const prospect = () =>
+  makeFighter({
+    age: 23,
+    attributes: { strikingOffence: 55, kicking: 50, speed: 55, wrestling: 50 },
+    potential: { strikingOffence: 85, kicking: 82, speed: 78, wrestling: 80 },
+    naturals: { motorLearning: 70 },
+  });
+
+describe('the forecast cannot lie', () => {
+  /**
+   * The whole point of sharing the arithmetic. If these ever diverge, the screen is telling
+   * the player something the simulation will not honour.
+   */
+  it('brackets what the camp actually delivers, across many seeds', () => {
+    const fighter = prospect();
+    const forecast = forecastTraining({
+      fighter,
+      focuses: ['striking'],
+      weeks: 8,
+      gym: gym(),
+      coach: coach(),
+      day: TEST_DAY,
+    });
+
+    for (let seed = 0; seed < 300; seed++) {
+      const actual = applyTraining({
+        fighter,
+        focuses: ['striking'],
+        weeks: 8,
+        gym: gym(),
+        coach: coach(),
+        day: TEST_DAY,
+        rng: createRng(`camp_${seed}`),
+      });
+
+      for (const [key, gained] of Object.entries(actual.gains) as [AttributeKey, number][]) {
+        // Rounding to 2dp on both sides can put a value a hair outside; allow for that only.
+        expect(gained, `${key} came in under the forecast floor on seed ${seed}`).toBeGreaterThanOrEqual(
+          (forecast.low[key] ?? 0) - 0.02,
+        );
+        expect(gained, `${key} came in over the forecast ceiling on seed ${seed}`).toBeLessThanOrEqual(
+          (forecast.high[key] ?? 0) + 0.02,
+        );
+      }
+    }
+  });
+
+  it('forecasts every attribute the camp will actually touch', () => {
+    const fighter = prospect();
+    const actual = applyTraining({
+      fighter,
+      focuses: ['striking'],
+      weeks: 8,
+      gym: gym(),
+      coach: coach(),
+      day: TEST_DAY,
+      rng: createRng('coverage'),
+    });
+    const forecast = forecastTraining({
+      fighter,
+      focuses: ['striking'],
+      weeks: 8,
+      gym: gym(),
+      coach: coach(),
+      day: TEST_DAY,
+    });
+
+    // No surprises: nothing may move that the player was not told about.
+    for (const key of Object.keys(actual.gains)) {
+      expect(forecast.expected[key as AttributeKey], `${key} moved unforecast`).toBeGreaterThan(0);
+    }
+  });
+
+  it('sits its expectation between its own bounds', () => {
+    const forecast = forecastTraining({
+      fighter: prospect(),
+      focuses: ['wrestling'],
+      weeks: 8,
+      gym: gym(),
+      coach: coach(),
+      day: TEST_DAY,
+    });
+    for (const key of Object.keys(forecast.expected) as AttributeKey[]) {
+      expect(forecast.low[key]!).toBeLessThanOrEqual(forecast.expected[key]!);
+      expect(forecast.expected[key]!).toBeLessThanOrEqual(forecast.high[key]!);
+    }
+  });
+});
+
+describe('the forecast answers the question the screen asks', () => {
+  it('shows longer camps giving more, with diminishing returns per week', () => {
+    const fighter = prospect();
+    const run = (weeks: number) =>
+      forecastTraining({
+        fighter,
+        focuses: ['striking'],
+        weeks,
+        gym: gym(),
+        coach: coach(),
+        day: TEST_DAY,
+      }).totalExpected;
+
+    const four = run(4);
+    const eight = run(8);
+    const twelve = run(12);
+
+    expect(eight).toBeGreaterThan(four);
+    expect(twelve).toBeGreaterThan(eight);
+    // Per-week value falls, which is the claim the screen makes in prose and never showed.
+    expect(twelve / 12).toBeLessThan(four / 4);
+  });
+
+  it('shows splitting focus costing both of them', () => {
+    const fighter = prospect();
+    const single = forecastTraining({
+      fighter,
+      focuses: ['striking'],
+      weeks: 8,
+      gym: gym(),
+      coach: coach(),
+      day: TEST_DAY,
+    });
+    const split = forecastTraining({
+      fighter,
+      focuses: ['striking', 'wrestling'],
+      weeks: 8,
+      gym: gym(),
+      coach: coach(),
+      day: TEST_DAY,
+    });
+
+    const strikingSingle = single.expected.strikingOffence ?? 0;
+    const strikingSplit = split.expected.strikingOffence ?? 0;
+    expect(strikingSplit).toBeLessThan(strikingSingle);
+  });
+
+  it('shows a coach and a good room being worth something', () => {
+    const fighter = prospect();
+    const base = { fighter, focuses: ['striking'] as const, weeks: 8, day: TEST_DAY };
+
+    const alone = forecastTraining({ ...base, gym: gym(30) }).totalExpected;
+    const supported = forecastTraining({ ...base, gym: gym(90), coach: coach() }).totalExpected;
+    expect(supported).toBeGreaterThan(alone * 1.5);
+  });
+
+  it('says plainly when there is nothing left to gain', () => {
+    const finished = makeFighter({
+      attributes: { strikingOffence: 80, kicking: 80, speed: 80 },
+      potential: { strikingOffence: 80, kicking: 80, speed: 80 },
+    });
+    const forecast = forecastTraining({
+      fighter: finished,
+      focuses: ['striking'],
+      weeks: 12,
+      gym: gym(),
+      coach: coach(),
+      day: TEST_DAY,
+    });
+    expect(forecast.atCeiling).toBe(true);
+    expect(forecast.totalExpected).toBe(0);
+  });
+
+  it('never forecasts a loss — a camp can be wasted but not harmful', () => {
+    for (const focus of TRAINING_FOCUSES) {
+      const forecast = forecastTraining({
+        fighter: makeFighter({ age: 38 }),
+        focuses: [focus],
+        weeks: 12,
+        day: TEST_DAY,
+      });
+      for (const value of Object.values(forecast.expected)) {
+        expect(value).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+});

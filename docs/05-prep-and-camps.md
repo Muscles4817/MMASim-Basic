@@ -147,3 +147,61 @@ look in isolation.
 - Camp injuries and overtraining.
 - Sparring partners, and the gym-quality effect on them.
 - Multi-coach corners with per-discipline specialists.
+
+## What the journey pass changed
+
+A UX pass walked the training and fight-camp screens as a player does, rather than reviewing
+them as components. Two of the findings were not presentation problems at all — they were
+failures in what happens *between* screens, which is exactly the class a component review
+cannot see.
+
+### Training could walk past a booked fight
+
+`runTraining` advances the world clock by the whole block, and the training screen had no
+idea a fight was booked. A twelve-week camp with a fight in eight walked the calendar
+straight past fight night. Verified, silent, and now both warned about and refused.
+
+The general lesson: **any control that moves the world clock has to know what is already on
+the calendar.**
+
+### The fight plan was not written down until you fought
+
+The camp plan — every drilled read, the approach, all three targeting sliders — was persisted
+only inside `startFight`. Leaving the screen for any reason (checking the opponent's profile,
+an accidental back gesture) silently discarded it and restored a default plan the player had
+never chosen, on the one screen whose entire purpose is a considered decision. It now saves
+as it is built.
+
+### The interface promised something the engine did not do
+
+The training screen said longer camps give more "with diminishing returns", and doc 05 says
+the same about camp weeks. The development formula was strictly **linear** in weeks, so three
+four-week camps and one twelve-week camp came to precisely the same thing and the duration
+was a false choice. `trainingBlocks()` now applies `(weeks / 4) ^ 0.75`, with the base gain
+raised so the common eight-week camp lands exactly where it did — a change to the *shape* of
+the curve, not its level.
+
+This was found by writing the forecast, not by reading the code: the forecast test asserted
+"per-week value falls as camps get longer" and it did not.
+
+### The decision screens did not show the decision
+
+Neither screen showed the player their own fighter. Training asked what to work on without
+displaying any rating; fight camp showed a scouting report on the opponent and nothing about
+you, so "does this threat matter?" had to be answered from memory of a screen two taps away.
+Each read now states the player's own defence in that phase, in words: *"Your takedown
+defence is weak (44) — this one will hurt you."*
+
+### Rest was a trap
+
+Resting is skill decay. The control was labelled "Rest instead" and explained nowhere, so a
+healthy fighter's player would reasonably read it as recovery and quietly get worse.
+`restAdvice()` says which situation you are in, and `weeksUntilFit()` gives the injured
+player the number the game already knew and never told them.
+
+### The forecast shares its arithmetic with the camp
+
+`forecastTraining()` and `applyTraining()` compute gains through the same `rawGain()`
+function, and a test brackets 300 real camps inside the forecast's range. A forecast built
+from a second copy of the formula would drift the first time either was tuned, and **a
+forecast that lies is worse than no forecast at all.**
