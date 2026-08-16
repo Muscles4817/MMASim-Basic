@@ -100,15 +100,31 @@ describe('the world stays within its budget', () => {
   });
 
   it('caps the work in one call rather than freezing the tab', () => {
-    const db = game('budget');
+    /*
+     * On the 2026 roster, because the backstop is a guard against *volume* and the 2020 world
+     * cannot produce enough of it to reach one — 139 fighters across five promotions run out
+     * of bookable matchups long before any budget binds. Testing the cap on a world that can
+     * never hit it proves nothing.
+     */
+    const db = createNewGame({ adapter: undefined, seed: 'budget', era: '2026' });
     const me = fighters(db)[0]!;
     // Twenty years in one go — nothing in the game does this, which is the point.
     const out = advanceWorld(db, 0, 365 * 20, me.id);
     expect(out.truncated).toBe(true);
-    // A soft ceiling: the budget is checked before each night and a card is atomic, so a
-    // call can overshoot by at most one card. Stopping mid-event would leave unresolved
-    // bouts on a card, which is worse than nine extra simulations.
-    expect(out.fights).toBeLessThanOrEqual(220 + 9);
+    /*
+     * The budget is now proportional to the span rather than flat, because a flat 220 was
+     * written when a card was one or two bouts and the 2026 roster made it bind immediately —
+     * a one-year call wants around 700 fights and got 220, which starved the world to six
+     * cards a year for the leader. `MAX_FIGHTS_PER_CALL * 12` survives as the absolute
+     * backstop this test exists to prove, and twenty years is far past it.
+     *
+     * Still a soft ceiling: the budget is checked before each night and a card is atomic, so
+     * a call can overshoot by at most one card. Stopping mid-event would leave unresolved
+     * bouts on a card, which is worse than nine extra simulations.
+     */
+    expect(out.fights).toBeLessThanOrEqual(220 * 12 + 9);
+    // And it must actually bind, or "truncated" is meaningless.
+    expect(out.fights).toBeLessThan(365 * 20 * 0.5);
   });
 
   it('simulates a realistic camp quickly enough to sit behind a button', () => {

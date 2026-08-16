@@ -54,6 +54,16 @@ export interface WorldMeta extends Entity {
   day: number;
   /** Root RNG seed. Together with `day` this reproduces the world exactly. */
   seed: string;
+  /**
+   * Which starting world this save was created from.
+   *
+   * Recorded rather than inferred, because it is not recoverable after the fact: a 2026 save
+   * played for six years and a 2020 save played for twelve are the same day number with
+   * entirely different rosters, and the menu has to be able to say which is which.
+   *
+   * Absent on saves made before eras existed, which are all 2020 by definition.
+   */
+  era?: '2020' | '2026';
   /** Which role the player is in. */
   playerRole?: 'fighter' | 'coach' | 'promoter';
   playerFighterId?: string;

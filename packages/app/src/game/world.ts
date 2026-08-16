@@ -122,6 +122,21 @@ const CARDS_PER_STEP = 6;
 const MAX_FIGHTS_PER_CALL = 220;
 
 /**
+ * Fights the loop will simulate per fortnight of elapsed time.
+ *
+ * The flat cap above was written when a card was one or two bouts, and the 2026 roster made it
+ * bind immediately: a full nine-bout card times three cards a fortnight is 27 fights, so a
+ * one-year call wants ~700 and got 220 — which truncated the world to six cards a year for the
+ * leader against a real schedule of twenty-odd, and quietly starved every division of activity.
+ *
+ * Proportional to the span requested rather than flat, because the two callers want different
+ * things: a twelve-week camp is six steps and should cost about what it always did, while a
+ * long simulation should be allowed to actually run. `MAX_FIGHTS_PER_CALL` survives as the
+ * backstop against somebody advancing twenty years in one go.
+ */
+const FIGHTS_PER_STEP_BUDGET = 30;
+
+/**
  * Cards run per fortnight, across every promotion.
  *
  * The budget above is a total, and a total is the wrong shape: measured over a simulated
@@ -179,6 +194,12 @@ export function advanceWorld(
     return { fights: 0, news, truncated: false };
   }
 
+  /*
+   * Scaled to the span, capped by the absolute backstop. See `FIGHTS_PER_STEP_BUDGET`.
+   */
+  const steps = Math.max(1, Math.ceil((toDay - fromDay) / STEP_DAYS));
+  const fightBudget = Math.min(MAX_FIGHTS_PER_CALL * 12, steps * FIGHTS_PER_STEP_BUDGET);
+
   const rng = createRng(`${world.seed}:world:${fromDay}`);
   const promotions = db.promotions.findAll() as unknown as Promotion[];
   const readyOn = new Map<string, number>();
@@ -217,7 +238,7 @@ export function advanceWorld(
 
     for (let card = 0; card < Math.min(CARDS_PER_STEP, MAX_CARDS_PER_STEP); card++) {
       if (available.length < 2) break;
-      if (fights >= MAX_FIGHTS_PER_CALL) {
+      if (fights >= fightBudget) {
         truncated = true;
         break;
       }

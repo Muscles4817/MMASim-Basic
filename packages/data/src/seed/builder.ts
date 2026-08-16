@@ -132,7 +132,14 @@ function derivePotential(spec: FighterSpec): Attributes {
   return out;
 }
 
-export function buildFighter(spec: FighterSpec): Fighter {
+/**
+ * @param onDay The world's start day, which every age in `spec` is stated as of.
+ *
+ * Defaulted to the 2020 seed day rather than made required, because the 2020 roster and its
+ * tests were written against a module const and there is no reason to churn them. A second era
+ * simply passes its own day.
+ */
+export function buildFighter(spec: FighterSpec, onDay: number = SEED_DAY): Fighter {
   const divisionId = asDivisionId(spec.div);
   const summary = parseRecord(spec.record);
 
@@ -144,7 +151,7 @@ export function buildFighter(spec: FighterSpec): Fighter {
     nationality: spec.nat,
     sex: spec.sex ?? 'male',
     // Real birthdays are not modelled; a fixed 15 June keeps ages stable and reproducible.
-    birthDay: birthDayForAge(spec.age, SEED_DAY, 6, 15),
+    birthDay: birthDayForAge(spec.age, onDay, 6, 15),
     walkingWeightLbs: spec.walk,
     heightInches: spec.htIn,
     reachInches: spec.reachIn,
@@ -179,7 +186,7 @@ export function buildFighter(spec: FighterSpec): Fighter {
     // nobody debuts before they could legally compete.
     proDebutDay: birthDayForAge(
       Math.max(0, Math.min(spec.age - 18, Math.round((summary.wins + summary.losses) / 2.5))),
-      SEED_DAY,
+      onDay,
       6,
       15,
     ),

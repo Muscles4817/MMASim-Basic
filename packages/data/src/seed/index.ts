@@ -5,9 +5,12 @@
  * and the contract/gym assignments that make it a world rather than a list.
  */
 
-import { asGymId, asPromotionId, type Fighter } from '@mmasim/engine';
+import { asGymId, asPromotionId, type Fighter, type Promotion } from '@mmasim/engine';
 import { buildFighter, SEED_DAY, type FighterSpec } from './builder.js';
 import { SEED_MANAGERS } from './managers.js';
+import { DEFAULT_ERA, type EraId } from './eras.js';
+import { buildFighters2026, DAY_2026 } from './world-2026.js';
+import { PROMOTIONS_2026 } from './organisations-2026.js';
 import { HEAVY_DIVISION_SPECS } from './fighters-heavy.js';
 import { LIGHT_DIVISION_SPECS } from './fighters-light.js';
 import { SMALL_DIVISION_SPECS } from './fighters-small.js';
@@ -83,7 +86,7 @@ export function buildSeedFighters(): Fighter[] {
 export interface SeedWorld {
   day: number;
   fighters: readonly Fighter[];
-  promotions: typeof SEED_PROMOTIONS;
+  promotions: readonly Promotion[];
   gyms: typeof SEED_GYMS;
   coaches: typeof SEED_COACHES;
   referees: typeof SEED_REFEREES;
@@ -92,7 +95,28 @@ export interface SeedWorld {
   managers: typeof SEED_MANAGERS;
 }
 
-export function buildSeedWorld(): SeedWorld {
+/**
+ * Build a starting world.
+ *
+ * The era is a parameter rather than an assumption, which it was not until a second one
+ * existed. `2020` is the original hand-authored world, unchanged; `2026` is a real-world
+ * roster at a depth that can actually fill a card.
+ */
+export function buildSeedWorld(era: EraId = DEFAULT_ERA): SeedWorld {
+  if (era === '2026') {
+    return {
+      day: DAY_2026,
+      fighters: buildFighters2026(),
+      promotions: PROMOTIONS_2026,
+      gyms: SEED_GYMS,
+      coaches: SEED_COACHES,
+      referees: SEED_REFEREES,
+      judges: SEED_JUDGES,
+      commentators: SEED_COMMENTATORS,
+      managers: SEED_MANAGERS,
+    };
+  }
+
   return {
     day: SEED_DAY,
     fighters: buildSeedFighters(),
@@ -107,6 +131,10 @@ export function buildSeedWorld(): SeedWorld {
 }
 
 export * from './builder.js';
+export * from './eras.js';
+export * from './depth.js';
+export { PROMOTIONS_2026 } from './organisations-2026.js';
+export { buildFighters2026, DAY_2026 } from './world-2026.js';
 export {
   SEED_COACHES,
   SEED_COMMENTATORS,

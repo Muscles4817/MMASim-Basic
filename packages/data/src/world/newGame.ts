@@ -9,7 +9,7 @@ import { CURRENT_SCHEMA_VERSION } from '../db/migrations.js';
 import { createGameDb, setWorld, type GameDb } from '../db/gameDb.js';
 import { createMemoryAdapter } from '../db/adapters.js';
 import type { Entity, StorageAdapter } from '../db/types.js';
-import { buildSeedWorld } from '../seed/index.js';
+import { buildSeedWorld, type EraId } from '../seed/index.js';
 import type {
   Coach,
   Commentator,
@@ -32,12 +32,26 @@ export interface NewGameOptions {
   adapter?: StorageAdapter;
   /** ISO timestamp for the save's creation. Passed in — the engine layer owns no clock. */
   createdAtIso?: string;
+  /**
+   * Which starting world.
+   *
+   * Defaults to `2020`, not to the menu's default. That looks backwards and is deliberate:
+   * this function is the *engine* entry point, and every existing test, fixture and long-sim
+   * was written against the 2020 roster and measures it by name. Silently changing what they
+   * build would not make them wrong, it would make them test something else while still
+   * passing — which is the worst possible outcome for a suite this one relies on.
+   *
+   * The player-facing default lives in `DEFAULT_ERA` and is chosen at the menu, which is where
+   * a decision about what a new player should see actually belongs.
+   */
+  era?: EraId;
 }
 
 export function createNewGame(options: NewGameOptions = {}): GameDb {
   const adapter = options.adapter ?? createMemoryAdapter();
   const db = createGameDb(adapter, true);
-  const seed = buildSeedWorld();
+  const era = options.era ?? '2020';
+  const seed = buildSeedWorld(era);
 
   db.fighters.upsertMany(seed.fighters as (Fighter & Entity)[]);
   db.promotions.upsertMany(seed.promotions as unknown as (Promotion & Entity)[]);
@@ -50,7 +64,8 @@ export function createNewGame(options: NewGameOptions = {}): GameDb {
 
   setWorld(db, {
     day: seed.day,
-    seed: options.seed ?? 'mmasim-2020',
+    seed: options.seed ?? `mmasim-${era}`,
+    era,
     playerRole: options.playerRole,
     playerFighterId: options.playerFighterId,
     playerGymId: options.playerGymId,
