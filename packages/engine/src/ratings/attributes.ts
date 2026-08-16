@@ -1,0 +1,323 @@
+/**
+ * The 15 visible attributes and the 8 hidden naturals.
+ *
+ * See docs/02-attributes-and-ratings.md. The headline rule: ratings are **absolute**, not
+ * weight-class relative. Power 78 is the same force at flyweight and at heavyweight; what
+ * changes is the company you keep.
+ */
+
+import { clamp, round } from '../core/math.js';
+
+/** A visible attribute rating. Always an integer in [1, 100]. */
+export type Rating = number;
+
+export const RATING_MIN = 1;
+export const RATING_MAX = 100;
+
+export const ATTRIBUTE_KEYS = [
+  // Physical
+  'power',
+  'speed',
+  'cardio',
+  'durability',
+  'strength',
+  // Striking
+  'strikingOffence',
+  'kicking',
+  'strikingDefence',
+  // Grappling
+  'wrestling',
+  'takedownDefence',
+  'groundControl',
+  'submissions',
+  'scrambling',
+  // Mental
+  'fightIq',
+  'composure',
+] as const;
+
+export type AttributeKey = (typeof ATTRIBUTE_KEYS)[number];
+
+/** A fighter's visible attribute block. Every key is required — no partial fighters. */
+export type Attributes = Record<AttributeKey, Rating>;
+
+export const ATTRIBUTE_GROUPS = ['physical', 'striking', 'grappling', 'mental'] as const;
+export type AttributeGroup = (typeof ATTRIBUTE_GROUPS)[number];
+
+export interface AttributeMeta {
+  key: AttributeKey;
+  label: string;
+  group: AttributeGroup;
+  /** One-line explanation shown on long-press / hover in the UI. */
+  blurb: string;
+  /**
+   * Convexity of this attribute's effect curve. Higher = a bigger gap between elite and
+   * all-time, i.e. the attribute rewards outliers more. See `curve.ts`.
+   */
+  convexity: number;
+}
+
+/**
+ * Single source of truth for attribute presentation and curve shape.
+ *
+ * Convexity choices, in short:
+ *  - 1.60 for the fight-ending attributes (Power, Ground Control, Submissions). These are
+ *    the ones where an all-timer must feel categorically different, not incrementally so.
+ *  - 1.20 for the attributes that *deny* — Cardio, Striking Defence, Takedown Defence.
+ *    Elite defence should be genuinely hard to solve, but not literally impenetrable.
+ *  - 0.90 for broad, everywhere-applied attributes (Speed, Fight IQ, Composure). These
+ *    already touch every roll, so a steep curve on top would double-count them.
+ */
+export const ATTRIBUTE_META: Readonly<Record<AttributeKey, AttributeMeta>> = {
+  power: {
+    key: 'power',
+    label: 'Power',
+    group: 'physical',
+    blurb: 'Absolute force on a clean strike. Fight-ending potential.',
+    convexity: 1.6,
+  },
+  speed: {
+    key: 'speed',
+    label: 'Speed',
+    group: 'physical',
+    blurb: 'Hand and foot speed, reaction time, who lands first.',
+    convexity: 0.9,
+  },
+  cardio: {
+    key: 'cardio',
+    label: 'Cardio',
+    group: 'physical',
+    blurb: 'Gas tank. How slowly you fade and how well you recover between rounds.',
+    convexity: 1.2,
+  },
+  durability: {
+    key: 'durability',
+    label: 'Durability',
+    group: 'physical',
+    blurb: 'Chin and body. Absorbing damage without being hurt.',
+    convexity: 1.2,
+  },
+  strength: {
+    key: 'strength',
+    label: 'Strength',
+    group: 'physical',
+    blurb: 'Functional grappling strength: clinch, top pressure, breaking grips.',
+    convexity: 1.1,
+  },
+  strikingOffence: {
+    key: 'strikingOffence',
+    label: 'Striking',
+    group: 'striking',
+    blurb: 'Boxing craft: accuracy, combinations, shot selection in the pocket.',
+    convexity: 1.1,
+  },
+  kicking: {
+    key: 'kicking',
+    label: 'Kicking',
+    group: 'striking',
+    blurb: 'Kick and knee arsenal, and the commitment to use it.',
+    convexity: 1.1,
+  },
+  strikingDefence: {
+    key: 'strikingDefence',
+    label: 'Striking Def.',
+    group: 'striking',
+    blurb: 'Head movement, range management, guard — not being there to be hit.',
+    convexity: 1.2,
+  },
+  wrestling: {
+    key: 'wrestling',
+    label: 'Wrestling',
+    group: 'grappling',
+    blurb: 'Takedown offence: entries, level changes, chaining, trips.',
+    convexity: 1.2,
+  },
+  takedownDefence: {
+    key: 'takedownDefence',
+    label: 'TD Defence',
+    group: 'grappling',
+    blurb: 'Sprawl, underhooks, hips, wall defence.',
+    convexity: 1.2,
+  },
+  groundControl: {
+    key: 'groundControl',
+    label: 'Ground Control',
+    group: 'grappling',
+    blurb: 'Holding top position, passing guard, landing ground-and-pound.',
+    convexity: 1.6,
+  },
+  submissions: {
+    key: 'submissions',
+    label: 'Submissions',
+    group: 'grappling',
+    blurb: 'Submission offence: chains, transitions, finishing squeezes.',
+    convexity: 1.6,
+  },
+  scrambling: {
+    key: 'scrambling',
+    label: 'Scrambling',
+    group: 'grappling',
+    blurb: 'Bottom game, guard, get-ups, wall-walking, transition speed.',
+    convexity: 1.2,
+  },
+  fightIq: {
+    key: 'fightIq',
+    label: 'Fight IQ',
+    group: 'mental',
+    blurb: 'Reading the fight, adapting mid-round, executing the game plan.',
+    convexity: 0.9,
+  },
+  composure: {
+    key: 'composure',
+    label: 'Composure',
+    group: 'mental',
+    blurb: 'Performing hurt, in deep water, in title rounds, in hostile buildings.',
+    convexity: 0.9,
+  },
+};
+
+export const ATTRIBUTES_BY_GROUP: Readonly<Record<AttributeGroup, readonly AttributeKey[]>> = {
+  physical: ['power', 'speed', 'cardio', 'durability', 'strength'],
+  striking: ['strikingOffence', 'kicking', 'strikingDefence'],
+  grappling: [
+    'wrestling',
+    'takedownDefence',
+    'groundControl',
+    'submissions',
+    'scrambling',
+  ],
+  mental: ['fightIq', 'composure'],
+};
+
+/** Force a value into a valid integer rating. */
+export function toRating(value: number): Rating {
+  return clamp(Math.round(value), RATING_MIN, RATING_MAX);
+}
+
+/** Clamp every attribute in a block to a valid rating. */
+export function normaliseAttributes(attrs: Attributes): Attributes {
+  const out = {} as Attributes;
+  for (const key of ATTRIBUTE_KEYS) out[key] = toRating(attrs[key]);
+  return out;
+}
+
+/** Build an attribute block where every key has the same value. Handy in tests. */
+export function uniformAttributes(value: Rating): Attributes {
+  const out = {} as Attributes;
+  for (const key of ATTRIBUTE_KEYS) out[key] = toRating(value);
+  return out;
+}
+
+// --- Descriptive bands ------------------------------------------------------------------
+// The bands in docs/02 are not decoration: the UI colours by them, scouting reports phrase
+// themselves with them, and a statistical test asserts the seeded roster's distribution
+// across them. Keep the two in sync.
+
+export const RATING_BANDS = [
+  { min: 96, key: 'allTime', label: 'All-time', short: 'ATG' },
+  { min: 90, key: 'worldBest', label: 'Best in the world', short: 'Elite+' },
+  { min: 82, key: 'elite', label: 'Elite', short: 'Elite' },
+  { min: 72, key: 'veryGood', label: 'Very good', short: 'Strong' },
+  { min: 62, key: 'solid', label: 'Solid', short: 'Solid' },
+  { min: 50, key: 'average', label: 'Average', short: 'Avg' },
+  { min: 38, key: 'belowLevel', label: 'Below level', short: 'Weak' },
+  { min: 20, key: 'liability', label: 'Liability', short: 'Poor' },
+  { min: RATING_MIN, key: 'absent', label: 'Absent', short: 'None' },
+] as const;
+
+export type RatingBandKey = (typeof RATING_BANDS)[number]['key'];
+
+export function ratingBand(rating: Rating): (typeof RATING_BANDS)[number] {
+  for (const band of RATING_BANDS) {
+    if (rating >= band.min) return band;
+  }
+  return RATING_BANDS[RATING_BANDS.length - 1]!;
+}
+
+// --- Hidden naturals --------------------------------------------------------------------
+
+export const NATURAL_KEYS = [
+  'frame',
+  'explosiveness',
+  'engine',
+  'constitution',
+  'recovery',
+  'motorLearning',
+  'injuryProneness',
+] as const;
+
+export type NaturalKey = (typeof NATURAL_KEYS)[number];
+
+/** Ageing shape. Drives when a fighter peaks and how sharply they fall off. */
+export const AGE_CURVES = ['earlyBloomer', 'standard', 'longPeak', 'lateBloomer'] as const;
+export type AgeCurve = (typeof AGE_CURVES)[number];
+
+/**
+ * Hidden physiological substrate. Never rendered as numbers — the player infers these from
+ * behaviour, scouting reports and years of watching a fighter.
+ */
+export interface Naturals extends Record<NaturalKey, Rating> {
+  ageCurve: AgeCurve;
+}
+
+export const NATURAL_META: Readonly<Record<NaturalKey, { label: string; blurb: string }>> = {
+  frame: {
+    label: 'Frame',
+    blurb: 'Natural walking weight and skeletal size. Sets which divisions are viable.',
+  },
+  explosiveness: {
+    label: 'Explosiveness',
+    blurb: 'Fast-twitch ceiling. Caps Power and wrestling burst. First thing age takes.',
+  },
+  engine: { label: 'Engine', blurb: 'Aerobic ceiling. Caps Cardio. Declines slowly.' },
+  constitution: {
+    label: 'Constitution',
+    blurb: 'Chin ceiling — and the floor Durability decays toward as damage accumulates.',
+  },
+  recovery: {
+    label: 'Recovery',
+    blurb: 'Injury healing, between-round recovery, tolerance for heavy camps.',
+  },
+  motorLearning: {
+    label: 'Motor learning',
+    blurb: 'Rate of skill acquisition. The biggest single driver of potential.',
+  },
+  injuryProneness: {
+    label: 'Injury proneness',
+    blurb: 'Baseline hazard of breaking down in camp or mid-fight. Higher is worse.',
+  },
+};
+
+/**
+ * An overall rating, for list sorting and at-a-glance display only.
+ *
+ * Deliberately **not** used by the fight simulator: a single number cannot express that
+ * Khabib beats a striker of equal "overall" nine times in ten. Weights lean toward the
+ * attributes that decide fights most often across the whole population.
+ */
+export function overallRating(attrs: Attributes): number {
+  const weights: Record<AttributeKey, number> = {
+    power: 1.1,
+    speed: 1.0,
+    cardio: 1.1,
+    durability: 1.0,
+    strength: 0.7,
+    strikingOffence: 1.2,
+    kicking: 0.7,
+    strikingDefence: 1.1,
+    wrestling: 1.1,
+    takedownDefence: 1.1,
+    groundControl: 0.9,
+    submissions: 0.8,
+    scrambling: 0.8,
+    fightIq: 1.2,
+    composure: 1.0,
+  };
+  let acc = 0;
+  let total = 0;
+  for (const key of ATTRIBUTE_KEYS) {
+    acc += attrs[key] * weights[key];
+    total += weights[key];
+  }
+  return round(acc / total, 1);
+}

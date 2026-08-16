@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.vite/
+.DS_Store
+Thumbs.db
+*.local
+.env
+.env.*
+!.env.example
+.eslintcache
+/tmp/
+/scratch/
