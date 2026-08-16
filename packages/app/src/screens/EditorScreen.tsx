@@ -272,24 +272,34 @@ export function EditorFighterScreen({ id }: { id: string }) {
           {ALL_TRAITS.map((trait) => {
             const active = draft.traits.includes(trait.id);
             return (
+              /*
+                Two fixes in one control.
+
+                It was 2.25rem — 36px against a 44px standard, on a wrapping grid of every
+                trait in the game, and the same mistake already corrected once in
+                `.segmented__option`. And `title={trait.blurb}` was the only explanation of
+                what a trait *does*: a tooltip shows nothing on touch, and the design system
+                ships `.trait__blurb` for precisely this content while this screen ignored it.
+              */
               <button
                 key={trait.id}
                 type="button"
                 aria-pressed={active}
-                title={trait.blurb}
                 onClick={() => toggleTrait(trait.id)}
                 style={{
+                  textAlign: 'left',
                   padding: 'var(--space-2) var(--space-3)',
-                  minHeight: '2.25rem',
-                  borderRadius: 'var(--radius-full)',
+                  minHeight: 'var(--tap-target)',
+                  maxWidth: '22rem',
+                  borderRadius: 'var(--radius)',
                   fontSize: 'var(--text-sm)',
-                  fontWeight: 600,
                   border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
                   background: active ? 'var(--accent-soft)' : 'var(--surface)',
                   color: active ? 'var(--accent)' : 'var(--text-muted)',
                 }}
               >
-                {trait.label}
+                <span className="trait__label">{trait.label}</span>
+                <span className="trait__blurb">{trait.blurb}</span>
               </button>
             );
           })}
@@ -346,8 +356,17 @@ function EditorSlider({
   return (
     <div style={{ marginBottom: 'var(--space-3)' }}>
       <div className="row" style={{ justifyContent: 'space-between', marginBottom: 2 }}>
-        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600 }} title={hint}>
-          {label}
+        {/*
+          The hint below the label rather than in a `title`. Without it a touch player sees a
+          slider labelled "Aggression" running 1–100 and has no way to learn which end is
+          which — while the generic entity editor next door renders its `help` visibly and
+          wires it up with aria-describedby.
+        */}
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, display: 'block' }}>
+            {label}
+          </span>
+          {hint && <span className="rating__hint">{hint}</span>}
         </span>
         <span className="faint" style={{ fontSize: 'var(--text-xs)' }}>
           {ratingBand(value).label}

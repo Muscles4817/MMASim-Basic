@@ -18,7 +18,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, RatingRow } from '../ui';
-import { Alert, Fact, FighterRead, ICON, Icon, KeyStat } from '../ui/signals';
+import { Alert, Fact, FighterRead, ICON, Icon, KeyStat, OverallRating } from '../ui/signals';
 import { FightRecordList, RecordSummaryBar } from '../ui/FightRecord';
 import { getLadderStatus } from '../game/progression';
 import { rivalriesFor } from '../game/rivalries';
@@ -92,7 +92,7 @@ export function FighterScreen({ id }: { id: string }) {
         </div>
 
         <div style={{ marginTop: 'var(--space-3)' }}>
-          <Fact label="Overall" value={Math.round(overallRating(fighter.attributes))} />
+          <Fact label="Overall" value={<OverallRating rating={overallRating(fighter.attributes)} />} />
           <Fact
             label="Star power"
             value={Math.round(fighter.starPower)}

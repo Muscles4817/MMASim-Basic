@@ -554,16 +554,29 @@ export function CampScreen() {
                 );
               })}
             </div>
-            <p
-              className={spend > playerFighter.bank ? 'prose' : 'faint prose'}
-              style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}
-            >
-              {spend === 0
-                ? `Nothing bought. You have £${Math.round(playerFighter.bank * 10) / 10}k.`
-                : spend > playerFighter.bank
-                  ? `£${spend}k against a bank of £${Math.round(playerFighter.bank * 10) / 10}k. You can run it anyway and go into the red — nothing stops you — but you will start taking fights you would otherwise refuse.`
+            {/*
+              Announced, because it changes on every tick and a total nobody hears is not a
+              total. And the over-budget case is an Alert rather than a dropped `faint` class:
+              signalling "you cannot afford this" by going from grey to slightly-less-grey was
+              the quietest thing in the block.
+            */}
+            {spend > playerFighter.bank ? (
+              <Alert tone="warn" title="More than you have">
+                £{spend}k against a bank of £{Math.round(playerFighter.bank * 10) / 10}k. You can
+                run it anyway and go into the red — nothing stops you — but you will start
+                taking fights you would otherwise refuse.
+              </Alert>
+            ) : (
+              <p
+                className="faint prose"
+                role="status"
+                style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}
+              >
+                {spend === 0
+                  ? `Nothing bought. You have £${Math.round(playerFighter.bank * 10) / 10}k.`
                   : `£${spend}k, leaving you £${Math.round((playerFighter.bank - spend) * 10) / 10}k.`}
-            </p>
+              </p>
+            )}
           </div>
         </div>
       </Card>
@@ -599,6 +612,19 @@ export function CampScreen() {
               {(['head', 'body', 'legs'] as const)
                 .map((t) => `${Math.round((targeting[t] / targetingTotal) * 100)}% ${t}`)
                 .join(' · ')}
+            </strong>
+          </li>
+          {/*
+            The spend. This card exists to restate what is being committed to, and it listed
+            everything except the only money commitment on the screen — up to £58k debited the
+            moment the player confirms, never mentioned in the confirmation.
+          */}
+          <li className="row" style={{ justifyContent: 'space-between' }}>
+            <span className="muted">Spend</span>
+            <strong>
+              {spend === 0
+                ? 'Nothing extra'
+                : `£${spend}k · ${bought.length} ${bought.length === 1 ? 'extra' : 'extras'}`}
             </strong>
           </li>
         </ul>

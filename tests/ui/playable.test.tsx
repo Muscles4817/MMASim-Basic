@@ -317,11 +317,13 @@ describe('the career is a career, not a sequence of fights', () => {
     await user.type(await screen.findByLabelText(/First name/i), 'Ade');
     await user.type(screen.getByLabelText(/Last name/i), 'Preview');
 
-    await user.click(screen.getByRole('button', { name: /Collegiate Wrestler/i }));
+    // `radio`, not `button`: the six backgrounds are mutually exclusive, so they announce
+    // "selected, 1 of 6" rather than "toggle button, pressed".
+    await user.click(screen.getByRole('radio', { name: /Collegiate Wrestler/i }));
     const wrestlingRow = await screen.findByRole('meter', { name: /^Wrestling:/i });
     const asWrestler = Number(wrestlingRow.getAttribute('aria-valuenow'));
 
-    await user.click(screen.getByRole('button', { name: /Amateur Boxer/i }));
+    await user.click(screen.getByRole('radio', { name: /Amateur Boxer/i }));
     const asBoxer = Number(
       (await screen.findByRole('meter', { name: /^Wrestling:/i })).getAttribute('aria-valuenow'),
     );

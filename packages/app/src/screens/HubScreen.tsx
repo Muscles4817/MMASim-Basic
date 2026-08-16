@@ -24,7 +24,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty } from '../ui';
-import { Alert, Fact, FighterRead, ICON, Icon, KeyStat, StreakBadge } from '../ui/signals';
+import { Alert, Fact, FighterRead, ICON, Icon, KeyStat, OverallRating, StreakBadge } from '../ui/signals';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
 import { getLadderStatus, signWith, type LadderStatus } from '../game/progression';
 import { getRivalry, previousMeetings } from '../game/rivalries';
@@ -167,7 +167,7 @@ export function HubScreen() {
         </div>
 
         <div style={{ marginTop: 'var(--space-3)' }}>
-          <Fact label="Overall" value={Math.round(overallRating(fighter.attributes))} />
+          <Fact label="Overall" value={<OverallRating rating={overallRating(fighter.attributes)} />} />
           <Fact
             label="Star power"
             value={Math.round(fighter.starPower)}
@@ -709,7 +709,7 @@ function OfferRow({
           </div>
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <Fact label="Record" value={recordString(opponent.summary)} emphasis="primary" />
-            <Fact label="Overall" value={Math.round(overallRating(opponent.attributes))} />
+            <Fact label="Overall" value={<OverallRating rating={overallRating(opponent.attributes)} />} />
             <Fact
               label="Star power"
               value={Math.round(opponent.starPower)}

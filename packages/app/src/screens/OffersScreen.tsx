@@ -224,12 +224,25 @@ function OfferCard({
           </span>
         </span>
 
-        {/* The three named futures. Money, route, level — never a bare purse to compare. */}
+        {/*
+          The three named futures. Money, route, level — never a bare purse to compare.
+
+          Each glyph is paired with a word and hidden from assistive tech, which is the house
+          rule. It was three bare emoji: a screen reader announced "pound banknote", "ladder"
+          and "balance scale" before each line, and a sighted player had to infer that 🪜 meant
+          "route" at all.
+        */}
         <span className="stack" style={{ gap: 2, marginTop: 'var(--space-2)' }}>
-          <span style={{ fontSize: 'var(--text-sm)' }}>💷 {offer.money}</span>
-          <span style={{ fontSize: 'var(--text-sm)' }}>🪜 {offer.route}</span>
+          <span style={{ fontSize: 'var(--text-sm)' }}>
+            <span aria-hidden="true">💷</span> <span className="muted">Money:</span>{' '}
+            {offer.money}
+          </span>
+          <span style={{ fontSize: 'var(--text-sm)' }}>
+            <span aria-hidden="true">🪜</span> <span className="muted">Route:</span>{' '}
+            {offer.route}
+          </span>
           <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
-            ⚖️ {offer.level}
+            <span aria-hidden="true">⚖️</span> Level: {offer.level}
           </span>
         </span>
       </button>

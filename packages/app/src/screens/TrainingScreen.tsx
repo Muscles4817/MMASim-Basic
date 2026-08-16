@@ -115,8 +115,10 @@ export function TrainingScreen() {
       if (current.includes(focus)) {
         return current.length === 1 ? current : current.filter((f) => f !== focus);
       }
-      // Two at most: a third would just make all three useless.
-      return current.length >= 2 ? [current[1]!, focus] : [...current, focus];
+      // Two at most: a third would just make all three useless. Refused rather than silently
+      // dropping the oldest — swapping one out with no explanation makes the cap look like a
+      // bug. The chip below says why, mirroring how the camp screen handles the same limit.
+      return current.length >= 2 ? current : [...current, focus];
     });
   };
 
@@ -159,11 +161,19 @@ export function TrainingScreen() {
           )}
             {/* The bank, which decides what kind of camp you can run, which decides what
                 kind of fighter you become. */}
+            {/*
+              The state in words, not only in the tone.
+              
+              It was `£12.4k` with the difference between comfortable, tight and broke carried
+              purely by colour — and a `title` that explained what a bank is rather than what
+              state you were in, which on touch showed nothing at all. The camp screen's own
+              quality chip does this correctly with a word.
+            */}
             <Chip
               tone={funding === 'comfortable' ? 'neutral' : funding === 'tight' ? 'warning' : 'negative'}
-              title="Money on hand. Camps are paid before the fight, win or lose."
             >
-              £{Math.round(fighter.bank * 10) / 10}k
+              £{Math.round(fighter.bank * 10) / 10}k ·{' '}
+              {funding === 'comfortable' ? 'comfortable' : funding === 'tight' ? 'tight' : 'broke'}
             </Chip>
           </span>
         </div>
@@ -229,6 +239,7 @@ export function TrainingScreen() {
           {TRAINING_FOCUSES.map((key) => {
             const meta = TRAINING_META[key];
             const selected = focuses.includes(key);
+            const atFocusLimit = focuses.length >= 2;
             const keys = Object.keys(meta.attributes) as AttributeKey[];
             const room =
               keys.reduce((a, k) => a + headroom(fighter.attributes[k], fighter.potential[k]), 0) /
@@ -276,6 +287,16 @@ export function TrainingScreen() {
                 >
                   Builds {keys.map((k) => ATTRIBUTE_META[k].label).join(', ')}
                 </span>
+                {/*
+                  Why the tap did nothing, on the thing that was tapped. The cap used to
+                  silently swap out whichever focus had been chosen first, which reads as a
+                  bug rather than a limit. Mirrors the camp screen's handling of its own cap.
+                */}
+                {atFocusLimit && !selected && (
+                  <span style={{ display: 'block', marginTop: 'var(--space-2)' }}>
+                    <Chip tone="warning">⚠ Two at most — drop one first</Chip>
+                  </span>
+                )}
               </button>
             );
           })}

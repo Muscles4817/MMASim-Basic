@@ -81,9 +81,26 @@
   padding: var(--space-4) var(--space-3);
   /* Clear the fixed tab bar plus the home indicator. */
   padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + var(--space-5));
+
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+/*
+ * Clear the update bar when it is showing.
+ *
+ * The bar is fixed above the nav and is itself at least a tap target plus padding tall, so it
+ * reached well past the space reserved above and buried the last of the content — the "Turn
+ * pro" button on fighter creation, the reset confirmation in Settings. Its own comment reasons
+ * carefully about clearing the *nav* and not at all about clearing the *page*.
+ *
+ * Matched from `body` because the prompt is mounted as a sibling *before* the shell, so no
+ * combinator reaches it from here. Scoped with :has() so a session with no update pending pays
+ * nothing for it.
+ */
+body:has(.update-prompt) .shell__main {
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + var(--space-5) + 6rem);
 }
 
 /* --- Bottom navigation --------------------------------------------------------------- */
