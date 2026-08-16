@@ -11,7 +11,8 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Card, Chip, Empty, ListItem, Segmented } from '../ui';
+import { Card, Empty, ListItem, Segmented, bandColour } from '../ui';
+import { StreakBadge } from '../ui/signals';
 
 /**
  * Roster browser.
@@ -124,16 +125,31 @@ export function RosterScreen() {
                 }
                 primary={displayName(f)}
                 secondary={
-                  <>
-                    {recordString(f.summary)} · {f.nationality}
-                    {search && ` · ${getDivision(f.divisionId).shortName}`}
-                  </>
+                  <span className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                    <span>
+                      {recordString(f.summary)} · {f.nationality}
+                      {search && ` · ${getDivision(f.divisionId).shortName}`}
+                    </span>
+                    {Math.abs(f.summary.streak) >= 2 && <StreakBadge streak={f.summary.streak} />}
+                  </span>
                 }
                 trailing={
-                  <Chip tone="info">
+                  // Band-coloured, so a division reads as a shape: where the elite sit and
+                  // where the filler starts, without comparing fifteen numbers.
+                  <span
+                    className="numeric"
+                    style={{
+                      fontWeight: 800,
+                      fontSize: 'var(--text-lg)',
+                      color: bandColour(Math.round(overallRating(f.attributes))),
+                      minWidth: '2.25rem',
+                      textAlign: 'right',
+                    }}
+                    title="Overall rating"
+                  >
                     <span className="visually-hidden">Overall rating </span>
                     {Math.round(overallRating(f.attributes))}
-                  </Chip>
+                  </span>
                 }
               />
             ))}

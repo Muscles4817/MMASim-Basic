@@ -65,6 +65,48 @@ Implementation rules, in order of importance:
 Duplicating the dark block is deliberate. A shared class or a CSS-nesting trick saves a few
 lines and reintroduces exactly the bug this structure exists to prevent.
 
+## The signal vocabulary
+
+The most common failure in a stats-heavy game is a screen where every number is the same
+size, weight and colour — which makes the *player* do the sorting. Three rules, applied
+everywhere, in `ui/signals.tsx`:
+
+**1. Three tiers, visibly far apart.** Primary information is large, coloured and iconed;
+secondary is plain; tertiary is muted and small. A primary stat is roughly three times the
+optical weight of a tertiary one, because a subtle hierarchy is the same as no hierarchy.
+At most one `KeyStat` per card, and often none.
+
+**2. Never colour alone.** Every colour-coded signal also carries a glyph and a word. Roughly
+one man in twelve cannot separate reds from greens, and a greyscale screen or a screen reader
+has no colour at all. A weakness badge is *also* dashed; a poor rating bar is *also* thinner
+and dotted; a fight outcome is a letter *and* a colour *and* the method text.
+
+**3. Say what it means, not what it is.** "Wins with Power 99" beats "Power: 99". "Ranked #2"
+beats "Rank: 2". The raw number stays available for the player who wants it.
+
+### Components
+
+| Component | Job |
+| --------- | --- |
+| `KeyStat` | The one thing to read first. Requires a tone, so you have to decide what it means |
+| `Fact` | A labelled value with an explicit tier |
+| `FighterRead` | "Wins with / Vulnerable to" — the two or three attributes that decide their fights |
+| `AttributeBadge` | One attribute, band-coloured on its leading edge rather than tinted |
+| `MethodBadge`, `StreakBadge`, `Trend` | Glyph plus colour plus word |
+| `Alert` | Louder than a chip, quieter than a modal. For things that change a decision |
+
+### Rating bars carry their band
+
+An elite bar is 10px, average is 6px, poor is 5px and dotted. A row of attributes therefore
+has a **silhouette** that can be read before any number is. The band short-name sits beside
+the value, because "84" needs a scale in your head and "Elite" does not.
+
+### Why badges are edge-coloured, not tinted
+
+Nine band colours as pill backgrounds turns a row of badges into confetti and moves the text
+contrast around with every hue. A fixed surface with a coloured leading edge stays scannable
+and keeps contrast constant.
+
 ## Colour language
 
 Rating band colours are the visual language of the game — a player learns to read a fighter

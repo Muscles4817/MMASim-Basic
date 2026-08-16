@@ -1,0 +1,283 @@
+/*
+ * The signal vocabulary.
+ *
+ * Everything here exists to answer one question the player should never have to work out for
+ * themselves: which of the things on this screen matters most? The tiers are deliberately far
+ * apart — a primary stat is roughly three times the optical weight of a tertiary one, because
+ * a subtle hierarchy is the same as no hierarchy.
+ */
+
+/* --- KeyStat: the one thing to read first ---------------------------------------------- */
+
+.keystat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.keystat__value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-3xl);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.keystat__icon {
+  font-size: 0.7em;
+}
+
+.keystat--good .keystat__value {
+  color: var(--positive);
+}
+
+.keystat--bad .keystat__value {
+  color: var(--negative);
+}
+
+.keystat--accent .keystat__value {
+  color: var(--accent);
+}
+
+.keystat__label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.keystat__detail {
+  font-size: var(--text-sm);
+  color: var(--text-faint);
+}
+
+/* --- Fact: a labelled value with an explicit tier -------------------------------------- */
+
+.fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+}
+
+.fact__label {
+  color: var(--text-muted);
+}
+
+.fact__value {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.fact--primary {
+  font-size: var(--text-lg);
+}
+
+.fact--primary .fact__value {
+  font-weight: 800;
+}
+
+.fact--primary .fact__label {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.fact--secondary {
+  font-size: var(--text-base);
+}
+
+.fact--secondary .fact__value {
+  font-weight: 600;
+}
+
+.fact--tertiary {
+  font-size: var(--text-sm);
+}
+
+.fact--tertiary .fact__label,
+.fact--tertiary .fact__value {
+  color: var(--text-faint);
+}
+
+.fact--good .fact__value {
+  color: var(--positive);
+}
+
+.fact--bad .fact__value {
+  color: var(--negative);
+}
+
+.fact--warn .fact__value {
+  color: var(--warning);
+}
+
+/* --- Method, streak, trend -------------------------------------------------------------- */
+
+.method,
+.streak,
+.trend {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.method--ko {
+  color: var(--negative);
+}
+
+.method--sub {
+  color: var(--warning);
+}
+
+.method--dec {
+  color: var(--info);
+}
+
+.method--draw {
+  color: var(--text-muted);
+}
+
+.streak--win {
+  color: var(--positive);
+}
+
+.streak--loss {
+  color: var(--negative);
+}
+
+.trend--rising {
+  color: var(--positive);
+}
+
+.trend--falling {
+  color: var(--negative);
+}
+
+.trend--level {
+  color: var(--text-faint);
+}
+
+/* --- Reading a fighter at a glance ------------------------------------------------------ */
+
+.fighter-read {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.fighter-read__group {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.fighter-read__caption {
+  flex: 0 0 auto;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  min-width: 6.5rem;
+}
+
+.fighter-read__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+/*
+ * An attribute badge carries its band colour on a left bar rather than as a background tint.
+ * A tinted pill at nine different hues turns a row of them into confetti; a consistent
+ * surface with a coloured edge stays scannable and keeps the text contrast fixed.
+ */
+.attr-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--band);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.attr-badge__name {
+  color: var(--text-muted);
+}
+
+.attr-badge__value {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--band);
+}
+
+.attr-badge--weakness {
+  /* A dashed edge as well as a colour, so a weakness reads as one in greyscale too. */
+  border-inline-start-style: dashed;
+}
+
+/* --- Alert -------------------------------------------------------------------------------- */
+
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.alert__icon {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.alert__title {
+  display: block;
+  font-weight: 700;
+}
+
+.alert__body {
+  display: block;
+  opacity: 0.9;
+}
+
+.alert--info {
+  background: var(--info-soft);
+  border-color: transparent;
+  color: var(--info);
+}
+
+.alert--good {
+  background: var(--positive-soft);
+  border-color: transparent;
+  color: var(--positive);
+}
+
+.alert--warn {
+  background: var(--warning-soft);
+  border-color: transparent;
+  color: var(--warning);
+}
+
+.alert--danger {
+  background: var(--negative-soft);
+  border-color: transparent;
+  color: var(--negative);
+}

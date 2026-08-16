@@ -15,7 +15,8 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Button, Card, Chip, Empty, RatingRow, Stat } from '../ui';
+import { Button, Card, Chip, Empty, RatingRow } from '../ui';
+import { Alert, Fact, FighterRead, Icon, KeyStat } from '../ui/signals';
 import { FightRecordList, RecordSummaryBar } from '../ui/FightRecord';
 import { getLadderStatus } from '../game/progression';
 
@@ -77,16 +78,38 @@ export function FighterScreen({ id }: { id: string }) {
           {division.name} · {fighterAge(fighter, world.day)} · {fighter.nationality} ·{' '}
           {fighter.stance}
         </p>
-        <div className="stat-grid" style={{ marginTop: 'var(--space-4)' }}>
-          <Stat value={recordString(fighter.summary)} label="Record" />
-          <Stat value={Math.round(overallRating(fighter.attributes))} label="Overall" />
-          <Stat value={`★ ${Math.round(fighter.starPower)}`} label="Star power" />
-          <Stat value={Math.round(fighter.reputation)} label="Reputation" />
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          <KeyStat
+            value={recordString(fighter.summary)}
+            label="Professional record"
+            tone={fighter.summary.streak > 0 ? 'good' : fighter.summary.streak < 0 ? 'bad' : 'neutral'}
+          />
+        </div>
+
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          <FighterRead attributes={fighter.attributes} />
+        </div>
+
+        <div style={{ marginTop: 'var(--space-3)' }}>
+          <Fact label="Overall" value={Math.round(overallRating(fighter.attributes))} />
+          <Fact
+            label="Star power"
+            value={Math.round(fighter.starPower)}
+            icon="star"
+            emphasis="tertiary"
+            hint="What the market pays to watch them. Independent of ability."
+          />
+          <Fact
+            label="Reputation"
+            value={Math.round(fighter.reputation)}
+            emphasis="tertiary"
+            hint="What the sport thinks of them. Moves slowly, and drives the rankings."
+          />
         </div>
         <div className="row" style={{ marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
           {ladder.isChampion && (
             <Chip tone="accent" title="Reigning divisional champion">
-              🏆 Champion
+              <Icon name="champion" /> Champion
             </Chip>
           )}
           {!ladder.isChampion && ladder.position !== undefined && (
@@ -177,22 +200,38 @@ export function FighterScreen({ id }: { id: string }) {
       </Card>
 
       <Card title="Condition">
-        <div className="stat-grid">
-          <Stat
-            value={Math.round(fighter.condition.headTrauma)}
-            label="Head trauma"
-            tone={fighter.condition.headTrauma > 50 ? 'negative' : undefined}
-          />
-          <Stat value={Math.round(fighter.condition.bodyWear)} label="Body wear" />
-          <Stat
-            value={Math.round(fighter.condition.confidence)}
-            label="Confidence"
-            tone={fighter.condition.confidence < 40 ? 'negative' : undefined}
-          />
-        </div>
-        <p className="faint" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
-          Head trauma only ever goes up. It permanently erodes the chin.
-        </p>
+        {fighter.condition.headTrauma > 45 && (
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <Alert
+              tone={fighter.condition.headTrauma > 65 ? 'danger' : 'warn'}
+              title={
+                fighter.condition.headTrauma > 65
+                  ? 'The chin has gone'
+                  : 'Damage is accumulating'
+              }
+            >
+              Trauma only ever rises, and it permanently lowers what this fighter can absorb.
+            </Alert>
+          </div>
+        )}
+        <Fact
+          label="Head trauma"
+          value={`${Math.round(fighter.condition.headTrauma)} / 100`}
+          icon="trauma"
+          emphasis={fighter.condition.headTrauma > 45 ? 'primary' : 'secondary'}
+          tone={fighter.condition.headTrauma > 65 ? 'bad' : fighter.condition.headTrauma > 45 ? 'warn' : undefined}
+        />
+        <Fact
+          label="Body wear"
+          value={`${Math.round(fighter.condition.bodyWear)} / 100`}
+          emphasis="tertiary"
+        />
+        <Fact
+          label="Confidence"
+          value={Math.round(fighter.condition.confidence)}
+          emphasis="tertiary"
+          tone={fighter.condition.confidence < 40 ? 'bad' : undefined}
+        />
       </Card>
 
       {fighter.notes && (

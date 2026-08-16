@@ -122,8 +122,14 @@ export function RatingRow({
 }) {
   const band = ratingBand(value);
   const showCeiling = ceiling !== undefined && ceiling > value;
+
+  // Elite and poor ratings get a visibly different bar, not just a different hue. A row of
+  // identically-weighted bars forces the player to read fifteen numbers to find the two that
+  // matter; a silhouette can be read at a glance.
+  const weight = value >= 82 ? ' rating--elite' : value < 50 ? ' rating--weak' : '';
+
   return (
-    <div className="rating">
+    <div className={`rating${weight}`}>
       {/* The visible label and value carry the information; the meter repeats it for AT.
           Hiding the spans stops every attribute being announced twice — 44 announcements
           on a fighter profile. */}
@@ -149,6 +155,15 @@ export function RatingRow({
           style={{ width: `${value}%`, background: bandColour(value) }}
         />
       </div>
+      {/* The band name, not just the number. "Elite" is actionable; "84" needs a scale in
+          your head before it means anything. */}
+      <span
+        className="rating__band"
+        style={{ color: bandColour(value) }}
+        aria-hidden="true"
+      >
+        {band.short}
+      </span>
       {hint && (
         <span className="rating__hint" aria-hidden="true">
           {hint}

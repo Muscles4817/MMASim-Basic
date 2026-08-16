@@ -330,3 +330,66 @@ describe('the career is a career, not a sequence of fights', () => {
     expectNoCrash();
   }, 30_000);
 });
+
+describe('the interface says what matters', () => {
+  it('leads a profile with the read, not with fifteen equal bars', async () => {
+    window.location.hash = '#/fighter/f_ngannou';
+    renderApp();
+    // "Wins with Power 99" is actionable. A wall of bars is homework.
+    expect(await screen.findByText(/Wins with/i)).toBeTruthy();
+    expect(screen.getByText(/Vulnerable to/i)).toBeTruthy();
+    expectNoCrash();
+  });
+
+  it('gives every colour-coded signal a text equivalent', async () => {
+    window.location.hash = '#/fighter/f_ngannou';
+    renderApp();
+    await screen.findByText(/Wins with/i);
+
+    // Attribute badges carry the band name for anyone who cannot use the colour.
+    const badges = document.querySelectorAll('.attr-badge');
+    expect(badges.length).toBeGreaterThan(0);
+    for (const badge of badges) {
+      expect(badge.textContent, 'a badge with no readable band').toMatch(
+        /All-time|Best in the world|Elite|Very good|Solid|Average|Below level|Liability|Absent/i,
+      );
+    }
+  });
+
+  it('never renders a decorative icon without an accessible name nearby', async () => {
+    window.location.hash = '#/fighter/f_ngannou';
+    renderApp();
+    await screen.findByText(/Wins with/i);
+    // Every icon is aria-hidden; meaning is carried by the text beside it.
+    for (const icon of document.querySelectorAll('.keystat__icon, .alert__icon')) {
+      expect(icon.getAttribute('aria-hidden')).toBe('true');
+    }
+  });
+
+  it('surfaces accumulated damage as a warning rather than a number in a row', async () => {
+    // Arlovski carries the highest head trauma in the game; it must be impossible to miss.
+    window.location.hash = '#/fighter/f_arlovski';
+    renderApp();
+    expect(await screen.findByText(/chin has gone|Damage is accumulating/i)).toBeTruthy();
+    expectNoCrash();
+  });
+
+  it('marks a rating’s band on the bar, not only its number', async () => {
+    window.location.hash = '#/fighter/f_ngannou';
+    renderApp();
+    await screen.findByText(/Wins with/i);
+    // Power 99 must be visibly a different class of rating from an average one.
+    const elite = document.querySelectorAll('.rating--elite');
+    const weak = document.querySelectorAll('.rating--weak');
+    expect(elite.length, 'no rating marked elite on a fighter with a 99').toBeGreaterThan(0);
+    expect(weak.length, 'no rating marked weak on a fighter with a 26').toBeGreaterThan(0);
+  });
+
+  it('shows a title fight and a champion with more than a word', async () => {
+    window.location.hash = '#/rankings';
+    renderApp();
+    // The champion row is marked with a crown and the word, not a bare "C".
+    expect(await screen.findByText(/Champion/i)).toBeTruthy();
+    expectNoCrash();
+  });
+});

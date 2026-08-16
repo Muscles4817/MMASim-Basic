@@ -23,6 +23,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty } from '../ui';
+import { Alert, FighterRead, KeyStat } from '../ui/signals';
 import { getBooking, runBookedFight, saveBookingPlan } from '../game/career';
 import { formatGameDay } from '../shell/Shell';
 
@@ -134,7 +135,20 @@ export function CampScreen() {
           {formatGameDay(booking.bout.day)} · {getDivision(opponent.divisionId).shortName} ·{' '}
           {recordString(opponent.summary)}
         </p>
-        <div className="row" style={{ marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
+        <div style={{ marginTop: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
+          <FighterRead attributes={opponent.attributes} />
+        </div>
+
+        {camp < 0.45 && (
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <Alert tone="warn" title="This camp is compromised">
+              Too little time, too poor a room, or not enough discipline. Every prepared read
+              is worth less than it should be.
+            </Alert>
+          </div>
+        )}
+
+        <div className="row" style={{ flexWrap: 'wrap' }}>
           <Chip tone={camp >= 0.7 ? 'positive' : camp >= 0.45 ? 'warning' : 'negative'}>
             {weeks}-week camp · {camp >= 0.7 ? 'Strong' : camp >= 0.45 ? 'Adequate' : 'Compromised'}
           </Chip>
@@ -194,11 +208,25 @@ export function CampScreen() {
           })}
         </div>
 
-        <p className="faint" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
-          {selected.length} of {MAX_PREPPED_READS} drilled · each answer is{' '}
-          <strong>{Math.round(drill * 100)}%</strong> sharp
-          {selected.length > 2 && ' — adding more is costing you sharpness on the rest'}
-        </p>
+        <div
+          role="status"
+          style={{
+            marginTop: 'var(--space-4)',
+            paddingTop: 'var(--space-3)',
+            borderTop: '1px solid var(--border)',
+          }}
+        >
+          <KeyStat
+            value={`${Math.round(drill * 100)}%`}
+            label="Sharpness of each answer"
+            tone={drill >= 0.6 ? 'good' : drill >= 0.35 ? 'neutral' : 'bad'}
+            detail={
+              selected.length > 2
+                ? `${selected.length} of ${MAX_PREPPED_READS} drilled — each one you add blunts the rest`
+                : `${selected.length} of ${MAX_PREPPED_READS} drilled`
+            }
+          />
+        </div>
       </Card>
 
       <Card title="Game plan">

@@ -151,12 +151,12 @@
 
 .rating {
   display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: var(--space-2) var(--space-3);
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
   width: 100%;
   text-align: left;
-  padding: var(--space-1) 0;
+  padding: var(--space-2) 0;
 }
 
 .rating__label {
@@ -164,20 +164,58 @@
   color: var(--text-muted);
 }
 
+.rating__band {
+  grid-column: 3;
+  min-width: 3.2rem;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-align: right;
+}
+
 .rating__value {
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
   min-width: 2ch;
   text-align: right;
 }
 
+/*
+ * The bar is sized by band, not just coloured by it.
+ *
+ * When every bar is the same 6px, an elite rating and an average one read as the same kind
+ * of fact and the player has to compare numbers by eye. Height carries the signal alongside
+ * colour, so a row of attributes has a visible silhouette before anything is read.
+ */
 .rating__track {
   grid-column: 1 / -1;
   height: 6px;
   border-radius: var(--radius-full);
   background: var(--surface-sunken);
   overflow: hidden;
+  transition: height var(--transition-fast);
+}
+
+.rating--elite .rating__track {
+  height: 10px;
+}
+
+.rating--weak .rating__track {
+  height: 5px;
+}
+
+/* A dotted underlay on a genuinely poor rating: legible without colour. */
+.rating--weak .rating__track {
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--border-strong) 0 2px,
+    transparent 2px 5px
+  );
+}
+
+.rating--elite .rating__value {
+  font-size: var(--text-base);
 }
 
 /* Explanatory line beneath an attribute. On a touch device a title attribute shows nothing,

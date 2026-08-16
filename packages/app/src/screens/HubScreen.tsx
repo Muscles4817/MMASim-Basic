@@ -11,7 +11,8 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Button, Card, Chip, Empty, Stat } from '../ui';
+import { Button, Card, Chip, Empty } from '../ui';
+import { Alert, Fact, FighterRead, Icon, KeyStat, StreakBadge } from '../ui/signals';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
 import { getLadderStatus, signWith, type LadderStatus } from '../game/progression';
 import { formatGameDay } from '../shell/Shell';
@@ -97,23 +98,35 @@ export function HubScreen() {
           </div>
         </div>
 
-        <div className="stat-grid" style={{ marginTop: 'var(--space-4)' }}>
-          <Stat value={recordString(fighter.summary)} label="Record" />
-          <Stat
-            value={Math.round(overallRating(fighter.attributes))}
-            label="Overall"
+        {/* One primary number. The record is what a career is; everything else is context. */}
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          <KeyStat
+            value={recordString(fighter.summary)}
+            label="Professional record"
+            tone={fighter.summary.streak > 0 ? 'good' : fighter.summary.streak < 0 ? 'bad' : 'neutral'}
+            detail={<StreakBadge streak={fighter.summary.streak} />}
           />
-          <Stat value={`★ ${Math.round(fighter.starPower)}`} label="Star power" />
-          <Stat
-            value={Math.round(fighter.condition.confidence)}
+        </div>
+
+        {/* What actually decides their fights, before any of the fifteen bars. */}
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          <FighterRead attributes={fighter.attributes} />
+        </div>
+
+        <div style={{ marginTop: 'var(--space-3)' }}>
+          <Fact label="Overall" value={Math.round(overallRating(fighter.attributes))} />
+          <Fact
+            label="Star power"
+            value={Math.round(fighter.starPower)}
+            icon="star"
+            emphasis="tertiary"
+            hint="What the market pays to watch you. Independent of how good you are."
+          />
+          <Fact
             label="Confidence"
-            tone={
-              fighter.condition.confidence >= 65
-                ? 'positive'
-                : fighter.condition.confidence <= 35
-                  ? 'negative'
-                  : undefined
-            }
+            value={Math.round(fighter.condition.confidence)}
+            emphasis="tertiary"
+            tone={fighter.condition.confidence >= 65 ? 'good' : fighter.condition.confidence <= 35 ? 'bad' : undefined}
           />
         </div>
 
@@ -121,21 +134,29 @@ export function HubScreen() {
           <Button size="sm" onClick={() => navigate({ name: 'fighter', id: fighter.id as string })}>
             Full profile
           </Button>
-          {fighter.condition.headTrauma > 45 && (
-            <Chip tone="warning" title="Accumulated career head trauma">
-              Taking damage
-            </Chip>
-          )}
           {ladder?.isChampion && (
             <Chip tone="accent" title="Reigning divisional champion">
-              🏆 Champion
+              <Icon name="champion" /> Champion
             </Chip>
           )}
-          {fighter.summary.streak >= 3 && <Chip tone="positive">{fighter.summary.streak}-fight win streak</Chip>}
-          {fighter.summary.streak <= -2 && (
-            <Chip tone="negative">{Math.abs(fighter.summary.streak)}-fight skid</Chip>
-          )}
         </div>
+
+        {/* Damage is a decision input, not a stat. It gets an alert, not a chip. */}
+        {fighter.condition.headTrauma > 45 && (
+          <div style={{ marginTop: 'var(--space-3)' }}>
+            <Alert
+              tone={fighter.condition.headTrauma > 65 ? 'danger' : 'warn'}
+              title={
+                fighter.condition.headTrauma > 65
+                  ? 'Your chin is going'
+                  : 'Damage is accumulating'
+              }
+            >
+              Head trauma {Math.round(fighter.condition.headTrauma)} of 100. It only ever goes
+              up, and it permanently lowers what your chin can absorb.
+            </Alert>
+          </div>
+        )}
       </Card>
 
       {ladder && <LadderCard ladder={ladder} onSign={(p) => { signWith(db, fighter, p); commit(); }} />}
@@ -320,11 +341,19 @@ function OfferRow({
             borderBottom: '1px solid var(--border)',
           }}
         >
-          <div className="stat-grid" style={{ marginBottom: 'var(--space-3)' }}>
-            <Stat value={recordString(opponent.summary)} label="Record" />
-            <Stat value={Math.round(overallRating(opponent.attributes))} label="Overall" />
-            <Stat value={Math.round(opponent.starPower)} label="Star power" />
-            <Stat value={getDivision(opponent.divisionId).shortName} label="Division" />
+          {/* What this opponent will actually do to you, before any numbers. */}
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <FighterRead attributes={opponent.attributes} />
+          </div>
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <Fact label="Record" value={recordString(opponent.summary)} emphasis="primary" />
+            <Fact label="Overall" value={Math.round(overallRating(opponent.attributes))} />
+            <Fact
+              label="Star power"
+              value={Math.round(opponent.starPower)}
+              icon="star"
+              emphasis="tertiary"
+            />
           </div>
           <p
             className="muted prose"

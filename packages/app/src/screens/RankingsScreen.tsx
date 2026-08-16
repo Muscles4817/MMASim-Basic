@@ -9,7 +9,8 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Card, Chip, Empty, ListItem, Segmented } from '../ui';
+import { Card, Empty, ListItem, Segmented, bandColour } from '../ui';
+import { Icon, StreakBadge } from '../ui/signals';
 
 /**
  * Divisional rankings.
@@ -96,7 +97,7 @@ export function RankingsScreen() {
                           color: i === 0 ? 'var(--accent)' : 'var(--text-faint)',
                         }}
                       >
-                        {i === 0 ? 'C' : i}
+                        {i === 0 ? <Icon name="champion" /> : i}
                         <span className="visually-hidden">
                           {i === 0 ? 'Champion' : ` Ranked number ${i}`}
                         </span>
@@ -104,13 +105,27 @@ export function RankingsScreen() {
                     }
                     primary={displayName(f)}
                     secondary={
-                      <>
-                        {recordString(f.summary)}
-                        {f.summary.streak >= 2 && ` · ${f.summary.streak}W streak`}
-                        {f.summary.streak <= -2 && ` · ${Math.abs(f.summary.streak)}L skid`}
-                      </>
+                      <span className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+                        <span>{recordString(f.summary)}</span>
+                        {Math.abs(f.summary.streak) >= 2 && <StreakBadge streak={f.summary.streak} />}
+                      </span>
                     }
-                    trailing={<Chip tone="info">{Math.round(overallRating(f.attributes))}</Chip>}
+                    trailing={
+                      <span
+                        className="numeric"
+                        style={{
+                          fontWeight: 800,
+                          fontSize: 'var(--text-lg)',
+                          color: bandColour(Math.round(overallRating(f.attributes))),
+                          minWidth: '2.25rem',
+                          textAlign: 'right',
+                        }}
+                        title="Overall rating"
+                      >
+                        <span className="visually-hidden">Overall rating </span>
+                        {Math.round(overallRating(f.attributes))}
+                      </span>
+                    }
                   />
                 ))}
               </div>
