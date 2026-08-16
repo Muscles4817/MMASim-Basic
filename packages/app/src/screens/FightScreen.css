@@ -232,3 +232,24 @@
 .fight-line--deduction .fight-line__flag {
   color: var(--negative);
 }
+
+/* --- The booth -------------------------------------------------------------------------
+   Colour commentary is somebody talking *over* the fight, not a thing that happened in it,
+   so it reads as a quieter, italic aside with no timestamp. The distinction matters more
+   than it looks: a biased commentator is allowed to be wrong about what he just watched,
+   and a reader has to be able to tell his opinion from the record. */
+
+.fight-booth {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.fight-line--colour {
+  font-style: italic;
+  color: var(--text-muted);
+  border-inline-start-color: var(--border);
+}

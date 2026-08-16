@@ -23,6 +23,7 @@ import {
   setChampion,
   simulateFight,
   type Bout,
+  type Commentator,
   type Fighter,
   type FightResult,
   type GamePlan,
@@ -96,7 +97,22 @@ export function clearTransientCareerState(): void {
   clearResult();
 }
 
-export const getLastResult = (): FightResult | undefined => readJson<FightResult>(RESULT_KEY);
+/**
+ * The last fight, plus who called it.
+ *
+ * The commentator is stored beside the result rather than baked into it: the booth is a
+ * *view* of the fight, and keeping it separate means the replay screen can re-call the same
+ * events without re-simulating anything. See engine `fight/broadcast.ts`.
+ */
+export interface StoredResult {
+  result: FightResult;
+  commentatorId?: string;
+}
+
+export const getLastResult = (): FightResult | undefined =>
+  readJson<StoredResult>(RESULT_KEY)?.result;
+
+export const getLastBroadcast = (): StoredResult | undefined => readJson<StoredResult>(RESULT_KEY);
 
 /**
  * Opponent options for the player's next fight.
@@ -154,6 +170,7 @@ export function bookFight(
   const rng = createRng(`${world.seed}:booking:${fighter.id}:${world.day}`);
   const referees = db.referees.findAll() as Referee[];
   const judges = db.judges.findAll() as Judge[];
+  const commentators = db.commentators.findAll() as Commentator[];
 
   const bout: Bout = {
     id: `bout_${fighter.id}_${world.day}`,
@@ -170,6 +187,9 @@ export function bookFight(
     // factor a stand-up-happy referee into their game plan. That is the point of showing it.
     refereeId: referees.length ? rng.pick(referees).id : undefined,
     judgeIds: judges.length ? rng.shuffle(judges).slice(0, 3).map((j) => j.id as string) : undefined,
+    // The booth is part of the card too, and a biased one will misread the fight in front
+    // of the player. See engine `fight/broadcast.ts`.
+    commentatorId: commentators.length ? rng.pick(commentators).id : undefined,
     hype: 0,
   };
 
@@ -314,7 +334,7 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
   });
   db.save();
 
-  writeJson(RESULT_KEY, result);
+  writeJson(RESULT_KEY, { result, commentatorId: booking.bout.commentatorId });
   clearBooking();
   return { result, notes: [...titleNotes, ...injuryNotes, ...aftermath.notes] };
 }

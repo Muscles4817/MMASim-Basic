@@ -27,6 +27,8 @@ export interface Bout {
   isTitleFight: boolean;
   refereeId?: string;
   judgeIds?: readonly string[];
+  /** Who is calling it. Assigned at booking, because the booth is part of the card. */
+  commentatorId?: string;
   /** 0–100. How much the audience cares. Drives revenue and star-power movement. */
   hype: number;
   /** Set once simulated, so a card can be replayed without re-running it. */

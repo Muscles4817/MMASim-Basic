@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  callFight,
+  createRng,
+  describeCommentator,
   displayName,
   isDecisionMethod,
   isKoMethod,
+  type Commentator,
   type FightEvent,
   type FightResult,
   type Fighter,
@@ -10,7 +14,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
-import { getLastResult } from '../game/career';
+import { getLastBroadcast } from '../game/career';
 import './FightScreen.css';
 
 const SPEEDS = [
@@ -33,8 +37,13 @@ export function FightScreen({ boutId }: { boutId?: string }) {
   const { navigate } = useRouter();
   // Only shows the stored result if it is the bout that was asked for. Navigating back to an
   // older #/fight/<id> should not silently render a different fight’s scorecards.
-  const stored = useMemo(() => getLastResult(), []);
+  const broadcast = useMemo(() => getLastBroadcast(), []);
+  const stored = broadcast?.result;
   const result = boutId === undefined || stored?.boutId === boutId ? stored : undefined;
+
+  const commentator = broadcast?.commentatorId
+    ? (db.commentators.findById(broadcast.commentatorId) as Commentator | undefined)
+    : undefined;
   const prefersReducedMotion = useMemo(
     () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false,
     [],
@@ -47,7 +56,24 @@ export function FightScreen({ boutId }: { boutId?: string }) {
   /** Whether the reader is following the feed, or has scrolled up to re-read something. */
   const following = useRef(true);
 
-  const total = result?.events.length ?? 0;
+  // The booth's interjections are woven in here rather than in the simulator: commentary is
+  // a view of the fight and must never be able to change one. A different commentator would
+  // narrate these same events differently, and that is the whole point of the module.
+  const feed = useMemo(() => {
+    if (!result) return [] as readonly FightEvent[];
+    if (!commentator) return result.events;
+    return callFight({
+      commentator,
+      result,
+      names: {
+        red: db.fighters.findById(result.redId as string)?.lastName ?? 'Red',
+        blue: db.fighters.findById(result.blueId as string)?.lastName ?? 'Blue',
+      },
+      rng: createRng(`booth:${result.boutId}`),
+    });
+  }, [result, commentator, db]);
+
+  const total = feed.length;
   const finished = shown >= total;
   const delay = SPEEDS.find((s) => s.value === speed)!.ms;
 
@@ -60,11 +86,11 @@ export function FightScreen({ boutId }: { boutId?: string }) {
     if (shown >= total) return;
     // Major beats hold longer — a knockdown that flashes past at the same rate as a jab
     // reads as noise rather than as the moment the fight turned.
-    const event = result.events[shown];
+    const event = feed[shown];
     const weight = event?.emphasis === 'critical' ? 2.2 : event?.emphasis === 'major' ? 1.5 : 1;
     const timer = setTimeout(() => setShown((n) => n + 1), delay * weight);
     return () => clearTimeout(timer);
-  }, [shown, total, delay, result]);
+  }, [shown, total, delay, result, feed]);
 
   // Only auto-scroll while the reader is actually at the bottom. Yanking them back every
   // 900ms because they scrolled up to re-read the knockdown is a genuine scroll trap.
@@ -96,7 +122,7 @@ export function FightScreen({ boutId }: { boutId?: string }) {
 
   const red = db.fighters.findById(result.redId as string) as Fighter | undefined;
   const blue = db.fighters.findById(result.blueId as string) as Fighter | undefined;
-  const visible = result.events.slice(0, shown);
+  const visible = feed.slice(0, shown);
   // Only round transitions and decisive moments reach the live region, so the narration
   // stays followable instead of queueing a hundred announcements behind the visuals.
   const lastMajorEvent = [...visible]
@@ -117,6 +143,15 @@ export function FightScreen({ boutId }: { boutId?: string }) {
       </Card>
 
       <Card title="Play-by-play" flush>
+        {commentator && (
+          <p className="fight-booth" title={describeCommentator(commentator)}>
+            <span aria-hidden="true">&#127908;</span>
+            <span>
+              Called by <strong>{commentator.name}</strong> &mdash;{' '}
+              <span className="muted">{describeCommentator(commentator)}</span>
+            </span>
+          </p>
+        )}
         {/*
           tabIndex makes the scroll container reachable by keyboard — without it a keyboard
           user physically cannot read past the first screenful. role=log rather than an
@@ -200,8 +235,10 @@ function FeedLine({ event }: { event: FightEvent }) {
   const mm = Math.floor(event.timeSeconds / 60);
   const ss = String(event.timeSeconds % 60).padStart(2, '0');
   const isFoul = event.kind === 'foul' || event.kind === 'pointDeduction';
+  const isColour = event.kind === 'colour';
   const classes = [
     'fight-line',
+    isColour && 'fight-line--colour',
     event.emphasis && `fight-line--${event.emphasis}`,
     event.corner && `fight-line--${event.corner}`,
     (event.kind === 'roundStart' || event.kind === 'roundEnd') && 'fight-line--round',
@@ -213,6 +250,17 @@ function FeedLine({ event }: { event: FightEvent }) {
 
   if (event.kind === 'roundStart' || event.kind === 'roundEnd') {
     return <p className={classes}>{event.text}</p>;
+  }
+
+  if (isColour) {
+    // No timestamp: this is somebody talking over the fight, not a thing that happened in
+    // it, and giving it a clock reading would imply it was an event on the record.
+    return (
+      <p className={classes}>
+        <span className="fight-line__time" aria-hidden="true" />
+        <span>{event.text}</span>
+      </p>
+    );
   }
 
   return (

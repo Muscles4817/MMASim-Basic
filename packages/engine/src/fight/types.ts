@@ -89,6 +89,8 @@ export type FightEventKind =
   | 'doctorCheck'
   | 'finish'
   | 'decision'
+  /** Colour commentary, inserted after the fact by `broadcast.ts`. Never affects a result. */
+  | 'colour'
   | 'note';
 
 /** Per-fighter accumulated statistics for one fight. */

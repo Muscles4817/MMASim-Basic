@@ -10,7 +10,15 @@ import { createGameDb, setWorld, type GameDb } from '../db/gameDb.js';
 import { createMemoryAdapter } from '../db/adapters.js';
 import type { Entity, StorageAdapter } from '../db/types.js';
 import { buildSeedWorld } from '../seed/index.js';
-import type { Coach, Fighter, Gym, Judge, Promotion, Referee } from '@mmasim/engine';
+import type {
+  Coach,
+  Commentator,
+  Fighter,
+  Gym,
+  Judge,
+  Promotion,
+  Referee,
+} from '@mmasim/engine';
 
 export interface NewGameOptions {
   /** Root RNG seed. Same seed + same tick count reproduces the world exactly. */
@@ -36,6 +44,7 @@ export function createNewGame(options: NewGameOptions = {}): GameDb {
   db.coaches.upsertMany(seed.coaches as unknown as (Coach & Entity)[]);
   db.referees.upsertMany(seed.referees as unknown as (Referee & Entity)[]);
   db.judges.upsertMany(seed.judges as unknown as (Judge & Entity)[]);
+  db.commentators.upsertMany(seed.commentators as unknown as (Commentator & Entity)[]);
 
   setWorld(db, {
     day: seed.day,
@@ -62,6 +71,26 @@ export function createNewGame(options: NewGameOptions = {}): GameDb {
  */
 export function loadOrCreateGame(adapter: StorageAdapter, options: NewGameOptions = {}): GameDb {
   const db = createGameDb(adapter);
-  if (db.world.findById('world') !== undefined) return db;
+  if (db.world.findById('world') !== undefined) {
+    backfillCommentators(db);
+    return db;
+  }
   return createNewGame({ ...options, adapter });
 }
+
+/**
+ * Give an older save the commentator roster it never had.
+ *
+ * Commentators were added as a collection after the first saves existed. A missing booth
+ * degrades gracefully — the replay simply has no colour — but silently losing a feature on
+ * load is the kind of thing nobody ever notices is broken, so it is backfilled instead.
+ *
+ * Deliberately additive and idempotent: it never touches a collection that already has
+ * anything in it, so a player who edited or deleted the booth keeps their edit.
+ */
+function backfillCommentators(db: GameDb): void {
+  if (db.commentators.count() > 0) return;
+  db.commentators.upsertMany(buildSeedWorld().commentators as unknown as (Commentator & Entity)[]);
+  db.save();
+}
+
