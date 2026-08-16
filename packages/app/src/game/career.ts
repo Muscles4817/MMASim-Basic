@@ -47,7 +47,7 @@ import { getWorld, setWorld, type GameDb } from '@mmasim/data';
 import { accrueHeatFromFight } from './rivalries';
 import { campCostFor, currentPurse, settleFight } from './money';
 import { afterFight, recordAdviceFor, settleManagerAdvice, type ManagerAdvice } from './contracts';
-import { runSupportingCard } from './night';
+import { playerCardPosition, runSupportingCard } from './night';
 import { recordPlayerNews } from './world';
 
 const BOOKING_KEY = 'mmasim:booking';
@@ -386,7 +386,10 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
       Math.max(1, Math.round((booking.bout.day - booking.campStartDay) / 7)),
     ),
     campWeeks: Math.max(1, Math.round((booking.bout.day - booking.campStartDay) / 7)),
-    position: booking.bout.isTitleFight ? 'mainEvent' : 'mainCard',
+    // The real slot, from the same function the card uses. This was hardcoded, so the 0.5x
+    // prelim and 1.6x co-main rungs were unreachable for the player and "get off the
+    // prelims" — doc 12's second axis of a career — was worth nothing.
+    position: playerCardPosition(red, blue, booking.bout.isTitleFight),
     isChampion: booking.bout.isTitleFight && playerWon,
   });
 

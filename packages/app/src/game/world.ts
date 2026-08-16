@@ -62,6 +62,7 @@ import {
   trimFeed,
   type BoutSeed,
   type CardBout,
+  type CardPosition,
   type Coach,
   type DivisionId,
   type FightNight,
@@ -489,12 +490,14 @@ function runCardBout(ctx: {
       develop(db, after.red, day, rng.fork(`dev:${red.id}`), lastSeen),
       redWon,
       day,
+      bout.position,
     ),
     blue: settleRosterFighter(
       db,
       develop(db, after.blue, day, rng.fork(`dev:${blue.id}`), lastSeen),
       result.winnerId === blue.id,
       day,
+      bout.position,
     ),
   };
 
@@ -564,25 +567,29 @@ function settleRosterFighter(
   fighter: Fighter,
   won: boolean,
   day: number,
+  position: CardPosition = 'mainCard',
 ): Fighter {
   const promotion = fighter.promotionId
     ? (db.promotions.findById(fighter.promotionId) as Promotion | undefined)
     : undefined;
   if (!promotion) return fighter;
 
-  const terms = defaultTerms(fighter, promotion);
-  const purse = purseFor(terms, promotion);
-  const gross = purse.show + (won ? purse.win : 0);
-
-  // One multiplier rather than the full chain: roughly what is left after everybody's cut and
-  // a camp. The shape is what matters here, not the itemisation.
-  const net = gross * 0.35 - campCost(8, 55);
-
   const agreement = fighter.agreementId
     ? (db.agreements.findById(fighter.agreementId as string) as
         | (PromotionalAgreement & Entity)
         | undefined)
     : undefined;
+
+  // The signed terms, not what they are worth today — the whole point of a contract.
+  const terms = agreement
+    ? { showPurse: agreement.showPurse, winBonus: agreement.winBonus }
+    : defaultTerms(fighter, promotion);
+  const purse = purseFor(terms, promotion, position);
+  const gross = purse.show + (won ? purse.win : 0);
+
+  // One multiplier rather than the full chain: roughly what is left after everybody's cut and
+  // a camp. The shape is what matters here, not the itemisation.
+  const net = gross * 0.35 - campCost(8, 55);
 
   if (agreement) {
     db.agreements.upsert(consumeFight(agreement) as PromotionalAgreement & Entity);

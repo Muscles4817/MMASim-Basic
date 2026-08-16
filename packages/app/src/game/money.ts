@@ -16,12 +16,16 @@ import {
   marketValue,
   netPurse,
   purseFor,
+  purseRateOf,
   solvency,
   sponsorshipIncome,
   type CardPosition,
   type Fighter,
   type Gym,
+  type Manager,
   type NetPurse,
+  type PromotionalAgreement,
+  type PurseTerms,
   type Promotion,
   type Purse,
   type Solvency,
@@ -36,16 +40,42 @@ export function promotionOf(db: GameDb, fighter: Fighter): Promotion | undefined
 }
 
 /** What this fighter would be paid for a bout right now. */
+/**
+ * The terms a fighter is actually on.
+ *
+ * The signed agreement, not what they are worth today. This was the single biggest hole in
+ * the business layer: `settleFight` computed the purse from current market value and never
+ * read the contract, so every fighter was always paid exactly what they were worth — which
+ * means the hub could correctly say "this deal is now an insult" while the bank quietly paid
+ * the market rate anyway.
+ *
+ * The entire economic grievance of the sport is that terms are fixed while worth is not.
+ * `contractFairness`, `resentment`, renegotiation and free agency all derive from that gap,
+ * and none of them meant anything while the ledger ignored the contract.
+ */
+export function termsFor(db: GameDb, fighter: Fighter): PurseTerms | undefined {
+  const promotion = promotionOf(db, fighter);
+  if (!promotion) return undefined;
+
+  const agreement = fighter.agreementId
+    ? (db.agreements.findById(fighter.agreementId as string) as PromotionalAgreement | undefined)
+    : undefined;
+
+  // A genuine free agent has no terms, so what they are worth is the only answer available.
+  return agreement
+    ? { showPurse: agreement.showPurse, winBonus: agreement.winBonus }
+    : defaultTerms(fighter, promotion);
+}
+
 export function currentPurse(
   db: GameDb,
   fighter: Fighter,
   position: CardPosition = 'mainCard',
 ): Purse | undefined {
   const promotion = promotionOf(db, fighter);
-  if (!promotion) return undefined;
-  // Until contracts exist (doc 16), terms are derived from what the fighter is worth. Once
-  // they do, the stored agreement replaces this and the rest of the chain is unchanged.
-  return purseFor(defaultTerms(fighter, promotion), promotion, position);
+  const terms = termsFor(db, fighter);
+  if (!promotion || !terms) return undefined;
+  return purseFor(terms, promotion, position);
 }
 
 /** What a camp of this length at this gym costs. */
@@ -109,7 +139,7 @@ export function settleFight(
   const promotion = promotionOf(db, fighter);
   if (!promotion) return undefined;
 
-  const purse = purseFor(defaultTerms(fighter, promotion), promotion, options.position);
+  const purse = purseFor(termsFor(db, fighter) ?? defaultTerms(fighter, promotion), promotion, options.position);
   const sponsorship = sponsorshipIncome(fighter, promotion, {
     boutsWithPromotion: fighter.record.length,
     isChampion: options.isChampion,
@@ -119,11 +149,18 @@ export function settleFight(
   const gross = round1(purse.show + (options.won ? purse.win : 0) + sponsorship);
   const months = Math.max(1, Math.round(options.campWeeks / 4));
 
+  const manager = fighter.managerId
+    ? (db.managers.findById(fighter.managerId as string) as Manager | undefined)
+    : undefined;
+
   const breakdown = netPurse({
     gross,
+    // `purseRateOf` had no callers, so Danny Rourke's 0% — the entire point of the family
+    // manager archetype — never reached the ledger, and a self-managed fighter still paid a
+    // manager who did not exist.
+    managerRate: options.managerRate ?? purseRateOf(manager),
     // Already paid, and shown here so the fighter can see what the night actually cleared.
     campCost: options.campCost,
-    managerRate: options.managerRate,
     livingCost: round1(livingCostPerMonth(fighter) * months),
   });
 

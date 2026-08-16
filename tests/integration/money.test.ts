@@ -10,7 +10,14 @@
 import { describe, expect, it } from 'vitest';
 import { createNewGame } from '@mmasim/data';
 import { marketValue, type Fighter, type Gym, type Promotion } from '@mmasim/engine';
-import { campCostFor, currentPurse, payForCamp, settleFight } from '../../packages/app/src/game/money';
+import {
+  campCostFor,
+  currentPurse,
+  payForCamp,
+  promotionOf,
+  settleFight,
+} from '../../packages/app/src/game/money';
+import { hire, sign } from '../../packages/app/src/game/contracts';
 import { runTraining } from '../../packages/app/src/game/progression';
 
 const game = () => createNewGame({ adapter: undefined });
@@ -69,10 +76,14 @@ describe('a fight pays', () => {
   it('takes the manager, the corner and the taxman out of both', () => {
     const db = game();
     const me = player(db);
-    const won = settleFight(db, { ...me, bank: 0 }, { won: true, campCost: 5, campWeeks: 8 })!;
+    // Explicitly managed, because the rate now comes from the manager rather than a default —
+    // a fighter with nobody representing them pays nobody, which is the whole point of the
+    // family-manager archetype and used to be silently overridden by a flat 10%.
+    const managed = hire(db, { ...me, bank: 0 }, (db.managers.findAll() as never as { id: string }[])[0] as never);
+    const won = settleFight(db, managed, { won: true, campCost: 5, campWeeks: 8 })!;
 
-    expect(won.breakdown.manager).toBeGreaterThan(0);
     expect(won.breakdown.corner).toBeGreaterThan(0);
+    expect(won.breakdown.tax).toBeGreaterThan(0);
     expect(won.breakdown.net).toBeLessThan(won.gross);
   });
 
@@ -153,5 +164,70 @@ describe('the shape of the sport', () => {
 
     // Winning at the bottom of the sport does not fund the next camp at a better gym.
     expect(earnings.breakdown.net).toBeLessThan(campCostFor(gyms[gyms.length - 1], 8));
+  });
+});
+
+describe('the contract actually pays', () => {
+  it('pays the signed terms, not what the fighter is worth today', () => {
+    /*
+     * The single biggest hole in the business layer. settleFight computed the purse from
+     * current market value and never read the agreement, so every fighter was always paid
+     * exactly what they were worth — which meant the hub could correctly say "this deal is
+     * now an insult" while the bank quietly paid the market rate anyway.
+     *
+     * The entire economic grievance of the sport is that terms are fixed while worth is not.
+     */
+    const db = game();
+    const me = player(db);
+    const promotion = promotionOf(db, me)!;
+
+    // Sign for a pittance, then become a star.
+    const signed = sign(db, { ...me, bank: 0 }, promotion, {
+      showPurse: 2,
+      winBonus: 2,
+      signingBonus: 0,
+      revenuePoints: 0,
+      fightsOwed: 4,
+      championshipExtension: 'none',
+      matchingRights: false,
+      exclusive: true,
+      outsideBouts: 0,
+    });
+
+    const nowAStar = { ...signed, starPower: 95, reputation: 90 };
+    db.fighters.upsert(nowAStar as Fighter & { id: string });
+
+    const purse = currentPurse(db, nowAStar)!;
+    const worth = marketValue(nowAStar, promotion);
+
+    // Paid the deal, which is now a fraction of what they are worth.
+    expect(purse.total).toBeLessThan(worth / 10);
+  });
+
+  it('falls back to market value for a genuine free agent', () => {
+    const db = game();
+    const me = player(db);
+    const free = { ...me, agreementId: undefined };
+    expect(currentPurse(db, free)).toBeDefined();
+  });
+
+  it('pays a prelim fighter a fraction of a main eventer', () => {
+    // CARD_POSITION_PURSE was defined and unreachable for the player: the position was
+    // hardcoded, so the 0.5x and 1.6x rungs did not exist and "get off the prelims" — the
+    // second axis of a career beside the record — was worth nothing.
+    const db = game();
+    const me = player(db);
+    const prelim = currentPurse(db, me, 'prelim')!;
+    const main = currentPurse(db, me, 'mainEvent')!;
+    expect(main.total).toBeGreaterThan(prelim.total * 3);
+  });
+
+  it('does not charge a self-managed fighter a manager', () => {
+    // purseRateOf had no callers, so the family manager's 0% never reached the ledger and a
+    // fighter with nobody representing them still paid ten per cent to nobody.
+    const db = game();
+    const me = { ...player(db), bank: 0, managerId: undefined };
+    const earnings = settleFight(db, me, { won: true, campCost: 0, campWeeks: 8 })!;
+    expect(earnings.breakdown.manager).toBe(0);
   });
 });
