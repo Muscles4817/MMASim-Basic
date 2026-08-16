@@ -31,6 +31,7 @@ export interface FighterOverrides {
   walkingWeightLbs?: number;
   headTrauma?: number;
   starPower?: number;
+  reputation?: number;
   sex?: 'male' | 'female';
 }
 
@@ -83,7 +84,7 @@ export function makeFighter(o: FighterOverrides = {}): Fighter {
     summary: emptyRecordSummary(),
 
     starPower: o.starPower ?? 30,
-    reputation: 40,
+    reputation: o.reputation ?? 40,
 
     proDebutDay: birthDayForAge(age - 6, TEST_DAY, 6, 15),
   };

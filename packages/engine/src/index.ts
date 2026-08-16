@@ -49,6 +49,7 @@ export * from './camp/scouting.js';
 export * from './business/matchmaking.js';
 export * from './business/aftermath.js';
 export * from './business/ladder.js';
+export * from './business/heat.js';
 
 // Testing helpers (shared across the out-of-package test suites)
 export * from './testing/fixtures.js';
