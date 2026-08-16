@@ -7,6 +7,7 @@
 
 import type { GameDay } from '../core/clock.js';
 import type { CoachId, DivisionId, FighterId, GymId, PromotionId } from '../core/ids.js';
+import type { SponsorshipPolicy } from '../business/money.js';
 import type { Personality } from './personality.js';
 
 /** Where a promotion sits in the market. Drives budget, reach and talent pull. */
@@ -23,6 +24,34 @@ export interface Promotion {
   prestige: number;
   /** Cash on hand, in thousands. */
   budget: number;
+  /**
+   * Lowest total package (show + win) this promotion will pay, in thousands.
+   *
+   * Real promotions publish a floor and honour it. Without one the pay formula produced
+   * debutant purses below the minimum the promotion advertises, which is a thing that does
+   * not happen. Also a promoter-mode lever: raising it is expensive, visible, buys
+   * relationship across the whole roster, and is exactly what a promotion under pressure
+   * quietly does not do.
+   */
+  minimumPurse: number;
+  /**
+   * Whether fighters keep their own sponsors.
+   *
+   * `open` — individual in-cage sponsors, worth more than the purse at the bottom of the
+   * sport. `uniform` — a single outfitting deal replaces them with a fixed tier by bout
+   * count. Real promotions have switched from one to the other and repriced a whole roster
+   * overnight; it is the second edge on doc 16's money-versus-level trade.
+   */
+  sponsorshipPolicy: SponsorshipPolicy;
+  /**
+   * Whether this promotion can grant revenue points at all.
+   *
+   * A promotion with no broadcast platform structurally cannot share broadcast revenue —
+   * which is exactly what makes points doc 16's *unmatchable term*.
+   */
+  revenueShareCapable: boolean;
+  /** Bouts the promotion owes a contracted fighter per 12 months. See doc 16. */
+  activityGuarantee: number;
   /** 1–100. Current audience attention. Moves with cards delivered and stars built. */
   buzz: number;
   /** Divisions this promotion actually runs. */

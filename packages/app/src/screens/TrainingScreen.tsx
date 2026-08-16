@@ -36,6 +36,7 @@ import {
 import { Alert, FighterRead, KeyStat, Trend } from '../ui/signals';
 import { getBooking } from '../game/career';
 import { formatGameDay } from '../shell/Shell';
+import { campCostFor, solvencyOf } from '../game/money';
 
 const WEEK_OPTIONS = [
   { value: '4', label: '4 weeks' },
@@ -85,6 +86,10 @@ export function TrainingScreen() {
     ? Math.max(0, Math.ceil((booking.bout.day - world.day) / 7))
     : undefined;
   const overrunsFight = weeksToFight !== undefined && Number(weeks) > weeksToFight;
+
+  const cost = campCostFor(gym, Number(weeks));
+  const funding = solvencyOf(fighter, cost);
+  const canPay = fighter.bank >= cost;
 
   // What this camp is likely to be worth, from the same arithmetic the camp itself runs.
   const forecast = useMemo(
@@ -142,11 +147,21 @@ export function TrainingScreen() {
               {formatGameDay(world.day)}
             </span>
           </span>
+          <span className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           {weeksToFight !== undefined && (
             <Chip tone={weeksToFight <= 4 ? 'warning' : 'info'}>
               Fight in {weeksToFight === 0 ? 'days' : `${weeksToFight}w`}
             </Chip>
           )}
+            {/* The bank, which decides what kind of camp you can run, which decides what
+                kind of fighter you become. */}
+            <Chip
+              tone={funding === 'comfortable' ? 'neutral' : funding === 'tight' ? 'warning' : 'negative'}
+              title="Money on hand. Camps are paid before the fight, win or lose."
+            >
+              £{Math.round(fighter.bank * 10) / 10}k
+            </Chip>
+          </span>
         </div>
 
         <div style={{ marginTop: 'var(--space-3)' }}>
@@ -277,6 +292,12 @@ export function TrainingScreen() {
             Longer blocks give more in total, but less per week — and every week spent
             training is a week older. You return on{' '}
             <strong>{formatGameDay(world.day + Number(weeks) * 7)}</strong>.
+          </p>
+          <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
+            {weeks} weeks at {gym?.name ?? 'no gym'} costs <strong>£{cost}k</strong>.{' '}
+            {canPay
+              ? `That leaves you £${Math.round((fighter.bank - cost) * 10) / 10}k.`
+              : `You have £${Math.round(fighter.bank * 10) / 10}k. You can run it anyway and go into the red — nothing stops you — but you will start taking fights you would otherwise refuse.`}
           </p>
         </div>
 
@@ -457,7 +478,13 @@ function GymPicker({
           const isCurrent = gym.id === currentGymId;
           // The bar is reputation-based, so this is a ladder you climb rather than a list.
           const required = Math.max(0, gym.prestige - 35);
-          const canJoin = playerFighter.reputation >= required;
+          const hasReputation = playerFighter.reputation >= required;
+          // The second gate. Reputation alone made the best rooms a one-way ratchet: once
+          // you were in, you were in forever regardless of what happened next. Money means a
+          // fighter who loses twice trains somewhere worse next camp — a death spiral you
+          // can see coming three months out, which is far better than one that arrives.
+          const eightWeeks = campCostFor(gym, 8);
+          const canAfford = playerFighter.bank >= eightWeeks;
           const coach = gym.headCoachId ? (db.coaches.findById(gym.headCoachId) as { lastName: string } | undefined) : undefined;
 
           return (
@@ -478,16 +505,24 @@ function GymPicker({
                 <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
                   {gym.city} · quality {gym.quality}
                   {coach && ` · ${coach.lastName}`}
+                  {' · '}£{eightWeeks}k for eight weeks
                 </span>
               </span>
               {isCurrent ? (
                 <Chip tone="accent">Your gym</Chip>
-              ) : canJoin ? (
-                <Button size="sm" onClick={() => onJoin(gym)}>
-                  Join
-                </Button>
+              ) : !hasReputation ? (
+                <Chip tone="warning">Needs reputation {required}</Chip>
               ) : (
-                <Chip tone="warning">Needs rep {required}</Chip>
+                <span className="row" style={{ gap: 'var(--space-2)' }}>
+                  {!canAfford && (
+                    <Chip tone="warning" title="You can still join. You just cannot pay for a camp there yet.">
+                      Beyond your means
+                    </Chip>
+                  )}
+                  <Button size="sm" onClick={() => onJoin(gym)}>
+                    Join
+                  </Button>
+                </span>
               )}
             </div>
           );

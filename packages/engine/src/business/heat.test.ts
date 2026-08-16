@@ -1,18 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../core/rng.js';
-import { asFighterId, asPromotionId } from '../core/ids.js';
-import type { Promotion } from '../domain/organisations.js';
-import { makeFighter } from '../testing/fixtures.js';
+import { asFighterId } from '../core/ids.js';
+import { makeFighter, makePromotion } from '../testing/fixtures.js';
 import {
   RIVALRY_THRESHOLD,
-  boutValue,
+  drawWeight,
   currentHeat,
   describeHeat,
   emptyRivalry,
   heatFromFight,
   heatRevenueMultiplier,
   pairKey,
-  purseFor,
   rivalryAggression,
   rivalryId,
   rivalryLossMultiplier,
@@ -22,21 +20,6 @@ import {
 const A = asFighterId('a');
 const B = asFighterId('b');
 
-const promotion = (overrides: Partial<Promotion> = {}): Promotion => ({
-  id: asPromotionId('p'),
-  name: 'Test',
-  shortName: 'T',
-  tier: 'global',
-  baseCountry: 'USA',
-  prestige: 90,
-  budget: 40_000,
-  buzz: 60,
-  divisions: [],
-  champions: {},
-  matchmakingAggression: 60,
-  narrativeControl: 70,
-  ...overrides,
-});
 
 describe('rivalry identity', () => {
   it('is order-independent, so a pair has exactly one rivalry', () => {
@@ -241,47 +224,21 @@ describe('what heat does', () => {
   });
 });
 
-describe('money', () => {
-  const star = makeFighter({ id: 'star', starPower: 90, reputation: 60 });
-  const grinder = makeFighter({ id: 'grind', starPower: 15, reputation: 85 });
-
-  it('pays for star power far more than for merit', () => {
-    // The mechanism by which a promotion pays a draw more than a champion, and then has to
-    // explain it to the champion.
-    expect(purseFor(star, promotion(), false)).toBeGreaterThan(
-      purseFor(grinder, promotion(), false) * 1.8,
-    );
-  });
-
-  it('pays more for a title fight and more at a bigger promotion', () => {
-    expect(purseFor(star, promotion(), true)).toBeGreaterThan(purseFor(star, promotion(), false));
-    expect(purseFor(star, promotion({ prestige: 95 }), false)).toBeGreaterThan(
-      purseFor(star, promotion({ prestige: 25 }), false),
-    );
-  });
-
-  it('charges more for a Mercenary and less for a Company Man', () => {
-    const mercenary = makeFighter({ ...star, traits: ['mercenary'] });
-    const loyal = makeFighter({ ...star, traits: ['companyMan'] });
-    expect(purseFor(mercenary, promotion(), false)).toBeGreaterThan(
-      purseFor(loyal, promotion(), false),
-    );
-  });
-
+describe('draw weight', () => {
   it('values a competitive fight above a mismatch of the same names', () => {
-    // This is what stops "always book the safest fight" being correct.
-    const even = boutValue({
-      promotion: promotion(),
-      red: makeFighter({ starPower: 70 }),
-      blue: makeFighter({ starPower: 70 }),
+    // What stops "always book the safest fight" being correct.
+    const even = drawWeight({
+      promotion: makePromotion(),
+      red: makeFighter({ id: 'a', starPower: 70 }),
+      blue: makeFighter({ id: 'b', starPower: 70 }),
       heat: 0,
       isRivalry: false,
       isTitleFight: false,
     });
-    const mismatch = boutValue({
-      promotion: promotion(),
-      red: makeFighter({ starPower: 70, attributes: { power: 90, speed: 90, cardio: 90 } }),
-      blue: makeFighter({ starPower: 70, attributes: { power: 25, speed: 25, cardio: 25 } }),
+    const mismatch = drawWeight({
+      promotion: makePromotion(),
+      red: makeFighter({ id: 'a', starPower: 70, attributes: { power: 90, speed: 90, cardio: 90 } }),
+      blue: makeFighter({ id: 'b', starPower: 70, attributes: { power: 25, speed: 25, cardio: 25 } }),
       heat: 0,
       isRivalry: false,
       isTitleFight: false,
@@ -289,24 +246,39 @@ describe('money', () => {
     expect(even).toBeGreaterThan(mismatch);
   });
 
-  it('makes a heated mid-card fight worth more than a cold title fight', () => {
+  it('makes a heated mid-card fight draw better than a cold title fight', () => {
     // The whole reason heat is a separate number from star power.
-    const grudge = boutValue({
-      promotion: promotion(),
-      red: makeFighter({ starPower: 40 }),
-      blue: makeFighter({ starPower: 40 }),
+    const grudge = drawWeight({
+      promotion: makePromotion(),
+      red: makeFighter({ id: 'a', starPower: 40 }),
+      blue: makeFighter({ id: 'b', starPower: 40 }),
       heat: 95,
       isRivalry: true,
       isTitleFight: false,
     });
-    const cold = boutValue({
-      promotion: promotion(),
-      red: makeFighter({ starPower: 40 }),
-      blue: makeFighter({ starPower: 40 }),
+    const cold = drawWeight({
+      promotion: makePromotion(),
+      red: makeFighter({ id: 'a', starPower: 40 }),
+      blue: makeFighter({ id: 'b', starPower: 40 }),
       heat: 0,
       isRivalry: false,
       isTitleFight: true,
     });
     expect(grudge).toBeGreaterThan(cold);
+  });
+
+  it('is not money, and must never be compared to a purse', () => {
+    // It used to return thousands, which made the promotion lose money on its marquee fights
+    // and profit on its prelims. It is a unitless share of an event's demand.
+    const weight = drawWeight({
+      promotion: makePromotion(),
+      red: makeFighter({ id: 'a', starPower: 100 }),
+      blue: makeFighter({ id: 'b', starPower: 100 }),
+      heat: 100,
+      isRivalry: true,
+      isTitleFight: true,
+    });
+    expect(Number.isFinite(weight)).toBe(true);
+    expect(weight).toBeGreaterThan(0);
   });
 });

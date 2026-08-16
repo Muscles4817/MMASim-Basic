@@ -9,7 +9,7 @@
  * See docs/08-promotions-marketing-heat.md.
  */
 
-import { clamp, clamp01, remap } from '../core/math.js';
+import { clamp, clamp01 } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import type { GameDay } from '../core/clock.js';
 import type { FighterId, RivalryId } from '../core/ids.js';
@@ -211,18 +211,27 @@ export interface BoutRevenueInput {
 }
 
 /**
- * What a single bout is worth to the promotion, in thousands.
+ * How much of an event's demand this bout is responsible for. **Unitless.**
  *
- * Star power dominates, quality contributes, and heat multiplies the whole thing. Note that
- * *competitiveness* is worth real money here: a coin-flip outdraws a mismatch of the same
- * names, which is the mechanism that stops "always book the safest fight" being correct.
+ * This was `boutValue()` and it returned thousands, which made it a second currency: it
+ * capped around 570 for two star-100s in a maximally heated title fight, while the two
+ * purses for that same pair came to roughly 3,300. The promotion lost money on its marquee
+ * fights and profited on its prelims, which is precisely inverted — and it was inverted
+ * before the money rework raised the top end.
+ *
+ * The resolution is not to rescale it. It is that this was never the promotion's revenue:
+ * doc 12's gate + broadcast equation is. So this is a **draw weight** — used to order a card,
+ * to split attention, and as the basis for allocating revenue points. It must never be
+ * denominated in money again.
  */
-export function boutValue(input: BoutRevenueInput): number {
+export function drawWeight(input: BoutRevenueInput): number {
   const { promotion, red, blue, heat, isRivalry, isTitleFight } = input;
 
   const star = (red.starPower + blue.starPower) / 2;
   const quality = (overallRating(red.attributes) + overallRating(blue.attributes)) / 2;
   const gap = Math.abs(overallRating(red.attributes) - overallRating(blue.attributes));
+  // Competitiveness is worth real weight: a coin-flip outdraws a mismatch of the same names,
+  // which is the mechanism that stops "always book the safest fight" being correct.
   const competitiveness = clamp01(1 - gap / 25);
 
   const base =
@@ -230,24 +239,6 @@ export function boutValue(input: BoutRevenueInput): number {
     (promotion.prestige / 100);
 
   return Math.round(base * heatRevenueMultiplier(heat, isRivalry));
-}
-
-/**
- * What a fighter is owed, in thousands.
- *
- * Scales with star power far more than with reputation — which is the mechanism by which a
- * promotion ends up paying a mediocre draw more than an excellent champion, and then has to
- * explain it to the champion.
- */
-export function purseFor(fighter: Fighter, promotion: Promotion, isTitleFight: boolean): number {
-  const star = remap(fighter.starPower, 1, 100, 4, 250);
-  const merit = remap(fighter.reputation, 1, 100, 2, 60);
-  const tierFactor = promotion.prestige / 100;
-  const titleFactor = isTitleFight ? 1.5 : 1;
-
-  return Math.round(
-    (star + merit) * tierFactor * titleFactor * traitMul(fighter.traits, 'purseDemand'),
-  );
 }
 
 /** A short, plain-language reason the audience cares. Shown on the fight build-up. */

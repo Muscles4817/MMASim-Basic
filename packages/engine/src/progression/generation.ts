@@ -222,6 +222,10 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
 
     // Nobody arrives famous. Star power is earned, and that is the point of having it.
     starPower: toRating(rng.normalClamped(12, 6, 1, 35)),
+    bank: 0,
+    lifetimeGross: 0,
+    lifetimeNet: 0,
+    resentment: 0,
     reputation: toRating(rng.normalClamped(25, 9, 5, 50)),
 
     proDebutDay: birthDayForAge(Math.max(0, age - 20), options.day, 1, 1),

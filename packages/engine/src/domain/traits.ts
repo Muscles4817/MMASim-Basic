@@ -27,6 +27,8 @@ export const MUL_HOOKS = [
   'heatGeneration',
   'developmentRate',
   'purseDemand',
+  /** How expensively they live between fights. See docs/17-money.md. */
+  'livingCost',
 ] as const;
 
 /** Additive hooks. Absent = 0. Combined by summation. Units are documented per hook. */
@@ -210,7 +212,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     category: 'camp',
     polarity: 'negative',
     visibility: 60,
-    mul: { campGain: 0.72, idleDecay: 1.7, weightMissRisk: 1.8 },
+    mul: { campGain: 0.72, idleDecay: 1.7, weightMissRisk: 1.8, livingCost: 2.2 },
   },
   companyMan: {
     id: 'companyMan',
@@ -219,7 +221,8 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     category: 'business',
     polarity: 'positive',
     visibility: 50,
-    mul: { purseDemand: 0.85 },
+    // Lives within his means as well as fighting within them.
+    mul: { purseDemand: 0.85, livingCost: 0.8 },
     add: { shortNoticeWillingness: 0.45 },
   },
   mercenary: {

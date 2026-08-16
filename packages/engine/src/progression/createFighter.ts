@@ -369,6 +369,10 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
 
     // Nobody knows who you are. That is the whole point.
     starPower: 1,
+    bank: 0,
+    lifetimeGross: 0,
+    lifetimeNet: 0,
+    resentment: 0,
     reputation: 5,
 
     proDebutDay: spec.day,

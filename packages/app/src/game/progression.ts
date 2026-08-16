@@ -38,6 +38,7 @@ import {
 } from '@mmasim/engine';
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
 import { advanceWorld } from './world';
+import { campCostFor, payForCamp } from './money';
 
 /** How much an existing injury is blunting a camp, 0-1. Surfaced on the training screen. */
 export function currentCampImpairment(fighter: Fighter, day: number): number {
@@ -137,8 +138,13 @@ export function runTraining(
 
   const rng = createRng(`${world.seed}:train:${fighter.id}:${world.day}`);
 
+  // The camp is paid for before it is run, in full, win or lose. That fixed cost is what
+  // turns money from a scoreboard into a constraint — see docs/17-money.md.
+  const cost = campCostFor(gym, weeks);
+  const paid = payForCamp(db, fighter, cost);
+
   const trained = applyTraining({
-    fighter,
+    fighter: paid,
     focuses,
     weeks,
     gym,
@@ -180,6 +186,7 @@ export function runTraining(
   return {
     gains: trained.gains,
     notes: [
+      `The camp cost £${cost}k. You have £${Math.round(paid.bank * 10) / 10}k left.`,
       ...(injury ? [describeInjury(injury, toDay)] : []),
       ...trained.notes,
       ...aged.notes,

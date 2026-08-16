@@ -7,8 +7,10 @@
  */
 
 import { birthDayForAge, type GameDay } from '../core/clock.js';
-import { asDivisionId, asFighterId } from '../core/ids.js';
+import { asDivisionId, asFighterId, asPromotionId } from '../core/ids.js';
 import type { Fighter } from '../domain/fighter.js';
+import type { Promotion } from '../domain/organisations.js';
+import { DIVISIONS } from '../domain/divisions.js';
 import { emptyRecordSummary, freshCondition } from '../domain/fighter.js';
 import type { Personality } from '../domain/personality.js';
 import { uniformPersonality } from '../domain/personality.js';
@@ -84,6 +86,14 @@ export function makeFighter(o: FighterOverrides = {}): Fighter {
     summary: emptyRecordSummary(),
 
     starPower: o.starPower ?? 30,
+
+    bank: 0,
+
+    lifetimeGross: 0,
+
+    lifetimeNet: 0,
+
+    resentment: 0,
     reputation: o.reputation ?? 40,
 
     proDebutDay: birthDayForAge(age - 6, TEST_DAY, 6, 15),
@@ -271,3 +281,38 @@ export const ARCHETYPES = {
   journeyman2: (): Fighter =>
     makeFighter({ id: 'fighter_journeyman_2', lastName: 'Everyman' }),
 } as const;
+
+/**
+ * A promotion, for tests that need one.
+ *
+ * Shared because two suites had grown their own copy, and both had to be found and edited by
+ * hand every time `Promotion` gained a field. One definition of "a valid promotion", for the
+ * same reason there is one definition of a valid fighter.
+ */
+export function makePromotion(
+  overrides: Partial<Omit<Promotion, 'id'>> & { id?: string } = {},
+): Promotion {
+  return {
+    name: 'Test Promotion',
+    shortName: 'TP',
+    tier: 'global',
+    baseCountry: 'USA',
+    prestige: 90,
+    budget: 40_000,
+    buzz: 60,
+    // Every division by default: a promotion that runs none signs nobody, which is a
+    // surprising way for an unrelated test to fail.
+    divisions: DIVISIONS.map((d) => d.id),
+    champions: {},
+    matchmakingAggression: 60,
+    narrativeControl: 70,
+    minimumPurse: 24,
+    sponsorshipPolicy: 'uniform',
+    revenueShareCapable: true,
+    activityGuarantee: 3,
+    ...overrides,
+    // After the spread: an `id` in the overrides arrives as a plain string and must still
+    // come out branded.
+    id: asPromotionId(overrides.id ?? 'p_test'),
+  };
+}

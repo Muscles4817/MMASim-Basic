@@ -6,10 +6,10 @@ import {
   fighterAge,
   getDivision,
   overallRating,
-  purseFor,
   recordString,
   type Fighter,
   type MatchupAppraisal,
+  type Gym,
   type Promotion,
   type Rivalry,
 } from '@mmasim/engine';
@@ -23,6 +23,7 @@ import { getRivalry, previousMeetings } from '../game/rivalries';
 import { advanceWorld, readNews } from '../game/world';
 import { NewsFeed } from '../ui/NewsFeed';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
+import { campCostFor, currentPurse, solvencyOf } from '../game/money';
 import { formatGameDay } from '../shell/Shell';
 
 /**
@@ -68,9 +69,10 @@ export function HubScreen() {
   const division = getDivision(fighter.divisionId);
   // Purses scale with the promotion's prestige, so a fighter with no contract is quoted
   // against a nominal regional shop rather than crashing or quoting a global figure.
-  const promotion = fighter.promotionId
-    ? (db.promotions.findById(fighter.promotionId) as Promotion | undefined)
-    : undefined;
+  // Read against an eight-week camp at the room they are actually in, which is the decision
+  // the bank is really about.
+  const gym = fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined;
+  const bankState = solvencyOf(fighter, campCostFor(gym, 8));
   const opponent = booking
     ? (db.fighters.findById(booking.opponentId) as Fighter | undefined)
     : undefined;
@@ -140,6 +142,12 @@ export function HubScreen() {
             icon="star"
             emphasis="tertiary"
             hint="What the market pays to watch you. Independent of how good you are."
+          />
+          <Fact
+            label="Bank"
+            value={`£${Math.round(fighter.bank * 10) / 10}k`}
+            emphasis={bankState === 'comfortable' ? 'tertiary' : 'secondary'}
+            hint="Camps are paid before the fight, win or lose. This is what decides which room you can afford next."
           />
           <Fact
             label="Confidence"
@@ -298,7 +306,7 @@ export function HubScreen() {
                   history={previousMeetings(fighter, offer.opponent.id)}
                   rivalry={getRivalry(db, fighter.id, offer.opponent.id, world.day)}
                   day={world.day}
-                  purse={promotion ? purseFor(fighter, promotion, false) : 0}
+                  purse={currentPurse(db, fighter)}
                 />
               ))}
             </div>
@@ -406,7 +414,7 @@ function OfferRow({
   history: { wins: number; losses: number; total: number };
   rivalry: Rivalry;
   day: number;
-  purse: number;
+  purse?: { show: number; win: number; total: number };
 }) {
   const { opponent, step, winChance } = offer;
   const heat = currentHeat(rivalry, day);
@@ -494,7 +502,14 @@ function OfferRow({
             {/* Money, plainly. A heated fight pays more, which is what makes building a
                 rivalry worth doing rather than just something that happens to you. An
                 unsigned fighter has no contract to quote, so nothing is shown. */}
-            {purse > 0 && <Fact label="Your purse" value={`$${purse}k`} emphasis="secondary" />}
+            {purse && (
+              <Fact
+                label="Purse"
+                value={`£${purse.show}k + £${purse.win}k`}
+                emphasis="secondary"
+                hint="Show money is paid win or lose. The win bonus is not, and the manager, the corner and the taxman all come out of both."
+              />
+            )}
           </div>
 
           {(heat >= 20 || history.total > 0) && (

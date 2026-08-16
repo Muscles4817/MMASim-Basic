@@ -165,6 +165,14 @@ export function buildFighter(spec: FighterSpec): Fighter {
     summary: { ...summary },
 
     starPower: spec.star,
+
+    bank: 0,
+
+    lifetimeGross: 0,
+
+    lifetimeNet: 0,
+
+    resentment: 0,
     reputation: spec.rep,
 
     // Debut is inferred from bouts fought: roughly two and a half fights a year, floored so

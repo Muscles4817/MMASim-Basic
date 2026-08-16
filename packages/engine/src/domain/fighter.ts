@@ -154,6 +154,25 @@ export interface Fighter {
 
   /** 1–100. What the market will pay to watch them. Independent of ability. */
   starPower: number;
+
+  /**
+   * Cash on hand, in thousands. Can go negative, and that is the point — a fighter in the
+   * red takes fights they would otherwise turn down, and the game plays that back at them
+   * rather than blocking anything. See docs/17-money.md.
+   */
+  bank: number;
+  /** Career earnings before deductions, for the retirement ledger. */
+  lifetimeGross: number;
+  /** Career earnings after the manager, the corner, the camp and the taxman. */
+  lifetimeNet: number;
+  /**
+   * 0–100. How badly they feel they are being paid relative to what they are now worth.
+   *
+   * Drives relationship, willingness to re-sign and — for a high-ego fighter — public
+   * complaint. Rises when the contract stops matching the fighter, which is the recurring
+   * grievance of the sport and falls straight out of arithmetic rather than a script.
+   */
+  resentment: number;
   /** 1–100. How the media and fans rate them, which is not the same as how good they are. */
   reputation: number;
 

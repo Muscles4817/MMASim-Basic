@@ -1,6 +1,13 @@
 # 17 — Money
 
-> Status: design, written out of the doc 16 review. Nothing here is built.
+> Status: **built**, except revenue points, the bonus pool, the locker-room bonus, the
+> purchasable one-shots and the retirement ledger — all of which need doc 12's events or doc
+> 16's contracts underneath them first.
+>
+> What ships: `marketValue()`, a show/win `purseFor()`, `minimumPurse`, the deduction chain,
+> camp costs debited when a camp runs, sponsorship, weight-miss forfeiture, solvency, and the
+> bank on the fighter. `boutValue()` is now `drawWeight()` and is no longer denominated in
+> money.
 >
 > Split out of [16 — Contracts, Free Agency & Managers](./16-contracts-free-agency-managers.md)
 > because contracts, purses, costs and the bank in one document is unreadable. Doc 16 owns the

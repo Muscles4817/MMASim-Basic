@@ -3,7 +3,7 @@ import { createRng } from '../core/rng.js';
 import { asDivisionId, asFighterId, asPromotionId } from '../core/ids.js';
 import type { Fighter } from '../domain/fighter.js';
 import type { Promotion } from '../domain/organisations.js';
-import { makeFighter } from '../testing/fixtures.js';
+import { makeFighter, makePromotion } from '../testing/fixtures.js';
 import {
   RANKED_DEPTH,
   TIER_ORDER,
@@ -18,21 +18,6 @@ import {
 
 const DIV = asDivisionId('mens-lightweight');
 
-const promotion = (overrides: Partial<Promotion> = {}): Promotion => ({
-  id: asPromotionId('p_test'),
-  name: 'Test Promotion',
-  shortName: 'TP',
-  tier: 'major',
-  baseCountry: 'USA',
-  prestige: 60,
-  budget: 10_000,
-  buzz: 40,
-  divisions: [DIV],
-  champions: {},
-  matchmakingAggression: 50,
-  narrativeControl: 50,
-  ...overrides,
-});
 
 /** A fighter with a real record, so they qualify as ranked. */
 const contender = (id: string, reputation: number, streak = 1): Fighter => {
@@ -120,14 +105,14 @@ describe('titleShotEligibility', () => {
 
   it('refuses an unranked fighter', () => {
     const debutant = { ...makeFighter({ id: 'new' }), promotionId: asPromotionId('p_test') };
-    const verdict = titleShotEligibility(debutant, ranked(50, 2), promotion());
+    const verdict = titleShotEligibility(debutant, ranked(50, 2), makePromotion());
     expect(verdict.eligible).toBe(false);
     expect(verdict.reason).toMatch(/unranked/i);
   });
 
   it('refuses a fighter outside the top three', () => {
     const list = ranked(10, 5);
-    const verdict = titleShotEligibility(list.find((r) => r.fighter.id === 'player')!.fighter, list, promotion());
+    const verdict = titleShotEligibility(list.find((r) => r.fighter.id === 'player')!.fighter, list, makePromotion());
     expect(verdict.eligible).toBe(false);
     expect(verdict.reason).toMatch(/top three/i);
   });
@@ -135,7 +120,7 @@ describe('titleShotEligibility', () => {
   it('refuses a top contender who is not currently winning', () => {
     const list = ranked(95, 1);
     const player = list.find((r) => r.fighter.id === 'player')!.fighter;
-    const verdict = titleShotEligibility(player, list, promotion());
+    const verdict = titleShotEligibility(player, list, makePromotion());
     expect(verdict.eligible).toBe(false);
     expect(verdict.reason).toMatch(/two straight wins/i);
   });
@@ -143,7 +128,7 @@ describe('titleShotEligibility', () => {
   it('grants the shot to a top-three fighter on a run', () => {
     const list = ranked(95, 3);
     const player = list.find((r) => r.fighter.id === 'player')!.fighter;
-    expect(titleShotEligibility(player, list, promotion()).eligible).toBe(true);
+    expect(titleShotEligibility(player, list, makePromotion()).eligible).toBe(true);
   });
 
   it('tells the champion to defend rather than chase', () => {
@@ -154,7 +139,7 @@ describe('titleShotEligibility', () => {
       0,
       asFighterId('player'),
     );
-    const verdict = titleShotEligibility(list[0]!.fighter, list, promotion());
+    const verdict = titleShotEligibility(list[0]!.fighter, list, makePromotion());
     expect(verdict.eligible).toBe(false);
     expect(verdict.reason).toMatch(/champion/i);
   });
@@ -162,8 +147,8 @@ describe('titleShotEligibility', () => {
   it('lets a star jump the queue in a promotion that pushes its faces', () => {
     const list = ranked(45, 3);
     const player = { ...list.find((r) => r.fighter.id === 'player')!.fighter, starPower: 95 };
-    const pushy = titleShotEligibility(player, list, promotion({ narrativeControl: 100 }));
-    const meritocratic = titleShotEligibility(player, list, promotion({ narrativeControl: 0 }));
+    const pushy = titleShotEligibility(player, list, makePromotion({ narrativeControl: 100 }));
+    const meritocratic = titleShotEligibility(player, list, makePromotion({ narrativeControl: 0 }));
     // Same fighter, same division, different promotional politics.
     expect(pushy.eligible).toBe(true);
     expect(meritocratic.eligible).toBe(false);
@@ -172,13 +157,13 @@ describe('titleShotEligibility', () => {
   it('always explains itself, eligible or not', () => {
     const list = ranked(60, 2);
     const player = list.find((r) => r.fighter.id === 'player')!.fighter;
-    expect(titleShotEligibility(player, list, promotion()).reason.length).toBeGreaterThan(15);
+    expect(titleShotEligibility(player, list, makePromotion()).reason.length).toBeGreaterThan(15);
   });
 });
 
 describe('setChampion', () => {
   it('crowns and vacates without mutating the promotion', () => {
-    const p = promotion();
+    const p = makePromotion();
     const crowned = setChampion(p, DIV, asFighterId('a'));
     expect(crowned.champions[DIV]).toBe('a');
     expect(p.champions[DIV], 'input was mutated').toBeUndefined();
@@ -190,10 +175,10 @@ describe('setChampion', () => {
 
 describe('promotionOffers', () => {
   const promotions: Promotion[] = [
-    promotion({ id: asPromotionId('p_dev'), tier: 'developmental', budget: 900, prestige: 20 }),
-    promotion({ id: asPromotionId('p_reg'), tier: 'regional', budget: 2400, prestige: 38 }),
-    promotion({ id: asPromotionId('p_maj'), tier: 'major', budget: 14000, prestige: 66 }),
-    promotion({ id: asPromotionId('p_glo'), tier: 'global', budget: 42000, prestige: 95 }),
+    makePromotion({ id: asPromotionId('p_dev'), tier: 'developmental', budget: 900, prestige: 20 }),
+    makePromotion({ id: asPromotionId('p_reg'), tier: 'regional', budget: 2400, prestige: 38 }),
+    makePromotion({ id: asPromotionId('p_maj'), tier: 'major', budget: 14000, prestige: 66 }),
+    makePromotion({ id: asPromotionId('p_glo'), tier: 'global', budget: 42000, prestige: 95 }),
   ];
 
   const atTier = (tier: Promotion['tier']) => promotions.find((p) => p.tier === tier)!;
@@ -240,10 +225,21 @@ describe('promotionOffers', () => {
   });
 
   it('never offers a division the promotion does not run', () => {
+    // Stated explicitly rather than relying on a fixture default. This previously passed
+    // because the shared promotion fixture ran no divisions at all, which meant it was also
+    // silently asserting nothing.
+    const mensOnly = [
+      makePromotion({ id: asPromotionId('p_reg'), tier: 'regional', prestige: 38, divisions: [] }),
+      makePromotion({
+        id: asPromotionId('p_maj'),
+        tier: 'major',
+        budget: 14000,
+        prestige: 66,
+        divisions: [asDivisionId('mens-lightweight')],
+      }),
+    ];
     const f = { ...contender('a', 95, 5), divisionId: asDivisionId('womens-strawweight') };
-    expect(
-      promotionOffers(f, promotions, atTier('regional'), createRng('f')),
-    ).toHaveLength(0);
+    expect(promotionOffers(f, mensOnly, mensOnly[0]!, createRng('f'))).toHaveLength(0);
   });
 });
 
@@ -251,15 +247,15 @@ describe('careerProgress', () => {
   it('is zero for the unsigned and one for a global champion', () => {
     expect(careerProgress(contender('a', 50), undefined, undefined, false)).toBe(0);
     expect(
-      careerProgress(contender('a', 50), promotion({ tier: 'global' }), 0, true),
+      careerProgress(contender('a', 50), makePromotion({ tier: 'global' }), 0, true),
     ).toBe(1);
   });
 
   it('rises with tier and with rank', () => {
     const f = contender('a', 50);
-    const regionalTop = careerProgress(f, promotion({ tier: 'regional' }), 1, false);
-    const majorTop = careerProgress(f, promotion({ tier: 'major' }), 1, false);
-    const majorLow = careerProgress(f, promotion({ tier: 'major' }), RANKED_DEPTH, false);
+    const regionalTop = careerProgress(f, makePromotion({ tier: 'regional' }), 1, false);
+    const majorTop = careerProgress(f, makePromotion({ tier: 'major' }), 1, false);
+    const majorLow = careerProgress(f, makePromotion({ tier: 'major' }), RANKED_DEPTH, false);
 
     expect(majorTop).toBeGreaterThan(regionalTop);
     expect(majorTop).toBeGreaterThan(majorLow);
@@ -268,7 +264,7 @@ describe('careerProgress', () => {
   it('stays inside 0–1 at every rung', () => {
     for (const tier of TIER_ORDER) {
       for (const position of [undefined, 0, 1, 8, RANKED_DEPTH]) {
-        const value = careerProgress(contender('a', 50), promotion({ tier }), position, position === 0);
+        const value = careerProgress(contender('a', 50), makePromotion({ tier }), position, position === 0);
         expect(value).toBeGreaterThanOrEqual(0);
         expect(value).toBeLessThanOrEqual(1);
       }

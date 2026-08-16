@@ -25,6 +25,7 @@ import {
   type Bout,
   type Commentator,
   type Fighter,
+  type Gym,
   type FightResult,
   type GamePlan,
   type Judge,
@@ -34,6 +35,7 @@ import {
 } from '@mmasim/engine';
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
 import { accrueHeatFromFight } from './rivalries';
+import { campCostFor, settleFight } from './money';
 
 const BOOKING_KEY = 'mmasim:booking';
 const RESULT_KEY = 'mmasim:lastResult';
@@ -305,6 +307,20 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
   db.fighters.upsert(settleInjuries(aftermath.red, 'red'));
   db.fighters.upsert(settleInjuries(aftermath.blue, 'blue'));
 
+  // Pay the man. Until this existed the purse was printed on two screens and discarded.
+  const playerWon = result.winnerId === red.id;
+  const earnings = settleFight(db, db.fighters.getById(red.id as string) as Fighter, {
+    won: playerWon,
+    // Already debited when the camp ran; passed in so the report can net it honestly.
+    campCost: campCostFor(
+      red.gymId ? (db.gyms.findById(red.gymId) as Gym | undefined) : undefined,
+      Math.max(1, Math.round((booking.bout.day - booking.campStartDay) / 7)),
+    ),
+    campWeeks: Math.max(1, Math.round((booking.bout.day - booking.campStartDay) / 7)),
+    position: booking.bout.isTitleFight ? 'mainEvent' : 'mainCard',
+    isChampion: booking.bout.isTitleFight && playerWon,
+  });
+
   // The fight builds its own rematch. A close, controversial or brutal night generates heat
   // between these two specifically, which is what makes a division produce grudges without
   // anybody scripting them. See engine `business/heat.ts`.
@@ -349,7 +365,16 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
 
   writeJson(RESULT_KEY, { result, commentatorId: booking.bout.commentatorId });
   clearBooking();
-  return { result, notes: [...titleNotes, ...injuryNotes, ...heatNotes, ...aftermath.notes] };
+  return {
+    result,
+    notes: [
+      ...titleNotes,
+      ...(earnings?.notes ?? []),
+      ...injuryNotes,
+      ...heatNotes,
+      ...aftermath.notes,
+    ],
+  };
 }
 
 /**

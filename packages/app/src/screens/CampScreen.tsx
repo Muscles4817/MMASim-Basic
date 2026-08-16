@@ -6,7 +6,6 @@ import {
   campQuality as computeCampQuality,
   createRng,
   currentHeat,
-  purseFor,
   deriveTendencies,
   displayName,
   drillQuality as computeDrillQuality,
@@ -22,7 +21,6 @@ import {
   type Coach,
   type Fighter,
   type Gym,
-  type Promotion,
   type ReadKey,
   type StrikeTarget,
 } from '@mmasim/engine';
@@ -32,6 +30,7 @@ import { Button, Card, Chip, Empty } from '../ui';
 import { Alert, FighterRead, KeyStat } from '../ui/signals';
 import { getBooking, runBookedFight, saveBookingPlan } from '../game/career';
 import { getRivalry } from '../game/rivalries';
+import { currentPurse } from '../game/money';
 import { formatGameDay } from '../shell/Shell';
 
 /**
@@ -122,12 +121,9 @@ export function CampScreen() {
 
   const rivalry = getRivalry(db, playerFighter.id, opponent.id, world.day);
   const heat = currentHeat(rivalry, world.day);
-  const promotion = playerFighter.promotionId
-    ? (db.promotions.findById(playerFighter.promotionId) as Promotion | undefined)
-    : undefined;
-  const purse = promotion
-    ? purseFor(playerFighter, promotion, booking.bout.isTitleFight)
-    : 0;
+  // A title fight is a main event, which is where the money for it now lives — the old flat
+  // ×1.5 on the base was cancelling the champion-versus-draw grievance doc 08 promises.
+  const purse = currentPurse(db, playerFighter, booking.bout.isTitleFight ? 'mainEvent' : 'mainCard');
 
   const camp = computeCampQuality(
     weeks,
@@ -200,7 +196,11 @@ export function CampScreen() {
           ) : (
             heat >= 40 && <Chip tone="warning">🔥 The audience wants this</Chip>
           )}
-          {purse > 0 && <Chip tone="info">Purse ${purse}k</Chip>}
+          {purse && (
+            <Chip tone="info" title="Show money is paid win or lose; the win bonus is not">
+              £{purse.show}k to show · £{purse.win}k to win
+            </Chip>
+          )}
           <Chip tone="neutral">{booking.bout.rounds} rounds</Chip>
         </div>
 
