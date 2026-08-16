@@ -81,8 +81,19 @@ export interface PromotionalAgreement {
   valueAtSigning: number;
 }
 
-export const agreementId = (fighterId: FighterId, day: GameDay): AgreementId =>
-  asId<AgreementId>(`agr_${fighterId}_${day}`);
+/**
+ * Identity for a deal.
+ *
+ * `salt` exists because fighter and day alone are not unique once the re-paper lands: tearing
+ * a deal up and replacing it on the same game day produced the same id, so the replacement
+ * silently overwrote the original rather than joining it. That failed loudly in the re-paper
+ * tests, and would have shown up in a save as a deal that changed its own terms retroactively.
+ *
+ * Salted with the terms rather than a counter so it stays a pure function of what was signed.
+ * Two genuinely identical deals agreed on the same day by the same fighter are the same deal.
+ */
+export const agreementId = (fighterId: FighterId, day: GameDay, salt = ''): AgreementId =>
+  asId<AgreementId>(`agr_${fighterId}_${day}${salt ? `_${salt}` : ''}`);
 
 // --- Fairness, and the grievance it produces --------------------------------------------------
 
@@ -307,7 +318,7 @@ export function createAgreement(input: {
   const fights = clamp(Math.round(terms.fightsOwed), 1, MAX_FIGHTS_OWED);
 
   return {
-    id: agreementId(fighter.id, day),
+    id: agreementId(fighter.id, day, `${terms.showPurse}x${fights}`),
     fighterId: fighter.id,
     promotionId: promotion.id,
     showPurse: terms.showPurse,
@@ -363,3 +374,136 @@ export function describeReleaseRisk(risk: number): string {
   if (risk < 0.45) return 'You are fighting for your job and everybody knows it.';
   return 'You are almost certainly gone if you lose this.';
 }
+
+// --- The re-paper -------------------------------------------------------------------------------
+
+/**
+ * "We'll rip that up. More money, starting now."
+ *
+ * Doc 16 specifies this in full and nothing implemented it, which left the contract layer
+ * with only one shape of decision — sign, then endure until it expires. The re-paper is the
+ * mechanism that turns captivity into something you agreed to repeatedly, and it is the
+ * honest near-neighbour of the champion's-clause sensation the fun brief asked for. An
+ * automatic per-win extension is not a term that exists; tearing up a deal and replacing it
+ * after a good win is everywhere in the sport.
+ *
+ * More money today for more captivity tomorrow, offered at the exact moment you feel
+ * invincible. Refusing costs nothing except that the offer may not return at that price.
+ * Accepting is how a career gets quietly extended by four years.
+ *
+ * The important structural consequence: `MAX_FIGHTS_OWED` is not really a cap on how long
+ * you can be trapped. It is a cap on how long you can be trapped *without having said yes
+ * again* — which is a far more interesting thing to be true.
+ */
+
+/** Minimum straight wins before a promotion will tear up a deal. */
+export const REPAPER_MIN_STREAK = 2;
+
+export interface RepaperOffer {
+  /** The replacement terms, ready to be signed. */
+  terms: OfferTerms;
+  /** What the fighter is on now, for the comparison the screen has to show. */
+  current: { showPurse: number; winBonus: number; fightsRemaining: number };
+  /** Fractional uplift on show purse, 0.25–0.40. */
+  uplift: number;
+  /** Why it is being offered, in the promotion's words. */
+  reason: string;
+}
+
+/**
+ * Whether the promotion tears up the deal, and on what terms.
+ *
+ * Fires on a win streak rather than on any single win, because "after every win" is both
+ * wrong and exhausting — a promotion does not reopen a deal for a fighter who has just beaten
+ * a debutant. Undefined means no offer, which is the common case.
+ *
+ * The uplift is scaled by how badly the current deal has fallen behind what the fighter is
+ * worth. That is deliberate: a promotion re-papers precisely when the gap has become
+ * embarrassing enough that somebody else would pay it, so the size of the offer is a readout
+ * of how underpaid you already were.
+ */
+export function repaperOffer(input: {
+  agreement: PromotionalAgreement;
+  fighter: Fighter;
+  promotion: Promotion;
+  /** True when the win that triggered this was for a belt. */
+  wasTitleFight?: boolean;
+}): RepaperOffer | undefined {
+  const { agreement, fighter, promotion, wasTitleFight } = input;
+
+  if (agreement.fightsRemaining <= 0) return undefined;
+
+  /*
+   * Not on a deal they have not fought on yet.
+   *
+   * Without this the offer re-fires the instant it is accepted, because a single 25–40% rise
+   * does not always close the whole gap for a fighter who has grown a lot — so the player
+   * would be handed the same alert repeatedly and could ratchet their purse upward without
+   * ever stepping in a cage. The re-paper is payment for having won; it has to be earned again
+   * each time.
+   */
+  if (agreement.fightsRemaining >= agreement.fightsOwed) return undefined;
+
+  const streak = fighter.summary.streak;
+  if (streak < REPAPER_MIN_STREAK && !wasTitleFight) return undefined;
+
+  // How far behind the deal has fallen. 1.0 means it is still fair.
+  const fairness = contractFairness(agreement, fighter, promotion);
+  const behind = clamp01(1 - fairness);
+
+  // A promotion does not reopen a deal that is still fair, however long the streak.
+  if (behind < 0.15 && !wasTitleFight) return undefined;
+
+  const uplift = clamp(0.25 + behind * 0.35, 0.25, 0.4);
+  const fightsOwed = clamp(
+    Math.round(4 + behind * 2),
+    4,
+    MAX_FIGHTS_OWED,
+  );
+
+  return {
+    uplift,
+    current: {
+      showPurse: agreement.showPurse,
+      winBonus: agreement.winBonus,
+      fightsRemaining: agreement.fightsRemaining,
+    },
+    terms: {
+      showPurse: round1(agreement.showPurse * (1 + uplift)),
+      winBonus: round1(agreement.winBonus * (1 + uplift)),
+      signingBonus: 0,
+      revenuePoints: agreement.revenuePoints,
+      fightsOwed,
+      // Reattached rather than carried over. The whole trade is more money now for terms
+      // that bind you again, and quietly dropping the extension would make it a free raise.
+      championshipExtension: agreement.championshipExtension === 'none' ? 'standard' : agreement.championshipExtension,
+      matchingRights: agreement.matchingRights,
+      exclusive: agreement.exclusive,
+      outsideBouts: agreement.outsideBouts,
+    },
+    reason: wasTitleFight
+      ? `${promotion.shortName} want their champion on a champion's deal.`
+      : `${streak} straight. ${promotion.shortName} would rather pay you now than lose you later.`,
+  };
+}
+
+/**
+ * Accept a re-paper: tear the old deal up and replace it.
+ *
+ * A genuinely new agreement rather than an edit, because `valueAtSigning` has to be restamped
+ * — that field is what every future grievance is measured against, and carrying the old one
+ * forward would mean a fighter who re-papered at 90 was still nursing a grudge calibrated to
+ * what they were worth at 30.
+ */
+export function acceptRepaper(input: {
+  agreement: PromotionalAgreement;
+  offer: RepaperOffer;
+  fighter: Fighter;
+  promotion: Promotion;
+  day: GameDay;
+}): PromotionalAgreement {
+  const { offer, fighter, promotion, day } = input;
+  return createAgreement({ fighter, promotion, terms: offer.terms, day });
+}
+
+const round1 = (n: number): number => Math.round(n * 10) / 10;

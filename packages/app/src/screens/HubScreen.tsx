@@ -31,7 +31,13 @@ import { advanceWorld, readNews } from '../game/world';
 import { NewsFeed } from '../ui/NewsFeed';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 import { campCostFor, currentPurse, solvencyOf } from '../game/money';
-import { adviceOn, boutMerit, contractStanding } from '../game/contracts';
+import {
+  acceptRepaperOffer,
+  adviceOn,
+  boutMerit,
+  contractStanding,
+  repaperOnTheTable,
+} from '../game/contracts';
 import { formatGameDay } from '../shell/Shell';
 
 /**
@@ -88,6 +94,7 @@ export function HubScreen() {
           isChampion: ladder?.isChampion,
         })
       : [];
+  const repaper = repaperOnTheTable(db, fighter);
   const jobRisk =
     standing.promotion && !standing.freeAgent ? releaseRisk(fighter, standing.promotion) : 0;
   const opponent = booking
@@ -375,6 +382,49 @@ export function HubScreen() {
             {triggers.length > 0 && (
               <Alert tone="info" title="You have grounds to reopen this">
                 {describeTrigger(triggers[0]!)}
+              </Alert>
+            )}
+
+            {/*
+              The ratchet.
+
+              Doc 16 specifies the re-paper in full and nothing implemented it, which left
+              the contract layer with exactly one shape of decision: sign, then endure until
+              it expires. This is the offer that makes captivity something you agreed to
+              repeatedly — more money today for more captivity tomorrow, put in front of you
+              at the precise moment you feel invincible.
+
+              Both halves are stated plainly, including the ones that cost you, because the
+              whole point is that it is a real decision and a fighter who says yes should
+              know exactly what they said yes to.
+            */}
+            {repaper && (
+              <Alert tone="good" title="They want to tear this up">
+                <p className="prose" style={{ marginBottom: 'var(--space-2)' }}>{repaper.reason}</p>
+                <p className="prose" style={{ marginBottom: 'var(--space-2)' }}>
+                  <strong>
+                    £{repaper.terms.showPurse}k to show, £{repaper.terms.winBonus}k to win
+                  </strong>{' '}
+                  — up from £{repaper.current.showPurse}k and £{repaper.current.winBonus}k, a{' '}
+                  {Math.round(repaper.uplift * 100)}% rise starting with your next fight.
+                </p>
+                <p className="prose" style={{ marginBottom: 'var(--space-3)' }}>
+                  In exchange the deal restarts at{' '}
+                  <strong>{repaper.terms.fightsOwed} fights</strong> owed, where you currently
+                  owe {repaper.current.fightsRemaining}
+                  {repaper.terms.championshipExtension !== 'none' &&
+                    ', and the championship extension is reattached'}
+                  . Saying no costs you nothing today, but the offer may not come back at this
+                  price.
+                </p>
+                <Button
+                  onClick={() => {
+                    acceptRepaperOffer(db, fighter, repaper);
+                    commit();
+                  }}
+                >
+                  Sign it
+                </Button>
               </Alert>
             )}
 

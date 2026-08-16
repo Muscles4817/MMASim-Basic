@@ -19,7 +19,10 @@ import {
   marketValue,
   offersFor,
   recordAdvice,
+  acceptRepaper,
+  repaperOffer,
   resentmentFrom,
+  type RepaperOffer,
   settleAdvice,
   tollAgreement,
   willRepresent,
@@ -351,4 +354,62 @@ export function signFirstDeal(db: GameDb, fighter: Fighter): Fighter | undefined
     exclusive: false,
     outsideBouts: 2,
   });
+}
+
+// --- The re-paper -------------------------------------------------------------------------------
+
+/**
+ * The offer on the table right now to tear up the current deal, if there is one.
+ *
+ * Read live from state rather than stored as a pending offer, for the same reason resentment
+ * is: it is a *condition*, not an event. A fighter who loses their next fight stops having a
+ * re-paper on the table, and that should happen because the condition lapsed rather than
+ * because something remembered to withdraw it.
+ */
+export function repaperOnTheTable(db: GameDb, fighter: Fighter): RepaperOffer | undefined {
+  const standing = contractStanding(db, fighter);
+  if (!standing.agreement || !standing.promotion || standing.freeAgent) return undefined;
+
+  const lastBout = fighter.record[fighter.record.length - 1];
+  return repaperOffer({
+    agreement: standing.agreement,
+    fighter,
+    promotion: standing.promotion,
+    wasTitleFight: lastBout?.outcome === 'win' && lastBout.wasTitleFight,
+  });
+}
+
+/**
+ * Say yes: the old deal is torn up and a new one signed in its place.
+ *
+ * The signing bonus is nil by design — this is a raise, not a signing — and the fighter is
+ * paid in show money rather than a lump, which is exactly why it is a better deal for the
+ * promotion than it looks.
+ */
+export function acceptRepaperOffer(db: GameDb, fighter: Fighter, offer: RepaperOffer): Fighter {
+  const standing = contractStanding(db, fighter);
+  if (!standing.agreement || !standing.promotion) return fighter;
+
+  const world = getWorld(db);
+  const replacement = acceptRepaper({
+    agreement: standing.agreement,
+    offer,
+    fighter,
+    promotion: standing.promotion,
+    day: world.day,
+  });
+
+  // Terminated rather than deleted: a career is worth being able to read back, and the
+  // sequence of deals a fighter signed is the most legible record of how they were treated.
+  db.agreements.upsert({ ...standing.agreement, status: 'terminated' } as never);
+  db.agreements.upsert(replacement as StoredAgreement);
+
+  const updated: Fighter = {
+    ...fighter,
+    agreementId: replacement.id,
+    resentment: resentmentFrom(contractFairness(replacement, fighter, standing.promotion)),
+  };
+  db.fighters.upsert(updated as Fighter & { id: string });
+  db.save();
+  return updated;
 }
