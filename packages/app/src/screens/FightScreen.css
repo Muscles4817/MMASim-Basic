@@ -289,3 +289,47 @@
   padding-inline-end: var(--space-1);
   opacity: 0.7;
 }
+
+/* --- The card ---------------------------------------------------------------------------
+   Where on the night the fight sat. Position is the second axis of a career beside the
+   record, so it is stated in words on every row rather than implied by order alone. */
+
+.card-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.card-row:last-child {
+  border-bottom: none;
+}
+
+.card-row--you {
+  background: var(--accent-soft);
+}
+
+.card-row__position {
+  grid-column: 1 / -1;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.card-row__names {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-weight: 600;
+}
+
+.card-row__result {
+  color: var(--text-muted);
+  text-align: right;
+  white-space: nowrap;
+}

@@ -15,6 +15,7 @@ import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
 import { getLastBroadcast } from '../game/career';
+import { nightFor, positionLabel } from '../game/night';
 import './FightScreen.css';
 
 const SPEEDS = [
@@ -188,7 +189,7 @@ export function FightScreen({ boutId }: { boutId?: string }) {
         {finished ? resultSentence(result, red, blue) : ''}
       </p>
 
-      {finished && <FightSummary result={result} red={red} blue={blue} />}
+      {finished && <FightSummary result={result} red={red} blue={blue} db={db} />}
 
       {finished && (
         <div className="row" style={{ flexWrap: 'wrap' }}>
@@ -301,11 +302,18 @@ function FightSummary({
   result,
   red,
   blue,
+  db,
 }: {
   result: FightResult;
   red?: Fighter;
   blue?: Fighter;
+  db: ReturnType<typeof useGame>['db'];
 }) {
+  const night = nightFor(db, result.boutId);
+  // The undercard results are not stored per bout, so the card shows who was on it and the
+  // player's own result; a full replay of somebody else's fight is doc 12's "expandable on
+  // request", which is not built.
+  const undercard: { bout: { boutId: string }; result: FightResult }[] = [];
   const methodLabel = isKoMethod(result.method)
     ? result.method === 'ko'
       ? 'Knockout'
@@ -339,6 +347,48 @@ function FightSummary({
           Round {result.round}, {mm}:{ss}
         </p>
       </Card>
+
+      {/*
+        The night, and where on it the player was.
+        Card position is the second axis of a career beside the record — being 12-0 and still
+        opening the prelims is a real and frustrating situation, and it has to be visible for
+        getting off them to feel like the milestone it is.
+      */}
+      {night && (
+        <Card title={night.name} flush>
+          <p className="muted" style={{ padding: 'var(--space-3) var(--space-4) 0' }}>
+            {night.venue.name}, {night.venue.city} · {night.broadcast === 'ppv' ? 'Pay-per-view' : night.broadcast === 'televised' ? 'Televised' : 'Streamed'}
+          </p>
+          <div className="list">
+            {night.bouts.map((bout) => {
+              const isPlayer = bout.boutId === result.boutId;
+              const under = undercard.find((u) => u.bout.boutId === bout.boutId);
+              const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
+              const blue = db.fighters.findById(bout.blueId as string) as Fighter | undefined;
+
+              return (
+                <div key={bout.boutId} className={`card-row${isPlayer ? ' card-row--you' : ''}`}>
+                  <span className="card-row__position">{positionLabel(bout.position)}</span>
+                  <span className="card-row__names">
+                    {red?.lastName ?? '—'} vs {blue?.lastName ?? '—'}
+                    {bout.isTitleFight && <span aria-hidden="true"> 🏆</span>}
+                    {isPlayer && <Chip tone="accent">You</Chip>}
+                  </span>
+                  <span className="card-row__result">
+                    {isPlayer
+                      ? 'See above'
+                      : under
+                        ? under.result.winnerId
+                          ? `${(db.fighters.findById(under.result.winnerId as string) as Fighter | undefined)?.lastName ?? 'Winner'}, R${under.result.round}`
+                          : 'Draw'
+                        : '—'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
 
       <Card title="Fight statistics">
         {/*

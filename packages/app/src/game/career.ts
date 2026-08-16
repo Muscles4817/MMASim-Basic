@@ -41,6 +41,7 @@ import { getWorld, setWorld, type GameDb } from '@mmasim/data';
 import { accrueHeatFromFight } from './rivalries';
 import { campCostFor, currentPurse, settleFight } from './money';
 import { afterFight, recordAdviceFor, settleManagerAdvice, type ManagerAdvice } from './contracts';
+import { runSupportingCard } from './night';
 
 const BOOKING_KEY = 'mmasim:booking';
 const RESULT_KEY = 'mmasim:lastResult';
@@ -418,6 +419,25 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
   });
   db.save();
 
+  // The night the fight sat on. Built after the bout because the bonus pool is decided by
+  // what happened across the whole card, and the player's fight is part of that comparison.
+  const promotionForNight = db.promotions.findById(
+    (red.promotionId ?? asPromotionId('p_apex')) as string,
+  ) as Promotion | undefined;
+
+  const night = promotionForNight
+    ? runSupportingCard(db, {
+        playerBoutId: booking.bout.id,
+        player: db.fighters.getById(red.id as string) as Fighter,
+        opponent: blue,
+        playerResult: result,
+        promotion: promotionForNight,
+        day,
+        isTitleFight: booking.bout.isTitleFight,
+      })
+    : undefined;
+
+  db.save();
   writeJson(RESULT_KEY, { result, commentatorId: booking.bout.commentatorId });
   clearBooking();
   return {
@@ -425,6 +445,7 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     notes: [
       ...titleNotes,
       ...weighInNotes,
+      ...(night?.notes ?? []),
       ...(earnings?.notes ?? []),
       ...injuryNotes,
       ...heatNotes,
