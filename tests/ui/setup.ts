@@ -24,3 +24,7 @@ if (!window.matchMedia) {
 // replaced unconditionally rather than only when absent.
 Element.prototype.scrollTo = () => {};
 window.scrollTo = (() => {}) as typeof window.scrollTo;
+// Same story: fighter creation scrolls its validation list into view on a failed submit, and
+// jsdom does not implement this at all. Stubbed so a genuine error is not lost in the noise of
+// an unhandled rejection every run.
+Element.prototype.scrollIntoView = () => {};

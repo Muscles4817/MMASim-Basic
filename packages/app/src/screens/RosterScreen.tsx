@@ -31,10 +31,20 @@ export function RosterScreen() {
 
   const divisions = useMemo(() => divisionsFor(sex), [sex]);
 
-  const fighters = useMemo(() => {
+  /*
+   * Capped, because a search matches across the whole roster rather than one division.
+   *
+   * Every keystroke filtered ~800 fighters and rendered every match, which is visible jank on
+   * a phone. Rankings already caps at 15 for the same reason. The cap only ever applies to a
+   * search — browsing a division is bounded by the division — and the count below says when
+   * it bit, so a truncated list never quietly reads as "that is everyone".
+   */
+  const SEARCH_LIMIT = 40;
+
+  const { fighters, truncated } = useMemo(() => {
     const term = search.trim().toLowerCase();
     const all = db.fighters.findAll() as Fighter[];
-    return all
+    const matched = all
       .filter((f) => {
         if (term) {
           return `${f.firstName} ${f.lastName} ${f.nickname ?? ''}`.toLowerCase().includes(term);
@@ -42,6 +52,10 @@ export function RosterScreen() {
         return f.divisionId === divisionId;
       })
       .sort((a, b) => overallRating(b.attributes) - overallRating(a.attributes));
+
+    return term && matched.length > SEARCH_LIMIT
+      ? { fighters: matched.slice(0, SEARCH_LIMIT), truncated: matched.length }
+      : { fighters: matched, truncated: 0 };
   }, [db, divisionId, search]);
 
   const onSexChange = (next: Sex) => {
@@ -101,7 +115,11 @@ export function RosterScreen() {
         flush
         title={
           search
-            ? `${fighters.length} result${fighters.length === 1 ? '' : 's'}`
+            ? truncated
+              ? // Never silently truncate: a capped list that reads as a complete one is a
+                // worse failure than a slow one.
+                `${fighters.length} of ${truncated} results`
+              : `${fighters.length} result${fighters.length === 1 ? '' : 's'}`
             : getDivision(divisionId as never).name
         }
       >

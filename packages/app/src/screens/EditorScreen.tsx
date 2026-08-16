@@ -380,7 +380,14 @@ function EditorSlider({
           value={value}
           aria-label={label}
           onChange={(e) => onChange(Number(e.target.value))}
-          style={{ flex: 1, accentColor: bandColour(value) }}
+          /*
+            `color`, not `accentColor`. The thumb is custom-painted in global.css with
+            `-webkit-appearance: none` and `background: currentColor`, so `accent-color` had
+            nothing left to tint and every slider rendered identically — the band signal this
+            line intends was invisible in every Chromium and WebKit browser. Driving
+            `currentColor` is what the existing CSS actually supports.
+          */
+          style={{ flex: 1, color: bandColour(value) }}
         />
         {/*
           The field holds a raw string while focused. Coercing on every keystroke makes it
@@ -423,7 +430,9 @@ function EditorSlider({
             value={ceiling}
             aria-label={`${label} potential ceiling`}
             onChange={(e) => onCeilingChange(Number(e.target.value))}
-            style={{ flex: 1, accentColor: 'var(--text-faint)' }}
+            // Same reason: this is the *ceiling* slider, deliberately de-emphasised against
+            // the value slider above it, and the two looked identical.
+            style={{ flex: 1, color: 'var(--text-faint)' }}
           />
           <span className="numeric faint" style={{ width: '4rem', textAlign: 'center' }}>
             {ceiling}
