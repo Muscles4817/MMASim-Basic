@@ -117,6 +117,26 @@ const BASE_GAIN_PER_BLOCK = 2.8;
  */
 const BLOCK_CURVE = 0.75;
 
+/**
+ * Weeks at the start of any camp that produce no development.
+ *
+ * Diminishing returns *within* a camp, with no cost to starting a new one, made splitting
+ * strictly correct: three four-week camps came to 3.00 blocks where one twelve-week camp came
+ * to 2.28. The player who noticed got a 32% permanent advantage over the player who read the
+ * screen and picked the long camp it recommends, which is the worst kind of hidden mechanic —
+ * it punishes playing the game as presented.
+ *
+ * A ramp is the honest fix rather than an arbitrary penalty, because it is simply true: the
+ * opening fortnight of a camp is spent getting back to where you left off, and every fighter
+ * will tell you so. It gives the curve a fixed overhead per camp, which is what makes
+ * consolidating worth doing.
+ *
+ * At two weeks the arithmetic inverts and stays inverted: 3 × 4wk = 1.78 blocks against
+ * 1 × 12wk = 1.99. A four-week camp is now worth about 0.59 blocks rather than 1.00 — it is
+ * a sharpening camp, not a development camp, which is exactly what four weeks is.
+ */
+const CAMP_RAMP_WEEKS = 2;
+
 /** Peak age by ageing curve. Learning slows toward it; the body declines after it. */
 const PEAK_AGE: Readonly<Record<AgeCurve, number>> = {
   earlyBloomer: 26,
@@ -192,7 +212,7 @@ export interface TrainingResult {
  */
 /** Weeks of camp, as effective training blocks. See `BLOCK_CURVE`. */
 export const trainingBlocks = (weeks: number): number =>
-  Math.pow(Math.max(0, weeks) / 4, BLOCK_CURVE);
+  Math.pow(Math.max(0, weeks - CAMP_RAMP_WEEKS) / 4, BLOCK_CURVE);
 
 /** The luck a camp can have, either way. Applied once per attribute per focus. */
 const CAMP_LUCK: [min: number, max: number] = [0.75, 1.3];

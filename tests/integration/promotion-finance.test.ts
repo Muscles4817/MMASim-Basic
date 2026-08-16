@@ -21,6 +21,7 @@ import {
   type EventRevenue,
   type FightResult,
   type Fighter,
+  trainingBlocks,
   type Promotion,
 } from '@mmasim/engine';
 import { advanceWorld } from '../../packages/app/src/game/world';
@@ -204,5 +205,60 @@ describe('medical suspensions are real', () => {
         }
       }
     }
+  });
+});
+
+describe('a camp cannot be gamed by splitting it', () => {
+  it('makes one long camp beat three short ones', () => {
+    /*
+     * Diminishing returns within a camp, with no cost to starting a new one, made splitting
+     * strictly correct: three four-week camps came to 3.00 blocks where one twelve-week camp
+     * came to 2.28. A player who noticed got a 32% permanent advantage over one who read the
+     * training screen and picked the long camp it recommends — the worst kind of hidden
+     * mechanic, because it punishes playing the game as presented.
+     */
+    expect(trainingBlocks(4) * 3).toBeLessThan(trainingBlocks(12));
+    expect(trainingBlocks(3) * 4).toBeLessThan(trainingBlocks(12));
+    expect(trainingBlocks(2) * 6).toBeLessThan(trainingBlocks(12));
+
+    /*
+     * The general property, and the one worth stating: no way of splitting twelve weeks
+     * carries a meaningful advantage over spending them in one camp.
+     *
+     * Two six-week camps land at 2.00 blocks against 1.99 for the single twelve — parity
+     * rather than an exploit, and deliberately left there. Driving every split strictly
+     * negative needs a ramp near 2.5 weeks, which pushes the efficiency peak out to ten weeks
+     * and away from the eight the sport actually uses. A 0.6% edge nobody can perceive is a
+     * better trade than a model whose optimum is wrong.
+     */
+    for (const [weeks, count] of [
+      [2, 6],
+      [3, 4],
+      [4, 3],
+      [6, 2],
+    ] as const) {
+      const split = trainingBlocks(weeks) * count;
+      expect(
+        split / trainingBlocks(12),
+        `${count} x ${weeks}wk beats one 12wk camp by too much`,
+      ).toBeLessThan(1.02);
+    }
+  });
+
+  it('leaves eight weeks the most efficient camp there is', () => {
+    // Falls out of the arithmetic rather than being chosen: maximising ((w−2)/4)^0.75 / w
+    // gives w = 8 exactly. The model's optimum being the sport's standard camp length is a
+    // good sign it is the right model.
+    const perWeek = (w: number) => trainingBlocks(w) / w;
+    for (const weeks of [3, 4, 5, 6, 7, 9, 10, 12, 16, 20]) {
+      expect(perWeek(8), `${weeks} weeks beat eight`).toBeGreaterThan(perWeek(weeks));
+    }
+  });
+
+  it('makes a very short camp worth little', () => {
+    // Under the ramp a two-week camp develops nothing at all. That is the claim: a fortnight
+    // is spent getting back to where you left off.
+    expect(trainingBlocks(2)).toBe(0);
+    expect(trainingBlocks(1)).toBe(0);
   });
 });

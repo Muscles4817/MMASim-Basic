@@ -39,9 +39,13 @@ import { formatGameDay } from '../shell/Shell';
 import { campCostFor, solvencyOf } from '../game/money';
 
 const WEEK_OPTIONS = [
-  { value: '4', label: '4 weeks' },
-  { value: '8', label: '8 weeks' },
-  { value: '12', label: '12 weeks' },
+  // The labels name what each length is *for*, because the arithmetic has a genuine sweet
+  // spot at eight weeks and nothing on the screen said so. See `CAMP_RAMP_WEEKS`: a camp has
+  // a fixed cost at the front and diminishing returns at the back, so per-week value rises,
+  // peaks at eight and falls. Four weeks sharpens; it does not develop.
+  { value: '4', label: '4 weeks', hint: 'Sharpen up' },
+  { value: '8', label: '8 weeks', hint: 'Full camp' },
+  { value: '12', label: '12 weeks', hint: 'Long build' },
 ] as const;
 
 /**
@@ -289,8 +293,9 @@ export function TrainingScreen() {
             options={WEEK_OPTIONS}
           />
           <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
-            Longer blocks give more in total, but less per week — and every week spent
-            training is a week older. You return on{' '}
+            A camp costs its first fortnight getting back to where you left off, so eight
+            weeks is the most you will ever get per week spent. Twelve gives more in total and
+            less per week — and every week training is a week older. You return on{' '}
             <strong>{formatGameDay(world.day + Number(weeks) * 7)}</strong>.
           </p>
           <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
@@ -309,6 +314,11 @@ export function TrainingScreen() {
           this shows it — computed from the same arithmetic the camp runs, so it cannot
           promise something the simulation will not honour. A range rather than a number,
           because a camp is not a purchase.
+
+          The shape is no longer "shorter is more efficient". A camp costs a fortnight at the
+          front getting back to where you left off, so value per week rises to a peak at eight
+          weeks and falls after it. That also closed a real exploit: splitting a long camp
+          into short ones used to be worth 32% more for the same total weeks.
         */}
         <div
           style={{

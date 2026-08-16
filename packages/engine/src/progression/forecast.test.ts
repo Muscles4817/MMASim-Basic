@@ -125,7 +125,7 @@ describe('the forecast cannot lie', () => {
 });
 
 describe('the forecast answers the question the screen asks', () => {
-  it('shows longer camps giving more, with diminishing returns per week', () => {
+  it('shows longer camps giving more, with a real sweet spot in the middle', () => {
     const fighter = prospect();
     const run = (weeks: number) =>
       forecastTraining({
@@ -143,8 +143,23 @@ describe('the forecast answers the question the screen asks', () => {
 
     expect(eight).toBeGreaterThan(four);
     expect(twelve).toBeGreaterThan(eight);
-    // Per-week value falls, which is the claim the screen makes in prose and never showed.
-    expect(twelve / 12).toBeLessThan(four / 4);
+
+    /*
+     * The shape changed with `CAMP_RAMP_WEEKS`, and changed for the better.
+     *
+     * It used to be monotonically diminishing per week, which made short camps the most
+     * efficient and — since nothing charged you for starting one — made splitting strictly
+     * correct. Now a camp has a fixed overhead at the front and diminishing returns at the
+     * back, so value per week rises, peaks and falls.
+     *
+     * It peaks at eight weeks. That falls out of the arithmetic rather than being chosen:
+     * maximising ((w−2)/4)^0.75 / w gives w = 8 exactly. That the model's optimum is the
+     * sport's standard camp length is a good sign it is the right model.
+     */
+    expect(eight / 8, 'eight weeks should be the most efficient camp').toBeGreaterThan(four / 4);
+    expect(eight / 8, 'eight weeks should be the most efficient camp').toBeGreaterThan(twelve / 12);
+    // Past the peak the returns still diminish, which is the claim the screen makes in prose.
+    expect(twelve / 12).toBeLessThan(eight / 8);
   });
 
   it('shows splitting focus costing both of them', () => {
