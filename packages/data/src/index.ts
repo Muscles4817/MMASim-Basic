@@ -10,5 +10,6 @@ export * from './db/adapters.js';
 export * from './db/repository.js';
 export * from './db/migrations.js';
 export * from './db/gameDb.js';
+export * from './db/saves.js';
 export * from './seed/index.js';
 export * from './world/newGame.js';
