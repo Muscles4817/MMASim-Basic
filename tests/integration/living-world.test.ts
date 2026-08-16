@@ -239,3 +239,88 @@ describe('the roster lives in the same economy the player does', () => {
     expect(broke.length).toBeGreaterThan(0);
   });
 });
+
+describe('the world behaves like a sport, not a burst', () => {
+  it('runs cards all year rather than emptying the calendar in March', () => {
+    // The fight budget used to be a total rather than a rate, so it bound in the first
+    // quarter and every fight in the world happened in the first three months — followed by
+    // nine months of nothing but ageing. A player booking a fight in June could not be on a
+    // card, and the rankings froze.
+    const db = game('calendar');
+    const me = fighters(db)[0]!;
+    advanceWorld(db, 0, 365, me.id);
+
+    const events = db.events.findAll() as { day: number }[];
+    const quarters = new Set(events.map((e) => Math.floor(e.day / 91)));
+    expect(quarters.size).toBeGreaterThan(2);
+  });
+
+  it('books a promotion’s own fighters, because exclusivity is the binding term', () => {
+    // 91% of bouts previously had at least one fighter not signed to the card's promotion.
+    // A contracted fighter appearing on a rival's card is not rare, it is impossible.
+    const db = game('exclusive');
+    const me = fighters(db)[0]!;
+    advanceWorld(db, 0, 200, me.id);
+
+    const events = db.events.findAll() as {
+      promotionId: string;
+      bouts: { redId: string; blueId: string }[];
+    }[];
+
+    let cross = 0;
+    let total = 0;
+    for (const event of events) {
+      for (const bout of event.bouts) {
+        total++;
+        const red = db.fighters.findById(bout.redId) as Fighter | undefined;
+        const blue = db.fighters.findById(bout.blueId) as Fighter | undefined;
+        if (red?.promotionId !== event.promotionId || blue?.promotionId !== event.promotionId) {
+          cross++;
+        }
+      }
+    }
+    // Not zero, because free agency legitimately moves people after a card has happened.
+    expect(cross / Math.max(1, total)).toBeLessThan(0.35);
+  });
+
+  it('never leaves a belt on somebody who has retired', () => {
+    // Retirees are filtered out of every card, so a belt on one kills its division forever.
+    const db = game('belts2');
+    const me = fighters(db)[0]!;
+    for (let year = 0; year < 10; year++) {
+      advanceWorld(db, year * 365, (year + 1) * 365, me.id);
+    }
+
+    for (const promotion of promos(db)) {
+      for (const championId of Object.values(promotion.champions)) {
+        if (!championId) continue;
+        const champion = db.fighters.findById(championId as string) as Fighter | undefined;
+        expect(champion?.retiredDay, `${promotion.shortName} belt on a retired fighter`).toBeUndefined();
+      }
+    }
+  });
+
+  it('gives more than one promotion a champion', () => {
+    // Four of five promotions seeded with `champions: {}`, and a title fight required an
+    // existing champion — so no champion meant no title fight meant no champion, forever.
+    const db = game('belts3');
+    const me = fighters(db)[0]!;
+    for (let year = 0; year < 6; year++) {
+      advanceWorld(db, year * 365, (year + 1) * 365, me.id);
+    }
+    const withBelts = promos(db).filter((p) => Object.keys(p.champions).length > 0);
+    expect(withBelts.length).toBeGreaterThan(1);
+  });
+
+  it('keeps careers to a plausible length', () => {
+    // readinessDelay is a medical gate, not a schedule. On its own it let the top of the
+    // roster fight five or six times a year for a decade and reach 63-fight records.
+    const db = game('records');
+    const me = fighters(db)[0]!;
+    for (let year = 0; year < 10; year++) {
+      advanceWorld(db, year * 365, (year + 1) * 365, me.id);
+    }
+    const longest = Math.max(...fighters(db).map((f) => f.record.length));
+    expect(longest).toBeLessThan(40);
+  });
+});

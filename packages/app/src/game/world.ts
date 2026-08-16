@@ -111,6 +111,28 @@ const CARDS_PER_STEP = 6;
  */
 const MAX_FIGHTS_PER_CALL = 220;
 
+/**
+ * Cards run per fortnight, across every promotion.
+ *
+ * The budget above is a total, and a total is the wrong shape: measured over a simulated
+ * year it bound in March and produced **every fight in the world in the first quarter**,
+ * followed by nine months of nothing but ageing. A player who booked a fight in June could
+ * not be on a card and the rankings froze for three quarters.
+ *
+ * So the real limiter is per-fortnight, and the total is only a backstop against somebody
+ * advancing twenty years in one call.
+ */
+const MAX_CARDS_PER_STEP = 3;
+
+/**
+ * Bouts a fighter will take in a rolling twelve months.
+ *
+ * Three is already busy by modern standards — the elite average is closer to two — but the
+ * bottom of a roster genuinely does fight more, and a hard ceiling here is what stops a
+ * favourite accumulating a 63-fight record in a decade.
+ */
+const MAX_BOUTS_PER_YEAR = 3;
+
 /** Bodies each division tries to keep, so cards can be made without endless rematches. */
 const divisionTarget = (sex: 'male' | 'female'): number => (sex === 'female' ? 6 : 9);
 
@@ -155,19 +177,33 @@ export function advanceWorld(
   for (let day = fromDay; day < toDay; day += STEP_DAYS) {
     // Quarterly intake, matching how a promotion actually signs people.
     if (Math.floor(day / 91) !== Math.floor((day - STEP_DAYS) / 91)) {
+      // A belt held by somebody who is never getting in a cage again kills its division,
+      // because retirees are filtered out of every card. Swept rather than only handled at
+      // the moment of retirement, because a fighter can reach that state by more than one
+      // route and the cost of being sure is one pass over five promotions.
+      vacateAbandonedBelts(db);
       news.push(...replenish(db, day, rng, promotions));
       // Deals run out across the roster too, so the market has other people in it.
       news.push(...resolveFreeAgency(db, day, rng, promotions));
     }
 
-    const available = (db.fighters.findAll() as Fighter[]).filter(
-      (f) =>
-        f.id !== exceptId &&
-        f.retiredDay === undefined &&
-        (readyOn.get(f.id as string) ?? 0) <= day,
-    );
+    /*
+     * Availability, with a real activity ceiling.
+     *
+     * `readinessDelay` is a *medical* gate — how long until a fighter is cleared. It is not
+     * a schedule, and on its own it let the top of the roster fight five or six times a year
+     * for a decade: measured, ten years produced records of 63-0 and a 47-year-old champion.
+     * Elite fighters average one and a half to two and a half bouts a year, and the ceiling
+     * is availability of *opponents and dates*, not of medical clearance.
+     */
+    const available = (db.fighters.findAll() as Fighter[]).filter((f) => {
+      if (f.id === exceptId || f.retiredDay !== undefined) return false;
+      if ((readyOn.get(f.id as string) ?? 0) > day) return false;
+      const inLastYear = f.record.filter((r) => day - r.day < 365).length;
+      return inLastYear < MAX_BOUTS_PER_YEAR;
+    });
 
-    for (let card = 0; card < CARDS_PER_STEP; card++) {
+    for (let card = 0; card < Math.min(CARDS_PER_STEP, MAX_CARDS_PER_STEP); card++) {
       if (available.length < 2) break;
       if (fights >= MAX_FIGHTS_PER_CALL) {
         truncated = true;
@@ -241,12 +277,25 @@ function buildNight(ctx: {
   const seeds: BoutSeed[] = [];
   const used = new Set<string>();
 
+  /*
+   * Only this promotion's own fighters.
+   *
+   * `offerOpponents` was called with the whole roster and no promotion filter, so 91% of
+   * bouts in a simulated year had at least one fighter who was not signed to the card's
+   * promotion — AFC-contracted fighters headlining Frontier Fights shows. Exclusivity is the
+   * most binding term in the sport; a fighter appearing on a rival's card is not a rare
+   * event, it is an impossible one. `night.ts` already did this correctly for the player.
+   */
+  const roster = available.filter((f) => f.promotionId === promotion.id);
+
   for (let attempt = 0; attempt < CARD_SIZE * 2 && seeds.length < CARD_SIZE; attempt++) {
-    const pool = available.filter((f) => !used.has(f.id as string));
+    const pool = roster.filter((f) => !used.has(f.id as string));
     if (pool.length < 2) break;
 
     const subject = rng.pick(pool);
-    const offers = offerOpponents(subject, pool, promotion, day, rng.fork(`m:${attempt}`));
+    const offers = offerOpponents(subject, pool, promotion, day, rng.fork(`m:${attempt}`), {
+      promotionId: promotion.id,
+    });
     if (offers.length === 0) continue;
 
     const opponent = rng.pick(offers).opponent;
@@ -255,9 +304,31 @@ function buildNight(ctx: {
     used.add(subject.id as string);
     used.add(opponent.id as string);
 
+    /*
+     * A title fight needs a champion, and four of five promotions seeded with none.
+     *
+     * `champions: {}` on VMA, RSC, ECC and FF meant no champion, therefore no title fight,
+     * therefore no champion — forever. Measured over ten years: AFC held 12 belts and the
+     * other four promotions held zero between them, while ECC's own seed note describes
+     * winning its belt as the thing that gets you a call from Apex.
+     *
+     * So a vacant belt in a division with real contenders gets contested, which is exactly
+     * what a promotion does.
+     */
     const champion = promotion.champions[subject.divisionId];
+    const contestsVacant =
+      champion === undefined &&
+      rankDivision(
+        db.fighters.findAll() as Fighter[],
+        subject.divisionId,
+        promotion.id,
+        day,
+      ).length >= 4;
+
     const isTitleFight =
-      champion !== undefined && (champion === subject.id || champion === opponent.id);
+      champion !== undefined
+        ? champion === subject.id || champion === opponent.id
+        : contestsVacant && seeds.length === 0;
 
     seeds.push({
       boutId: `night:${day}:${promotion.id}:${seeds.length}`,
@@ -652,12 +723,35 @@ function finalise(
   fighter: Fighter,
   day: number,
   rng: Rng,
-  promotion: Promotion,
+  _promotion: Promotion,
 ): { fighter: Fighter; news?: NewsItem } {
   if (!shouldRetire(fighter, day, rng)) return { fighter };
 
   const reason = retirementReason(fighter, day);
-  const wasChampion = promotion.champions[fighter.divisionId] === fighter.id;
+
+  /*
+   * Vacate every belt they hold, at every promotion.
+   *
+   * Checking only the *card's* promotion was the bug: a fighter retiring on an AFC show who
+   * held a VMA belt kept it forever, and that division could never stage another title fight
+   * because retirees are filtered out of every future card. Scanning all promotions is
+   * cheap and cannot get this wrong.
+   */
+  const allPromotions = db.promotions.findAll() as unknown as Promotion[];
+  const heldBelts = allPromotions.filter((p) => p.champions[fighter.divisionId] === fighter.id);
+  const wasChampion = heldBelts.length > 0;
+
+  /*
+   * A retiring champion vacates.
+   *
+   * Without this the belt stayed on somebody who is filtered out of every future card, so
+   * the division could never stage another title fight — measured, six of twelve AFC belts
+   * were held by retired fighters after ten years and those divisions were permanently dead.
+   * `setChampion(p, div, undefined)` existed, was unit-tested, and had no caller.
+   */
+  for (const held of heldBelts) {
+    db.promotions.upsert(setChampion(held, fighter.divisionId, undefined) as never);
+  }
 
   return {
     fighter: { ...fighter, retiredDay: day, notes: reason },
@@ -671,7 +765,21 @@ function finalise(
       wasChampion,
     }),
   };
-  void db;
+}
+
+/** Take every belt off anybody who has retired. */
+function vacateAbandonedBelts(db: GameDb): void {
+  for (const promotion of db.promotions.findAll() as unknown as Promotion[]) {
+    let updated = promotion;
+    for (const [divisionId, championId] of Object.entries(promotion.champions)) {
+      if (!championId) continue;
+      const champion = db.fighters.findById(championId as string) as Fighter | undefined;
+      if (!champion || champion.retiredDay !== undefined) {
+        updated = setChampion(updated, divisionId as never, undefined);
+      }
+    }
+    if (updated !== promotion) db.promotions.upsert(updated as never);
+  }
 }
 
 /** Replace retirees so divisions do not quietly empty out over a long career. */
