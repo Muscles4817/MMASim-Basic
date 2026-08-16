@@ -33,5 +33,16 @@ export * from './fight/stamina.js';
 export * from './fight/scoring.js';
 export * from './fight/simulate.js';
 
+// Progression
+export * from './progression/retirement.js';
+export * from './progression/generation.js';
+
+// Camp
+export * from './camp/scouting.js';
+
+// Business
+export * from './business/matchmaking.js';
+export * from './business/aftermath.js';
+
 // Testing helpers (shared across the out-of-package test suites)
 export * from './testing/fixtures.js';

@@ -1,0 +1,114 @@
+/**
+ * Routing.
+ *
+ * A hand-rolled hash router rather than a dependency. The app has a fixed, small set of
+ * routes and no need for nested layouts or data loaders; a router library would be more
+ * code than this, not less.
+ *
+ * Hash-based because it works from `file://` and any static host with no server rewrites,
+ * and because the back button must work — on mobile the hardware/gesture back is the
+ * primary navigation control and a state-machine "router" that ignores it feels broken.
+ */
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+
+export type Route =
+  | { name: 'start' }
+  | { name: 'hub' }
+  | { name: 'roster' }
+  | { name: 'fighter'; id: string }
+  | { name: 'camp' }
+  | { name: 'fight'; boutId: string }
+  | { name: 'rankings' }
+  | { name: 'promotions' }
+  | { name: 'editor' }
+  | { name: 'editorFighter'; id: string }
+  | { name: 'settings' };
+
+function parse(hash: string): Route {
+  const path = hash.replace(/^#\/?/, '');
+  const [head, param] = path.split('/');
+  switch (head) {
+    case '':
+    case 'start':
+      return { name: 'start' };
+    case 'hub':
+      return { name: 'hub' };
+    case 'roster':
+      return { name: 'roster' };
+    case 'fighter':
+      return param ? { name: 'fighter', id: param } : { name: 'roster' };
+    case 'camp':
+      return { name: 'camp' };
+    case 'fight':
+      return param ? { name: 'fight', boutId: param } : { name: 'hub' };
+    case 'rankings':
+      return { name: 'rankings' };
+    case 'promotions':
+      return { name: 'promotions' };
+    case 'editor':
+      return param ? { name: 'editorFighter', id: param } : { name: 'editor' };
+    case 'settings':
+      return { name: 'settings' };
+    default:
+      return { name: 'hub' };
+  }
+}
+
+export function toHash(route: Route): string {
+  switch (route.name) {
+    case 'fighter':
+      return `#/fighter/${route.id}`;
+    case 'fight':
+      return `#/fight/${route.boutId}`;
+    case 'editorFighter':
+      return `#/editor/${route.id}`;
+    default:
+      return `#/${route.name}`;
+  }
+}
+
+interface RouterValue {
+  route: Route;
+  navigate(route: Route): void;
+  /** Replaces the current entry instead of pushing, for redirects. */
+  replace(route: Route): void;
+  back(): void;
+}
+
+const RouterContext = createContext<RouterValue | undefined>(undefined);
+
+export function RouterProvider({ children }: { children: ReactNode }) {
+  const [route, setRoute] = useState<Route>(() => parse(window.location.hash));
+
+  useEffect(() => {
+    const onHashChange = () => setRoute(parse(window.location.hash));
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const navigate = useCallback((next: Route) => {
+    window.location.hash = toHash(next);
+    // Every navigation starts at the top: carrying scroll position across screens is one of
+    // the most disorienting things a mobile app can do.
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  const replace = useCallback((next: Route) => {
+    window.history.replaceState(null, '', toHash(next));
+    setRoute(next);
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  const back = useCallback(() => window.history.back(), []);
+
+  const value = useMemo(() => ({ route, navigate, replace, back }), [route, navigate, replace, back]);
+  return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>;
+}
+
+export function useRouter(): RouterValue {
+  const ctx = useContext(RouterContext);
+  if (!ctx) throw new Error('useRouter must be used inside RouterProvider');
+  return ctx;
+}

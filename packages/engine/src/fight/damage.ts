@@ -140,8 +140,10 @@ export function applyStrike(
   attacker.stats.strikesByTarget[target]++;
 
   if (target === 'head') {
+    // Rate tuned against the long-sim suite: a full twenty-year career should leave a
+    // busy fighter visibly damaged without the whole roster degrading into glass.
     defender.traumaIncrement +=
-      damage * 0.05 * traitMul(defender.fighter.traits, 'headTraumaRate');
+      damage * 0.032 * traitMul(defender.fighter.traits, 'headTraumaRate');
   }
 
   const knockdown = rng.chance(knockdownHazard(attacker, defender, target, flushness));

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover lets the app paint under the notch; the CSS uses env(safe-area-*)
+         to keep content clear of it. maximum-scale is deliberately NOT set: blocking zoom
+         is an accessibility failure. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="A deep MMA simulation: fight, coach, or run a promotion." />
+    <!-- Matches the CSS surface colour in each scheme so the browser chrome does not flash. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f6f7" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e0f12" />
+    <title>MMA Sim</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
