@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { ErrorBoundary } from './shell/ErrorBoundary';
-import { GameProvider } from './state/GameProvider';
+import { SaveGate } from './state/SaveGate';
 import { RouterProvider } from './state/router';
 import { ThemeProvider } from './state/theme';
 import './styles/global.css';
@@ -16,11 +16,16 @@ createRoot(container).render(
         has to sit above it to catch a corrupt or too-new save. */}
     <ErrorBoundary>
       <ThemeProvider>
-        <GameProvider>
+        {/*
+          The gate, not the provider, is what mounts here now: the main menu runs outside the
+          game entirely — no world, no player, no shell — and only once a save is chosen does a
+          GameProvider exist to render into.
+        */}
+        <SaveGate>
           <RouterProvider>
             <App />
           </RouterProvider>
-        </GameProvider>
+        </SaveGate>
       </ThemeProvider>
     </ErrorBoundary>
   </StrictMode>,

@@ -78,6 +78,28 @@ export function SettingsScreen() {
           </p>
         )}
 
+        {/*
+          Out to the menu, which is where every other save lives.
+          
+          Not destructive and deliberately not confirmed: the game is saved continuously, so
+          leaving costs nothing and a confirmation would teach the player to expect one on the
+          reset below, which is the action that actually needs it.
+        */}
+        <Button
+          variant="secondary"
+          onClick={() => {
+            try {
+              sessionStorage.removeItem('mmasim:active-save');
+            } catch {
+              /* Falling back to a reload still lands on the menu. */
+            }
+            window.location.hash = '';
+            window.location.reload();
+          }}
+        >
+          Back to the main menu
+        </Button>
+
         {confirmingRestart ? (
           /*
            * Announced, and focus moved into it.
