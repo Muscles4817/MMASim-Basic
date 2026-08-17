@@ -169,6 +169,15 @@ export interface FightStats {
   submissionAttempts: number;
   /** Seconds of controlling position (top ground or dominant clinch). */
   controlSeconds: number;
+  /**
+   * Of that, the seconds spent controlling the *clinch* rather than the floor.
+   *
+   * The fence and the floor are different places to be winning, and until step 6B gave the clinch
+   * a second side they were close enough to one number. A fighter who lives in the tie-up and one
+   * who lives in top position both read as "controlling" on a single counter, which is exactly the
+   * resolution a judoka and a wrestler need distinguishing at (docs/19 §13.6).
+   */
+  clinchControlSeconds: number;
   /** Seconds spent at distance. Used by judges assessing octagon control. */
   distanceSeconds: number;
   /** Cumulative damage dealt, in the same units as the opponent's damage meters. */
@@ -235,6 +244,7 @@ export function emptyStats(): FightStats {
     takedownsAttempted: 0,
     submissionAttempts: 0,
     controlSeconds: 0,
+    clinchControlSeconds: 0,
     distanceSeconds: 0,
     damageDealt: 0,
   };

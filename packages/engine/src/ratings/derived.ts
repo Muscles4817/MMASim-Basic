@@ -44,11 +44,30 @@ export const DERIVED_META: Readonly<Record<DerivedKey, DerivedMeta>> = {
   clinchOffence: {
     key: 'clinchOffence',
     label: 'Clinch Offence',
-    blurb: 'Winning the tie-up: pinning, dirty boxing, working from the fence.',
+    blurb: 'Winning the tie-up: grips, pinning, dirty boxing, working from the fence.',
+    /*
+     * **A tie-up is a grip fight, not a strength contest.** This was 0.45 `strength` + 0.35
+     * `wrestling` + 0.2 `strikingOffence`, which made the clinch a near-copy of `chainWrestling`
+     * (0.5 `wrestling` + 0.3 `cardio` + 0.2 `strength`) — the same two attributes deciding both,
+     * so **the engine could not tell a clinch grappler from a shot grappler** whatever the
+     * discipline table said. Measured, that was the whole reason step 6B could not separate judo
+     * from wrestling: their derived clinch and wrestling ratings sat within three points of each
+     * other (docs/19 §13.6).
+     *
+     * `scrambling` and `submissions` are hand-fighting and what follows from a grip, which is what
+     * a tie-up is actually contested with. Strength still leads it — you cannot hold somebody you
+     * cannot hold — but it no longer *is* it.
+     *
+     * The exact split was set by a guard rather than by taste: `attributes.test.ts` asserts that a
+     * fighter with 25 `strength` and 25 `wrestling` cannot have a clinch worth anything, and a
+     * first cut at 0.3/0.25/0.25/0.2 let that fighter reach 45 and broke it. Grip skill is worth
+     * real points in a tie-up and it is not worth as much as being able to hold somebody.
+     */
     inputs: [
-      ['strength', 0.45],
-      ['wrestling', 0.35],
-      ['strikingOffence', 0.2],
+      ['strength', 0.35],
+      ['wrestling', 0.25],
+      ['scrambling', 0.22],
+      ['submissions', 0.18],
     ],
   },
   clinchDefence: {

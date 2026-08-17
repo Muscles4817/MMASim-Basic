@@ -582,6 +582,7 @@ function applyPassiveEffects(
       (start.position === 'clinch' && start.clinchControl === corner)
     ) {
       c.stats.controlSeconds += seconds;
+      if (start.position === 'clinch') c.stats.clinchControlSeconds += seconds;
       tally[corner].controlSeconds += seconds;
     }
   }
@@ -1212,7 +1213,11 @@ function pickTakedownEntry(
       entry === 'bodyLock'
         ? t.bodyLock * clamp01(remap(a.strength, 40, 90, 0.5, 1.2))
         : entry === 'trip'
-          ? t.doubleLeg * clamp01(remap(a.scrambling, 40, 90, 0.4, 1.4))
+          ? // A throw is a grip and a hip, not a level change. This read `doubleLeg` — which is
+            // `p(wrestling) × f(strength)` — so the one entry that is supposed to be judo's was
+            // gated on the *shot* attributes, and a judoka tripped less often than a wrestler did.
+            clamp01(remap(a.scrambling, 40, 90, 0.2, 1.15)) *
+            clamp01(remap(a.submissions, 40, 90, 0.35, 1.35))
           : t.singleLeg * 0.5,
     );
   }

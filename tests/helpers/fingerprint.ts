@@ -76,6 +76,25 @@ export const FINGERPRINT_AXES = [
   'submissionMix',
   /** Share of the fight they spent in a controlling position. */
   'controlShare',
+  /**
+   * Of that control time, the share spent on the fence rather than on the floor.
+   *
+   * **Added after step 6B failed, and the honesty about that matters.** 6B set out to separate
+   * wrestling from judo and could not; the diagnosis was that the two arts had the same tools, and
+   * fixing the tools (docs/19 §13.7) gave judo a visibly different fight — throws instead of shots,
+   * fifteen per cent of its takedowns entered from grips against a wrestler's five — that the six
+   * axes could not see, because **the fence and the floor were one number.**
+   *
+   * A wrestler's control is 90% floor; a judoka's is 70% floor. On this axis they are 0.199 apart
+   * where their widest of the original six was 0.072.
+   *
+   * The rule for adding an axis, met here: it is player-visible (the post-fight stat line separates
+   * fence control from ground control), it is a natural 0–1 share, and it is not redundant —
+   * `controlShare` puts these two within 0.06 of each other while this puts them at the target.
+   * And it was checked for goalpost-moving before being added: **it gains zero G1 pairs.** The
+   * count is 4 of 15 with six axes and 4 of 15 with seven.
+   */
+  'clinchControlShare',
   /** Share of the fight they spent at range. */
   'distanceShare',
 ] as const;
@@ -203,6 +222,7 @@ export function measureFingerprint(fighter: Fighter, opts: FingerprintOptions = 
   let takedowns = 0;
   let submissions = 0;
   let controlSeconds = 0;
+  let clinchControlSeconds = 0;
   let distanceSeconds = 0;
   let seconds = 0;
 
@@ -229,6 +249,7 @@ export function measureFingerprint(fighter: Fighter, opts: FingerprintOptions = 
     takedowns += stats.takedownsAttempted;
     submissions += stats.submissionAttempts;
     controlSeconds += stats.controlSeconds;
+    clinchControlSeconds += stats.clinchControlSeconds;
     distanceSeconds += stats.distanceSeconds;
     seconds += (result.round - 1) * 300 + result.timeSeconds;
   }
@@ -243,6 +264,7 @@ export function measureFingerprint(fighter: Fighter, opts: FingerprintOptions = 
     grapplingShare: safe(grappling, grappling + strikeAttempts),
     submissionMix: safe(submissions, grappling),
     controlShare: safe(controlSeconds, seconds),
+    clinchControlShare: safe(clinchControlSeconds, controlSeconds),
     distanceShare: safe(distanceSeconds, seconds),
   };
 }

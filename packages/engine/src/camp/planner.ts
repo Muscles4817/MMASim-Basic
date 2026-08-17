@@ -69,6 +69,10 @@ function pickApproach(fighter: Fighter, opponent: Fighter): GamePlan['approach']
 
   // Grappling first, because a takedown ends the striking exchange and the reverse is not true.
   if (wrestlingEdge > strikingEdge + 6) {
+    // A fighter better in the tie-up than on the shot is told to work there. Before this, every
+    // grappler in the game was sent to `wrestle` and judo and wrestling were handed identical
+    // plans — which is half of why the fingerprint could not tell them apart (docs/19 §13.6).
+    if (clinchEdge > wrestlingEdge) return 'grind';
     // `wrestle` means "put them down and keep them there", so it is gated on being able to do
     // something once you arrive. The gate was 68/72 in the first cut and handed 2% of the roster
     // the approach — a table row nobody reads is the defect this whole phase is about.

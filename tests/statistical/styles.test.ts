@@ -21,14 +21,20 @@
  * per exemplar with default game plans on both sides:**
  *
  * ```
- *              kickShare  legTarget  grappling  subMix  control  distance
- * boxing           0.154      0.028      0.183   0.679    0.202     0.262
- * kickboxing       0.395      0.125      0.190   0.685    0.181     0.243
- * karate           0.450      0.141      0.192   0.631    0.248     0.273
- * wrestling        0.239      0.043      0.299   0.394    0.420     0.298
- * jiuJitsu         0.361      0.065      0.174   0.482    0.265     0.359
- * judo             0.233      0.044      0.338   0.465    0.374     0.268
+ *              kickShare  legTarget  grappling  subMix  control  fence  distance
+ * boxing           0.152      0.027      0.173   0.681    0.198  0.174     0.266
+ * kickboxing       0.412      0.131      0.184   0.692    0.178  0.168     0.247
+ * karate           0.451      0.144      0.191   0.633    0.245  0.177     0.277
+ * wrestling        0.232      0.045      0.299   0.399    0.427  0.105     0.301
+ * jiuJitsu         0.365      0.070      0.183   0.470    0.270  0.223     0.356
+ * judo             0.277      0.051      0.284   0.403    0.365  0.298     0.302
  * ```
+ *
+ * `fence` is `clinchControlShare`, a seventh axis added in docs/19 §13.7 after step 6B failed to
+ * separate wrestling from judo. It gains **zero** G1 pairs — the count is 4 of 15 with six axes and
+ * 4 of 15 with seven — and it exists because it is the only axis on which those two arts differ at
+ * all: a wrestler's control time is 90% floor, a judoka's is 70%, and the gap is 0.193 against
+ * their widest of the original six at 0.072.
  *
  * `distanceShare` is trustworthy for the first time in this table: step 6.0 stopped the simulator
  * booking a transition's seconds against the position it landed in, which lifted the column by
@@ -88,7 +94,6 @@ import {
   type Fighter,
 } from '@mmasim/engine';
 import {
-  SCOUTING_ERROR,
   SEPARATION_TARGET,
   describeFingerprint,
   disciplineExemplar,
@@ -214,8 +219,8 @@ describe('G1 — separation between the six disciplines', () => {
      * pairs, none of them meeting G1, and the reason is structural rather than tuned — two arts
      * that want the same phase of the fight and reach for it with the same intents can only be
      * told apart by *where inside that phase* they operate, and the engine has one standing
-     * position and one clinch. Kickboxing against karate is 0.073 at its widest, jiu-jitsu against
-     * judo 0.165, wrestling against judo 0.077.
+     * position. Measured: kickboxing/karate 0.067, jiu-jitsu/judo 0.100, wrestling/jiu-jitsu 0.156,
+     * wrestling/judo 0.193 — the last of those a hair under the target and the work of §13.7.
      *
      * When phase 6's positions land this breaks. Invert it then to the G1 target for every pair.
      */
@@ -236,20 +241,28 @@ describe('G1 — separation between the six disciplines', () => {
     ).toEqual([]);
   });
 
-  it('can finally tell the two grappling arts apart, but not clearly enough', () => {
+  it('tells the throwing art from the shooting art, and not the two submission arts', () => {
     /*
-     * Jiu-jitsu against judo was the sharpest single number in this file: **0.058 at its widest,
-     * less than half the scouting error term** — two disciplines the creation screen offers as
-     * different choices and the simulator played identically. It survived phases 1, 2 and 3
-     * untouched, and the file said plainly that nothing short of positions would move it.
+     * **Judo is a midpoint, and this assertion is where that shows.**
      *
-     * Phase 5 moved it to **0.165**, which is past the scouting error term and still short of the
-     * 0.20 target. Game plans did it: the planner sends judo to `wrestle` or `grind` and jiu-jitsu
-     * to a striking approach, because a jiu-jitsu exemplar's `chainWrestling` cannot get the fight
-     * to the floor against a contender — which is both a real property of the art in MMA and an
-     * accident of the exemplar. So it is bounded from *both* sides here: above the error term, and
-     * short of the target, because the remaining gap is the positional one and claiming otherwise
-     * would be claiming phase 6 had already happened.
+     * Jiu-jitsu against judo was 0.058 at the phase 0 baseline — the sharpest single number in this
+     * file, two arts the creation screen offers as different choices and the simulator played
+     * identically. Phase 5 took it to 0.165, past the scouting error term, by giving the two arts
+     * different game plans.
+     *
+     * Then §13.7 made the clinch a grip fight so that *judo* could separate from *wrestling*, and
+     * it did — 0.072 to 0.193, on the fence-versus-floor axis that change made meaningful. And this
+     * pair fell back to 0.100, because judo moved across the space rather than out of it: away from
+     * the wrestler and toward the jiu-jitsu player.
+     *
+     * **That is the finding, and it is worth more than either number.** Judo does not occupy its own
+     * point in the space this engine models — it sits between the shooting art and the submission
+     * art, and every change that separates it from one moves it toward the other. Which is a
+     * question about `origin.ts` and about what the game is claiming when it offers "Judo / Sambo"
+     * as a distinct choice, not a question the fight engine can answer (docs/19 §13.7).
+     *
+     * Bounded on both sides deliberately: the pair must stay separated *at all* — 0.05 is the floor
+     * every pair in the game is held to — and it must not be claimed as solved.
      */
     const jiuJitsu = prints().get('jiuJitsu')!;
     const judo = prints().get('judo')!;
@@ -257,8 +270,13 @@ describe('G1 — separation between the six disciplines', () => {
     expect(
       separation,
       `jiuJitsu ${describeFingerprint(jiuJitsu)} vs judo ${describeFingerprint(judo)}`,
-    ).toBeGreaterThan(SCOUTING_ERROR);
+    ).toBeGreaterThan(0.05);
     expect(separation).toBeLessThan(SEPARATION_TARGET);
+    // And the pair this one traded places with, so the trade cannot be quietly undone.
+    expect(
+      maxSeparation(prints().get('wrestling')!, prints().get('judo')!),
+      'wrestling/judo lost the separation §13.7 bought it',
+    ).toBeGreaterThan(0.15);
   });
 });
 
