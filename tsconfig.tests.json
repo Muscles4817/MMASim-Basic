@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    // `vite/client` because the UI tier mounts the real app, which reads `import.meta.env`.
+    "types": ["node", "vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@mmasim/engine": ["packages/engine/src/index.ts"],
+      "@mmasim/data": ["packages/data/src/index.ts"]
+    }
+  },
+  "include": ["tests/**/*"]
+}

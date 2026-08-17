@@ -212,7 +212,18 @@ describe('medical suspensions are real', () => {
   });
 
   it('never books a fighter inside their own suspension', () => {
-    // The property that actually matters, checked against the record rather than the field.
+    /*
+     * The property that actually matters, checked against the record rather than the field.
+     *
+     * This assertion read `bouts[i].result` where the field is `outcome`, so `lostByStoppage`
+     * was always false and **it had never once been evaluated**. It was found by putting the
+     * test tier inside `npm run typecheck` (docs/19 §7.4 F4), and it is real: over a simulated
+     * year, no fighter takes a bout fewer than **70 days** after being stopped, against a
+     * 30-day commission minimum.
+     *
+     * Same-day pairs are excluded, and that exclusion is a separate defect rather than a
+     * loosening of this one — see the test below.
+     */
     const db = game();
     const player = (db.fighters.findAll() as Fighter[])[0]!;
     advanceWorld(db, 0, 365, player.id);
@@ -221,8 +232,9 @@ describe('medical suspensions are real', () => {
       const bouts = [...fighter.record].sort((a, b) => a.day - b.day);
       for (let i = 1; i < bouts.length; i++) {
         const gap = bouts[i]!.day - bouts[i - 1]!.day;
+        if (gap === 0) continue;
         const lostByStoppage =
-          bouts[i - 1]!.result === 'loss' &&
+          bouts[i - 1]!.outcome === 'loss' &&
           (bouts[i - 1]!.method === 'ko' || bouts[i - 1]!.method === 'tko');
         if (lostByStoppage) {
           // The commission minimum after a knockout. Nothing in the game should book inside it.
@@ -230,6 +242,52 @@ describe('medical suspensions are real', () => {
         }
       }
     }
+  });
+
+  it('writes bouts to the record that the schedule never held — a known defect', () => {
+    /*
+     * **Tripwire.** Asserts a defect, and is meant to break when the defect is fixed.
+     *
+     * Reviving the assertion above surfaced a second, larger problem underneath it: fighters
+     * carry record entries dated the same day as another of their bouts. Diagnosed over a
+     * simulated year on the 2020 world — 45 cards, 139 fighters:
+     *
+     *  - **65 same-day pairs**, of which **52 are the identical bout written twice** (same day,
+     *    same opponent, same method).
+     *  - The other 13 are two *different* bouts on one day.
+     *  - The schedule itself is clean: **no fighter appears twice on any one day** across every
+     *    `FightNight` in the world, and the suspension gate above is respected.
+     *  - Every settled bout still reads `result: undefined` on its night, so nothing downstream
+     *    can tell that a card has already been resolved.
+     *
+     * Read together: the schedule is right, the suspension is right, and the *record* is wrong.
+     * One fighter's year reads `day 28 loss/ko vs dos Santos`, `day 28 win/ko vs Cormier`,
+     * `day 98 loss/tko vs Blaydes`, `day 98 loss/tko vs Blaydes` — against two scheduled bouts.
+     * A duplicated bout inflates records, KO counts, rankings and purses, so this is a
+     * correctness bug rather than a cosmetic one.
+     *
+     * Deliberately not fixed here: it belongs to the card runner and the aftermath path, it
+     * moves career distributions, and it would land in the middle of a fight-engine programme
+     * whose whole discipline is one change at a time (docs/19 §7.4 F7). Recorded so it is
+     * visible and cannot get quietly worse. When it is fixed, delete this test and drop the
+     * `gap === 0` skip above.
+     */
+    const db = game();
+    const player = (db.fighters.findAll() as Fighter[])[0]!;
+    advanceWorld(db, 0, 365, player.id);
+
+    let sameDayPairs = 0;
+    for (const fighter of db.fighters.findAll() as Fighter[]) {
+      const bouts = [...fighter.record].sort((a, b) => a.day - b.day);
+      for (let i = 1; i < bouts.length; i++) {
+        if (bouts[i]!.day === bouts[i - 1]!.day) sameDayPairs++;
+      }
+    }
+
+    expect(
+      sameDayPairs,
+      'same-day record entries are gone — delete this tripwire and the `gap === 0` skip above',
+    ).toBeGreaterThan(0);
   });
 });
 

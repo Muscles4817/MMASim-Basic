@@ -266,7 +266,7 @@ describe('the world behaves like a sport, not a burst', () => {
     const me = fighters(db)[0]!;
     advanceWorld(db, 0, 365, me.id);
 
-    const events = db.events.findAll() as { day: number }[];
+    const events = db.events.findAll() as readonly { day: number }[];
     const quarters = new Set(events.map((e) => Math.floor(e.day / 91)));
     expect(quarters.size).toBeGreaterThan(2);
   });
@@ -278,9 +278,9 @@ describe('the world behaves like a sport, not a burst', () => {
     const me = fighters(db)[0]!;
     advanceWorld(db, 0, 200, me.id);
 
-    const events = db.events.findAll() as {
+    const events = db.events.findAll() as readonly {
       promotionId: string;
-      bouts: { redId: string; blueId: string }[];
+      bouts: readonly { redId: string; blueId: string }[];
     }[];
 
     let cross = 0;

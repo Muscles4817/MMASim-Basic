@@ -172,7 +172,7 @@ describe('a fighter you never book can walk', () => {
       advanceWorld(db, 2192 + year * 365, 2192 + (year + 1) * 365, player.id);
     }
 
-    const walked = (db.news.findAll() as { headline: string; detail?: string }[]).filter((n) =>
+    const walked = (db.news.findAll() as readonly { headline: string; detail?: string }[]).filter((n) =>
       /walks out on/i.test(n.headline),
     );
     expect(walked.length, 'nobody ever walked out over inactivity').toBeGreaterThan(0);
@@ -189,7 +189,7 @@ describe('a fighter you never book can walk', () => {
     const player = (db.fighters.findAll() as Fighter[])[0]!;
     advanceWorld(db, 2192, 2192 + 200, player.id);
 
-    const walked = (db.news.findAll() as { headline: string }[]).filter((n) =>
+    const walked = (db.news.findAll() as readonly { headline: string }[]).filter((n) =>
       /walks out on/i.test(n.headline),
     );
     expect(walked).toHaveLength(0);

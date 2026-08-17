@@ -23,6 +23,7 @@ import { createNewGame } from '@mmasim/data';
 import {
   applyAgeing,
   applyTraining,
+  asDivisionId,
   createPlayerFighter,
   createRng,
   headroom,
@@ -72,7 +73,7 @@ function create(seed: string, background: Background = 'athlete'): Fighter {
       lastName: 'Fighter',
       nationality: 'USA',
       sex: 'male',
-      divisionId: 'mens-lightweight',
+      divisionId: asDivisionId('mens-lightweight'),
       age: 22,
       background,
       build: 'balanced',

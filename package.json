@@ -13,7 +13,7 @@
     "test": "vitest run --project unit --project integration --project ui",
     "test:watch": "vitest",
     "test:long": "vitest run --project long-sim",
-    "typecheck": "tsc --noEmit -p packages/engine && tsc --noEmit -p packages/data && tsc --noEmit -p packages/app",
+    "typecheck": "tsc --noEmit -p packages/engine && tsc --noEmit -p packages/data && tsc --noEmit -p packages/app && tsc --noEmit -p tsconfig.tests.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

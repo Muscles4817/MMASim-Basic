@@ -62,7 +62,7 @@ describe('the world cuts people', () => {
     const released = (db.fighters.findAll() as Fighter[]).filter(
       (f) => f.promotionId === undefined && f.retiredDay === undefined,
     );
-    const news = (db.news.findAll() as { kind: string }[]).filter((n) => n.kind === 'release');
+    const news = (db.news.findAll() as readonly { kind: string }[]).filter((n) => n.kind === 'release');
     expect(news.length, 'nobody was cut across three years').toBeGreaterThan(0);
     void released;
   });
@@ -91,7 +91,7 @@ describe('the world cuts people', () => {
     const player = (db.fighters.findAll() as Fighter[])[0]!;
     for (let year = 0; year < 3; year++) advanceWorld(db, year * 365, (year + 1) * 365, player.id);
 
-    const news = db.news.findAll() as { kind: string; fighterIds: readonly string[] }[];
+    const news = db.news.findAll() as readonly { kind: string; fighterIds: readonly string[] }[];
     for (const item of news.filter((n) => n.kind === 'release')) {
       const fighter = db.fighters.findById(item.fighterIds[0] as string) as Fighter | undefined;
       if (!fighter?.retiredDay) continue;

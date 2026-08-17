@@ -96,7 +96,9 @@ describe('a reign is a thing with a shape', () => {
   it('counts defences, and says so in words', () => {
     const db = game();
     const title = titles(db)[0]!;
-    const defended = defend(defend(title));
+    // Both defences are dated. `defend` takes the day; calling it without one wrote
+    // `lastContestedDay: undefined` into the lineage, which the test never looked at.
+    const defended = defend(defend(title, START), START);
 
     expect(currentReign(defended)!.defences).toBe(currentReign(title)!.defences + 2);
     expect(describeReign(defended, START)).toMatch(/defences/);
@@ -209,7 +211,7 @@ describe('the sport keeps its belts occupied', () => {
   });
 
   it('reports title changes and vacancies in the news', () => {
-    const news = (db.news.findAll() as { kind: string; headline: string }[]).filter(
+    const news = (db.news.findAll() as readonly { kind: string; headline: string }[]).filter(
       (n) => n.kind === 'titleChange',
     );
     expect(news.length).toBeGreaterThan(0);

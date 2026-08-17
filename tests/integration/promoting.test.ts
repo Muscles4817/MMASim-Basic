@@ -342,7 +342,7 @@ describe('the world leaves the player’s promotion alone', () => {
 
     advanceWorld(db, 2192, 2192 + 365, { promotionId: mine.id });
 
-    const events = db.events.findAll() as { promotionId: string }[];
+    const events = db.events.findAll() as readonly { promotionId: string }[];
     expect(events.filter((e) => e.promotionId === mine.id)).toHaveLength(0);
     expect(events.length).toBeGreaterThan(10);
   });
