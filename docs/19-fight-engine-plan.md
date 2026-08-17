@@ -1,7 +1,12 @@
 # 19 — Making the fight engine express style
 
-**Status:** **phase 0 has landed** (§7). Phases 1–6 remain a proposal, and the decision points in
-§4 are still open — D1 and D2 are the gate on phase 1 and want an answer before it starts.
+**Status:** **phases 0 and 1 have landed** (§7, §7.7). **Phase 2 is in progress** — its prediction is
+recorded in §8 before the work, per §7.5's convention. Phases 3–6 remain a proposal; D3–D6 in §4 are
+still open, and D1/D2 are answered.
+
+Doc 20 (persistence and save size) is deferred by the owner rather than dropped: the quota failure it
+measures is real but there is no player other than the developer, so a bug that costs a save nobody
+is keeping ranks below the phase that makes the game worth saving. Revisit before anyone else plays.
 
 > Findings marked **verified** were checked directly against source. The two measurements this
 > plan leans on — the clinch rate and the 2026 roster profile — have both been independently
@@ -605,6 +610,65 @@ karate vs TKD, judo vs sambo) are the ones it cannot separate because they all s
 of it. G1 needs the position and targeting axes, which is phases 2, 5 and 6. The plan's ordering
 still holds — G4 was unreachable without this, and phase 2 wires the narrator to a formula that is
 now correct — but the case that **B is unavoidable** is stronger than when it was written.
+
+---
+
+## 8. Phase 2 — the prediction, written first
+
+Three edits, in this order, each revertable on its own. §3 sizes the phase at 4–6 days and calls it
+the first change to *who wins*.
+
+**(a) `strikeLean` reads the whole grappling game.** `profile.ts:42` weighs striking against
+`wrestling` and `groundControl` only, so a fighter whose entire game is `submissions` and
+`scrambling` reads 0.529 — striker-leaning — and every tendency scaled by that scalar is scaled the
+wrong way (§7.4's fourth tripwire, asserted at `profile.test.ts:39`).
+
+**(b) Targeting stops being one table for the whole roster.** `pickTarget` reads
+`plan.targeting` and nothing else, so *where* a fighter aims is a property of their plan and never
+of their art — the flat column §7.2 named at the baseline. Phase 1 gave `legTargetShare` a pulse
+indirectly, through `pickShot` refusing to punch a leg; this makes it a choice. The fighter's own
+`calfKick` / `bodyWork` / `headKick` tendencies blend with the plan, gated on `adherence`, so a
+disciplined fighter follows the corner and a headhunter follows their habits.
+
+This is the one place tendencies can drive selection without the double-count §5 rejects in the
+positional identity vector: the plan's targeting table is not attribute-derived, so blending against
+it adds `fightIq` and the trait layer to a decision that currently sees neither, rather than
+multiplying an attribute by a monotone function of itself. The intent lottery is deliberately left
+alone for exactly that reason.
+
+**(c) The takedown entry becomes a recorded fact.** `commentary.ts:152` picks the entry itself —
+`rng.pick(['a double leg', 'a single leg', 'a body lock', 'a reactive shot', 'a trip'])` — which is
+D2's defect one layer down and in a phase D2 never audited, because phase 1's parity test only ever
+compared *strikes*. The entry becomes a resolved value chosen from `singleLeg` / `doubleLeg` /
+`bodyLock`, gated by whether the shot came from distance or the clinch, carried on the event and
+narrated from the record.
+
+**What should happen, so it can be scored:**
+
+1. **(a) inverts the fourth tripwire and moves almost nothing else.** Tendencies reach the engine at
+   exactly one site — `prepBonus` — so the live consequence is confined to prep value against
+   submission-shaped grapplers. `balance.test.ts`'s prep bounds should hold without re-statement.
+2. **(b) is where G1 gets its second axis or fails to.** `legTargetShare` sits in a 0.030–0.074 band
+   across the six arts; it should spread wide enough that boxing/karate and boxing/kickboxing — both
+   already clear on `kickShare` — clear on two axes, which breaks the G1 tripwire at
+   `styles.test.ts:153`. **If `legTargetShare` does not clear the error term after this, Strategy A
+   has one axis and not two, and phase 6 should move up the queue.** That is the falsifiable claim
+   in this phase.
+3. **jiu-jitsu against judo does not move.** It is a position problem and (b) is a targeting change.
+   The grappling tripwire at `styles.test.ts:177` should still pass, and if it breaks, suspect the
+   measurement rather than celebrating.
+4. **F3's discipline spread does not narrow much.** Since phase 1 it is a claim about which
+   *attributes* are worth having, not about a bug, and targeting does not change what an attribute
+   is worth. Kickboxing should stay the worst of the six.
+5. **The outcome bounds move less than phase 1 moved them.** Phase 1 raised the population's hazard
+   because kicks and knees are harder than punches in absolute terms; (b) *redistributes* where
+   shots go without making any shot more dangerous, so `firstRoundPct` — 32.7% against a `< 34`
+   ceiling, still the closest bound in the suite — should stay inside it without a recalibration. A
+   second `BASE_KD_HAZARD` change in two phases would mean (b) is doing something it was not asked
+   to do.
+6. **(c) finds at least one lie.** The entry list is offered whole to a resolver that knows whether
+   the shot came from the clinch, so "a trip" and "a body lock" are already narrating distance
+   shots. Parity tests have found something on every run so far; assume this one does too.
 
 ---
 
