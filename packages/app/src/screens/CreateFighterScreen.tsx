@@ -1,23 +1,36 @@
 import { useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import {
+  ATHLETIC_ORIGINS,
+  ATTAINMENT_META,
   ATTRIBUTES_BY_GROUP,
   ATTRIBUTE_GROUPS,
   ATTRIBUTE_META,
-  BACKGROUNDS,
-  BACKGROUND_META,
   BUILDS,
   BUILD_META,
+  COMBAT_DISCIPLINES,
   CREATION_POINTS,
+  DEFAULT_ORIGIN,
+  DISCIPLINE_META,
   MAX_POINTS_PER_ATTRIBUTE,
+  TALENT_META,
+  TALENT_TIERS,
+  attainmentBlurb,
+  attainmentLabel,
+  attainmentsForTalent,
   createPlayerFighter,
   createRng,
   creationSummary,
+  describeOrigin,
   divisionsFor,
+  reconcileOrigin,
+  secondaryOptionsFor,
   validateCreation,
   type AttributeKey,
-  type Background,
   type Build,
+  type CombatDiscipline,
   type CreateFighterSpec,
+  type FighterOrigin,
   type Gym,
   type Sex,
   findNationality,
@@ -32,16 +45,105 @@ import { clearTransientCareerState } from '../game/career';
 import { signFirstDeal } from '../game/contracts';
 
 /**
+ * One selectable origin option: a title, a paragraph, and an optional footnote.
+ *
+ * `aria-label` carries only the name and `aria-describedby` carries the prose, rather than
+ * letting the accessible name fall out of the whole button's text content the way the old
+ * background cards did. Two reasons, one of them a real bug: the old scheme made "Boxing"
+ * a substring of "Kickboxing / Muay Thai" *and* of every blurb on the screen, so neither a
+ * screen reader nor a test could name one option unambiguously. The other is that a name
+ * forty words long is announced in full every time focus lands on it.
+ */
+function OriginOption({
+  id,
+  name,
+  description,
+  footnote,
+  selected,
+  onSelect,
+}: {
+  id: string;
+  name: string;
+  description: string;
+  footnote?: ReactNode;
+  selected: boolean;
+  onSelect(): void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      aria-label={name}
+      aria-describedby={`${id}-desc`}
+      onClick={onSelect}
+      style={{
+        textAlign: 'left',
+        padding: 'var(--space-3)',
+        minHeight: 'var(--tap-target)',
+        borderRadius: 'var(--radius)',
+        border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+        background: selected ? 'var(--accent-soft)' : 'var(--surface)',
+        color: 'var(--text)',
+      }}
+    >
+      <span style={{ fontWeight: 700, display: 'block' }}>{name}</span>
+      <span
+        id={`${id}-desc`}
+        className="muted"
+        style={{ fontSize: 'var(--text-sm)', display: 'block' }}
+      >
+        {description}
+      </span>
+      {footnote && (
+        <span className="faint" style={{ fontSize: 'var(--text-xs)', display: 'block', marginTop: 4 }}>
+          {footnote}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/** The grid every layer's options sit in. One column on a phone, as many as fit above it. */
+const OPTION_GRID = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(14rem, 1fr))',
+  gap: 'var(--space-2)',
+} as const;
+
+/** A numbered heading, so three nested layers read as a sequence rather than a wall. */
+function LayerHeading({ step, title, children }: { step: number; title: string; children: ReactNode }) {
+  return (
+    <div style={{ marginBottom: 'var(--space-2)' }}>
+      <h3 className="section-title" style={{ marginBottom: 2 }}>
+        {step}. {title}
+      </h3>
+      <p className="muted prose" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+        {children}
+      </p>
+    </div>
+  );
+}
+
+/**
  * Create your fighter.
  *
  * Deliberately *not* a points budget across fifteen sliders. That invites min-maxing and
  * produces incoherent people — Power 90 on a body with no explosiveness, which the naturals
- * layer says is impossible. Instead you choose a background and a build, which set your
- * hidden physiology and therefore your ceilings, and a small discretionary allocation shapes
- * where you already are inside them.
+ * layer says is impossible.
  *
- * You are choosing what kind of athlete you are, not buying numbers. What you *become* is
- * decided by the next ten years of training.
+ * Instead you answer three questions in order — what kind of athlete you are, what you
+ * trained, and how far you got at it — and those set your hidden physiology and therefore
+ * your ceilings. A small discretionary allocation shapes where you already are inside them.
+ *
+ * The three layers are nested rather than independent, and the screen has to *show* that or
+ * it becomes three unrelated menus: layer 1 filters what layer 3 offers, because an Olympic
+ * medallist is by definition an elite athlete. `reconcileOrigin` keeps the selection legal
+ * as the player moves between tiers, so nothing silently becomes invalid behind them.
+ *
+ * Nothing on this screen ever shows a ceiling. That is doc/06's rule and it is what makes
+ * coaches, scouting and camps worth anything later: you are told what you *did*, and the
+ * hidden physiology it implies is for the next ten years to reveal.
  */
 export function CreateFighterScreen() {
   const { db, updateWorld, commit } = useGame();
@@ -57,7 +159,7 @@ export function CreateFighterScreen() {
   const recognised = findNationality(nationality) !== undefined;
   const [sex, setSex] = useState<Sex>('male');
   const [age, setAge] = useState(22);
-  const [background, setBackground] = useState<Background>('wrestler');
+  const [origin, setOrigin] = useState<FighterOrigin>(DEFAULT_ORIGIN);
   const [build, setBuild] = useState<Build>('balanced');
   const [allocation, setAllocation] = useState<Partial<Record<AttributeKey, number>>>({});
 
@@ -66,6 +168,28 @@ export function CreateFighterScreen() {
 
   const spent = Object.values(allocation).reduce((a, v) => a + (v ?? 0), 0);
   const remaining = CREATION_POINTS - spent;
+
+  const disciplines = secondaryOptionsFor(origin.discipline);
+  const attainments = attainmentsForTalent(origin.talent);
+  const minAge = ATTAINMENT_META[origin.attainment].minDebutAge;
+
+  /*
+   * Every origin change goes through `reconcileOrigin` and then through the age floor.
+   *
+   * Dropping from Freak to Grinder invalidates an Olympic attainment and a rugby background
+   * at the same time, and leaving them selected would show the player a choice the engine
+   * then refuses on submit — the exact dead end the "Turn pro" button's own comment argues
+   * against. Reconciling here means the illegal field falls to its nearest legal value and
+   * everything the player did not touch survives.
+   *
+   * The age floor moves *with* the attainment rather than merely validating against it,
+   * because a slider that silently makes the form invalid is worse than one that moves.
+   */
+  const changeOrigin = (next: FighterOrigin) => {
+    const legal = reconcileOrigin(next);
+    setOrigin(legal);
+    setAge((current) => Math.max(current, ATTAINMENT_META[legal.attainment].minDebutAge));
+  };
 
   const spec: CreateFighterSpec = {
     id: `player_${Date.now().toString(36)}`,
@@ -76,13 +200,14 @@ export function CreateFighterScreen() {
     sex,
     age,
     divisionId: divisionId as CreateFighterSpec['divisionId'],
-    background,
+    origin,
     build,
     allocation,
     day: 0,
   };
 
   const issues = validateCreation(spec);
+  const originKey = `${origin.talent}:${origin.discipline}:${origin.secondary ?? '-'}:${origin.attainment}`;
 
   // A stable preview: the same choices always show the same fighter, so the player is
   // comparing decisions rather than rerolling until they like the dice.
@@ -91,14 +216,14 @@ export function CreateFighterScreen() {
     try {
       return createPlayerFighter(
         { ...spec, id: 'preview' },
-        createRng(`preview:${background}:${build}:${age}:${sex}:${divisionId}`),
+        createRng(`preview:${originKey}:${build}:${age}:${sex}:${divisionId}`),
       );
     } catch {
       return undefined;
     }
     // Deliberately keyed on the *choices* rather than on `spec`, which is rebuilt every
     // render. Serialising the allocation is the cheapest stable key for a small object.
-  }, [background, build, age, sex, divisionId, JSON.stringify(allocation), issues.length]);
+  }, [originKey, build, age, sex, divisionId, JSON.stringify(allocation), issues.length]);
 
   /*
    * Keep the fighter roughly where they were when the sex toggle flips.
@@ -292,9 +417,17 @@ export function CreateFighterScreen() {
             </label>
             <label style={{ flex: '1 1 8rem' }}>
               <span className="section-title">Debut age: {age}</span>
+              {/*
+                The floor moves with what you say you achieved.
+
+                You cannot medal at a world championship and also turn pro at nineteen, and
+                that is the balance for the whole attainment layer rather than a hidden
+                penalty: a fighter who arrives with a name arrives having spent the years it
+                took to build it, and ageing bills them for it for the rest of the career.
+              */}
               <input
                 type="range"
-                min={18}
+                min={minAge}
                 max={35}
                 value={age}
                 aria-label="Debut age"
@@ -305,66 +438,175 @@ export function CreateFighterScreen() {
           <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
             Debuting young means more years to grow into your ceiling. Debuting late means you
             start further along and have less runway to use it.
+            {minAge > 18 && ` Getting as far as you did means you cannot start before ${minAge}.`}
           </p>
         </div>
       </Card>
 
       <Card title="Where you came from">
-        {/*
-          A radiogroup, not six toggle buttons.
+        <p className="muted prose" style={{ marginBottom: 'var(--space-4)' }}>
+          Three questions, in order: what you were born with, what you trained, and how far you
+          got at it. They are separate things and they do separate jobs — the first decides what
+          you could eventually become, the second what kind of fighter you already are, and the
+          third who has heard of you on the day you turn pro.
+        </p>
 
-          `Segmented`'s own comment states the rule for exactly this case: mutually exclusive
-          options should announce "selected, 1 of 6" rather than "toggle button, pressed". These
-          six were six separate tab stops with no group name, while every other single-select on
-          this screen (Sex, Build) uses Segmented. They stay as cards rather than becoming a
-          Segmented because each carries a paragraph of description, which is the whole point of
-          the choice.
-        */}
-        <div
-          role="radiogroup"
-          aria-label="Where you came from"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(14rem, 1fr))',
-            gap: 'var(--space-2)',
-          }}
-        >
-          {BACKGROUNDS.map((key) => {
-            const meta = BACKGROUND_META[key];
-            const selected = background === key;
-            return (
-              <button
+        {/* --- Layer 1: talent ---------------------------------------------------------- */}
+        <div style={{ marginBottom: 'var(--space-5)' }}>
+          <LayerHeading step={1} title="What kind of athlete you are">
+            The one thing on this screen you were born with rather than earned. Nobody, including
+            you, ever finds out exactly how far it goes.
+          </LayerHeading>
+          <div role="radiogroup" aria-label="What kind of athlete you are" style={OPTION_GRID}>
+            {TALENT_TIERS.map((key) => (
+              <OriginOption
                 key={key}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                onClick={() => setBackground(key)}
-                style={{
-                  textAlign: 'left',
-                  padding: 'var(--space-3)',
-                  minHeight: 'var(--tap-target)',
-                  borderRadius: 'var(--radius)',
-                  border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
-                  background: selected ? 'var(--accent-soft)' : 'var(--surface)',
-                }}
-              >
-                <span style={{ fontWeight: 700, display: 'block' }}>{meta.label}</span>
-                <span className="muted" style={{ fontSize: 'var(--text-sm)', display: 'block' }}>
-                  {meta.blurb}
-                </span>
-                <span
-                  className="faint"
-                  style={{ fontSize: 'var(--text-xs)', display: 'block', marginTop: 4 }}
+                id={`talent-${key}`}
+                name={TALENT_META[key].label}
+                description={TALENT_META[key].blurb}
+                footnote={TALENT_META[key].cost}
+                selected={origin.talent === key}
+                onSelect={() => changeOrigin({ ...origin, talent: key })}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* --- Layer 2: discipline ------------------------------------------------------ */}
+        <div style={{ marginBottom: 'var(--space-5)' }}>
+          <LayerHeading step={2} title="What you trained">
+            What you have already done ten thousand times. It decides what you reach for in a
+            fight, and it is the reason two fighters with the same ratings do not fight the same.
+          </LayerHeading>
+          {/*
+            One radiogroup for all of it, not two.
+
+            The combat arts and the athletic backgrounds are a single mutually-exclusive
+            choice, so splitting them into two radiogroups would announce two independent
+            selections and let a keyboard user believe they could have one of each.
+          */}
+          <div role="radiogroup" aria-label="What you trained">
+            <div style={OPTION_GRID}>
+              {COMBAT_DISCIPLINES.map((key) => (
+                <OriginOption
+                  key={key}
+                  id={`discipline-${key}`}
+                  name={DISCIPLINE_META[key].label}
+                  description={DISCIPLINE_META[key].blurb}
+                  footnote={`Weakness: ${DISCIPLINE_META[key].weakness}`}
+                  selected={origin.discipline === key}
+                  onSelect={() => changeOrigin({ ...origin, discipline: key })}
+                />
+              ))}
+            </div>
+
+            {TALENT_META[origin.talent].allowsAthleticOrigin && (
+              <>
+                <p
+                  className="faint prose"
+                  style={{ fontSize: 'var(--text-sm)', margin: 'var(--space-3) 0 var(--space-2)' }}
                 >
-                  Weakness: {meta.weakness}
-                </span>
-              </button>
-            );
-          })}
+                  Or no martial art at all. You come from another sport entirely and everything
+                  technical is still ahead of you — the longest road in the game, and the one with
+                  the most at the end of it.
+                </p>
+                <div style={OPTION_GRID}>
+                  {ATHLETIC_ORIGINS.map((key) => (
+                    <OriginOption
+                      key={key}
+                      id={`discipline-${key}`}
+                      name={DISCIPLINE_META[key].label}
+                      description={DISCIPLINE_META[key].blurb}
+                      footnote={`Weakness: ${DISCIPLINE_META[key].weakness}`}
+                      selected={origin.discipline === key}
+                      onSelect={() => changeOrigin({ ...origin, discipline: key })}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/*
+            The second art is a select rather than nine more cards.
+
+            It is an optional modifier on a choice already made, and giving it the same visual
+            weight as the primary would suggest it is worth the same — it is worth a third,
+            and it is taken out of the primary rather than added on top.
+          */}
+          <label style={{ display: 'block', marginTop: 'var(--space-3)' }}>
+            <span className="section-title">A second discipline (optional)</span>
+            <select
+              className="field"
+              value={origin.secondary ?? ''}
+              disabled={disciplines.length === 0}
+              onChange={(e) =>
+                changeOrigin({
+                  ...origin,
+                  secondary: (e.target.value || undefined) as CombatDiscipline | undefined,
+                })
+              }
+            >
+              <option value="">Nothing else — you only ever did the one thing</option>
+              {disciplines.map((key) => (
+                <option key={key} value={key}>
+                  {DISCIPLINE_META[key].label}
+                </option>
+              ))}
+            </select>
+            <span className="faint prose" style={{ fontSize: 'var(--text-sm)', display: 'block', marginTop: 4 }}>
+              {disciplines.length === 0
+                ? 'You have never trained a martial art, so there is no second one.'
+                : 'Worth about a third of the first, and taken out of it rather than added on top. A wrestler who can box is not the same fighter as a boxer who can wrestle.'}
+            </span>
+          </label>
+        </div>
+
+        {/* --- Layer 3: attainment ------------------------------------------------------ */}
+        <div>
+          <LayerHeading step={3} title="How far you got">
+            How much of it you actually have, and how many people know your name. A name gets
+            you seeded above the nobodies for your first few fights — after that it is results.
+          </LayerHeading>
+          <div role="radiogroup" aria-label="How far you got" style={OPTION_GRID}>
+            {attainments.map((key) => (
+              <OriginOption
+                key={key}
+                id={`attainment-${key}`}
+                name={attainmentLabel(key, origin.discipline)}
+                description={attainmentBlurb(key, origin.discipline)}
+                footnote={
+                  ATTAINMENT_META[key].minDebutAge > 18
+                    ? `Getting there takes years: you cannot turn pro before ${ATTAINMENT_META[key].minDebutAge}.`
+                    : undefined
+                }
+                selected={origin.attainment === key}
+                onSelect={() => changeOrigin({ ...origin, attainment: key })}
+              />
+            ))}
+          </div>
+          {/*
+            Why the list is short, said out loud rather than left as a mystery.
+
+            The filter is the design: the higher rungs are not offered below the tier that
+            earns them, because an Olympic medallist *is* an elite athlete and offering it
+            here and then quietly discounting it would count the same fact twice.
+          */}
+          {attainments.length < Object.keys(ATTAINMENT_META).length && (
+            <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
+              Nobody medals at a world championship without the body to do it. The rungs above
+              this open up if you are a better athlete.
+            </p>
+          )}
         </div>
       </Card>
 
       <Card title="Build">
+        {/*
+          Physique, kept separate from origin on purpose: a rangy boxer and a powerful boxer
+          are both real people, so folding this into the discipline would mean inventing six
+          more menu entries for a choice that is orthogonal to all of them.
+        */}
         <Segmented
           label="Build"
           value={build}
@@ -464,9 +706,23 @@ export function CreateFighterScreen() {
 
       {preview && (
         <Card title="What you would start as">
+          <p className="prose" style={{ marginBottom: 'var(--space-2)', fontWeight: 600 }}>
+            {describeOrigin(origin)}
+          </p>
           <p className="muted prose" style={{ marginBottom: 'var(--space-3)' }}>
             {creationSummary(preview)}
           </p>
+          {/*
+            No ceiling ticks here, deliberately.
+
+            `RatingRow` can draw a scouted-ceiling marker and this screen used to pass the
+            fighter's *true* `potential`, which is the one thing doc/06 says the player must
+            never see — and worse, it leaked the hidden roll: flipping between two origins
+            and reading where the ticks landed told you exactly how the dice had fallen for
+            each. Hiding potential is the entire reason coaches, scouting reports and camps
+            are worth anything later on, so the creation screen shows what you *are* and the
+            next ten years reveal what you could have been.
+          */}
           {ATTRIBUTE_GROUPS.map((group) => (
             <div key={group} style={{ marginBottom: 'var(--space-2)' }}>
               {ATTRIBUTES_BY_GROUP[group].map((key) => (
@@ -474,15 +730,14 @@ export function CreateFighterScreen() {
                   key={key}
                   label={ATTRIBUTE_META[key].label}
                   value={preview.attributes[key]}
-                  ceiling={preview.potential[key]}
                 />
               ))}
             </div>
           ))}
           <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
-            The tick on each bar is your coach&rsquo;s estimate of your ceiling. He is not always
-            right, and your real physiology is rolled — two fighters built identically here are
-            not the same person.
+            Your real physiology is rolled and you are never shown it — two fighters built
+            identically on this screen are not the same person, and finding out which one you
+            got is what coaches, scouting and ten years of camps are for.
           </p>
         </Card>
       )}

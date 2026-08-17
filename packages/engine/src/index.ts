@@ -46,6 +46,7 @@ export * from './progression/generation.js';
 export * from './progression/names.js';
 export * from './progression/ringRust.js';
 export * from './progression/development.js';
+export * from './progression/origin.js';
 export * from './progression/createFighter.js';
 
 // Camp

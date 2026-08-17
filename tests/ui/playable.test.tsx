@@ -312,7 +312,7 @@ describe('the career is a career, not a sequence of fights', () => {
     expectNoCrash();
   }, 30_000);
 
-  it('lets the background choice actually change the fighter you get', async () => {
+  it('lets the discipline choice actually change the fighter you get', async () => {
     const user = userEvent.setup();
     window.location.hash = '#/create';
     renderApp();
@@ -320,13 +320,15 @@ describe('the career is a career, not a sequence of fights', () => {
     await user.type(await screen.findByLabelText(/First name/i), 'Ade');
     await user.type(screen.getByLabelText(/Last name/i), 'Preview');
 
-    // `radio`, not `button`: the six backgrounds are mutually exclusive, so they announce
-    // "selected, 1 of 6" rather than "toggle button, pressed".
-    await user.click(screen.getByRole('radio', { name: /Collegiate Wrestler/i }));
+    // `radio`, not `button`: the disciplines are mutually exclusive, so they announce
+    // "selected, 1 of 9" rather than "toggle button, pressed". Matched by *exact* name,
+    // which the options carry as an `aria-label` — "Boxing" is a substring of "Kickboxing"
+    // and of half the blurbs on the screen, so a content-derived name cannot name one.
+    await user.click(screen.getByRole('radio', { name: 'Wrestling' }));
     const wrestlingRow = await screen.findByRole('meter', { name: /^Wrestling:/i });
     const asWrestler = Number(wrestlingRow.getAttribute('aria-valuenow'));
 
-    await user.click(screen.getByRole('radio', { name: /Amateur Boxer/i }));
+    await user.click(screen.getByRole('radio', { name: 'Boxing' }));
     const asBoxer = Number(
       (await screen.findByRole('meter', { name: /^Wrestling:/i })).getAttribute('aria-valuenow'),
     );

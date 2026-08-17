@@ -5,10 +5,15 @@
  * fifteen attributes invites min-maxing and produces incoherent people — Power 90 on a body
  * with no explosiveness, which the naturals layer says is impossible.
  *
- * So creation works the way generation does (doc 06): you choose a **background** and a
- * **physical build**, those set your hidden naturals, and the naturals decide your ceilings.
- * A small discretionary allocation then shapes where you already are within them. You are
- * choosing what kind of athlete you are, not buying numbers.
+ * So creation works the way generation does (doc 06): your **origin** sets your hidden
+ * naturals, and the naturals decide your ceilings. A small discretionary allocation then
+ * shapes where you already are within them. You are choosing what kind of athlete you are,
+ * not buying numbers.
+ *
+ * Origin is three nested layers — talent, discipline, attainment — defined in `origin.ts`,
+ * which is also where the reasoning for each layer lives. The flat `background` picker it
+ * replaced is still accepted (see `resolveSpecOrigin`) because callers and saved fixtures
+ * exist that use it, and because it is genuinely the same shape of input one layer down.
  */
 
 import { birthDayForAge, type GameDay } from '../core/clock.js';
@@ -31,8 +36,25 @@ import {
   type Naturals,
 } from '../ratings/attributes.js';
 import { ceilingsFromNaturals } from './generation.js';
+import {
+  ATTAINMENT_META,
+  DISCIPLINE_META,
+  attainmentsForTalent,
+  disciplinesForTalent,
+  isAthleticOrigin,
+  resolveOrigin,
+  secondaryOptionsFor,
+  type FighterOrigin,
+  type ResolvedOrigin,
+} from './origin.js';
 
-/** Where a fighter came from. Sets their starting shape and their natural leanings. */
+/**
+ * Where a fighter came from, flat.
+ *
+ * @deprecated Superseded by `CreateFighterSpec.origin` (talent / discipline / attainment).
+ * Kept working, and kept producing bit-identical fighters for the same seed, because tests,
+ * fixtures and the long-sim baselines were all built on it — see `resolveSpecOrigin`.
+ */
 export const BACKGROUNDS = [
   'wrestler',
   'boxer',
@@ -145,8 +167,21 @@ export interface CreateFighterSpec {
   sex: Sex;
   age: number;
   divisionId: DivisionId;
-  background: Background;
-  build: Build;
+  /**
+   * The three-layer origin. Preferred, and what the creation screen sends.
+   *
+   * Optional only so that the deprecated `background` route keeps compiling; a spec with
+   * neither is rejected by `validateCreation` rather than silently defaulted, because a
+   * fighter with no origin is not a sensible thing to build.
+   */
+  origin?: FighterOrigin;
+  /** @deprecated Use `origin`. Ignored when `origin` is present. */
+  background?: Background;
+  /**
+   * Physique, which is orthogonal to origin: a rangy boxer and a powerful boxer are both
+   * real people. Defaults to `balanced`.
+   */
+  build?: Build;
   stance?: 'orthodox' | 'southpaw' | 'switch';
   /** Discretionary points per attribute. Must total at most `CREATION_POINTS`. */
   allocation?: Partial<Record<AttributeKey, number>>;
@@ -162,6 +197,52 @@ export interface CreationIssue {
   message: string;
 }
 
+/**
+ * Everything the origin layers can be wrong about.
+ *
+ * Separated out because the creation screen wants to check an origin on its own while the
+ * player is still typing their name, and because the layer-3 filter is the design's central
+ * claim: it has to be enforced here rather than only hidden in the UI, or the rule is a
+ * suggestion that the first caller with a hand-written spec quietly breaks.
+ */
+export function validateOrigin(origin: FighterOrigin, age?: number): CreationIssue[] {
+  const issues: CreationIssue[] = [];
+  const disciplineLabel = DISCIPLINE_META[origin.discipline]?.label ?? origin.discipline;
+
+  if (!disciplinesForTalent(origin.talent).includes(origin.discipline)) {
+    issues.push({
+      field: 'origin.discipline',
+      message: `${disciplineLabel} is only open to fighters who were exceptional athletes first.`,
+    });
+  }
+
+  if (!attainmentsForTalent(origin.talent).includes(origin.attainment)) {
+    issues.push({
+      field: 'origin.attainment',
+      message: `Nobody reaches ${ATTAINMENT_META[origin.attainment].label.toLowerCase()} without the athleticism to match.`,
+    });
+  }
+
+  if (origin.secondary && !secondaryOptionsFor(origin.discipline).includes(origin.secondary)) {
+    issues.push({
+      field: 'origin.secondary',
+      message: isAthleticOrigin(origin.discipline)
+        ? `${disciplineLabel} means you have never trained a martial art at all.`
+        : 'Your second discipline has to be a different one.',
+    });
+  }
+
+  const minAge = ATTAINMENT_META[origin.attainment].minDebutAge;
+  if (age !== undefined && age < minAge) {
+    issues.push({
+      field: 'age',
+      message: `Getting that far takes years: you cannot debut before ${minAge}.`,
+    });
+  }
+
+  return issues;
+}
+
 /** Validate a creation spec. Empty means it is buildable. */
 export function validateCreation(spec: CreateFighterSpec): CreationIssue[] {
   const issues: CreationIssue[] = [];
@@ -170,6 +251,12 @@ export function validateCreation(spec: CreateFighterSpec): CreationIssue[] {
   if (!spec.lastName.trim()) issues.push({ field: 'lastName', message: 'Last name is required.' });
   if (spec.age < 18 || spec.age > 35) {
     issues.push({ field: 'age', message: 'Debut age must be between 18 and 35.' });
+  }
+
+  if (spec.origin) {
+    issues.push(...validateOrigin(spec.origin, spec.age));
+  } else if (!spec.background) {
+    issues.push({ field: 'origin', message: 'Choose where you came from.' });
   }
 
   const allocation = spec.allocation ?? {};
@@ -243,6 +330,30 @@ const NATURALS_BASELINE = 73;
 /** Rating points of room every attribute has at debut, however the ceilings rolled. */
 const MINIMUM_DEBUT_HEADROOM = 4;
 
+/**
+ * Turn whichever origin the spec carries into the one shape the builder below reads.
+ *
+ * The deprecated `background` route maps onto exactly the numbers it always used — the same
+ * attribute table, the same naturals leaning, the same 73 centre, the same 5 reputation and
+ * 1 star power — so an old spec and a seed produce the fighter they produced before. That
+ * matters more than it looks: the long-sim career suite asserts a *distribution* over forty
+ * seeded careers built through this path, and every one of those bounds was measured.
+ */
+function resolveSpecOrigin(spec: CreateFighterSpec): ResolvedOrigin {
+  if (spec.origin) return resolveOrigin(spec.origin);
+
+  // Only reachable through a spec `validateCreation` has already rejected, which
+  // `createPlayerFighter` throws on — but `resolveSpecOrigin` must still be total.
+  const background = BACKGROUND_META[spec.background ?? 'wrestler'];
+  return {
+    naturalsCentre: NATURALS_BASELINE,
+    naturals: background.naturals,
+    attributes: background.attributes,
+    reputation: 5,
+    starPower: 1,
+  };
+}
+
 export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter {
   const issues = validateCreation(spec);
   if (issues.length > 0) {
@@ -250,7 +361,7 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
   }
 
   const division = getDivision(spec.divisionId);
-  const background = BACKGROUND_META[spec.background];
+  const origin = resolveSpecOrigin(spec);
 
   const buildShift = spec.build === 'powerful' ? 1 : spec.build === 'rangy' ? -1 : 0;
   const walkingWeightLbs = Math.round(division.limitLbs * (1.07 + buildShift * 0.035));
@@ -269,21 +380,22 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
    * much of the ceiling ever gets reached and the one the player has least say over. That is
    * the roll a career is quietly decided by.
    */
+  const centre = origin.naturalsCentre;
   const naturals: Naturals = {
     frame: toRating(clamp((walkingWeightLbs / 300) * 100, 5, 99)),
     explosiveness: toRating(
-      rng.normalClamped(NATURALS_BASELINE + (background.naturals.explosiveness ?? 0) + buildShift * 4, 11, 30, 96),
+      rng.normalClamped(centre + (origin.naturals.explosiveness ?? 0) + buildShift * 4, 11, 30, 96),
     ),
     engine: toRating(
-      rng.normalClamped(NATURALS_BASELINE + (background.naturals.engine ?? 0) - buildShift * 4, 11, 30, 96),
+      rng.normalClamped(centre + (origin.naturals.engine ?? 0) - buildShift * 4, 11, 30, 96),
     ),
     constitution: toRating(
-      rng.normalClamped(NATURALS_BASELINE + (background.naturals.constitution ?? 0), 11, 30, 96),
+      rng.normalClamped(centre + (origin.naturals.constitution ?? 0), 11, 30, 96),
     ),
-    recovery: toRating(rng.normalClamped(NATURALS_BASELINE + (background.naturals.recovery ?? 0), 11, 30, 96)),
+    recovery: toRating(rng.normalClamped(centre + (origin.naturals.recovery ?? 0), 11, 30, 96)),
     // The single most important hidden number, and the one the player has least say over.
     motorLearning: toRating(
-      rng.normalClamped(NATURALS_BASELINE + (background.naturals.motorLearning ?? 0), 14, 28, 97),
+      rng.normalClamped(centre + (origin.naturals.motorLearning ?? 0), 14, 28, 97),
     ),
     injuryProneness: toRating(rng.normalClamped(46, 15, 12, 88)),
     ageCurve: rng.pickWeighted(['standard', 'longPeak', 'lateBloomer', 'earlyBloomer'] as const, (c) =>
@@ -298,12 +410,12 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
   const attributes = {} as Attributes;
 
   for (const key of ATTRIBUTE_KEYS) {
-    const fromBackground = background.attributes[key] ?? 0;
+    const fromOrigin = origin.attributes[key] ?? 0;
     const fromAllocation = allocation[key] ?? 0;
     // Older debutants arrive slightly further along; they have less runway to use it.
     const experience = remap(spec.age, 18, 35, 0, 7);
 
-    const value = BASELINE + fromBackground + fromAllocation + experience + rng.range(-2, 2);
+    const value = BASELINE + fromOrigin + fromAllocation + experience + rng.range(-2, 2);
 
     /*
      * A debutant has finished developing nowhere.
@@ -367,13 +479,21 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
     promotionId: spec.promotionId,
     gymId: spec.gymId as Fighter['gymId'],
 
-    // Nobody knows who you are. That is the whole point.
-    starPower: 1,
+    /*
+     * How well known you are on the day you turn pro — layer 3's real payload.
+     *
+     * Almost nobody, for almost everybody: a club-level debutant still starts at 1 and 5,
+     * which is where every created fighter used to start. An Olympic medallist does not,
+     * and `standingScore` is where that shows up — outside reputation carries into a new
+     * promotion's rankings at a quarter of face value and fades over six bouts, so a name
+     * gets you seeded above the nobodies and then six fights to justify it.
+     */
+    starPower: toRating(origin.starPower),
     bank: 0,
     lifetimeGross: 0,
     lifetimeNet: 0,
     resentment: 0,
-    reputation: 5,
+    reputation: toRating(origin.reputation),
 
     proDebutDay: spec.day,
   };
