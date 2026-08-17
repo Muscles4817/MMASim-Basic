@@ -734,6 +734,50 @@ which puts it with phase 5, and moving it moves the whole damage distribution.
 
 ---
 
+## 9. Phase 3 — the prediction, written first
+
+Four items, and unlike phase 2 they share only a theme: **things the engine declares and does not
+read.** §3 sizes it at 3–4 days and calls the stance magnitude the variable.
+
+**(a) `takedownRate` is a hook nothing pulls.** It is declared in `MUL_HOOKS`, read at
+`resolveTakedown`, and **no trait in the table sets it** — a resolution site with no source, the
+mirror image of §5's "no read keys before their resolution sites exist". Two traits fill it, and
+the hook moves to the *intent* weight where its name says it belongs: `takedownRate` should mean
+how often a fighter shoots, not how well the shot goes, and putting it in both would pay twice.
+
+**(b) Trait generation ignores the fighter it is decorating.** `generateTraits` picks uniformly
+from 24 non-acquirable traits, so a `cardioMachine` with 30 `cardio` and a `headhunter` who cannot
+punch are both one roll away, at roughly the rate you would expect from chance. Traits gain an
+`affinity` — data, like everything else about a trait — and generation weights the pool by how well
+each fits the ratings already rolled.
+
+**(c) `stance` is stored, seeded by hand on real fighters, rendered on the fighter screen, and read
+by nothing.** An open-stance matchup gives the southpaw a small edge in the landing contest,
+reduced by the orthodox fighter's `fightIq` because the whole mechanism is unfamiliarity and a
+smart fighter solves it. A switch-stance fighter neither gets it nor gives it.
+
+**(d) `cageIq` is computed for every combatant in every fight and read by nobody.** It is deleted.
+Its inputs — `fightIq` and `composure` — are already read directly at four sites, which is why it
+was never wired up: it is a name for a thing the engine already does twice.
+
+**What should happen:**
+
+1. **(a) and (b) are career-shaped, not fight-shaped.** Neither moves a population outcome bound;
+   what they move is how *coherent* a generated fighter reads. The measurable claim for (b) is that
+   the correlation between a trait and the attribute it implies goes from ~0 to something a test
+   can assert, across a generated roster.
+2. **(c) is the only one that can move a distribution**, and it should move a small one: with
+   southpaws at 25% of generated fighters, a stance edge worth a point or two of win rate in mixed
+   matchups is worth a fraction of a point across the population. **If `firstRoundPct` or the
+   finish rate moves by more than that, the magnitude is wrong and it comes down.**
+3. **(d) changes no behaviour at all**, and if any test fails when it goes, that test was asserting
+   the existence of a dead rating rather than a live one.
+4. **Nothing here touches G1.** Phase 2 established that the fingerprint's second axis is not
+   available to weapons, targeting or traits. Phase 3 is legibility and coherence work, and the
+   plan should stop pretending any of it is separation work.
+
+---
+
 **The one-line version:** the engine's missing primitive is a named weapon on the strike, not a
 new attribute — and the missing discipline is a test that can tell two fighting styles apart.
 Build the second, then the first, and the case for growing past six disciplines makes itself.
