@@ -21,7 +21,13 @@ import type { Fighter } from '../domain/fighter.js';
 import { emptyRecordSummary, freshCondition } from '../domain/fighter.js';
 import type { Personality } from '../domain/personality.js';
 import { PERSONALITY_AXES } from '../domain/personality.js';
-import { ALL_TRAITS, findTraitConflicts, type TraitId } from '../domain/traits.js';
+import {
+  ALL_TRAITS,
+  findTraitConflicts,
+  type AffinityAttribute,
+  type TraitDef,
+  type TraitId,
+} from '../domain/traits.js';
 import {
   AGE_CURVES,
   ATTRIBUTE_KEYS,
@@ -119,14 +125,54 @@ export function generatePersonality(rng: Rng): Personality {
   return p;
 }
 
-/** Roll traits, refusing any combination that contradicts itself. */
-export function generateTraits(rng: Rng, count = 2): TraitId[] {
+/**
+ * How well a trait fits the fighter it is being considered for.
+ *
+ * A weight around 1, from the trait's `affinity` against the ratings already rolled. A trait with
+ * no affinity always returns 1 and is therefore neither favoured nor penalised — most of the
+ * business and camp traits say nothing about how good somebody is, and inventing a correlation
+ * for them would be worse than the uniform draw this replaces.
+ *
+ * The band is deliberately wide but bounded. `TRAIT_FIT_FLOOR` above zero is the important end:
+ * an unlikely trait has to stay *possible*, because "a heavyweight with no engine who fights like
+ * a cardio machine anyway" is a fighter worth meeting occasionally, and a generator that can only
+ * produce coherent people produces a roster with no texture.
+ */
+const TRAIT_FIT_FLOOR = 0.12;
+const TRAIT_FIT_CEILING = 3;
+
+export function traitFit(trait: TraitDef, attributes: Attributes): number {
+  if (!trait.affinity) return 1;
+  let fit = 1;
+  for (const [key, weight] of Object.entries(trait.affinity) as [AffinityAttribute, number][]) {
+    // Neutral at 50, doubled at 70, near zero at 30 for a weight of 1 — and it keeps going past
+    // those, which is what puts an Iron Chin on the 95-durability fighter rather than merely on an
+    // above-average one. The slope is steeper than it looks because generated debutants are
+    // compressed: their attributes measure a mean of 42 with a standard deviation of 11, so a
+    // rating of 70 is already exceptional rather than merely good.
+    fit *= 1 + (weight * (attributes[key] - 50)) / 20;
+  }
+  return clamp(fit, TRAIT_FIT_FLOOR, TRAIT_FIT_CEILING);
+}
+
+/**
+ * Roll traits, refusing any combination that contradicts itself.
+ *
+ * Weighted by `traitFit` since docs/19 phase 3. The uniform draw this replaces gave every fighter
+ * a one-in-twelve chance per trait of each label in the table regardless of who they were, so the
+ * roster carried cardio machines who gas, headhunters who cannot punch and chain wrestlers who
+ * cannot wrestle at exactly the rate chance produces them — and a trait is the most *legible*
+ * thing about a fighter, being what the scouting report and the profile screen lead with.
+ */
+export function generateTraits(rng: Rng, count = 2, attributes?: Attributes): TraitId[] {
   const traits: TraitId[] = [];
   // Acquired traits are earned in play, not handed out at generation.
   const pool = ALL_TRAITS.filter((t) => !t.acquirable);
 
   for (let attempt = 0; attempt < 30 && traits.length < count; attempt++) {
-    const candidate = rng.pick(pool).id;
+    const candidate = attributes
+      ? rng.pickWeighted(pool, (t) => traitFit(t, attributes)).id
+      : rng.pick(pool).id;
     if (traits.includes(candidate)) continue;
     if (findTraitConflicts([...traits, candidate]).length > 0) continue;
     traits.push(candidate);
@@ -202,7 +248,7 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     naturals,
     potential,
     personality: generatePersonality(rng),
-    traits: generateTraits(rng, rng.int(1, 3)),
+    traits: generateTraits(rng, rng.int(1, 3), attributes),
 
     condition: freshCondition(),
     record: [],

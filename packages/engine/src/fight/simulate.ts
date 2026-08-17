@@ -632,6 +632,10 @@ function resolveDistance(
   const takedownW =
     fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
     approachWeight(plan.approach, 'takedown') *
+    // How often they shoot, which is what `takedownRate` means. It was on the takedown contest
+    // instead — better shots rather than more of them — and no trait in the game set it, so the
+    // hook had a reader and no writer for as long as it has existed (docs/19 §9a).
+    traitMul(actor.fighter.traits, 'takedownRate') *
     exploitFactor(actor, actor.attrs.wrestling, target.attrs.takedownDefence);
   const clinchW =
     fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) *
@@ -768,6 +772,46 @@ function pickTarget(rng: Rng, actor: Combatant): StrikeTarget {
     ['head', 'body', 'legs'] as const,
     (k) => plan[k] * (habit[k] / mean / NEUTRAL_HABIT[k]),
   );
+}
+
+/**
+ * The open-stance edge, as a multiplier on the landing contest.
+ *
+ * `Fighter.stance` was stored, hand-authored on the real fighters in both seed rosters, rendered
+ * on the fighter screen — and read by nothing at all (docs/19 §9c). A southpaw across from an
+ * orthodox fighter is the one genuinely *discrete* physical matchup the data already carries, and
+ * it is why §4 D6 refused `reachInches` the same treatment: reach has no contest to win until a
+ * range concept exists, and a stance mismatch is a contest today.
+ *
+ * Three claims, and each is why the shape is what it is:
+ *
+ *  - **The edge is the southpaw's**, because the mechanism is unfamiliarity rather than geometry —
+ *    roughly one fighter in seven leads with the other foot and has spent their whole life
+ *    training against the other six, while the other six rarely train against them.
+ *  - **A smart opponent solves it.** It is scaled down by the orthodox fighter's `fightIq`, from
+ *    its full value at 40 to about a third at 90. An elite fighter adjusts inside a round; a dull
+ *    one never does.
+ *  - **A switch-stance fighter neither takes it nor gives it.** They are comfortable in both, and
+ *    that comfort *is* the trait — it costs them the edge as well as sparing them it, which is
+ *    what stops `switch` from being strictly the best stance to be generated with.
+ *
+ * `STANCE_EDGE` is the magnitude docs/19 §3 called "the variable", and it was set by measurement
+ * rather than by argument. 10% on the offence term is worth **1.5 points of win rate against a
+ * dull orthodox opponent, 1.1 against an average one and 0.5 against a smart one** over paired
+ * seeds. 6% was tried first and read 0.90 / 0.63 / 0.30, which is inside the noise of anything
+ * cheaper than six thousand fights — an edge nobody can measure is a field that is still dead.
+ *
+ * It cannot move the population's outcome distribution, whatever the value: a stance mismatch is
+ * symmetric across the roster, so it decides *who* wins rather than how fights end. That is the
+ * property that makes this safe to tune and the reason it is allowed a number this size at all.
+ */
+const STANCE_EDGE = 0.1;
+
+function stanceEdge(actor: Combatant, target: Combatant): number {
+  if (actor.fighter.stance !== 'southpaw') return 1;
+  if (target.fighter.stance !== 'orthodox') return 1;
+  const solved = clamp01(remap(target.attrs.fightIq, 40, 90, 0, 0.68));
+  return 1 + STANCE_EDGE * (1 - solved);
 }
 
 /**
@@ -917,6 +961,7 @@ function throwBurst(
       ) *
       (isKick ? legImpairment(actor) : 1) *
       momentumMultiplier(actor) *
+      stanceEdge(actor, target) *
       traitMul(actor.fighter.traits, 'strikeAccuracy');
 
     const defence =
@@ -1123,7 +1168,6 @@ function resolveTakedown(
   const offence =
     fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
     momentumMultiplier(actor) *
-    traitMul(actor.fighter.traits, 'takedownRate') *
     (from === 'clinch' ? 1.25 : 1);
 
   const defence =
@@ -1190,7 +1234,10 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
     return { seconds: rng.int(6, 14) };
   }
 
-  const takedownW = fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) * 1.2;
+  const takedownW =
+    fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
+    traitMul(actor.fighter.traits, 'takedownRate') *
+    1.2;
   const strikeW = fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) * 0.8;
   const stallW = actor.plan.approach === 'grind' ? 1.6 : 0.5;
 

@@ -35,6 +35,8 @@ export interface FighterOverrides {
   starPower?: number;
   reputation?: number;
   sex?: 'male' | 'female';
+  /** Orthodox unless a test is about the open-stance matchup. See `tests/statistical/stance.test.ts`. */
+  stance?: Fighter['stance'];
 }
 
 export const TEST_DAY: GameDay = 0;
@@ -70,7 +72,7 @@ export function makeFighter(o: FighterOverrides = {}): Fighter {
     walkingWeightLbs: o.walkingWeightLbs ?? 170,
     heightInches: 70,
     reachInches: 72,
-    stance: 'orthodox',
+    stance: o.stance ?? 'orthodox',
 
     divisionId,
     divisionHistory: [divisionId],

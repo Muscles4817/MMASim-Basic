@@ -6,6 +6,13 @@
  * editor produce incoherent fighters (Strength 30 with Clinch 90) and would guarantee that
  * the two drift apart over time.
  *
+ * **Every key here must be read by something.** `cageIq` — `fightIq` 0.6 against `composure` 0.4 —
+ * was computed for both corners of every fight in the game and read by nothing, for the reason it
+ * was never going to be: both of its inputs are already read *directly* at four separate sites, so
+ * it was a name for a thing the engine does twice rather than a capability of its own. Deleted in
+ * docs/19 phase 3. A derived rating that nothing consumes is not an abstraction, it is a claim the
+ * player can read on a screen and the simulator does not honour.
+ *
  * See docs/02-attributes-and-ratings.md § "Why not more?".
  */
 
@@ -17,7 +24,6 @@ export const DERIVED_KEYS = [
   'clinchDefence',
   'submissionDefence',
   'groundAndPound',
-  'cageIq',
   'finishingInstinct',
   'chainWrestling',
 ] as const;
@@ -73,15 +79,6 @@ export const DERIVED_META: Readonly<Record<DerivedKey, DerivedMeta>> = {
     inputs: [
       ['groundControl', 0.55],
       ['power', 0.45],
-    ],
-  },
-  cageIq: {
-    key: 'cageIq',
-    label: 'Cage IQ',
-    blurb: 'Composed decision-making under fire; sticking to the plan when it hurts.',
-    inputs: [
-      ['fightIq', 0.6],
-      ['composure', 0.4],
     ],
   },
   finishingInstinct: {

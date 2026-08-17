@@ -21,6 +21,15 @@ export const MUL_HOOKS = [
   'headTraumaRate',
   'strikeOutput',
   'strikeAccuracy',
+  /**
+   * How often this fighter reaches for a takedown, relative to everything else they could do.
+   *
+   * Read at the *intent* weight rather than at the takedown contest, so it means what it is
+   * called: a `chainWrestler` shoots more, and whether the shot lands is still their wrestling
+   * against the other man's defence. It sat on the contest instead until docs/19 phase 3, where
+   * it would have paid twice for one trait — more shots *and* better ones — and it sat there
+   * with no trait setting it at all, which is why nobody noticed.
+   */
   'takedownRate',
   'finishingUrge',
   'starPowerGrowth',
@@ -67,7 +76,47 @@ export interface TraitDef {
   acquirable?: boolean;
   mul?: Partial<Record<MulHook, number>>;
   add?: Partial<Record<AddHook, number>>;
+  /**
+   * Which ratings this trait implies, and in which direction.
+   *
+   * `+1` means the trait belongs on somebody strong in that attribute, `-1` on somebody weak, and
+   * the magnitude scales how hard generation leans. Data rather than code, like every other part
+   * of a trait: `generateTraits` weights its pool by this and nothing else needs to know.
+   *
+   * The point is coherence, not balance. Generation picked uniformly from the whole table before
+   * docs/19 phase 3, so a `cardioMachine` with 30 `cardio` and a `headhunter` who cannot punch
+   * arrived at exactly the rate chance produces them, and a fighter's own numbers argued with the
+   * labels on their profile screen.
+   *
+   * Absent means the trait says nothing about ratings — a `mercenary` or a `partyAnimal` can be
+   * anybody, and pretending otherwise would invent a correlation the design does not claim.
+   */
+  affinity?: Partial<Record<AffinityAttribute, number>>;
 }
+
+/**
+ * The attributes a trait is allowed to imply.
+ *
+ * The stored attribute keys, restated here rather than imported: `traits.ts` is domain data and
+ * `ratings/` is the numeric layer, and an import in that direction would put the trait table
+ * downstream of every future rating change.
+ */
+export type AffinityAttribute =
+  | 'power'
+  | 'speed'
+  | 'cardio'
+  | 'durability'
+  | 'strength'
+  | 'strikingOffence'
+  | 'kicking'
+  | 'strikingDefence'
+  | 'wrestling'
+  | 'takedownDefence'
+  | 'groundControl'
+  | 'submissions'
+  | 'scrambling'
+  | 'fightIq'
+  | 'composure';
 
 export const TRAIT_IDS = [
   'gymRat',
@@ -91,6 +140,8 @@ export const TRAIT_IDS = [
   'volumeMachine',
   'headhunter',
   'finisher',
+  'chainWrestler',
+  'sprawlAndBrawl',
   'durableMind',
   'injuryProne',
   'quickHealer',
@@ -134,6 +185,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     visibility: 40,
     mul: { weightMissRisk: 2.6, fatigueRate: 1.3 },
     add: { sizeAdvantage: 6 },
+    affinity: { strength: 0.6 },
   },
   frontrunner: {
     id: 'frontrunner',
@@ -153,6 +205,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     visibility: 45,
     mul: { fightInjuryRisk: 1.2, headTraumaRate: 1.25 },
     add: { momentumSensitivity: -0.35, compositionUnderFire: 14 },
+    affinity: { composure: 0.8, durability: 0.5 },
   },
   trashTalker: {
     id: 'trashTalker',
@@ -175,6 +228,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     visibility: 70,
     mul: { durabilityDecay: 0.6, headTraumaRate: 1.4 },
     add: { durabilityFloorShift: 10 },
+    affinity: { durability: 1 },
   },
   glassCannon: {
     id: 'glassCannon',
@@ -185,6 +239,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     visibility: 65,
     mul: { finishingUrge: 1.3 },
     add: { durabilityFloorShift: -14 },
+    affinity: { power: 0.8, durability: -1 },
   },
   gunShy: {
     id: 'gunShy',
@@ -195,6 +250,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     visibility: 50,
     acquirable: true,
     mul: { strikeOutput: 0.75, finishingUrge: 0.6 },
+    affinity: { composure: -0.8 },
   },
   fragileEgo: {
     id: 'fragileEgo',
@@ -243,6 +299,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     polarity: 'doubleEdged',
     visibility: 45,
     add: { lateRoundBias: 0.35 },
+    affinity: { cardio: 0.8 },
   },
   fastStarter: {
     id: 'fastStarter',
@@ -253,6 +310,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     visibility: 50,
     mul: { fatigueRate: 1.15 },
     add: { lateRoundBias: -0.3 },
+    affinity: { cardio: -0.6, power: 0.5 },
   },
   chinny: {
     id: 'chinny',
@@ -264,6 +322,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     acquirable: true,
     mul: { durabilityDecay: 1.5 },
     add: { durabilityFloorShift: -18 },
+    affinity: { durability: -1.2 },
   },
   cardioMachine: {
     id: 'cardioMachine',
@@ -273,6 +332,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     polarity: 'positive',
     visibility: 70,
     mul: { fatigueRate: 0.78, recoveryRate: 1.25 },
+    affinity: { cardio: 1.2 },
   },
   gatekeeperMentality: {
     id: 'gatekeeperMentality',
@@ -291,6 +351,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     polarity: 'doubleEdged',
     visibility: 85,
     mul: { strikeOutput: 1.3, strikeAccuracy: 0.88, fatigueRate: 1.1 },
+    affinity: { cardio: 1, strikingOffence: 0.6, power: -0.4 },
   },
   headhunter: {
     id: 'headhunter',
@@ -300,6 +361,28 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     polarity: 'doubleEdged',
     visibility: 75,
     mul: { finishingUrge: 1.35, strikeOutput: 0.85 },
+    affinity: { power: 1.1, fightIq: -0.4 },
+  },
+  chainWrestler: {
+    id: 'chainWrestler',
+    label: 'Chain Wrestler',
+    blurb: 'Shoots, gets stuffed, shoots again. The twelfth one goes in as hard as the first.',
+    category: 'fight',
+    polarity: 'doubleEdged',
+    // The most visible thing a fighter can do: everybody in the building knows what is coming.
+    visibility: 85,
+    mul: { takedownRate: 1.45, fatigueRate: 1.05 },
+    affinity: { wrestling: 1.2, cardio: 0.5 },
+  },
+  sprawlAndBrawl: {
+    id: 'sprawlAndBrawl',
+    label: 'Sprawl and Brawl',
+    blurb: 'Wants no part of the floor and fights like it. Will trade all night to stay up.',
+    category: 'fight',
+    polarity: 'doubleEdged',
+    visibility: 70,
+    mul: { takedownRate: 0.5, strikeOutput: 1.05 },
+    affinity: { takedownDefence: 1, strikingOffence: 0.8, wrestling: -0.5 },
   },
   finisher: {
     id: 'finisher',
@@ -309,6 +392,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     polarity: 'positive',
     visibility: 80,
     mul: { finishingUrge: 1.4 },
+    affinity: { power: 0.7, submissions: 0.5 },
   },
   durableMind: {
     id: 'durableMind',
@@ -318,6 +402,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     polarity: 'positive',
     visibility: 40,
     add: { compositionUnderFire: 10 },
+    affinity: { composure: 1 },
   },
   injuryProne: {
     id: 'injuryProne',
@@ -405,6 +490,7 @@ export const CONFLICTING_TRAITS: readonly (readonly [TraitId, TraitId])[] = [
   ['durableMind', 'fragileEgo'],
   ['injuryProne', 'quickHealer'],
   ['volumeMachine', 'headhunter'],
+  ['chainWrestler', 'sprawlAndBrawl'],
 ];
 
 /** Any conflicting pairs present in `traits`. Empty means coherent. */
