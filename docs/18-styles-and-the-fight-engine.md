@@ -245,17 +245,30 @@ commentary text to what the simulator actually resolved.**
 `roster-profile.test.ts` calls `createNewGame()` with no era, defaulting to 2020 (139 fighters).
 `DEFAULT_ERA` is 2026 (858 fighters) — what the menu offers and what a new player gets.
 
+**Measured directly**, using the suite's own pairing rule, seed scheme and method classification —
+801 pairings for 2020, 35,627 for 2026:
+
 | | 2020 (tested) | 2026 (played) | real UFC |
 |---|---|---|---|
-| Finish rate | 64.3% | 49.6% | ~48% |
-| KO/TKO | 50.8% | 29.7% | ~31% |
-| Submission | 13.5% | 20.0% | ~17% |
-| Decisions | 34.8% | 46.8% | ~52% |
-| KO : sub | 3.77 : 1 | 1.48 : 1 | ~1.8 : 1 |
+| Finish rate | 61.5% | **49.5%** | ~48% |
+| KO/TKO | 47.3% | **30.1%** | ~31% |
+| Submission | 14.2% | **19.4%** | ~17% |
+| Decisions | 36.7% | **46.9%** | ~52% |
+| KO : sub | 3.32 : 1 | **1.55 : 1** | ~1.8 : 1 |
+| First-round finish | 32.1% | 32.0% | — |
+| Draw | 1.25% | 2.97% | ~0.5% |
 
-The calibration gap the code comments agonise over — and deliberately refused to close by deleting
-the power tail — appears to be an artefact of profiling the legacy roster. *(These figures are the
-adversarial reviewer's measurement and have not been independently reproduced.)*
+**On the roster the player actually plays, the engine is already close to the real sport on every
+axis except the draw rate.** The calibration gap the code comments agonise over — and that doc 03
+deliberately refused to close by deleting the power tail — is an artefact of profiling the legacy
+roster. The 2020 column reproduces `damage.ts`'s own calibration table exactly.
+
+Two further things fell out of reproducing this:
+
+- **The clinch rate holds**: 0.68 landed clinch strikes per fight on 2026, 0.57 on 2020.
+- **The knife-edge bounds are real.** The adversarial review measured 2020's KO:sub at 3.77 on its
+  seed; this measurement gets 3.32 on the suite's own seed scheme. The bound is `< 3.6`. Same
+  population, different seed, opposite sides of the assertion.
 
 Also: `roster-profile.test.ts:61` counts `method === 'decisionDraw'`, which is not a member of
 `FinishMethod`. `drawPct` is permanently 0 and that assertion has never tested anything.

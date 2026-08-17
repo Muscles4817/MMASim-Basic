@@ -29,8 +29,9 @@ Everything else in these reports is the agent's own work and is **unverified**.
 | `commentary.ts` contains zero references to `tendencies` | **Confirmed** |
 | `strikeMissed` never receives `isKick`, so missed kicks are narrated as punches | **Confirmed** |
 | `roster-profile.test.ts:61` counts `'decisionDraw'`, which is not a `FinishMethod` | **Confirmed** |
-| Clinch produces ~0.67 landed strikes per fight | Agent's measurement, **not independently reproduced** |
-| The 2026 roster profiles at 49.6% finish / 1.48:1 KO:sub | Agent's measurement, **not independently reproduced** |
+| Clinch produces ~0.67 landed strikes per fight | **Reproduced** — 0.68 on 2026, 0.57 on 2020 |
+| The 2026 roster profiles at 49.6% finish / 1.48:1 KO:sub | **Reproduced** — 49.5% finish, 1.55:1, and close to the real sport on every axis but the draw rate |
+| `roster-profile` bounds are seed-dependent coin flips | **Reproduced** — the review measured 2020 KO:sub at 3.77, this measurement gets 3.32 on the suite's own seed scheme, against a `< 3.6` bound |
 | Training convergence figures (boxer and kickboxer indistinguishable within a career) | Mechanism confirmed; **specific figures not reproduced** |
 
 ## Corrections to doc 18
