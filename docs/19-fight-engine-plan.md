@@ -990,6 +990,64 @@ against a blank, and `balance.test.ts` now measures both.
 
 ---
 
+## 12. Phase 4 — the prediction, written first
+
+§3 calls this "the only item in the plan that is a **broken promise** rather than a legibility gap",
+and D3 calls it the defensible thing to defer — with the condition that deferring it means taking
+G3 off the goal list rather than letting it quietly fail. It is being done rather than deferred.
+
+**The promise being broken.** The game offers "Kickboxing / Muay Thai" as an identity, and then
+`TRAINING_META.striking` trains `strikingOffence` at 1.0 and `kicking` at 0.85 in the same block —
+so every camp a kickboxer takes moves them *toward* being a boxer. G3's stated defect is that the
+gap closes to zero in 24 camps. A fighter cannot persist as a kicker because the only striking
+camp in the game makes them less of one.
+
+**And the deeper half, which §3 did not know about.** `world.ts:1215`:
+
+```ts
+focuses: [rng.pick(['striking', 'wrestling', 'submissions', 'conditioning', 'strategy'])]
+```
+
+**Every fighter in the world trains a uniformly random discipline every camp.** A wrestler spends a
+fifth of their career on submissions and a fifth on fight IQ; a striker trains takedown defence as
+often as their hands. Splitting the striking focus would achieve *nothing* for the world on its own,
+because a kickboxer would pick the hands block as often as the kicks block. This is the same defect
+shape phase 5 found in game plans — the mechanism exists, the world uses a uniform default — and it
+is why phase 4 has to be two changes rather than one.
+
+Three items:
+
+**(a) The striking focus splits into hands and kicks.** Two focuses, both mapping to the existing
+`striking` coach specialism, so no coach or gym in either seed roster changes.
+
+**(b) Fighters train what they are.** A focus chosen from the fighter — their own shape, and where
+they still have room — rather than from `rng.pick`. Deterministic enough to be a *style*, random
+enough not to be a treadmill.
+
+**(c) A persistence assertion, which is G3.** Stated where it can run in the fast tier rather than
+only in the long-sim: a fighter's striking *shape* after twenty-four camps still points the way it
+pointed at the start.
+
+**What should happen:**
+
+1. **G3 becomes assertable and passes.** A kickboxer who starts 30 points of `kicking` ahead of
+   their hands should still be a kicker after twenty-four camps. The bound is on the *sign and
+   most of the magnitude* of the gap, not on the gap being preserved exactly — a fighter's holes
+   should still close somewhat, because that is what coaches are for.
+2. **The fingerprint at 34 should resemble the fingerprint at 24**, which is G3 as doc §1 states it.
+   If (a) and (b) land and this does not follow, the persistence problem is in ageing rather than in
+   training and G3 needs restating.
+3. **Career distributions move, and this is the phase where that is expected.** §3 says the
+   re-baselining *is* the work. Fighters who train their strengths get better at what they are
+   already good at, so the roster should get slightly more *extreme* rather than better —
+   `overallRating` should be roughly flat while the spread within a fighter's own attributes widens.
+4. **`created-career.test.ts` is the file at risk.** Its harness deliberately rotates focus to
+   whatever has the most room, calling that "the worst sensible strategy" — that harness is now
+   also *not what the world does*, so its numbers describe a player strategy rather than a
+   population. Expect to re-state, not to fix.
+
+---
+
 **The one-line version:** the engine's missing primitive is a named weapon on the strike, not a
 new attribute — and the missing discipline is a test that can tell two fighting styles apart.
 Build the second, then the first, and the case for growing past six disciplines makes itself.
