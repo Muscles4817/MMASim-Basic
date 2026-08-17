@@ -1428,6 +1428,63 @@ So the choice is not "how should judo's forty points be spent". It is one of:
 4. **Accept three of fifteen** and take same-family separation off the goal list explicitly, the way
    §4 D3 said to do with G3 if it were deferred.
 
+### 13.7 Option 2, tried — the clinch is a grip fight now, and judo is a midpoint
+
+The cheapest of the four options in §13.6: change what the clinch *reads* rather than adding an
+attribute. Three changes and an instrument.
+
+**`clinchOffence` stops being 45% strength.** It was 0.45 `strength` + 0.35 `wrestling` + 0.2
+`strikingOffence` — a near-copy of `chainWrestling` (0.5 `wrestling` + 0.3 `cardio` + 0.2
+`strength`), which is why no discipline table could separate a clinch grappler from a shot
+grappler. Now 0.35 / 0.25 / 0.22 `scrambling` / 0.18 `submissions`. The exact split was set by a
+guard rather than by taste: `attributes.test.ts` asserts a 25-`strength`, 25-`wrestling` fighter
+cannot have a clinch worth anything, and the first cut broke it.
+
+**The trip stops being gated on the shot.** It read the `doubleLeg` tendency — `p(wrestling)` ×
+`f(strength)` — so **the one entry that is supposed to be judo's was decided by the wrestling
+attributes, and a judoka tripped less often than a wrestler did.** Reading grips instead, the entry
+mix answers immediately:
+
+```
+            doubleLeg  singleLeg  reactive  bodyLock  trip
+wrestling         39%        35%       15%        5%    5%
+judo              31%        32%       12%       10%   15%
+```
+
+**And the planner sends a grip fighter to `grind`.** Every grappler in the game was given `wrestle`.
+
+**A seventh fingerprint axis, and the honesty about it matters.** `clinchControlShare` — of your
+control time, how much is on the fence rather than the floor. Added *after* 6B failed, which is
+exactly when an axis is most suspect, so it was checked for goalpost-moving before being added:
+**it gains zero G1 pairs**, 4 of 15 either way. It exists because it is the only axis on which the
+two arts differ at all — a wrestler's control is 90% floor, a judoka's 70%.
+
+**The result is a wash on the metric, and the finding underneath it is the answer to the question.**
+
+```
+                      before 6B   after §13.7
+wrestling / judo          0.077         0.193
+jiu-jitsu / judo          0.165         0.101
+```
+
+**Judo does not occupy its own point in the space this engine models.** It sits between the shooting
+art and the submission art, and every change that separates it from one moves it toward the other.
+Both pairs are asserted together in `styles.test.ts` now, so the trade cannot be silently undone by
+a later change that only looks at one of them.
+
+**What that means for the four options.** Option 2 is done and it bought a better model — the clinch
+is no longer a strength contest, the throw is no longer a shot, and a grip fighter gets told to
+fight where their grips are — but it did not buy separation, and the reason is not that it was too
+weak. **A seventeenth attribute (option 1) would move judo along the same line.** It changes who is
+good at what; it does not give judo a *place to be* that wrestling and jiu-jitsu are not. The
+options that remain are therefore not 1 vs 2 at all:
+
+- **Give judo somewhere to stand that the other two do not** — which is a *position*, not an
+  attribute, and is 6A's shape applied to the grappling half: a clinch with sub-states (over-under,
+  back clinch, the fence) the way 6A gives standing `outside | pocket`.
+- **Merge it.** Option 3, unchanged, and now with a measurement behind it rather than a shrug.
+- **Accept.** Option 4, with same-family separation taken off the goal list explicitly.
+
 ---
 
 **The one-line version:** the engine's missing primitive is a named weapon on the strike, not a
