@@ -8,6 +8,7 @@
 import type { GameDay } from '../core/clock.js';
 import type { CoachId, DivisionId, FighterId, GymId, PromotionId } from '../core/ids.js';
 import type { SponsorshipPolicy } from '../business/money.js';
+import type { MatchmakingStyleId } from '../business/matchmakingStyle.js';
 import type { Personality } from './personality.js';
 
 /** Where a promotion sits in the market. Drives budget, reach and talent pull. */
@@ -73,6 +74,18 @@ export interface Promotion {
   champions: Partial<Record<DivisionId, FighterId>>;
   /** 1–100. Willingness to book a fight that damages a star. Low = protective. */
   matchmakingAggression: number;
+  /**
+   * How this promotion decides who is next.
+   *
+   * `matchmakingAggression` says how *hard* they book; this says what they are optimising for
+   * when they do. A tournament promotion works the ranking, a spectacle promotion books what the
+   * building wants, and the biggest promotion in the sport does both — rankings until they stop
+   * being interesting, then whoever sells.
+   *
+   * Optional so an edited or custom promotion still behaves; `styleOf` derives something sane
+   * from the other fields when it is absent.
+   */
+  matchmakingStyle?: MatchmakingStyleId;
   /** 1–100. How hard they push their chosen faces regardless of results. */
   narrativeControl: number;
   /** Signature ruleset differences, shown on the promotion screen. */

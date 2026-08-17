@@ -76,6 +76,8 @@ export function buildChampionships(input: {
         fighterId: champion.id,
         wonDay: day - heldDays,
         defences,
+        // Their most recent defence, so a seeded champion is not instantly contestable.
+        lastContestedDay: day - Math.round(heldDays / Math.max(1, defences + 1)),
       };
 
       titles.push({

@@ -12,6 +12,7 @@ import type { GameDay } from '../core/clock.js';
 import type { DivisionId, FighterId } from '../core/ids.js';
 import type { Fighter, FightRecordEntry } from '../domain/fighter.js';
 import { isActive } from '../domain/fighter.js';
+import { favourFor } from './matchmakingStyle.js';
 import type { FinishMethod } from '../domain/fighter.js';
 import type { Promotion } from '../domain/organisations.js';
 import { overallRating } from '../ratings/attributes.js';
@@ -71,6 +72,14 @@ export function baseHype(a: Fighter, b: Fighter, isTitleFight: boolean): number 
 }
 
 export interface OpponentOptions {
+  /**
+   * The subject's place in the merit ranking, 1-indexed.
+   *
+   * Optional because plenty of callers legitimately do not have it, but supplying it is what
+   * lets a promotion tell the difference between building somebody and doing favours for the
+   * person already at the top of the queue.
+   */
+  rank?: number;
   /** Exclude anyone the subject has already fought this many days ago or less. */
   rematchCooldownDays?: number;
   /** How many options to return. */
@@ -159,6 +168,20 @@ export function offerOpponents(
   const appraised = eligible.map(appraise);
 
   /*
+   * The stylistic favour a promotion does the people it is building.
+   *
+   * This is the half of matchmaking usually left out of these models. A promotion building a
+   * draw does not only put them on later in the night — it books them opponents they look good
+   * against, so they arrive at a title shot with a highlight reel rather than a hard nine
+   * rounds. `favourFor` returns a negative step adjustment for a fighter worth building, and it
+   * is capped so a favourite still has to beat somebody.
+   *
+   * It is also why the same fighter is matched differently at different promotions, which is the
+   * point: a tournament promotion does nobody any favours.
+   */
+  const favour = favourFor({ fighter: subject, promotion, rank: options.rank });
+
+  /*
    * A protective promotion shades every offer toward safety; an aggressive one toward the fight
    * that sells. This is the single number that makes promotions feel different.
    *
@@ -182,12 +205,19 @@ export function offerOpponents(
    * a push is: not protection, but a matchmaker choosing opponents who make somebody look like
    * a star. `protect` skews harder toward safety and skips the step up entirely.
    */
+  /*
+   * The bands shift by the favour, so a promotion that is building somebody genuinely offers
+   * them a softer slate rather than merely ordering the same slate differently.
+   */
+  const stepUp = 4 - favour;
+  const level = Math.abs(favour) + 4;
+
   const offers = (
     subject.handling === 'protect'
-      ? [pick((m) => m.step <= -4), pick((m) => Math.abs(m.step) < 4)]
+      ? [pick((m) => m.step <= -4), pick((m) => Math.abs(m.step) < level)]
       : subject.handling === 'push'
-        ? [pick((m) => Math.abs(m.step) < 4), pick((m) => m.step <= -4), pick((m) => m.step >= 4)]
-        : [pick((m) => m.step >= 4), pick((m) => Math.abs(m.step) < 4), pick((m) => m.step <= -4)]
+        ? [pick((m) => Math.abs(m.step) < level), pick((m) => m.step <= -4), pick((m) => m.step >= stepUp)]
+        : [pick((m) => m.step >= stepUp), pick((m) => Math.abs(m.step) < level), pick((m) => m.step <= -4)]
   ).filter((m): m is MatchupAppraisal => m !== undefined);
 
   // Backfill from the rest of the pool when a tier has nobody in it — a thin division must

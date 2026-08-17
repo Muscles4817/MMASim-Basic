@@ -33,9 +33,10 @@ import {
   activityBreach,
   bonusPoolFor,
   championshipId,
+  contenderQueue,
   crown,
-  currentReign,
   defend,
+  lastContested,
   describeVacancy,
   vacate,
   chargeCosts,
@@ -60,6 +61,7 @@ import {
   rankDivision,
   readinessDelay,
   newsId,
+  nextContender,
   releaseRisk,
   recordString,
   marketValue,
@@ -426,7 +428,10 @@ function buildNight(ctx: {
      */
     if (ranked.length < 2) continue;
 
-    const [first, second] = [ranked[0]!.fighter, ranked[1]!.fighter];
+    // Ordered by this promotion's own priorities rather than by the bare ranking, so a
+    // spectacle promotion fills a vacant belt with the fight it wants to sell.
+    const queued = contenderQueue({ ranked, promotion });
+    const [first, second] = [queued[0]!.fighter, queued[1]!.fighter];
     used.add(first.id as string);
     used.add(second.id as string);
 
@@ -493,13 +498,39 @@ function buildNight(ctx: {
             | Championship
             | undefined)
         : undefined;
-    const lastTitleBout = title ? (currentReign(title)?.wonDay ?? 0) : 0;
+    // From the last time the belt was *contested*, not from when the reign began — see
+    // `Reign.lastContestedDay`.
+    const lastTitleBout = title ? lastContested(title) : 0;
     const beltIsFree = day - lastTitleBout >= TITLE_DEFENCE_INTERVAL_DAYS;
 
-    const isTitleFight =
-      champion !== undefined &&
-      beltIsFree &&
-      (champion === subject.id || champion === opponent.id);
+    /*
+     * A title fight is the champion against the contender *this promotion* would pick.
+     *
+     * It used to be the champion against whoever the matchmaker happened to draw, which is why
+     * a belt changed hands on a coin flip roughly every hundred days: the challenger was as
+     * likely to be the twelfth-best fighter in the division as the first, and `rankDivision` —
+     * which has existed since the ladder shipped — was never consulted by anything.
+     *
+     * Whose queue it is matters as much as that there is one. A tournament promotion's next
+     * contender is the number one; the biggest promotion in the sport takes rankings seriously
+     * for two or three places and then books whoever people want to watch.
+     */
+    let isTitleFight = false;
+    if (champion !== undefined && beltIsFree && (champion === subject.id || champion === opponent.id)) {
+      const challengerId = champion === subject.id ? opponent.id : subject.id;
+      const wanted = nextContender({
+        ranked: rankDivision(
+          db.fighters.findAll() as Fighter[],
+          subject.divisionId,
+          promotion.id,
+          day,
+          champion as FighterId,
+        ),
+        promotion,
+        championId: champion as string,
+      });
+      isTitleFight = wanted === undefined || wanted.fighter.id === challengerId;
+    }
 
     seeds.push({
       boutId: `night:${day}:${promotion.id}:${seeds.length}`,
@@ -725,7 +756,7 @@ export function runCardBout(ctx: {
     } else if (title && result.winnerId) {
       // A champion who wins, or a draw, keeps it — and a win is a defence, which is the number
       // the sport actually measures a reign by.
-      db.championships.upsert(defend(title) as Championship & Entity);
+      db.championships.upsert(defend(title, day) as Championship & Entity);
     }
   }
 

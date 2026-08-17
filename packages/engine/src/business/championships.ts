@@ -48,6 +48,15 @@ export interface Reign {
   lostBy?: { opponentId?: FighterId; method?: FinishMethod; vacated?: VacancyReason };
   /** Successful title defences within this reign. */
   defences: number;
+  /**
+   * The last day this belt was contested, won or defended.
+   *
+   * Distinct from `wonDay` and the distinction is load-bearing. A defence interval measured from
+   * when the reign *started* stops applying the moment a champion defends once — measured, that
+   * left half of all reigns ending inside seventy days, because after a single defence the belt
+   * was contestable on every card again.
+   */
+  lastContestedDay?: GameDay;
 }
 
 export interface Championship {
@@ -106,19 +115,25 @@ export function crown(input: {
       : reign,
   );
 
-  lineage.push({ fighterId, wonDay: day, wonBy, defences: 0 });
+  lineage.push({ fighterId, wonDay: day, wonBy, defences: 0, lastContestedDay: day });
   return { ...title, lineage, vacancy: undefined };
 }
 
 /** A successful defence. Counted on the reign rather than derived, so it survives a rebuild. */
-export function defend(title: Championship): Championship {
+export function defend(title: Championship, day: GameDay): Championship {
   const reign = currentReign(title);
   if (!reign) return title;
   return {
     ...title,
-    lineage: title.lineage.map((r) => (r === reign ? { ...r, defences: r.defences + 1 } : r)),
+    lineage: title.lineage.map((r) =>
+      r === reign ? { ...r, defences: r.defences + 1, lastContestedDay: day } : r,
+    ),
   };
 }
+
+/** When this belt was last on the line, however that turned out. */
+export const lastContested = (title: Championship): GameDay =>
+  currentReign(title)?.lastContestedDay ?? currentReign(title)?.wonDay ?? 0;
 
 /**
  * Take the belt off somebody without anybody beating them.

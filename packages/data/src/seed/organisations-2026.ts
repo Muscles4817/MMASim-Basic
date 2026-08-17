@@ -63,7 +63,12 @@ export const PROMOTIONS_2026: readonly Promotion[] = [
     buzz: 88,
     divisions: ALL,
     champions: {},
-    // Books the fight that sells. Not reckless, but it does not protect people either.
+    /*
+     * Books the fight that sells. Rankings matter to a point and then stop. Past the top two or three the
+     * queue is whoever sells, a finisher on a run is fast-tracked, and the people being built get
+     * the stylistic matchups that keep them looking good on the way up.
+     */
+    matchmakingStyle: 'showman',
     matchmakingAggression: 62,
     narrativeControl: 72,
     notes:
@@ -86,10 +91,10 @@ export const PROMOTIONS_2026: readonly Promotion[] = [
     divisions: NO_WFW,
     champions: {},
     /*
-     * The season format is a genuinely different product: a regular season, then a bracket.
-     * The engine does not model tournaments yet, but the *behaviour* it produces is high
-     * matchmaking aggression — you do not get to duck anybody in a bracket.
+     * The season format is the whole product: a regular season and a bracket.
+     * Who is next is a matter of record rather than an opinion, and nobody gets a favour.
      */
+    matchmakingStyle: 'tournament',
     matchmakingAggression: 78,
     narrativeControl: 48,
     notes:
@@ -110,6 +115,11 @@ export const PROMOTIONS_2026: readonly Promotion[] = [
     buzz: 49,
     divisions: NO_WFW,
     champions: {},
+    /*
+     * Builds its own stars deliberately and matches them to keep building them,
+     * which is a different thing from simply booking what sells.
+     */
+    matchmakingStyle: 'narrative',
     matchmakingAggression: 58,
     narrativeControl: 66,
     notes:
@@ -130,7 +140,12 @@ export const PROMOTIONS_2026: readonly Promotion[] = [
     buzz: 44,
     divisions: MENS,
     champions: {},
-    // Spectacle first. It will book the fight the audience wants over the fight that is fair.
+    /*
+     * Spectacle first: it books the fight the audience wants over the fight that is fair.
+     * New Year's Eve is the biggest night of its year and the card is built for
+     * the building. The rankings are a guide.
+     */
+    matchmakingStyle: 'spectacle',
     matchmakingAggression: 84,
     narrativeControl: 70,
     notes:
@@ -151,6 +166,11 @@ export const PROMOTIONS_2026: readonly Promotion[] = [
     buzz: 38,
     divisions: MENS,
     champions: {},
+    /*
+     * Sells out arenas in Poland that most majors could not, and it does it with
+     * Polish fighters in front of a Polish crowd.
+     */
+    matchmakingStyle: 'domestic',
     matchmakingAggression: 66,
     narrativeControl: 74,
     notes:
@@ -171,6 +191,10 @@ export const PROMOTIONS_2026: readonly Promotion[] = [
     buzz: 34,
     divisions: MENS,
     champions: {},
+    /*
+     * The tournament format has become the thing it is known for.
+     */
+    matchmakingStyle: 'tournament',
     matchmakingAggression: 72,
     narrativeControl: 58,
     notes:
@@ -195,6 +219,11 @@ export const PROMOTIONS_2026: readonly Promotion[] = [
      * A feeder's job is to expose people. It books hard because a fighter who beats everyone
      * available gets a call from the leader, and that call is the product.
      */
+    /*
+     * A feeder's product is exposure. It books the hardest fight available,
+     * because beating everybody here is what gets you the call.
+     */
+    matchmakingStyle: 'proving',
     matchmakingAggression: 80,
     narrativeControl: 30,
     notes:
@@ -215,6 +244,11 @@ export const PROMOTIONS_2026: readonly Promotion[] = [
     buzz: 25,
     divisions: MENS,
     champions: {},
+    /*
+     * The most-scouted regional promotion in the sport, and it earns that by
+     * booking hard.
+     */
+    matchmakingStyle: 'proving',
     matchmakingAggression: 82,
     narrativeControl: 28,
     notes:
