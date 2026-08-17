@@ -5,10 +5,17 @@
  * and the contract/gym assignments that make it a world rather than a list.
  */
 
-import { asGymId, asPromotionId, type Fighter, type Promotion } from '@mmasim/engine';
+import {
+  asGymId,
+  asPromotionId,
+  type Championship,
+  type Fighter,
+  type Promotion,
+} from '@mmasim/engine';
 import { buildFighter, SEED_DAY, type FighterSpec } from './builder.js';
 import { SEED_MANAGERS } from './managers.js';
 import { DEFAULT_ERA, type EraId } from './eras.js';
+import { buildChampionships, championMapFor } from './championships.js';
 import { buildFighters2026, DAY_2026 } from './world-2026.js';
 import { PROMOTIONS_2026 } from './organisations-2026.js';
 import { HEAVY_DIVISION_SPECS } from './fighters-heavy.js';
@@ -93,6 +100,7 @@ export interface SeedWorld {
   judges: typeof SEED_JUDGES;
   commentators: typeof SEED_COMMENTATORS;
   managers: typeof SEED_MANAGERS;
+  championships: readonly Championship[];
 }
 
 /**
@@ -104,10 +112,11 @@ export interface SeedWorld {
  */
 export function buildSeedWorld(era: EraId = DEFAULT_ERA): SeedWorld {
   if (era === '2026') {
+    const fighters = buildFighters2026();
     return {
       day: DAY_2026,
-      fighters: buildFighters2026(),
-      promotions: PROMOTIONS_2026,
+      fighters,
+      ...withChampions(PROMOTIONS_2026, fighters, DAY_2026, 'era2026'),
       gyms: SEED_GYMS,
       coaches: SEED_COACHES,
       referees: SEED_REFEREES,
@@ -117,10 +126,11 @@ export function buildSeedWorld(era: EraId = DEFAULT_ERA): SeedWorld {
     };
   }
 
+  const fighters2020 = buildSeedFighters();
   return {
     day: SEED_DAY,
-    fighters: buildSeedFighters(),
-    promotions: SEED_PROMOTIONS,
+    fighters: fighters2020,
+    ...withChampions(SEED_PROMOTIONS, fighters2020, SEED_DAY, 'era2020'),
     gyms: SEED_GYMS,
     coaches: SEED_COACHES,
     referees: SEED_REFEREES,
@@ -133,6 +143,7 @@ export function buildSeedWorld(era: EraId = DEFAULT_ERA): SeedWorld {
 export * from './builder.js';
 export * from './eras.js';
 export * from './depth.js';
+export * from './championships.js';
 export { PROMOTIONS_2026 } from './organisations-2026.js';
 export { buildFighters2026, DAY_2026 } from './world-2026.js';
 export {
@@ -144,3 +155,23 @@ export {
   SEED_REFEREES,
 };
 export { SEED_MANAGERS } from './managers.js';
+
+/**
+ * Give every promotion its belts, and its denormalised champion map.
+ *
+ * Returned together because they must not be built apart: the map is derived from the lineage,
+ * and a caller that could seed one without the other is a caller that can ship a world where the
+ * matchmaker and the history disagree about who is champion.
+ */
+function withChampions(
+  promotions: readonly Promotion[],
+  fighters: readonly Fighter[],
+  day: number,
+  seed: string,
+): { promotions: readonly Promotion[]; championships: readonly Championship[] } {
+  const championships = buildChampionships({ promotions, fighters, day, seed });
+  return {
+    championships,
+    promotions: promotions.map((p) => ({ ...p, champions: championMapFor(p, championships) })),
+  };
+}

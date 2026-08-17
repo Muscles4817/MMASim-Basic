@@ -15,11 +15,14 @@ import {
   livingCostPerMonth,
   marketValue,
   netPurse,
+  championshipId,
+  currentReign,
   purseFor,
   purseRateOf,
   solvency,
   sponsorshipIncome,
   type CardPosition,
+  type Championship,
   type Fighter,
   type Gym,
   type Manager,
@@ -67,6 +70,29 @@ export function termsFor(db: GameDb, fighter: Fighter): PurseTerms | undefined {
     : defaultTerms(fighter, promotion);
 }
 
+/**
+ * What the belt is worth, for whoever is holding it.
+ *
+ * Read from the lineage rather than the denormalised map because the defence count only exists
+ * there — and a defence is worth money, which is the point.
+ */
+export function championStatus(
+  db: GameDb,
+  fighter: Fighter,
+): { isChampion: boolean; defences: number } {
+  const promotion = promotionOf(db, fighter);
+  if (!promotion) return { isChampion: false, defences: 0 };
+
+  const title = db.championships.findById(
+    championshipId(promotion.id, fighter.divisionId),
+  ) as Championship | undefined;
+  const reign = title ? currentReign(title) : undefined;
+
+  return reign?.fighterId === fighter.id
+    ? { isChampion: true, defences: reign.defences }
+    : { isChampion: false, defences: 0 };
+}
+
 export function currentPurse(
   db: GameDb,
   fighter: Fighter,
@@ -75,7 +101,7 @@ export function currentPurse(
   const promotion = promotionOf(db, fighter);
   const terms = termsFor(db, fighter);
   if (!promotion || !terms) return undefined;
-  return purseFor(terms, promotion, position);
+  return purseFor(terms, promotion, position, championStatus(db, fighter));
 }
 
 /** What a camp of this length at this gym costs. */
@@ -139,7 +165,12 @@ export function settleFight(
   const promotion = promotionOf(db, fighter);
   if (!promotion) return undefined;
 
-  const purse = purseFor(termsFor(db, fighter) ?? defaultTerms(fighter, promotion), promotion, options.position);
+  const purse = purseFor(
+    termsFor(db, fighter) ?? defaultTerms(fighter, promotion),
+    promotion,
+    options.position,
+    championStatus(db, fighter),
+  );
   const sponsorship = sponsorshipIncome(fighter, promotion, {
     boutsWithPromotion: fighter.record.length,
     isChampion: options.isChampion,

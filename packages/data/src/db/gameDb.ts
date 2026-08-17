@@ -11,6 +11,7 @@ import type {
   Fighter,
   Gym,
   Commentator,
+  Championship,
   FightNight,
   InboxItem,
   Judge,
@@ -43,6 +44,7 @@ export const COLLECTIONS = [
   'managers',
   'agreements',
   'events',
+  'championships',
   'inbox',
   'world',
 ] as const;
@@ -91,6 +93,14 @@ export interface GameDb {
   agreements: Repository<PromotionalAgreement & Entity>;
   events: Repository<FightNight & Entity>;
   /**
+   * Belts, and every reign that has ever held one.
+   *
+   * `Promotion.champions` stays as the fast lookup — "who holds this" is asked on every
+   * matchmaking pass — and this is the truth it is derived from. Same relationship the fighter
+   * has between `summary` and `record`.
+   */
+  championships: Repository<Championship & Entity>;
+  /**
    * Things waiting on the player.
    *
    * Stored rather than derived, unlike the calendar, because read/unread and answered/unanswered
@@ -123,6 +133,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
   const managers = make<Manager & Entity>('managers');
   const agreements = make<PromotionalAgreement & Entity>('agreements');
   const events = make<FightNight & Entity>('events');
+  const championships = make<Championship & Entity>('championships');
   const inbox = make<InboxItem & Entity>('inbox');
   const world = make<WorldMeta>('world');
 
@@ -139,6 +150,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
     managers,
     agreements,
     events,
+    championships,
     inbox,
     world,
   ];
@@ -156,6 +168,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
     managers,
     agreements,
     events,
+    championships,
     inbox,
     world,
     save: () => {

@@ -17,6 +17,7 @@
  */
 
 import { clamp, clamp01 } from '../core/math.js';
+import { championPurseMultiplier } from './championships.js';
 import type { Fighter } from '../domain/fighter.js';
 import type { Promotion } from '../domain/organisations.js';
 import type { Personality } from '../domain/personality.js';
@@ -110,8 +111,27 @@ export function purseFor(
   terms: PurseTerms,
   promotion: Promotion,
   position: CardPosition = 'mainCard',
+  /**
+   * The belt, if they hold it.
+   *
+   * Champions are paid materially more than contenders and the model had no way to say so: this
+   * function read the agreement and the card position and stopped, so a belt changed a fighter's
+   * ranking, their star-power growth, and nothing whatsoever in their bank account.
+   *
+   * Deliberately a multiplier on the negotiated terms rather than a flat bonus, so it scales
+   * with the promotion — and deliberately smaller than the main-event card multiplier, because
+   * being the fight people bought the night for is worth more than being the champion. That
+   * ordering is what makes a champion who cannot sell tickets an interesting problem rather
+   * than a contradiction in the numbers.
+   */
+  champion?: { isChampion: boolean; defences: number },
 ): Purse {
-  const mul = CARD_POSITION_PURSE[position];
+  const mul =
+    CARD_POSITION_PURSE[position] *
+    championPurseMultiplier({
+      isChampion: champion?.isChampion ?? false,
+      defences: champion?.defences ?? 0,
+    });
   let show = terms.showPurse * mul;
   let win = terms.winBonus * mul;
 

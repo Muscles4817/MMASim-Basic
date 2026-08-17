@@ -61,6 +61,7 @@ export * from './business/events.js';
 export * from './business/boutAgreements.js';
 export * from './business/promotionCosts.js';
 export * from './business/inbox.js';
+export * from './business/championships.js';
 export * from './business/news.js';
 
 // Testing helpers (shared across the out-of-package test suites)

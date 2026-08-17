@@ -32,6 +32,12 @@ import {
   awardBonuses,
   activityBreach,
   bonusPoolFor,
+  championshipId,
+  crown,
+  currentReign,
+  defend,
+  describeVacancy,
+  vacate,
   chargeCosts,
   DELIVERY_MEMORY,
   broadcastFor,
@@ -69,6 +75,8 @@ import {
   trimFeed,
   type BoutSeed,
   type CardBout,
+  type Championship,
+  type VacancyReason,
   type CardPosition,
   type Coach,
   type DivisionId,
@@ -154,6 +162,14 @@ const FIGHTS_PER_STEP_BUDGET = 30;
 const MAX_CARDS_PER_STEP = 3;
 
 /**
+ * Days between title fights for the same belt.
+ *
+ * Roughly two and a half defences a year at the ceiling, which is what a busy champion actually
+ * manages. It is also what makes a *reign* a thing rather than a coin flip repeated fortnightly.
+ */
+const TITLE_DEFENCE_INTERVAL_DAYS = 150;
+
+/**
  * Bouts a fighter will take in a rolling twelve months.
  *
  * Three is already busy by modern standards — the elite average is closer to two — but the
@@ -235,7 +251,6 @@ export function advanceWorld(
       // because retirees are filtered out of every card. Swept rather than only handled at
       // the moment of retirement, because a fighter can reach that state by more than one
       // route and the cost of being sure is one pass over five promotions.
-      vacateAbandonedBelts(db);
       news.push(...replenish(db, day, rng, promotions));
       // Deals run out across the roster too, so the market has other people in it.
       news.push(...resolveFreeAgency(db, day, rng, promotions));
@@ -323,6 +338,18 @@ export function advanceWorld(
    * time is passing* — and because `advanceTo` stops the clock on an unresolved decision, which
    * it can only do if the decision exists by the time the step finishes.
    */
+  /*
+   * Reconcile the belts last, so the world always leaves itself consistent.
+   *
+   * This was a quarterly sweep near the top of the step, which left the champion map stale in
+   * two ways at once: for up to three months at a time, and — worse — for the *rest of every
+   * step*, because free agency runs afterwards and can move a champion out of the promotion
+   * whose belt they are still recorded as holding. A fighter listed as champion somewhere they
+   * have already left is a belt nobody can defend and a division that cannot stage a title
+   * fight. Running it at the end is both cheap and the only placement that cannot be stale.
+   */
+  news.push(...vacateAbandonedBelts(db, toDay));
+
   scanForInbox(db, toDay);
 
   const stored = appendNews(db, news);
@@ -364,6 +391,62 @@ function buildNight(ctx: {
    */
   const roster = available.filter((f) => f.promotionId === promotion.id);
 
+  /*
+   * A vacant belt is the first thing a promotion books.
+   *
+   * This used to be a rider on the random matchmaker — `contestsVacant && seeds.length === 0`,
+   * which only fired if the randomly-picked first subject happened to be in the empty division.
+   * Across seventy-four divisions that essentially never happened, and belts stayed vacant
+   * forever: measured, thirty-one of seventy-four empty after four years, in a sport where a
+   * promotion leaves a division without a champion for months at most.
+   *
+   * So it is deliberate and it goes first, from the two best available contenders — which is
+   * exactly what a matchmaker does when a title comes free.
+   */
+  for (const divisionId of promotion.divisions) {
+    // Up to two per night. A promotion with several empty divisions is in an unusual situation
+    // and books its way out of it quickly; more than two title fights on one card is a gimmick.
+    if (seeds.length >= 2) break;
+    if (promotion.champions[divisionId] !== undefined) continue;
+
+    const ranked = rankDivision(
+      roster.filter((f) => !used.has(f.id as string)),
+      divisionId,
+      promotion.id,
+      day,
+    );
+    /*
+     * Two, because two is what a title fight takes.
+     *
+     * This was four, reasoning that a belt should only be contested in a credible division —
+     * and it is measured against the *available* roster, of which roughly a third of any
+     * division is bookable on a given date. A six-deep division therefore almost never had four
+     * free at once, so thin divisions stayed vacant indefinitely: measured, ten of thirteen
+     * vacancies had stood for over a year and one for five and a half.
+     */
+    if (ranked.length < 2) continue;
+
+    const [first, second] = [ranked[0]!.fighter, ranked[1]!.fighter];
+    used.add(first.id as string);
+    used.add(second.id as string);
+
+    seeds.push({
+      boutId: `night:${day}:${promotion.id}:vacant`,
+      redId: first.id,
+      blueId: second.id,
+      divisionId,
+      isTitleFight: true,
+      draw: drawWeight({
+        promotion,
+        red: first,
+        blue: second,
+        heat: 0,
+        isRivalry: false,
+        isTitleFight: true,
+      }),
+    });
+  }
+
   for (let attempt = 0; attempt < CARD_SIZE * 2 && seeds.length < CARD_SIZE; attempt++) {
     const pool = roster.filter((f) => !used.has(f.id as string));
     if (pool.length < 2) break;
@@ -392,19 +475,31 @@ function buildNight(ctx: {
      * what a promotion does.
      */
     const champion = promotion.champions[subject.divisionId];
-    const contestsVacant =
-      champion === undefined &&
-      rankDivision(
-        db.fighters.findAll() as Fighter[],
-        subject.divisionId,
-        promotion.id,
-        day,
-      ).length >= 4;
+
+    /*
+     * A belt is contested a few times a year, not on every card it can be.
+     *
+     * Without a cooldown the champion was put in a title fight essentially every time the
+     * matchmaker picked them, and since a title fight is close to a coin flip the belt churned:
+     * measured, a **median reign of 98 days** and 605 of 789 reigns ending without a single
+     * defence. Real champions defend two or three times a year and the long reign — the thing
+     * a division's history is actually made of — could never happen.
+     *
+     * Read off the lineage, which is the only place the last title bout is recorded.
+     */
+    const title =
+      champion !== undefined
+        ? (db.championships.findById(championshipId(promotion.id, subject.divisionId)) as
+            | Championship
+            | undefined)
+        : undefined;
+    const lastTitleBout = title ? (currentReign(title)?.wonDay ?? 0) : 0;
+    const beltIsFree = day - lastTitleBout >= TITLE_DEFENCE_INTERVAL_DAYS;
 
     const isTitleFight =
-      champion !== undefined
-        ? champion === subject.id || champion === opponent.id
-        : contestsVacant && seeds.length === 0;
+      champion !== undefined &&
+      beltIsFree &&
+      (champion === subject.id || champion === opponent.id);
 
     seeds.push({
       boutId: `night:${day}:${promotion.id}:${seeds.length}`,
@@ -597,12 +692,41 @@ export function runCardBout(ctx: {
   });
 
   // The belt moves, or it does not. A draw leaves it with the champion, which is the rule.
+  /*
+   * The belt moves, or it is defended, and either way the lineage records it.
+   *
+   * Both halves matter. A championship used to be one id in a map, so a belt changing hands
+   * overwrote the only trace of who had held it — there was no reign length, no defence count,
+   * and nothing the sport could say about a division's history.
+   */
   let titleChangedHands = false;
-  if (isTitleFight && result.winnerId && champion !== (result.winnerId as string)) {
-    db.promotions.upsert(
-      setChampion(promotion, red.divisionId, result.winnerId) as never,
-    );
-    titleChangedHands = true;
+  if (isTitleFight) {
+    const title = db.championships.findById(
+      championshipId(promotion.id, red.divisionId),
+    ) as Championship | undefined;
+
+    if (result.winnerId && champion !== (result.winnerId as string)) {
+      db.promotions.upsert(setChampion(promotion, red.divisionId, result.winnerId) as never);
+      titleChangedHands = true;
+      if (title) {
+        db.championships.upsert(
+          crown({
+            title,
+            fighterId: result.winnerId,
+            day,
+            wonBy: {
+              opponentId: champion as FighterId | undefined,
+              method: result.method,
+              round: result.round,
+            },
+          }) as Championship & Entity,
+        );
+      }
+    } else if (title && result.winnerId) {
+      // A champion who wins, or a draw, keeps it — and a win is a defence, which is the number
+      // the sport actually measures a reign by.
+      db.championships.upsert(defend(title) as Championship & Entity);
+    }
   }
 
   const redWon = result.winnerId === red.id;
@@ -780,6 +904,10 @@ function releaseIfCut(
   day: number,
   rng: Rng,
 ): NewsItem | undefined {
+  // Nobody cuts their own champion. A promotion that has just put its belt on somebody does not
+  // release them for a bad run — it books them a defence.
+  if (holdsABeltAnywhere(db, fighter)) return undefined;
+
   const risk = releaseRisk(fighter, promotion);
   if (risk <= 0 || rng.next() > risk) return undefined;
 
@@ -834,10 +962,22 @@ function resolveFreeAgency(db: GameDb, day: number, rng: Rng, promotions: readon
       ? (db.promotions.findById(fighter.promotionId) as Promotion | undefined)
       : undefined;
 
+    /*
+     * A champion does not walk out of the promotion whose belt they are holding.
+     *
+     * This check used to live inside the `agreement` branch below, which meant it only applied
+     * to fighters who had a written contract — and no seeded fighter has one, so every champion
+     * in the game fell straight through into free agency and left. Measured: after four years,
+     * **thirty-three of seventy-four belts were vacant and every single one was `leftPromotion`**.
+     *
+     * Doc 16's championship extension is precisely this rule — "you cannot leave while you hold
+     * the belt" — and it was written, tested, and unreachable for the entire roster.
+     */
+    if (holdsABeltAnywhere(db, fighter)) continue;
+
     // Under contract with fights left: nothing to do.
     if (agreement && promotion) {
-      const isChampion = promotion.champions[fighter.divisionId] === fighter.id;
-      if (!agreementStatus(agreement, day, { isChampion }).expired) continue;
+      if (!agreementStatus(agreement, day, { isChampion: false }).expired) continue;
     }
 
     // Cut, or out of contract. Where do they land?
@@ -978,19 +1118,71 @@ function finalise(
 }
 
 /** Take every belt off anybody who has retired. */
-function vacateAbandonedBelts(db: GameDb): void {
+function vacateAbandonedBelts(db: GameDb, day: number): NewsItem[] {
+  const news: NewsItem[] = [];
+
   for (const promotion of db.promotions.findAll() as unknown as Promotion[]) {
     let updated = promotion;
+
     for (const [divisionId, championId] of Object.entries(promotion.champions)) {
       if (!championId) continue;
       const champion = db.fighters.findById(championId as string) as Fighter | undefined;
-      if (!champion || champion.retiredDay !== undefined) {
-        updated = setChampion(updated, divisionId as never, undefined);
+
+      /*
+       * A vacancy is always a consequence, and the reason is what makes it a story.
+       *
+       * This used to strip a belt only for retirement and record nothing about why — so the
+       * division simply had an empty slot one day, with no news item and no way for anybody to
+       * find out what had happened. "The belt is vacant" is not a story; "he is out for a year
+       * and they have stripped him" is.
+       */
+      const reason: VacancyReason | undefined = !champion
+        ? 'leftPromotion'
+        : champion.retiredDay !== undefined
+          ? 'retired'
+          : champion.promotionId !== promotion.id
+            ? 'leftPromotion'
+            : champion.divisionId !== (divisionId as unknown as typeof champion.divisionId)
+              ? 'movedDivision'
+              : (champion.readyOnDay ?? 0) - day > 365
+                ? 'injured'
+                : undefined;
+
+      if (!reason) continue;
+
+      updated = setChampion(updated, divisionId as never, undefined);
+
+      const title = db.championships.findById(
+        championshipId(promotion.id, divisionId as never),
+      ) as Championship | undefined;
+      if (title) {
+        db.championships.upsert(vacate({ title, day, reason }) as Championship & Entity);
       }
+
+      news.push({
+        id: newsId(day, `vacated:${promotion.id}:${divisionId}`),
+        day,
+        kind: 'titleChange',
+        weight: 'major',
+        headline: `${promotion.shortName} ${divisionLabel(divisionId)} title vacated`,
+        detail: champion
+          ? `${displayName(champion)} has ${describeVacancy(reason)}. The division is without a champion.`
+          : `The champion has ${describeVacancy(reason)}. The division is without a champion.`,
+        fighterIds: champion ? [champion.id] : [],
+        divisionId: divisionId as never,
+        promotionId: promotion.id,
+      });
     }
+
     if (updated !== promotion) db.promotions.upsert(updated as never);
   }
+
+  return news;
 }
+
+/** A division id as it reads in a headline. */
+const divisionLabel = (divisionId: string): string =>
+  divisionId.replace(/^mens-/, '').replace(/^womens-/, "women's ").replace(/-/g, ' ');
 
 /** Replace retirees so divisions do not quietly empty out over a long career. */
 function replenish(
@@ -1197,6 +1389,13 @@ function enforceActivity(db: GameDb, day: number, rng: Rng): NewsItem[] {
      */
     if (day - agreement.signedDay < 365) continue;
 
+    /*
+     * A champion is never inactive by the promotion's choice — they are the one fighter it is
+     * always trying to book — so the guarantee does not give them a way out. Doc 16's
+     * championship extension says the same thing from the other side.
+     */
+    if (holdsABeltAnywhere(db, fighter)) continue;
+
     const boutsInLastYear = fighter.record.filter((r) => day - r.day < 365).length;
     if (!activityBreach(agreement, boutsInLastYear)) continue;
 
@@ -1239,4 +1438,21 @@ function enforceActivity(db: GameDb, day: number, rng: Rng): NewsItem[] {
   }
 
   return news;
+}
+
+/**
+ * Whether this fighter is champion *anywhere*, not just where they are signed.
+ *
+ * Checking only their current promotion was subtly wrong and produced a real failure: a fighter
+ * can briefly hold promotion A's belt while the map still says so and already be signed to B —
+ * the sweep that reconciles the two runs quarterly, not continuously. Asking B whether they are
+ * B's champion answers no, and they were free to move again, so a belt could be orphaned by a
+ * fighter the guard was supposed to be protecting.
+ *
+ * `finalise` already scans every promotion for exactly this reason, with the same comment.
+ */
+function holdsABeltAnywhere(db: GameDb, fighter: Fighter): boolean {
+  return (db.promotions.findAll() as unknown as Promotion[]).some(
+    (p) => p.champions[fighter.divisionId] === fighter.id,
+  );
 }
