@@ -77,7 +77,10 @@ describe('a created fighter starts somewhere', () => {
     const user = userEvent.setup();
     await createFighter(user);
     goTo('#/hub');
-    expect(await screen.findByText(/^Bank$/i)).toBeTruthy();
+    // Two of them now, and deliberately: the hub's stat card, plus the permanent readout in the
+    // shell header that put the balance next to every point of spending in the game.
+    expect((await screen.findAllByText(/^Bank$/i)).length).toBeGreaterThan(0);
+    expect(await screen.findByTestId('shell-funds')).toBeTruthy();
   });
 });
 

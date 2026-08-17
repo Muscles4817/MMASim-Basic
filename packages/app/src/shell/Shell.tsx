@@ -1,8 +1,9 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { gameDayToIso, toCalendar } from '@mmasim/engine';
+import { gameDayToIso, toCalendar, type Fighter, type Promotion } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { toHash, useRouter, type Route } from '../state/router';
 import { inboxCount } from '../game/inbox';
+import { isOverdrawn, money } from '../ui/format';
 import './Shell.css';
 
 const MONTHS = [
@@ -121,6 +122,40 @@ export function Shell({
     mainRef.current?.focus({ preventScroll: true });
   }, [route]);
 
+  /*
+    Money, permanently on screen.
+   
+    It used to appear in exactly three places — the hub's stat card, a chip at the top of the
+    training screen, and inside the confirmation sentence of a spend that was already affordable.
+    Every one of those is somewhere other than where the player is deciding. Looking at a gym
+    that costs £40k for eight weeks, or a camp option priced against a balance two screens away,
+    the player was being asked to do arithmetic against a number they could not see.
+   
+    Putting it in the sticky header fixes the whole class of problem rather than each instance:
+    there is no point of spending anywhere in the game that is not now within a glance of the
+    balance it spends from.
+  */
+  const funds = ((): { label: string; value: string; overdrawn: boolean } | undefined => {
+    if (world.playerRole === 'promoter') {
+      const promotion = world.playerPromotionId
+        ? (db.promotions.findById(world.playerPromotionId) as Promotion | undefined)
+        : undefined;
+      return promotion
+        ? {
+            label: 'Budget',
+            value: money(promotion.budget),
+            overdrawn: isOverdrawn(promotion.budget),
+          }
+        : undefined;
+    }
+    const fighter = world.playerFighterId
+      ? (db.fighters.findById(world.playerFighterId) as Fighter | undefined)
+      : undefined;
+    return fighter
+      ? { label: 'Bank', value: money(fighter.bank), overdrawn: isOverdrawn(fighter.bank) }
+      : undefined;
+  })();
+
   const isCurrent = (item: NavItem) =>
     item.matches ? item.matches.includes(route.name) : route.name === item.route.name;
 
@@ -205,6 +240,18 @@ export function Shell({
             )}
           </div>
           <div className="spacer" />
+          {funds && (
+            <div className="shell__funds" title={undefined}>
+              <span className="shell__funds-label">{funds.label}</span>
+              <span
+                className="shell__funds-value"
+                data-testid="shell-funds"
+                data-negative={funds.overdrawn ? 'true' : undefined}
+              >
+                {funds.value}
+              </span>
+            </div>
+          )}
           {actions}
         </header>
 

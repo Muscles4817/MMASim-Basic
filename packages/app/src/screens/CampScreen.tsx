@@ -32,6 +32,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty } from '../ui';
+import { spendLine } from '../ui/format';
 import { Alert, FighterRead, KeyStat } from '../ui/signals';
 import {
   getBooking,
@@ -574,7 +575,7 @@ export function CampScreen() {
               >
                 {spend === 0
                   ? `Nothing bought. You have £${Math.round(playerFighter.bank * 10) / 10}k.`
-                  : `£${spend}k, leaving you £${Math.round((playerFighter.bank - spend) * 10) / 10}k.`}
+                  : spendLine({ cost: spend, balance: playerFighter.bank })}
               </p>
             )}
           </div>

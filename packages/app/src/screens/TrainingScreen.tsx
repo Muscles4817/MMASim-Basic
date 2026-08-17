@@ -25,6 +25,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
+import { money, spendLine } from '../ui/format';
 import {
   changeDivision,
   divisionField,
@@ -77,6 +78,23 @@ export function TrainingScreen() {
   const coach = fighter.headCoachId
     ? (db.coaches.findById(fighter.headCoachId) as Coach | undefined)
     : undefined;
+
+  /*
+    The nearest gym that actually has a head coach, so the no-coach warning can name a
+    destination instead of gesturing at a list. Sorted by the reputation it asks for rather than
+    by quality: what the player needs to know is which door opens first, and the cheapest room
+    is not the one with the lowest bar.
+  */
+  const nearestCoachedGym = useMemo(() => {
+    const options = (db.gyms.findAll() as Gym[])
+      .filter((g) => g.headCoachId && g.id !== fighter.gymId)
+      .map((g) => {
+        const required = Math.max(0, g.prestige - 35);
+        return { gym: g, required, shortBy: Math.max(0, required - fighter.reputation) };
+      })
+      .sort((a, b) => a.shortBy - b.shortBy || a.required - b.required);
+    return options[0];
+  }, [db, fighter.gymId, fighter.reputation]);
 
   const carrying = activeInjuries(fighter.injuries ?? [], world.day);
   const impairment = campImpairment(fighter.injuries ?? [], world.day);
@@ -172,7 +190,7 @@ export function TrainingScreen() {
             <Chip
               tone={funding === 'comfortable' ? 'neutral' : funding === 'tight' ? 'warning' : 'negative'}
             >
-              £{Math.round(fighter.bank * 10) / 10}k ·{' '}
+              {money(fighter.bank)} ·{' '}
               {funding === 'comfortable' ? 'comfortable' : funding === 'tight' ? 'tight' : 'broke'}
             </Chip>
           </span>
@@ -182,7 +200,11 @@ export function TrainingScreen() {
           <FighterRead attributes={fighter.attributes} />
         </div>
 
-        <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
+        <p
+          className="muted prose"
+          style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}
+          data-testid="coach-status"
+        >
           {coach ? (
             <>
               <strong>
@@ -192,7 +214,41 @@ export function TrainingScreen() {
               that get markedly less out of you.
             </>
           ) : (
-            <>You have no head coach. Training alone costs most of your progress.</>
+            /*
+              A dead end until now, and one every single player hit.
+             
+              You do not hire a coach — you join a gym and its head coach becomes yours. That is
+              nowhere stated and is not guessable from a screen that only says training is
+              ineffective without one. Worse, the starting gym is chosen as the *lowest quality*
+              one, which is The Basement, which is one of the two gyms in the seed with no head
+              coach at all. So every new fighter in every era begins with this warning showing and
+              no route out of it visible.
+             
+              Starting unattached is the right design — a coach is something to earn, and The
+              Basement is a good first room. It just has to read as a starting condition with a
+              path rather than as a missing button, so this names the path and the specific gym
+              at the end of it.
+            */
+            <>
+              You have no head coach, and training alone costs most of your progress. You do not
+              hire one directly &mdash; <strong>a gym&rsquo;s head coach becomes yours when you
+              join</strong>.{' '}
+              {nearestCoachedGym ? (
+                <>
+                  The nearest room with one is <strong>{nearestCoachedGym.gym.name}</strong>
+                  {nearestCoachedGym.shortBy > 0 ? (
+                    <>
+                      , which needs reputation {nearestCoachedGym.required} &mdash; you are on{' '}
+                      {playerFighter.reputation}. Win and get noticed, then join it below.
+                    </>
+                  ) : (
+                    <>, and you can join it below right now.</>
+                  )}
+                </>
+              ) : (
+                <>Join one from the list below.</>
+              )}
+            </>
           )}
         </p>
       </Card>
@@ -322,8 +378,8 @@ export function TrainingScreen() {
           <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
             {weeks} weeks at {gym?.name ?? 'no gym'} costs <strong>£{cost}k</strong>.{' '}
             {canPay
-              ? `That leaves you £${Math.round((fighter.bank - cost) * 10) / 10}k.`
-              : `You have £${Math.round(fighter.bank * 10) / 10}k. You can run it anyway and go into the red — nothing stops you — but you will start taking fights you would otherwise refuse.`}
+              ? spendLine({ cost, balance: fighter.bank })
+              : `${spendLine({ cost, balance: fighter.bank })} You can run it anyway — nothing stops you — but you will start taking fights you would otherwise refuse.`}
           </p>
         </div>
 
@@ -530,7 +586,12 @@ function GymPicker({
           // can see coming three months out, which is far better than one that arrives.
           const eightWeeks = campCostFor(gym, 8);
           const canAfford = playerFighter.bank >= eightWeeks;
-          const coach = gym.headCoachId ? (db.coaches.findById(gym.headCoachId) as { lastName: string } | undefined) : undefined;
+          // Typed as the real thing rather than `{ lastName }`: a gym's head coach is the only
+          // way a fighter gets one, so the row has to be able to say who they are and what they
+          // are good at.
+          const coach = gym.headCoachId
+            ? (db.coaches.findById(gym.headCoachId) as Coach | undefined)
+            : undefined;
 
           return (
             <div
@@ -547,10 +608,27 @@ function GymPicker({
             >
               <span style={{ minWidth: 0 }}>
                 <span style={{ fontWeight: 600, display: 'block' }}>{gym.name}</span>
-                <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
-                  {gym.city} · quality {gym.quality}
-                  {coach && ` · ${coach.lastName}`}
-                  {' · '}£{eightWeeks}k for eight weeks
+                <span className="muted" style={{ fontSize: 'var(--text-sm)', display: 'block' }}>
+                  {gym.city} · quality {gym.quality} · {money(eightWeeks)} for eight weeks
+                </span>
+                {/*
+                  The head coach, named and on its own line, because joining a gym is the only
+                  way to get one and the row used to mention them as a bare surname in a list of
+                  metadata — if it mentioned them at all. Two of the seven gyms have none, and a
+                  player choosing between them has no way to know which.
+                */}
+                <span
+                  className="list__secondary"
+                  style={{ display: 'block', marginTop: 2 }}
+                >
+                  {coach ? (
+                    <>
+                      Head coach: <strong>{coach.firstName} {coach.lastName}</strong> —{' '}
+                      {coach.specialisms.join(', ')}
+                    </>
+                  ) : (
+                    <em>No head coach. Your camps here would be self-directed.</em>
+                  )}
                 </span>
               </span>
               {isCurrent ? (

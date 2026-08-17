@@ -273,3 +273,36 @@ body:has(.update-prompt) .shell__main {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+
+/*
+  The balance, permanently in the header.
+
+  Right-aligned and tabular so it does not reflow as it changes — a number that jitters between
+  screens reads as a different number, which is the opposite of the point.
+*/
+.shell__funds {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+  padding-left: var(--space-2);
+  flex-shrink: 0;
+}
+
+.shell__funds-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.shell__funds-value {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* In the red is a state, not a smaller number, and it has to read as one at a glance. */
+.shell__funds-value[data-negative='true'] {
+  color: var(--negative);
+}
