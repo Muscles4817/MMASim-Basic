@@ -55,7 +55,20 @@ function agreementRate(styleBias: number, results: readonly FightResult[]): numb
 }
 
 describe('a biased booth misleads the audience', () => {
-  const results = fights(400);
+  /*
+   * 1,600 fights, up from 400, and for the reason this file's own header describes happening to
+   * its 150-fight ancestor: the effect is real and the sample could not resolve it.
+   *
+   * Measured across bias levels 0 / 0.3 / 0.6 / 0.9 — at n=400, agreement runs 0.8519 / 0.8586 /
+   * 0.8473 / 0.8416, so the first two are *inverted* and the monotone chain below was passing on
+   * luck. At 1,600 it is 0.8576 / 0.8487 / 0.8366 / 0.8273 and at 4,000 it is 0.8652 / 0.8531 /
+   * 0.8395 / 0.8282 — clean, and the same ordering both times. Adjacent bias levels differ by
+   * about a point of agreement, which 400 fights cannot see.
+   *
+   * Found when phase 1's weapon primitive shifted the seeded stream and the inversion surfaced.
+   * The change did not break this property; it exposed a sample that was too small to state it.
+   */
+  const results = fights(1600);
 
   it('agrees with the judges less the more biased it is', () => {
     const neutral = agreementRate(0, results);

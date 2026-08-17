@@ -60,7 +60,7 @@ import {
  * this fight on the floor, and what do you do when you get it there.
  */
 export const FINGERPRINT_AXES = [
-  /** Share of this fighter's landed strikes that the play-by-play called a kick. */
+  /** Share of this fighter's landed strikes thrown with a shin. Read off `strikesByWeapon`. */
   'kickShare',
   /** Share of their landed strikes that went to the legs. */
   'legTargetShare',
@@ -205,14 +205,11 @@ export function measureFingerprint(fighter: Fighter, opts: FingerprintOptions = 
 
     const stats = result.stats.red;
     landed += stats.significantStrikesLanded;
-    // The play-by-play is the ground truth for *what was thrown*, because nothing on the stat
-    // line records it — which is exactly the gap docs/19 phase 1 closes with a `Weapon` on the
-    // strike. Note the known undercount: a missed kick is narrated as a missed punch
-    // (`strikeMissed` never receives `isKick`), so only landed kicks are countable, which is
-    // why the axis is a share of *landed* strikes rather than of attempts.
-    for (const event of result.events) {
-      if (event.kind === 'kick' && event.corner === 'red') kicks++;
-    }
+    // Read off the stat line rather than counted out of the play-by-play. Phase 0 had to infer
+    // this from `kind === 'kick'` events because nothing recorded what was thrown, and that
+    // inference could only ever see *landed* kicks — a missed kick was narrated as a missed
+    // punch. `strikesByWeapon` is the ground truth phase 1 added, and it is exact.
+    kicks += stats.strikesByWeapon.kick;
     legs += stats.strikesByTarget.legs;
     targeted +=
       stats.strikesByTarget.head + stats.strikesByTarget.body + stats.strikesByTarget.legs;

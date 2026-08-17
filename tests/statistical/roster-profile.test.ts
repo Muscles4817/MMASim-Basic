@@ -32,6 +32,21 @@
  * draw                          1.25%              2.97%      ~0.5%
  * ```
  *
+ * Those are the numbers as of the era fix. **Phase 1's weapon primitive then moved them**, and the
+ * current 2026 column is below — `BASE_KD_HAZARD` was recalibrated 0.019 → 0.0158 to absorb the
+ * extra danger a weapon table introduces, so the movement is small and mostly toward the sport:
+ *
+ * ```
+ *                    2026 before phase 1   now      real UFC
+ * finishes                        49.5%   50.7%       ~48%
+ * KO/TKO                          30.1%   31.0%       ~31%
+ * submission                      19.4%   19.8%       ~17%
+ * decisions                       46.9%   45.8%       ~52%
+ * KO : submission                1.55:1  1.57:1      ~1.8:1
+ * first-round finish              32.0%   32.7%         —
+ * draw                            2.97%   2.90%      ~0.5%
+ * ```
+ *
  * On the roster the player actually plays, the engine is already close to the real sport on
  * every axis except the draw rate — and the calibration gap the damage constants agonise over
  * was an artefact of profiling the legacy roster.
@@ -145,14 +160,14 @@ describe('the shipped roster fights like the sport', () => {
 
   it('goes to the judges about half the time', async () => {
     // The single most important number in the whole engine, and the one the archetype-based
-    // suite could not see. Real MMA decisions run ~48–52%; measured 46.9%.
+    // suite could not see. Real MMA decisions run ~48–52%; measured 45.8%.
     const three = await profile(3);
     expect(three.decisionPct, JSON.stringify(three)).toBeGreaterThan(35);
     expect(three.decisionPct, JSON.stringify(three)).toBeLessThan(62);
   });
 
   it('finishes roughly half its fights', async () => {
-    // Measured 49.5%, against roughly 48% in the real sport.
+    // Measured 50.7%, against roughly 48% in the real sport.
     const three = await profile(3);
     expect(three.finishPct, JSON.stringify(three)).toBeGreaterThan(35);
     expect(three.finishPct, JSON.stringify(three)).toBeLessThan(62);
@@ -161,7 +176,7 @@ describe('the shipped roster fights like the sport', () => {
   it('keeps submissions a real terminal path rather than a rounding error', async () => {
     /*
      * At 9:1 the grappling half of the sport had almost no way to end a fight, which makes a
-     * control wrestler someone who wins rounds you rarely get to score. Measured 1.55:1 on
+     * control wrestler someone who wins rounds you rarely get to score. Measured 1.57:1 on
      * 2026, against ~1.8:1 in the real sport.
      *
      * The ceiling was a knife edge on the old population and is not on this one: at 801
@@ -189,13 +204,13 @@ describe('the shipped roster fights like the sport', () => {
      * engine produces 2.97%, so 0.5% is comfortably below anything plausible while still
      * failing instantly if the count ever goes dead again.
      *
-     * The ceiling is honest rather than aspirational. 2.97% is three to six times the real
+     * The ceiling is honest rather than aspirational. 2.90% is three to six times the real
      * sport, and the cause is arithmetic in the scoring rather than anything in this file:
      * every 10-8 round makes a card sum to 56 rather than 57, which is exactly how cards end
      * up tied, and the recalibration that sent far more fights to the judges exposed it to far
      * more samples. Closing that gap means changing how rounds are scored, which moves who
      * wins — out of scope for a phase whose purpose is to measure. So the bound sits where the
-     * engine honestly is, with the number visible, and the five-round figure is 2.71%.
+     * engine honestly is, with the number visible, and the five-round figure is 2.52%.
      */
     const three = await profile(3);
     expect(three.drawPct, JSON.stringify(three)).toBeGreaterThan(0.5);
@@ -204,15 +219,16 @@ describe('the shipped roster fights like the sport', () => {
 
   it('does not end most fights in the first round', async () => {
     /*
-     * 44% suggested no feeling-out period at all. Real first-round finishes are ~16%; this
-     * sits at 32.0% on 2026 — within a rounding error of the 32.1% the legacy roster produced,
-     * making it the one number the era fix did *not* move.
+     * 44% suggested no feeling-out period at all. Real first-round finishes are ~16%; this sits
+     * at 32.7% on 2026, having been 32.0% before phase 1 and 32.1% on the legacy roster.
      *
      * The bound is set where the engine honestly is rather than where the sport is, so the
-     * number is visible instead of asserted away. It is also the bound closest to its limit,
-     * and docs/19 phase 1 is expected to push on it from both directions: kicks becoming more
-     * dangerous raises hazard, legs-as-punches becoming punches lowers it, and the two do not
-     * cancel. If it fails there, that is information, not a regression.
+     * number is visible instead of asserted away — and it did what docs/19 §3 predicted: it is
+     * the bound closest to its limit and it is the one phase 1 broke, reaching 34.7% before
+     * `BASE_KD_HAZARD` was recalibrated to absorb the weapon table's extra hazard. The 0.7-point
+     * residual is the honest price of kicks and knees being harder than punches, and it was
+     * chosen over softening the weapon profile because the style expression lives in the ratios
+     * between weapons rather than in the absolute level.
      *
      * The remaining gap is not reachable from the damage constants — see the calibration table
      * on `shouldRefereeStop`. Round one is where both fighters are freshest and land cleanest,
@@ -227,7 +243,7 @@ describe('the shipped roster fights like the sport', () => {
 describe('championship distance', () => {
   it('still sends plenty of five-round fights to the cards', async () => {
     // Real five-round main events go to decision roughly 40–45% of the time. The engine had it
-    // at 11%, which makes a championship a coin-flip on a single exchange. 37.9% on 2026 —
+    // at 11%, which makes a championship a coin-flip on a single exchange. 36.7% on 2026 —
     // materially better than the 24% the legacy roster gave, and now genuinely close to the
     // sport. It still sits below the three-round decision rate by construction: two extra
     // rounds are two more chances to be finished.
@@ -236,7 +252,7 @@ describe('championship distance', () => {
   });
 
   it('finishes more often over five rounds than three, but not overwhelmingly', async () => {
-    // 58.5% over five against 49.5% over three.
+    // 59.8% over five against 50.7% over three.
     const five = await profile(5);
     expect(five.finishPct, JSON.stringify(five)).toBeGreaterThan((await profile(3)).finishPct - 5);
     expect(five.finishPct, JSON.stringify(five)).toBeLessThan((await profile(3)).finishPct + 20);

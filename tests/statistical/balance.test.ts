@@ -31,11 +31,18 @@ describe('overall finish distribution', () => {
     // arithmetic makes them easy to produce accidentally: every 10-8 round makes a card
     // sum to 56 rather than 57, which is exactly how cards end up tied.
     const draws = s.draws / s.fights;
-    // Two *identical* fighters are the maximum-draw case by construction, so this bound is
-    // a ceiling on the pathological end rather than a reading of the sport. The population
-    // number — which is the one that matters and which nothing guarded until now — is
-    // asserted over the shipped roster in roster-profile.test.ts.
-    expect(draws, describeSummary(s)).toBeLessThan(0.1);
+    /*
+     * Two *identical* fighters are the maximum-draw case by construction, so this bound is a
+     * ceiling on the pathological end rather than a reading of the sport. The population number —
+     * which is the one that matters — is asserted over the shipped roster in
+     * roster-profile.test.ts, where it is 2.9%.
+     *
+     * 0.1 → 0.12 when phase 1 recalibrated `BASE_KD_HAZARD` from 0.019 to 0.0158: fewer knockdowns
+     * means more rounds reaching the cards, and for two fighters with identical numbers the cards
+     * are exactly where draws come from. Measured 10.1% here against 2.9% across the real roster,
+     * which is the gap between "two clones" and "a sport with skill gaps in it".
+     */
+    expect(draws, describeSummary(s)).toBeLessThan(0.12);
   });
 
   it('is symmetric between corners for identical fighters', () => {
@@ -229,10 +236,24 @@ describe('preparation is worth more than a few rating points', () => {
      * a +5-point bar silently became a demand for a 60% relative swing rather than the ~35%
      * it originally encoded. Same mistake the KO-ratio assertion made, same fix.
      */
+    /*
+     * Both forms of this bound, because each alone is hostage to the other's denominator.
+     *
+     * The ratio was 1.35 and now measures 1.29 — while the *absolute* gain grew, from +2.8 points
+     * of win rate to +2.9. Phase 1's hazard recalibration lifted the underdog's unprepared base
+     * from ~8.0% to 9.7% (fewer flash knockdowns for the smaller wrestler to lose to), so the same
+     * camp buys the same points and reads as a smaller multiple. That is the mirror image of the
+     * failure this test was rewritten to avoid — an absolute bound silently becoming a demand for a
+     * larger relative swing — and the fix for both is to state the claim twice.
+     */
     expect(
       prepared.redWinRate / base.redWinRate,
       `unprepared ${describeSummary(base)} vs prepared ${describeSummary(prepared)}`,
-    ).toBeGreaterThan(1.35);
+    ).toBeGreaterThan(1.25);
+    expect(
+      (prepared.redWinRate - base.redWinRate) * 100,
+      `prep bought ${((prepared.redWinRate - base.redWinRate) * 100).toFixed(1)} points`,
+    ).toBeGreaterThan(2);
   });
 
   it('wastes the camp entirely when the read is wrong', () => {

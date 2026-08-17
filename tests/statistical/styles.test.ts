@@ -22,28 +22,28 @@
  *
  * ```
  *              kickShare  legTarget  grappling  subMix  control  distance
- * boxing           0.081      0.115      0.132   0.622    0.224     0.318
- * kickboxing       0.265      0.120      0.134   0.618    0.175     0.324
- * karate           0.358      0.121      0.147   0.569    0.253     0.349
- * wrestling        0.127      0.097      0.209   0.415    0.334     0.323
- * jiuJitsu         0.171      0.112      0.200   0.600    0.266     0.315
- * judo             0.142      0.102      0.235   0.535    0.314     0.291
+ * boxing           0.163      0.030      0.135   0.613    0.221     0.319
+ * kickboxing       0.380      0.067      0.135   0.611    0.176     0.318
+ * karate           0.430      0.074      0.151   0.566    0.242     0.341
+ * wrestling        0.263      0.043      0.213   0.428    0.338     0.317
+ * jiuJitsu         0.295      0.050      0.195   0.581    0.265     0.322
+ * judo             0.274      0.049      0.229   0.523    0.291     0.288
  * ```
  *
- * Of the fifteen pairs, **none** is separated by 0.20 on two axes and five are separated by
- * 0.20 on even one. Jiu-jitsu against judo is the worst at 0.065 — two arts the engine plays
- * identically. Boxing against jiu-jitsu is 0.090.
+ * **Phase 1 moved one axis and one goal.** `kickShare` roughly doubled everywhere and spread out
+ * (boxing 0.081 → 0.163, karate 0.358 → 0.430), `legTargetShare` came alive as a style axis
+ * rather than a plan artefact — a boxer now aims low on 3% of shots against a karateka's 7%,
+ * where before every fighter sat at 0.115 because the game plan sent 15% of everybody's shots at
+ * the legs regardless of whether they could kick. G4 is met (see below).
  *
- * The one thing that *does* work is shot selection: boxing and karate differ by 0.277 on
- * `kickShare`, because `kicking` genuinely decides what gets thrown. What follows the choice
- * does not — see the G4 block below, where a 60-point `kicking` swing is worth nothing at all.
- * That pair of measurements is the plan's central claim stated as numbers: the engine already
- * expresses style in *selection* and in *prose*, and then makes it strategically irrelevant.
- *
- * The `legTarget` column is flat by construction, not by accident: `pickTarget` reads the game
- * plan's targeting split and nothing else, so where a fighter aims is a property of their plan
- * and never of their art. It is here because it is the axis phase 1's weapon × target stats
- * are supposed to move, and a dead axis that later comes alive is evidence.
+ * **G1 is not, and did not move: still 0 of 15 pairs.** The honest reading is that the four
+ * position-and-targeting axes are what G1 needs and phase 1 touched neither. Two pairs are now
+ * separated on `kickShare` alone (boxing/kickboxing 0.217, boxing/karate 0.267), and one pair got
+ * *worse* — kickboxing against karate fell from 0.109 to 0.066, because both are now high-kick
+ * fighters and the axis that finally works saturates for both of them. That is Strategy A's
+ * ceiling arriving exactly where §2 said it would: "cannot reach karate vs TKD". Jiu-jitsu
+ * against judo remains the worst pair in the game at 0.058, untouched, because it is a position
+ * problem and always was.
  *
  * Two assertions below are **tripwires**: they assert a defect rather than a design, and they
  * are supposed to break when the phase that fixes them lands. Each says so at the site.
@@ -218,42 +218,68 @@ describe('G4 — style decides whether you win, not just how', () => {
   }
 
   it('makes being a far better wrestler worth winning fights', () => {
-    // The property to protect, and the yardstick G4 is measured against: 38 → 40.8%, 98 →
-    // 54.4%, a 13.6-point swing. Grappling attributes reach the result because the position
-    // model gives them somewhere to land.
+    // The yardstick G4 is measured against: 42.9% → 53.9%, a 10.9-point swing. Grappling
+    // attributes reach the result because the position model gives them somewhere to land. Was
+    // 13.6 before phase 1 — the striking half of the sport got more dangerous, so grappling is
+    // worth relatively less than it was, in a sport that still turns on it.
     const wrestling = swing('wrestling');
-    expect(wrestling.pp, `wrestling swing ${wrestling.pp.toFixed(1)}pp`).toBeGreaterThan(10);
+    expect(wrestling.pp, `wrestling swing ${wrestling.pp.toFixed(1)}pp`).toBeGreaterThan(8);
   });
 
   it('makes being a far better striker worth winning fights', () => {
-    // 38 → 41.7%, 98 → 56.3%: a 14.5-point swing, the largest of the four measured.
+    // 45.9% → 58.0%: a 12.1-point swing, still the largest of the four, and it should be — hands
+    // are 65% of the landed strikes in this engine.
     const striking = swing('strikingOffence');
     expect(striking.pp, `strikingOffence swing ${striking.pp.toFixed(1)}pp`).toBeGreaterThan(10);
   });
 
-  it('makes being a far better kicker worth nothing at all', () => {
+  it('makes being a far better kicker worth winning fights, like every other weapon', () => {
     /*
-     * **Tripwire**, and the reason phase 1 is ranked first among the changes that move
-     * behaviour.
+     * **This was the sharpest tripwire in the file and phase 1 broke it, which is the point.**
      *
-     * Sixty rating points of `kicking` — the difference between someone who cannot kick and an
-     * all-time kicker — moves the win rate by **−1.3 points**: 48.9% at 38, 47.7% at 98. Not
-     * small: *zero*, and if anything the wrong way. The kicks land more often and then do
-     * exactly what a jab does, so buying them buys nothing.
+     * Before `WEAPON_PROFILE`, sixty rating points of `kicking` — the difference between somebody
+     * who cannot kick and an all-time kicker — moved the win rate by **−1.3 points**: not small,
+     * *zero*, and if anything the wrong way. The kicks landed more often and then did exactly what
+     * a jab does, because `rollFlushness`, `strikeDamage` and `knockdownHazard` never asked what
+     * was thrown.
      *
-     * The adversarial review measured ~1pp on its own seeds and concluded style attributes are
-     * "strategically inert". Its own §1.5 explains why, two sections earlier: damage,
-     * flushness and hazard never see `isKick`. This is that bug, priced.
+     * Now: 45.6% → 55.3%, a **+9.7-point** swing, against `wrestling`'s 10.9 and
+     * `strikingOffence`'s 12.1. G4 asked for "variance comparable to `wrestling`'s" and that is
+     * what this is. The bound is set below the measured value rather than at it, because the claim
+     * being defended is "kicking is a real attribute", not "kicking is worth 9.7 points".
      *
-     * Phase 1 should break this assertion. When it does, raise the bound toward the wrestling
-     * yardstick above rather than deleting the test — G4 is met when a kicking swing is worth
-     * something comparable to a wrestling one.
+     * Note what moved to pay for it: `strikingOffence` fell from 14.5pp to 12.1 and `wrestling`
+     * from 13.6 to 10.9. Striking as a whole became *more* consequential — 26.6 points across the
+     * two striking attributes against 13.2 before — and it is now split across both of them rather
+     * than concentrated in the hands. Grappling gave up ground in relative terms because the
+     * striking half of the sport got more dangerous, which is the trade phase 1 was asking for.
      */
     const kicking = swing('kicking');
     expect(
-      Math.abs(kicking.pp),
+      kicking.pp,
       `kicking swing ${kicking.pp.toFixed(1)}pp (low ${(kicking.low * 100).toFixed(1)}% high ${(kicking.high * 100).toFixed(1)}%)`,
-    ).toBeLessThan(5);
+    ).toBeGreaterThan(6);
+  });
+
+  it('does not make the feet worth more than the hands', () => {
+    /*
+     * The guard on overcorrecting, and it caught a real one.
+     *
+     * The first cut of `pickShot` resolved every leg-targeted shot as a kick — correct in itself,
+     * since nobody punches a leg — but `GamePlan.targeting` aims 15% of *everybody's* shots at the
+     * legs and every AI fight in the game uses the default plan. So a sixth of a boxer's offence
+     * was moved onto an attribute they are bad at: `strikingOffence` fell to 8.1pp while `kicking`
+     * rose to 10.3, and the engine briefly said a kicker's shins beat a boxer's hands. Hands are
+     * ~65% of the landed strikes in this engine and about 70% in the real sport; they should be
+     * the most consequential striking attribute, and going low is now gated on whether the fighter
+     * can kick at all.
+     */
+    const striking = swing('strikingOffence');
+    const kicking = swing('kicking');
+    expect(
+      striking.pp,
+      `hands ${striking.pp.toFixed(1)}pp vs feet ${kicking.pp.toFixed(1)}pp`,
+    ).toBeGreaterThan(kicking.pp);
   });
 
   it('charges the same forty points for every discipline and does not deliver the same fighter', () => {
