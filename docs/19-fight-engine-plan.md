@@ -381,7 +381,7 @@ to six times too often, and the cause is scoring arithmetic — every 10-8 round
 judges. Recorded at `< 4` with the reason, plus a floor of `> 0.5` so a metric can never silently
 go dead again. Closing the gap is a scoring change and belongs with the judging work, not here.
 
-**F7 — Bouts are written to fighters' records twice, and the schedule never held them.**
+**F7 — Bouts were written to fighters' records twice. (Fixed — §7.6.)**
 
 Found by reviving the assertion in F4, which failed on the first run: `Ngannou fought 0d after
 being stopped`. Diagnosed over a simulated year of the 2020 world — 45 cards, 139 fighters:
@@ -401,18 +401,23 @@ loss/tko vs Blaydes`, `day 98 loss/tko vs Blaydes` — against exactly two sched
 dos Santos fight has no scheduled counterpart at all. A duplicated bout inflates records, KO
 counts, rankings and purses, which makes this a correctness bug rather than a cosmetic one.
 
-Two things point at the mechanism without proving it: night ids are deterministic per promotion
-and day (`evt_p_apex_28`), so a card built twice for one day would *overwrite* its predecessor
-while both were simulated and recorded — which is exactly the shape of the evidence, a recorded
-bout with no surviving schedule row. And because a settled bout's `result` is never written back,
-nothing in the loop can tell that a card has already been resolved.
+The mechanism turned out to be one line's worth of assumption, in `advanceWorld`. **Every card in a
+step was stamped with the step's own `day`** — three shows on one date, a fortnight apart from the
+next three. `eventId` is `evt_${promotionId}_${day}` and the promotion is drawn independently per
+card, so two of the three cards drawing the same promotion produced the *same event id*, and
+`db.events.upsert` silently overwrote the first night after it had already been simulated and
+written to everybody's record. The schedule looked spotless because the row that would have shown
+the collision had been overwritten by the row that collided with it.
 
-**Not fixed, deliberately.** It lives in the card runner and the aftermath path, it moves career
-distributions and every long-sim baseline, and landing it inside a fight-engine programme would
-destroy the attribution that §5 exists to protect. It is recorded as a tripwire in
-`promotion-finance.test.ts` so it is visible and cannot get quietly worse, and it wants its own
-piece of work — arguably before phase 1, because it is a live data defect where phase 1 is an
-expressiveness gap.
+Underneath that, `available` was built once per fortnight and never pruned as fighters were booked.
+`used` only ever kept a fighter off *this* night, so the same fighter could be matched onto two of
+the three cards — the 13 different-opponent pairs. That defect would have survived the date fix on
+its own, as two bouts inside one fortnight instead of two on one day.
+
+Fixed in §7.6, against the plan's own rule about attribution rather than in spite of it: it is not
+a fight-engine change, it does not touch a damage constant or a resolution site, and leaving a live
+double-counting defect underneath a measurement programme would corrupt every career-level number
+the later phases are supposed to move.
 
 ### 7.5 What to expect when phase 1 lands
 
@@ -428,14 +433,62 @@ Three tripwires should break, and each is a checkpoint rather than a regression:
 `roster-profile.test.ts`'s `firstRoundPct < 34` is the bound closest to its limit at 31.96%, and
 phase 1 pushes it from both directions. A fourth tripwire waits on phase 2: `profile.test.ts`
 asserts that a pure guard player scouts as the busier striker, which the `strikeLean` fix inverts.
-A fifth waits on nothing in this plan at all — the F7 record tripwire in
-`promotion-finance.test.ts`.
 
 **And phases 1–6 remain unapproved.** D1 (`Weapon` enum vs threading `isKick`) and D2 (does
 commentary read the fighter or the event?) both gate phase 1, and D2 in particular cannot be
 deferred past it: if the narrator and the resolver each pick a technique independently, the parity
 test that phase 1 is supposed to land is unwritable. Phase 0 does not settle either — it makes them
 answerable, which is different.
+
+### 7.6 F7, fixed
+
+Two changes in `advanceWorld`, neither of them in the fight engine.
+
+**Cards in a step get their own dates.** Spread across whatever part of the step is actually being
+simulated, so a short call cannot date a card past the day it was asked to stop at. This is what
+breaks the `eventId` collision, and it is also just true of the sport — three shows on one night was
+never right.
+
+**A fighter on tonight's card leaves the step's available pool.** `used` kept them off one night;
+this keeps them off the fortnight.
+
+Measured over a simulated year, both eras:
+
+| | 2020 before | 2020 after | 2026 before | 2026 after |
+|---|---|---|---|---|
+| Same-day record pairs | 65 | **0** | 87 | **0** |
+| Identical bout written twice | 52 | **0** | 50 | **0** |
+| Pairs inside a fortnight | 65 | **0** | 87 | **0** |
+| Shortest gap between bouts | 0d | **47d** | 0d | **51d** |
+| Suspension violations | 9 | **0** | 12 | **0** |
+| Cards that survived to the schedule | 45 | **53** | 68 | **74** |
+| Distinct card dates | 26 | **53** | 27 | **74** |
+| Total bouts recorded | 394 | 374 | 1210 | 1134 |
+
+The last three rows are the interesting ones. Eight cards a year in 2020 were being destroyed after
+they had been fought — the fights counted, the event they happened at did not — and the world's whole
+schedule ran on 26 dates rather than 53. Recorded bouts fall about 5%, which is the double-counting
+going away.
+
+Guarded in `living-world.test.ts` by the two invariants rather than by the numbers: nobody fights
+twice inside a fortnight, and no two cards share a promotion and a date. The revived suspension
+assertion in `promotion-finance.test.ts` now runs at full strength with no same-day exclusion.
+
+One thing deliberately left: `CardBout.resultId` is documented "Set once the night has been
+simulated" and is written by nothing, in either card runner. It is the field that would have made a
+re-run detectable, and pointing it at something means deciding to store fight results — a save-size
+and retention question rather than a bug fix. Recorded here rather than answered.
+
+**And a note on where this was covered from.** `twenty-years.test.ts` — the suite whose name
+suggests it would catch this — drives its *own* booking loop rather than `advanceWorld`, so the
+production world loop has no twenty-year coverage at all. The multi-year confidence for this fix
+comes from `generations.test.ts`, which does advance the real loop year by year, plus twelve
+integration and statistical files.
+
+Worth sitting with: that private harness already contained the fix. `for (const id of [red.id,
+blue.id]) { ... available.splice(index, 1) }`, under the comment *"Both are now booked; do not book
+them again in this block."* The correct behaviour was written down, in a test file, next to a loop
+standing in for the one that did not do it.
 
 ---
 
