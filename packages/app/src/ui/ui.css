@@ -661,3 +661,36 @@ a.list__item:hover {
   flex-wrap: wrap;
   gap: var(--space-1);
 }
+
+/* --- Calendar row -------------------------------------------------------------------------
+   The date leads, because this is the one screen in the game that is about *when*. Everywhere
+   else leads with a name. Fixed width so the dates form a column the eye can run down. */
+
+.cal__when {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 5.5rem;
+  margin-right: var(--space-2);
+}
+
+.cal__date {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cal__away {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+/* At 360px a fixed date column plus a title plus a chip is too much, so the date goes above. */
+@media (max-width: 24rem) {
+  .cal__when {
+    flex-basis: auto;
+    flex-direction: row;
+    gap: var(--space-2);
+    align-items: baseline;
+    margin: 0 0 var(--space-1);
+  }
+}

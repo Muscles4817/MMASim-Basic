@@ -51,6 +51,10 @@ export type Route =
   | { name: 'promotion' }
   | { name: 'card' }
   | { name: 'promoterRoster' }
+  // The clock and the staging ground. Shared by every mode — the one screen that owns time, and
+  // the one place anything needing an answer waits.
+  | { name: 'calendar' }
+  | { name: 'inbox' }
   | { name: 'editor' }
   | { name: 'editorFighter'; id: string }
   | { name: 'editorList'; kind: EditorEntityKind }
@@ -88,6 +92,10 @@ function parse(hash: string): Route {
       return { name: 'card' };
     case 'stable':
       return { name: 'promoterRoster' };
+    case 'calendar':
+      return { name: 'calendar' };
+    case 'inbox':
+      return { name: 'inbox' };
     case 'editor':
       return param ? { name: 'editorFighter', id: param } : { name: 'editor' };
     case 'edit': {

@@ -25,6 +25,8 @@ import { SettingsScreen } from './screens/SettingsScreen';
 import { PromotionHubScreen } from './screens/PromotionHubScreen';
 import { CardBuilderScreen } from './screens/CardBuilderScreen';
 import { PromoterRosterScreen } from './screens/PromoterRosterScreen';
+import { CalendarScreen } from './screens/CalendarScreen';
+import { InboxScreen } from './screens/InboxScreen';
 
 export function App() {
   const { route, replace } = useRouter();
@@ -152,6 +154,19 @@ export function App() {
         return (
           <Shell title="Your roster">
             <PromoterRosterScreen />
+          </Shell>
+        );
+      // --- Shared by every mode --------------------------------------------------------
+      case 'calendar':
+        return (
+          <Shell title="Calendar">
+            <CalendarScreen />
+          </Shell>
+        );
+      case 'inbox':
+        return (
+          <Shell title="Inbox">
+            <InboxScreen />
           </Shell>
         );
       case 'rankings':

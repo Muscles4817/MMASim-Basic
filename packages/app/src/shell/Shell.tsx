@@ -2,6 +2,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { gameDayToIso, toCalendar } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { toHash, useRouter, type Route } from '../state/router';
+import { inboxCount } from '../game/inbox';
 import './Shell.css';
 
 const MONTHS = [
@@ -35,6 +36,14 @@ interface NavItem {
   matches?: readonly Route['name'][];
 }
 
+/*
+ * Five tabs, and the clock and the inbox now take two of them.
+ *
+ * Rankings and Editor moved out. Rankings was already on the hub's own "everywhere else" grid,
+ * so the tab was a second door to the same room; the editor is a power tool that nobody reaches
+ * for mid-career. Time and the things waiting on you are what a player needs from anywhere,
+ * which is what a tab bar is for.
+ */
 const FIGHTER_NAV: readonly NavItem[] = [
   // `start` belongs to Career: picking a fighter is the first step of the career flow, and
   // without it the very first screen a new player sees has no tab marked current.
@@ -44,9 +53,14 @@ const FIGHTER_NAV: readonly NavItem[] = [
     icon: '🥊',
     matches: ['hub', 'camp', 'fight', 'start', 'create', 'training'],
   },
-  { route: { name: 'roster' }, label: 'Roster', icon: '👥', matches: ['roster', 'fighter'] },
-  { route: { name: 'rankings' }, label: 'Rankings', icon: '🏆' },
-  { route: { name: 'editor' }, label: 'Editor', icon: '✏️', matches: ['editor', 'editorFighter'] },
+  { route: { name: 'calendar' }, label: 'Calendar', icon: '📅' },
+  { route: { name: 'inbox' }, label: 'Inbox', icon: '📥' },
+  {
+    route: { name: 'roster' },
+    label: 'Roster',
+    icon: '👥',
+    matches: ['roster', 'fighter', 'rankings', 'editor', 'editorFighter'],
+  },
   { route: { name: 'settings' }, label: 'Settings', icon: '⚙️' },
 ];
 
@@ -66,16 +80,16 @@ const PROMOTER_NAV: readonly NavItem[] = [
     icon: '🎪',
     matches: ['promotion', 'card', 'hub', 'start'],
   },
+  { route: { name: 'calendar' }, label: 'Calendar', icon: '📅' },
+  { route: { name: 'inbox' }, label: 'Inbox', icon: '📥' },
   // A promoter's "roster" is their own stable with contracts attached, not the world's fighter
-  // list — which is still reachable, from the promotion hub.
+  // list — which is reachable through it.
   {
     route: { name: 'promoterRoster' },
     label: 'Roster',
     icon: '👥',
-    matches: ['promoterRoster', 'fighter', 'roster'],
+    matches: ['promoterRoster', 'fighter', 'roster', 'rankings', 'editor', 'editorFighter'],
   },
-  { route: { name: 'rankings' }, label: 'Rankings', icon: '🏆' },
-  { route: { name: 'editor' }, label: 'Editor', icon: '✏️', matches: ['editor', 'editorFighter'] },
   { route: { name: 'settings' }, label: 'Settings', icon: '⚙️' },
 ];
 
@@ -93,8 +107,11 @@ export function Shell({
   children: ReactNode;
 }) {
   const { route, navigate, back } = useRouter();
-  const { world } = useGame();
+  const { db, world } = useGame();
   const NAV_ITEMS = world.playerRole === 'promoter' ? PROMOTER_NAV : FIGHTER_NAV;
+  // Unread rather than blocking: a player should see that something arrived, not only that
+  // something is stopping them.
+  const waiting = inboxCount(db).unread;
   const mainRef = useRef<HTMLElement>(null);
 
   // Move focus to the content region on every navigation. Without this a screen-reader
@@ -130,8 +147,22 @@ export function Shell({
         >
           <span className="shell__nav-icon" aria-hidden="true">
             {item.icon}
+            {/*
+              The count, on the icon.
+
+              A tab that never says anything is a tab nobody opens, and the whole point of the
+              inbox is that it holds things time will stop for. The number is also in the
+              accessible name below rather than only here, because a coloured dot is not
+              information.
+            */}
+            {item.route.name === 'inbox' && waiting > 0 && (
+              <span className="shell__badge">{waiting > 9 ? '9+' : waiting}</span>
+            )}
           </span>
           {item.label}
+          {item.route.name === 'inbox' && waiting > 0 && (
+            <span className="visually-hidden">, {waiting} waiting</span>
+          )}
         </a>
       ))}
     </nav>
