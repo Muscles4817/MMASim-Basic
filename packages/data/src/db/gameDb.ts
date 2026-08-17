@@ -12,6 +12,7 @@ import type {
   Gym,
   Commentator,
   FightNight,
+  InboxItem,
   Judge,
   Manager,
   NewsItem,
@@ -42,6 +43,7 @@ export const COLLECTIONS = [
   'managers',
   'agreements',
   'events',
+  'inbox',
   'world',
 ] as const;
 
@@ -88,6 +90,14 @@ export interface GameDb {
   managers: Repository<Manager & Entity>;
   agreements: Repository<PromotionalAgreement & Entity>;
   events: Repository<FightNight & Entity>;
+  /**
+   * Things waiting on the player.
+   *
+   * Stored rather than derived, unlike the calendar, because read/unread and answered/unanswered
+   * are state that nothing else holds — and because the advance loop has to be able to ask
+   * "is anything blocking" without recomputing the world.
+   */
+  inbox: Repository<InboxItem & Entity>;
   world: Repository<WorldMeta>;
   /** Persist every dirty collection. Call at save points, not on every mutation. */
   save(): void;
@@ -113,6 +123,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
   const managers = make<Manager & Entity>('managers');
   const agreements = make<PromotionalAgreement & Entity>('agreements');
   const events = make<FightNight & Entity>('events');
+  const inbox = make<InboxItem & Entity>('inbox');
   const world = make<WorldMeta>('world');
 
   const all: Flushable[] = [
@@ -128,6 +139,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
     managers,
     agreements,
     events,
+    inbox,
     world,
   ];
 
@@ -144,6 +156,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
     managers,
     agreements,
     events,
+    inbox,
     world,
     save: () => {
       for (const repo of all) repo.flush();

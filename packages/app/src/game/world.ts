@@ -89,6 +89,7 @@ import {
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
 import { currentPurse } from './money';
+import { scanForInbox } from './inbox';
 
 type StoredNews = NewsItem & Entity;
 
@@ -314,6 +315,15 @@ export function advanceWorld(
 
   // And the deals of anybody the world forgot to book. See `enforceActivity`.
   news.push(...enforceActivity(db, toDay, rng.fork('breach')));
+
+  /*
+   * Anything that now needs the player.
+   *
+   * Raised here rather than on a screen, because the whole point is that these arrive *while
+   * time is passing* — and because `advanceTo` stops the clock on an unresolved decision, which
+   * it can only do if the decision exists by the time the step finishes.
+   */
+  scanForInbox(db, toDay);
 
   const stored = appendNews(db, news);
   db.save();
