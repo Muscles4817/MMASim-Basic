@@ -1395,6 +1395,39 @@ gets merged with wrestling honestly.
 their weapon, and a kickboxer who can win a tie-up is a truer kickboxer. But it is worth saying
 plainly: **step 6B made the simulation better and the programme's headline metric worse.**
 
+##### Probed: re-spending judo's forty points does not fix it either
+
+The cheapest answer to 6B's finding would be to leave the engine alone and spend judo's forty bias
+points on attributes the engine already reads as *clinch* rather than as *shot* — no new attribute,
+no new mechanic, and `origin.ts`'s equal-cost rule preserved exactly. Measured, on an exemplar built
+the same way `disciplineExemplar` builds them:
+
+```
+                  chainWrestling  clinchOffence  approach   widest axis vs wrestling
+judo (shipped)              76.0           76.0   wrestle                      0.059
+judo (re-spent)             76.0           79.0   wrestle                      0.078
+```
+
+Better and nowhere near the 0.20 target, and the reason is worth having in writing: **the two
+derived ratings are built from the same two attributes.** `clinchOffence` is 0.45 `strength` + 0.35
+`wrestling` + 0.2 `strikingOffence`; `chainWrestling` is 0.5 `wrestling` + 0.3 `cardio` + 0.2
+`strength`. To pull them apart you need a fighter with enormous strength and poor wrestling, which
+reads as a big man who cannot grapple rather than as a judoka. **The engine cannot tell a clinch
+grappler from a shot grappler**, whatever the discipline table says, and the planner's approach
+cascade sends anything with a wrestling edge to `wrestle` before the clinch branch is ever reached.
+
+So the choice is not "how should judo's forty points be spent". It is one of:
+
+1. **An attribute for grips and throws**, the same shape as `footwork` for range — a seventeenth,
+   with the same seed-roster cost the sixteenth already carries.
+2. **Change what the clinch reads.** Put `scrambling` or `submissions` into `clinchOffence` so the
+   tie-up is not simply a strength contest. Cheapest by far, and it changes what the clinch means
+   for every fighter in the game rather than only for judo.
+3. **Merge the discipline.** D5 asked when `COMBAT_DISCIPLINES` should grow; this asks whether it
+   should shrink, and "Judo / Sambo" as a separate pick is a promise the engine has never kept.
+4. **Accept three of fifteen** and take same-family separation off the goal list explicitly, the way
+   §4 D3 said to do with G3 if it were deferred.
+
 ---
 
 **The one-line version:** the engine's missing primitive is a named weapon on the strike, not a
