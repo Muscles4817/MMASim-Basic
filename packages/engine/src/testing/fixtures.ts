@@ -272,6 +272,43 @@ export const ARCHETYPES = {
     }),
 
   /**
+   * A pure guard player: dangerous off his back, and nowhere else.
+   *
+   * Exists because `ARCHETYPES` had no submission specialist, and that gap is why a live bug
+   * in `deriveTendencies` went unseen. `strikeLean` averages striking against *wrestling and
+   * ground control only* — it never reads `submissions` or `scrambling` — so this fighter,
+   * whose entire game is those two attributes, scores **0.529**: striker-leaning, above the
+   * midpoint, and closer to `striker` (0.850) than to `smotherer` (0.150). Measured, and
+   * asserted in `fight/profile.test.ts`.
+   *
+   * The striking values are deliberately mediocre-but-not-absent, which is what makes the
+   * reading indefensible rather than arguable: a 48/42 hands-and-kicks fighter with 92
+   * submissions is not somebody who reaches for a jab first.
+   */
+  guardPlayer: (): Fighter =>
+    makeFighter({
+      id: 'fighter_guard_player',
+      lastName: 'Player',
+      attributes: {
+        submissions: 92,
+        scrambling: 85,
+        wrestling: 40,
+        groundControl: 45,
+        strikingOffence: 48,
+        kicking: 42,
+        strikingDefence: 52,
+        takedownDefence: 48,
+        power: 50,
+        speed: 62,
+        cardio: 70,
+        durability: 62,
+        strength: 55,
+        fightIq: 78,
+        composure: 76,
+      },
+    }),
+
+  /**
    * A second wholly-average fighter with a distinct identity.
    *
    * Exists so symmetry and even-matchup tests can pit two identical-but-distinguishable
