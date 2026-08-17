@@ -9,7 +9,7 @@
 import type { Rng } from '../core/rng.js';
 import { displayName } from '../domain/fighter.js';
 import type { Combatant } from './profile.js';
-import type { GroundPosition, StrikeTarget, Weapon } from './types.js';
+import type { GroundPosition, StrikeTarget, TakedownEntry, Weapon } from './types.js';
 
 export const surname = (c: Combatant): string => c.fighter.lastName;
 export const fullDisplayName = (c: Combatant): string => displayName(c.fighter);
@@ -148,16 +148,68 @@ export function recoveredText(defender: Combatant): string {
   return `${surname(defender)} has cleared their head and is fighting back.`;
 }
 
-export function takedownText(rng: Rng, attacker: Combatant, position: GroundPosition): string {
-  const entry = rng.pick(['a double leg', 'a single leg', 'a body lock', 'a reactive shot', 'a trip']);
-  return `${surname(attacker)} hits ${entry} — down they go, ${surname(attacker)} ${GROUND_POSITION_NAMES[position]}.`;
+/**
+ * What each takedown entry looks like, landed and stuffed.
+ *
+ * The same table shape as `VOCABULARY` and for the same reason. This function used to open with
+ * `rng.pick(['a double leg', 'a single leg', 'a body lock', 'a reactive shot', 'a trip'])`, which
+ * is D2's defect surviving in the phase D2 never audited: the narrator drew the entry, the
+ * resolver knew nothing about it, and so a judoka and a wrestler shot the same five takedowns in
+ * the same proportions while a shot taken from inside the clinch could be narrated as a double leg
+ * from range. Resolution picks it now (`pickTakedownEntry`) and passes it here.
+ */
+const TAKEDOWN_VOCABULARY: Readonly<
+  Record<TakedownEntry, { readonly landed: readonly string[]; readonly stuffed: readonly string[] }>
+> = {
+  doubleLeg: {
+    landed: ['drops levels and hits a double leg', 'blasts through on a double leg'],
+    stuffed: [
+      'shoots the double — STUFFED',
+      'dives on the double and gets nothing but air',
+    ],
+  },
+  singleLeg: {
+    landed: ['gets in deep on a single leg and runs the pipe', 'picks up the single and drives'],
+    stuffed: ['gets in on the single but loses the leg', 'reaches for the single and is shrugged off'],
+  },
+  reactiveShot: {
+    landed: [
+      'times the shot off the strike beautifully',
+      'ducks under the counter and takes the hips',
+    ],
+    stuffed: ['times the shot badly and eats a sprawl', 'changes levels early and is read'],
+  },
+  bodyLock: {
+    landed: ['locks the body up and walks them down', 'gets the body lock and dumps them'],
+    stuffed: ['tries to lock the body but the grip breaks', 'cannot close the body lock'],
+  },
+  trip: {
+    landed: ['hooks the leg and trips them down', 'gets the grip and throws them over the hip'],
+    stuffed: ['goes for the trip and cannot get the angle', 'tries the throw and is posted on'],
+  },
+};
+
+export function takedownText(
+  rng: Rng,
+  attacker: Combatant,
+  position: GroundPosition,
+  entry: TakedownEntry,
+): string {
+  const action = rng.pick(TAKEDOWN_VOCABULARY[entry].landed);
+  return `${surname(attacker)} ${action} — down they go, ${surname(attacker)} ${GROUND_POSITION_NAMES[position]}.`;
 }
 
-export function takedownStuffedText(rng: Rng, attacker: Combatant, defender: Combatant): string {
+export function takedownStuffedText(
+  rng: Rng,
+  attacker: Combatant,
+  defender: Combatant,
+  entry: TakedownEntry,
+): string {
+  const action = rng.pick(TAKEDOWN_VOCABULARY[entry].stuffed);
   return rng.pick([
-    `${surname(attacker)} shoots — STUFFED. ${surname(defender)} sprawls and circles off.`,
-    `${surname(defender)} sees the level change coming and defends it easily.`,
-    `${surname(attacker)} gets in on the hips but ${surname(defender)} fights the grip and breaks free.`,
+    `${surname(attacker)} ${action}. ${surname(defender)} sprawls and circles off.`,
+    `${surname(attacker)} ${action} — ${surname(defender)} defends it and resets.`,
+    `${surname(attacker)} ${action}, and ${surname(defender)} breaks free.`,
   ]);
 }
 

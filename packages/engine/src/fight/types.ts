@@ -53,6 +53,29 @@ export type DamageRegion = StrikeTarget;
 export const WEAPONS = ['punch', 'kick', 'knee', 'elbow'] as const;
 export type Weapon = (typeof WEAPONS)[number];
 
+/**
+ * How a takedown was entered.
+ *
+ * The same argument as `Weapon`, in the phase of the fight that argument had not reached. The
+ * narrator was picking the entry itself — `rng.pick(['a double leg', 'a single leg', 'a body
+ * lock', 'a reactive shot', 'a trip'])` — which meant a judoka's throws and a wrestler's doubles
+ * were the same uniform draw, a shot taken from the clinch could be narrated as a reactive shot
+ * from range, and nothing could tell any of it was wrong (docs/19 §8c). Resolution picks it now,
+ * from the fighter's own tendencies and from where the shot started, and the play-by-play is told.
+ *
+ * Descriptive on purpose: the entry names what happened and does not change the odds of it
+ * happening or where it lands. Giving a trip a different landing position than a double leg is a
+ * real idea and a distribution move, which makes it somebody else's phase.
+ */
+export const TAKEDOWN_ENTRIES = [
+  'doubleLeg',
+  'singleLeg',
+  'reactiveShot',
+  'bodyLock',
+  'trip',
+] as const;
+export type TakedownEntry = (typeof TAKEDOWN_ENTRIES)[number];
+
 /** What a fighter is trying to do this exchange. */
 export type Intent =
   | 'strike'
@@ -93,6 +116,8 @@ export interface FightEvent {
   weapon?: Weapon;
   /** Where it landed, when this event is about a strike. */
   target?: StrikeTarget;
+  /** How the takedown was entered, when this event is about one — landed or stuffed. */
+  takedown?: TakedownEntry;
 }
 
 export type FightEventKind =

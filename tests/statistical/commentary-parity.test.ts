@@ -28,12 +28,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   ARCHETYPES,
+  TAKEDOWN_ENTRIES,
   WEAPONS,
   makeFighter,
   simulateFight,
   type Corner,
   type FightEvent,
   type FightResult,
+  type TakedownEntry,
   type Weapon,
 } from '@mmasim/engine';
 import { disciplineExemplar } from '../helpers/fingerprint.js';
@@ -49,6 +51,24 @@ const TELLS: Readonly<Record<Weapon, readonly string[]>> = {
   kick: ['kick', 'teep', 'roundhouse', 'shin'],
   knee: ['knee'],
   elbow: ['elbow'],
+};
+
+/**
+ * Words that can only mean one takedown entry.
+ *
+ * Same rule as `TELLS`: every entry has to be a word no honest line about another entry could
+ * contain. "Shot" is excluded — every takedown is a shot — and so is "drives", which a single leg
+ * and a body lock both do.
+ */
+const ENTRY_TELLS: Readonly<Record<TakedownEntry, readonly string[]>> = {
+  doubleLeg: ['double'],
+  // Not "the leg": a trip line ("hooks the leg and trips them down") contains it honestly, which
+  // this test reported as 149 contradictions on its first run. The tell was wrong, not the prose —
+  // a distinction worth keeping in view, because a parity test that cries wolf gets deleted.
+  singleLeg: ['single'],
+  reactiveShot: ['times the shot', 'ducks under', 'changes levels'],
+  bodyLock: ['body lock', 'lock the body', 'locks the body'],
+  trip: ['trip', 'throw'],
 };
 
 /**
@@ -210,6 +230,65 @@ describe('the play-by-play describes the fight that happened', () => {
     }
 
     expect(offences.slice(0, 10), `${offences.length} false claims`).toEqual([]);
+  });
+
+  it('names the takedown the resolver actually shot', () => {
+    /*
+     * The same claim as the weapon check, in the phase D2 never audited.
+     *
+     * `takedownText` opened with `rng.pick(['a double leg', 'a single leg', 'a body lock', 'a
+     * reactive shot', 'a trip'])` — the narrator drawing a technique the resolver knew nothing
+     * about, which is exactly the arrangement docs/19 §4 D2 rejected for strikes and which
+     * survived here because phase 1's parity test only ever looked at strikes. Two consequences,
+     * both invisible until something compared them: a judoka and a wrestler shot the same five
+     * takedowns in the same proportions, and a shot taken from inside the clinch could be
+     * narrated as a double leg from range.
+     */
+    const offences: string[] = [];
+    const takedownEvents = fights.flatMap((f) => f.events.filter((e) => e.takedown !== undefined));
+
+    for (const event of takedownEvents) {
+      const text = description(event, NAMES);
+      for (const other of TAKEDOWN_ENTRIES) {
+        if (other === event.takedown) continue;
+        for (const tell of ENTRY_TELLS[other]) {
+          if (text.includes(tell)) {
+            offences.push(`${event.takedown} narrated as ${other} ("${tell}"): ${event.text}`);
+          }
+        }
+      }
+    }
+
+    expect(takedownEvents.length, 'no takedown was ever attempted').toBeGreaterThan(500);
+    expect(offences.slice(0, 10), `${offences.length} contradictions`).toEqual([]);
+  });
+
+  it('shoots the entries that exist from where the fighter is standing', () => {
+    /*
+     * A double leg from inside a body lock is not a prose problem, it is a resolver problem, and
+     * this is the assertion that keeps the entry table honest about position. The clinch offers
+     * the body lock, the trip and the single; range offers the double, the single and the
+     * reactive shot. `bodyLock` and `trip` are the two that could only ever come from a tie-up.
+     *
+     * Stated as a distribution rather than per-event because the event does not record where the
+     * shot started — the two clinch-only entries simply must be rarer than the range entries
+     * across a population that spends most of its time at range, and a resolver that ignored
+     * `from` would produce them at the same rate as everything else.
+     */
+    const counts = new Map<string, number>();
+    for (const fight of fights) {
+      for (const event of fight.events) {
+        if (event.takedown) counts.set(event.takedown, (counts.get(event.takedown) ?? 0) + 1);
+      }
+    }
+    const total = [...counts.values()].reduce((a, b) => a + b, 0);
+    const clinchOnly = (counts.get('bodyLock') ?? 0) + (counts.get('trip') ?? 0);
+
+    // Every entry has to be reachable, or the table is decoration.
+    for (const entry of TAKEDOWN_ENTRIES) {
+      expect(counts.get(entry) ?? 0, `${entry} was never shot`).toBeGreaterThan(0);
+    }
+    expect(clinchOnly / total, `entry mix ${JSON.stringify(Object.fromEntries(counts))}`).toBeLessThan(0.4);
   });
 
   it('keeps knees in the clinch, where the only knees in the game are thrown', () => {

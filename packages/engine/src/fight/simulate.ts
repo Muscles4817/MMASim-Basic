@@ -10,7 +10,7 @@
  * plus the seed.
  */
 
-import { clamp, clamp01 } from '../core/math.js';
+import { clamp, clamp01, remap } from '../core/math.js';
 import { createRng, type Rng } from '../core/rng.js';
 import type { FighterId } from '../core/ids.js';
 import type { Fighter, FinishMethod } from '../domain/fighter.js';
@@ -58,6 +58,7 @@ import {
   type GroundPosition,
   type Position,
   type StrikeTarget,
+  type TakedownEntry,
   type Weapon,
 } from './types.js';
 
@@ -191,7 +192,7 @@ export function simulateFight(config: FightConfig): FightResult {
         text: string,
         corner?: Corner,
         emphasis?: FightEvent['emphasis'],
-        shot?: { weapon: Weapon; target: StrikeTarget },
+        fact?: { weapon?: Weapon; target?: StrikeTarget; takedown?: TakedownEntry },
       ) => {
         events.push({
           round,
@@ -200,8 +201,9 @@ export function simulateFight(config: FightConfig): FightResult {
           text,
           corner,
           emphasis,
-          weapon: shot?.weapon,
-          target: shot?.target,
+          weapon: fact?.weapon,
+          target: fact?.target,
+          takedown: fact?.takedown,
         });
       };
 
@@ -377,7 +379,7 @@ interface ExchangeContext {
     text: string,
     corner?: Corner,
     emphasis?: FightEvent['emphasis'],
-    shot?: { weapon: Weapon; target: StrikeTarget },
+    fact?: { weapon?: Weapon; target?: StrikeTarget; takedown?: TakedownEntry },
   ) => void;
   scoreSoFar: readonly Record<Corner, RoundTally>[];
 }
@@ -1066,6 +1068,47 @@ function shiftMomentum(gainer: Combatant, loser: Combatant, amount: number): voi
 
 // --- Takedowns ----------------------------------------------------------------------------
 
+/**
+ * How this fighter is trying to put them down, chosen before the contest is resolved.
+ *
+ * Where the shot starts decides what is available — you cannot double-leg somebody you are already
+ * chest to chest with, and you cannot trip somebody you have no grip on — and inside that, the
+ * fighter's own tendencies decide. A wrestler doubles, a judoka trips, a strong man body-locks, and
+ * a smart one takes the shot the exchange gave him.
+ *
+ * `reactiveShot` reads `fightIq` and the `counter` approach rather than a tendency, because it is
+ * the one entry that is a property of *timing* rather than of technique, and there is no read for
+ * it — deliberately, since adding a read key before its resolution site exists nerfs the prep
+ * system's coverage (docs/19 §5).
+ */
+function pickTakedownEntry(
+  rng: Rng,
+  actor: Combatant,
+  from: 'distance' | 'clinch',
+): TakedownEntry {
+  const t = actor.tendencies;
+  const a = actor.attrs;
+
+  if (from === 'clinch') {
+    return rng.pickWeighted(['bodyLock', 'trip', 'singleLeg'] as const, (entry) =>
+      entry === 'bodyLock'
+        ? t.bodyLock * clamp01(remap(a.strength, 40, 90, 0.5, 1.2))
+        : entry === 'trip'
+          ? t.doubleLeg * clamp01(remap(a.scrambling, 40, 90, 0.4, 1.4))
+          : t.singleLeg * 0.5,
+    );
+  }
+
+  return rng.pickWeighted(['doubleLeg', 'singleLeg', 'reactiveShot'] as const, (entry) =>
+    entry === 'doubleLeg'
+      ? t.doubleLeg
+      : entry === 'singleLeg'
+        ? t.singleLeg
+        : clamp01(remap(a.fightIq, 40, 90, 0.15, 0.7)) *
+          (actor.plan.approach === 'counter' ? 1.8 : 0.7),
+  );
+}
+
 function resolveTakedown(
   ctx: ExchangeContext,
   actor: Combatant,
@@ -1091,6 +1134,7 @@ function resolveTakedown(
     (target.hurtSeconds > 0 ? 0.5 : 1);
 
   actor.stats.takedownsAttempted++;
+  const entry = pickTakedownEntry(rng, actor, from);
 
   if (rng.chance(offence / (offence + defence))) {
     actor.stats.takedownsLanded++;
@@ -1102,12 +1146,24 @@ function resolveTakedown(
       actor.attrs.groundControl > 80 && rng.chance(0.35) ? 'halfGuard' : 'guard';
     state.stalledSeconds = 0;
     shiftMomentum(actor, target, 0.25);
-    emit('takedown', say.takedownText(rng, actor, state.groundPosition), actor.corner, 'major');
+    emit(
+      'takedown',
+      say.takedownText(rng, actor, state.groundPosition, entry),
+      actor.corner,
+      'major',
+      { takedown: entry },
+    );
     return { seconds: rng.int(6, 12) };
   }
 
   shiftMomentum(target, actor, 0.15);
-  emit('takedownStuffed', say.takedownStuffedText(rng, actor, target), target.corner);
+  emit(
+    'takedownStuffed',
+    say.takedownStuffedText(rng, actor, target, entry),
+    target.corner,
+    undefined,
+    { takedown: entry },
+  );
   // A stuffed shot from the clinch usually ends up back at distance.
   if (from === 'clinch' && rng.chance(0.5)) {
     state.position = 'distance';
