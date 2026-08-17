@@ -41,7 +41,7 @@ Three of mine, in descending order of consequence:
 1. **"`deriveTendencies` is what a fighter reaches for"** — false. Tendencies drive no behaviour
    whatsoever. They are a *scoutability* axis: they scale the opponent's prepared-read bonus and
    nothing else.
-2. **"The cheapest real win is a clinch-striking attribute"** — measured at 0.67 landed clinch
+2. **"The cheapest real win is a clinch-striking attribute"** — measured at 0.68 landed clinch
    strikes per fight, the clinch is the rarest branch in the engine. The real cause of Muay Thai
    and kickboxing collapsing together is that `isKick` never reaches the damage functions, so a
    head kick is a jab with a different noun.

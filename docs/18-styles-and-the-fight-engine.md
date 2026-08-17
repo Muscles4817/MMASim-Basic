@@ -8,7 +8,8 @@ currently tell apart, and where exactly does the distinction get lost?**
 
 > **Revision note.** The first draft of this document answered that question wrongly. It blamed
 > the clinch and recommended a clinch-striking attribute as "the cheapest real win". Measurement
-> says the clinch resolves **0.67 landed strikes per fight** — the rarest branch in the engine —
+> says the clinch resolves **0.68 landed strikes per fight** (measured directly, §5) — the rarest
+> branch in the engine —
 > and the real cause is somewhere else entirely (§4). Three other claims were also wrong and are
 > corrected in place, flagged like this. The reviews are committed verbatim alongside this file
 > because the corrections matter more than the original.
