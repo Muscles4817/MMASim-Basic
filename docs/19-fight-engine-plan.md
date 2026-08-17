@@ -121,7 +121,7 @@ A is the instrument and foundation for B, not a substitute.
 | Phase | Lands | Effort | Risk |
 |---|---|---|---|
 | **0** ✅ | Era fix, draw-bound fix, knife-edge bounds, **fingerprint suite**, guard-player archetype | landed — §7 | none — no engine source touched |
-| **1** | **`Weapon` primitive**, kick profile, weapon×target stats, **commentary parity test** | 4–6 days | moves finish rate; 2 files |
+| **1** ✅ | **`Weapon` primitive**, kick profile, weapon×target stats, **commentary parity test** | landed — §7.7 | moved finish rate +1.2pp after recalibration; 4 files |
 | **2** | `strikeLean` fix, tendencies drive selection, takedown entry becomes a recorded fact | 4–6 days | first change to who wins |
 | **3** | `takedownRate` traits, attribute-aware trait generation, `stance` consumer, kill `cageIq` | 3–4 days | low; stance magnitude is the variable |
 | **4** | Split the striking training focus; persistence assertion | 1–2 weeks | career distributions; long-sim re-baseline |
@@ -438,6 +438,21 @@ double-counting defect underneath a measurement programme would corrupt every ca
 the later phases are supposed to move.
 
 ### 7.5 What to expect when phase 1 lands
+
+> **Scored: one of three, and the two that held are the finding.** Written before phase 1; kept as
+> written, because a prediction edited after the fact is worth nothing.
+>
+> **(2) broke, as expected** — the kicking swing inverted from −1.3pp to +9.7pp and the assertion
+> inverted with it. **(1) did not.** Pairs did *not* start clearing G1; the count is still 0 of 15,
+> because `kickShare` is one axis and G1 asks for two. **(3) did not.** Kickboxing is still the
+> worst discipline in the game — 35.5% mean win rate against boxing's 56.5%, boxing still beats it
+> 63% head to head — but the *cause* has changed, and that is worth more than the tripwire firing
+> would have been. It is no longer that `kicking` is worthless; it is that kickboxing spends 7 of
+> its 40 points on `durability` and `strength` while boxing spends 29 on `strikingOffence` and
+> `strikingDefence`. F3 is now a claim about which *attributes* are worth having, not about a bug.
+>
+> `firstRoundPct` broke exactly as called, at 34.7%, and was brought back to 32.7% by recalibrating
+> `BASE_KD_HAZARD` rather than by softening the weapon table.
 
 Three tripwires should break, and each is a checkpoint rather than a regression:
 
