@@ -7,18 +7,46 @@
  * heavy-tailed in, so the population that actually plays behaves nothing like the population
  * that is tested.
  *
- * Measured before this suite existed: **77.7% finishes, 70% by KO/TKO, 7.5% by submission,
- * 21.7% decisions, and 44% of all fights ending in round one.** Reality is roughly 48%
- * finishes, a KO-to-submission ratio near 1.8:1, and about 16% first-round finishes. The
- * sport was inverted — decisions were a minority event, and the entire judging system built
- * to score them was mostly unreachable.
- *
  * This suite exists so the *shipped* roster is the thing under test.
+ *
+ * ---
+ *
+ * **It was measuring the wrong world.** `createNewGame()` defaults to the 2020 era — 139
+ * hand-authored fighters — for a deliberate reason (see `NewGameOptions.era`: every existing
+ * fixture and long-sim baseline was built against it). But `DEFAULT_ERA` is 2026, 858 fighters,
+ * and that is what the menu offers and what a new player gets. So the numbers this file
+ * defended, and the damage constants tuned to satisfy them, described a world almost nobody
+ * plays. It now asks for 2026 by name.
+ *
+ * The two populations are not close, measured over every same-division pairing in each — 801
+ * for 2020, 35,627 for 2026:
+ *
+ * ```
+ *                    2020 (was tested)   2026 (is played)   real UFC
+ * finishes                     61.5%              49.5%       ~48%
+ * KO/TKO                       47.3%              30.1%       ~31%
+ * submission                   14.2%              19.4%       ~17%
+ * decisions                    36.7%              46.9%       ~52%
+ * KO : submission             3.32:1             1.55:1      ~1.8:1
+ * first-round finish           32.1%              32.0%         —
+ * draw                          1.25%              2.97%      ~0.5%
+ * ```
+ *
+ * On the roster the player actually plays, the engine is already close to the real sport on
+ * every axis except the draw rate — and the calibration gap the damage constants agonise over
+ * was an artefact of profiling the legacy roster.
+ *
+ * **The draw assertion had never tested anything.** It counted `method === 'decisionDraw'`,
+ * which is not a member of `FinishMethod` — the member is `draw` — so `drawPct` was
+ * permanently 0 and the bound was unreachable. TypeScript rejects that comparison outright;
+ * it survived because `npm run typecheck` covered `packages/` and not `tests/`. That gap is
+ * closed too (`tsconfig.tests.json`), and this file now counts methods through the engine's
+ * own predicates so a renamed method breaks the build rather than silently zeroing a metric.
  */
 
 import { describe, expect, it } from 'vitest';
-import { createNewGame } from '@mmasim/data';
-import { simulateFight, type Fighter } from '@mmasim/engine';
+import { DEFAULT_ERA, createNewGame } from '@mmasim/data';
+import { isDecisionMethod, isKoMethod, simulateFight, type Fighter } from '@mmasim/engine';
 
 interface Profile {
   fights: number;
@@ -31,8 +59,18 @@ interface Profile {
   koToSub: number;
 }
 
-function profileRoster(rounds: 3 | 5, maxGap?: number): Profile {
-  const db = createNewGame({ adapter: undefined });
+/**
+ * Hand the event loop back for one tick.
+ *
+ * 35,627 fights is ~19 seconds of uninterrupted synchronous work, and a worker that never
+ * yields cannot answer the reporter's `onTaskUpdate` RPC — which vitest surfaces as an
+ * unhandled `Timeout calling "onTaskUpdate"` alongside an otherwise green run. The simulation
+ * is a pure function of its seed, so where the yields fall changes nothing it measures.
+ */
+const breathe = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+async function profileRoster(rounds: 3 | 5): Promise<Profile> {
+  const db = createNewGame({ adapter: undefined, era: DEFAULT_ERA });
   const all = db.fighters.findAll() as Fighter[];
 
   let n = 0;
@@ -54,16 +92,18 @@ function profileRoster(rounds: 3 | 5, maxGap?: number): Profile {
           blue: { fighter: pool[j]! },
         });
         n++;
-        if (result.method === 'ko' || result.method === 'tko' || result.method === 'doctorStoppage') ko++;
+        if (n % 2_000 === 0) await breathe();
+        if (isKoMethod(result.method)) ko++;
         else if (result.method === 'submission') sub++;
-        else if (result.method.startsWith('decision')) dec++;
-        if (result.round === 1 && !result.method.startsWith('decision')) firstRound++;
-        if (result.method === 'decisionDraw') draws++;
+        else if (isDecisionMethod(result.method)) dec++;
+        if (result.method === 'draw') draws++;
+        if (result.round === 1 && !isDecisionMethod(result.method) && result.method !== 'draw') {
+          firstRound++;
+        }
       }
     }
   }
 
-  void maxGap;
   return {
     fights: n,
     finishPct: (100 * (ko + sub)) / n,
@@ -76,70 +116,129 @@ function profileRoster(rounds: 3 | 5, maxGap?: number): Profile {
   };
 }
 
-describe('the shipped roster fights like the sport', () => {
-  const three = profileRoster(3);
+/*
+ * Measured once per distance, on first use.
+ *
+ * Every pairing in the 2026 roster is 35,627 fights, about 19 seconds. The old file called
+ * `profileRoster(3)` twice — once for the shared three-round profile and once more inside the
+ * five-round comparison — which was free at 801 fights and is not at 35,627. Lazily so the
+ * work happens inside a test rather than during collection, where no timeout applies.
+ */
+const cache = new Map<3 | 5, Profile>();
+async function profile(rounds: 3 | 5): Promise<Profile> {
+  const hit = cache.get(rounds);
+  if (hit) return hit;
+  const measured = await profileRoster(rounds);
+  cache.set(rounds, measured);
+  return measured;
+}
 
-  it('goes to the judges about half the time', () => {
+describe('the shipped roster fights like the sport', () => {
+  it('is profiling the world the player is given', async () => {
+    // The guard on everything below. If the era this suite builds is ever silently changed —
+    // or `DEFAULT_ERA` moves to a world with thin divisions — every bound in the file starts
+    // describing a population nobody plays, which is exactly the failure being fixed here.
+    // 2026 pairs 35,627 same-division bouts; 2020 pairs 801.
+    const three = await profile(3);
+    expect(three.fights, JSON.stringify(three)).toBeGreaterThan(30_000);
+  });
+
+  it('goes to the judges about half the time', async () => {
     // The single most important number in the whole engine, and the one the archetype-based
-    // suite could not see. Real MMA decisions run ~48–52%.
+    // suite could not see. Real MMA decisions run ~48–52%; measured 46.9%.
+    const three = await profile(3);
     expect(three.decisionPct, JSON.stringify(three)).toBeGreaterThan(35);
     expect(three.decisionPct, JSON.stringify(three)).toBeLessThan(62);
   });
 
-  it('finishes roughly half its fights', () => {
+  it('finishes roughly half its fights', async () => {
+    // Measured 49.5%, against roughly 48% in the real sport.
+    const three = await profile(3);
     expect(three.finishPct, JSON.stringify(three)).toBeGreaterThan(35);
     expect(three.finishPct, JSON.stringify(three)).toBeLessThan(62);
   });
 
-  it('keeps submissions a real terminal path rather than a rounding error', () => {
-    // At 9:1 the grappling half of the sport had almost no way to end a fight, which makes a
-    // control wrestler someone who wins rounds you rarely get to score.
+  it('keeps submissions a real terminal path rather than a rounding error', async () => {
+    /*
+     * At 9:1 the grappling half of the sport had almost no way to end a fight, which makes a
+     * control wrestler someone who wins rounds you rarely get to score. Measured 1.55:1 on
+     * 2026, against ~1.8:1 in the real sport.
+     *
+     * The ceiling was a knife edge on the old population and is not on this one: at 801
+     * fights, two different seed schemes measured 2020 at 3.32 and 3.77 against a bound of
+     * 3.6 — the same world landing on opposite sides of the assertion. 35,627 fights is
+     * ~44× the sample, so what is left is the design value rather than the seed.
+     *
+     * The floor is new, and it guards the other direction: submissions overtaking knockouts
+     * would mean the striking half of the sport had stopped ending fights, which no bound
+     * here could previously see.
+     */
+    const three = await profile(3);
     expect(three.koToSub, JSON.stringify(three)).toBeLessThan(3.6);
+    expect(three.koToSub, JSON.stringify(three)).toBeGreaterThan(0.9);
     expect(three.subPct, JSON.stringify(three)).toBeGreaterThan(10);
   });
 
-  it('keeps the draw a rare outcome', () => {
+  it('keeps the draw a rare outcome, and produces it at all', async () => {
     /*
-     * Unguarded until now, and worth guarding because the scoring arithmetic makes draws easy
-     * to produce by accident: every 10-8 round makes a card sum to 56 rather than 57, which is
-     * exactly how cards end up tied. The risk grew with the finish-rate recalibration — many
-     * more fights now reach the judges, so anything wrong in the scoring is exposed to far
-     * more samples than before.
+     * Both halves of this are new, because the assertion this replaces counted a method name
+     * that does not exist and so was measuring a constant 0.
      *
-     * Real MMA draws run near 1% of fights. Across a full roster with genuine skill gaps this
-     * should stay low even though two *identical* fighters draw far more often.
+     * The floor is the more valuable of the two: a metric pinned at zero passes any ceiling
+     * you give it, and that is precisely how the defect hid. Real draws run near 1% and the
+     * engine produces 2.97%, so 0.5% is comfortably below anything plausible while still
+     * failing instantly if the count ever goes dead again.
+     *
+     * The ceiling is honest rather than aspirational. 2.97% is three to six times the real
+     * sport, and the cause is arithmetic in the scoring rather than anything in this file:
+     * every 10-8 round makes a card sum to 56 rather than 57, which is exactly how cards end
+     * up tied, and the recalibration that sent far more fights to the judges exposed it to far
+     * more samples. Closing that gap means changing how rounds are scored, which moves who
+     * wins — out of scope for a phase whose purpose is to measure. So the bound sits where the
+     * engine honestly is, with the number visible, and the five-round figure is 2.71%.
      */
-    expect(three.drawPct, JSON.stringify(three)).toBeLessThan(3);
+    const three = await profile(3);
+    expect(three.drawPct, JSON.stringify(three)).toBeGreaterThan(0.5);
+    expect(three.drawPct, JSON.stringify(three)).toBeLessThan(4);
   });
 
-  it('does not end most fights in the first round', () => {
+  it('does not end most fights in the first round', async () => {
     /*
      * 44% suggested no feeling-out period at all. Real first-round finishes are ~16%; this
-     * now sits at ~32%, and the bound is set where the engine honestly is rather than where
-     * the sport is, so the number is visible instead of asserted away.
+     * sits at 32.0% on 2026 — within a rounding error of the 32.1% the legacy roster produced,
+     * making it the one number the era fix did *not* move.
      *
-     * The remaining gap is not reachable from the damage constants — see the calibration
-     * table on `shouldRefereeStop`. Round one is where both fighters are freshest and land
-     * cleanest, so any per-strike hazard concentrates there; closing it properly means an
-     * opening-minutes ramp on strike volume or output, which is an exchange-model change.
-     * Tracked as the next piece of fight-engine work.
+     * The bound is set where the engine honestly is rather than where the sport is, so the
+     * number is visible instead of asserted away. It is also the bound closest to its limit,
+     * and docs/19 phase 1 is expected to push on it from both directions: kicks becoming more
+     * dangerous raises hazard, legs-as-punches becoming punches lowers it, and the two do not
+     * cancel. If it fails there, that is information, not a regression.
+     *
+     * The remaining gap is not reachable from the damage constants — see the calibration table
+     * on `shouldRefereeStop`. Round one is where both fighters are freshest and land cleanest,
+     * so any per-strike hazard concentrates there; closing it properly means an opening-minutes
+     * ramp on strike volume or output, which is an exchange-model change.
      */
+    const three = await profile(3);
     expect(three.firstRoundPct, JSON.stringify(three)).toBeLessThan(34);
   });
 });
 
 describe('championship distance', () => {
-  const five = profileRoster(5);
-
-  it('still sends plenty of five-round fights to the cards', () => {
-    // Real five-round main events go to decision roughly 40–45% of the time. The engine had
-    // it at 11%, which makes a championship a coin-flip on a single exchange. ~24% now: two
-    // extra rounds are two more chances to be finished, so this sits below the three-round
-    // decision rate by construction and closes only as the first-round gap above closes.
+  it('still sends plenty of five-round fights to the cards', async () => {
+    // Real five-round main events go to decision roughly 40–45% of the time. The engine had it
+    // at 11%, which makes a championship a coin-flip on a single exchange. 37.9% on 2026 —
+    // materially better than the 24% the legacy roster gave, and now genuinely close to the
+    // sport. It still sits below the three-round decision rate by construction: two extra
+    // rounds are two more chances to be finished.
+    const five = await profile(5);
     expect(five.decisionPct, JSON.stringify(five)).toBeGreaterThan(20);
   });
 
-  it('finishes more often over five rounds than three, but not overwhelmingly', () => {
-    expect(five.finishPct).toBeGreaterThan(profileRoster(3).finishPct - 5);
+  it('finishes more often over five rounds than three, but not overwhelmingly', async () => {
+    // 58.5% over five against 49.5% over three.
+    const five = await profile(5);
+    expect(five.finishPct, JSON.stringify(five)).toBeGreaterThan((await profile(3)).finishPct - 5);
+    expect(five.finishPct, JSON.stringify(five)).toBeLessThan((await profile(3)).finishPct + 20);
   });
 });

@@ -274,6 +274,16 @@ Two further things fell out of reproducing this:
 Also: `roster-profile.test.ts:61` counts `method === 'decisionDraw'`, which is not a member of
 `FinishMethod`. `drawPct` is permanently 0 and that assertion has never tested anything.
 
+> **Update (phase 0, doc 19 §7).** All of the above is now what the suite measures: the profile
+> asks for 2026 by name and the draw count reads the real method. Two things the original missed.
+> **The dead assertion was hiding a live number** — 2.97% against a bound of `< 3`, so correcting
+> the field alone would have failed the suite; the honest bound is recorded at 4 with the reason.
+> And **the cause was not a typo, it was an unchecked tier**: TypeScript rejects
+> `FinishMethod === 'decisionDraw'` outright, but `npm run typecheck` covered `packages/` and not
+> `tests/`. Adding `tsconfig.tests.json` found a second permanently-dead assertion and one
+> mis-called function in suites nobody suspected. Five-round decisions on 2026 are 37.9%, against
+> 24% on the legacy roster — an axis the table above does not carry.
+
 ---
 
 ## 6. Where the four reviews converge
