@@ -1344,6 +1344,57 @@ the clinch has neither, so a fighter who wins the tie-up and does nothing pays n
    approach; if the referee break lands correctly, `grind` should be worth *less* than it is now
    against a fighter who can reverse, and that is the intended cost rather than a regression.
 
+#### 6B — landed, and the failure is the finding
+
+| | Predicted | Happened |
+|---|---|---|
+| 1 | landed clinch strikes roughly double from 0.66 | ✅ **1.03 per fight**, and significant strikes per fight rose rather than fell |
+| 2 | **`wrestling` against `judo` separates** | ❌ **0.077 → 0.072.** It did not move at all |
+| 3 | control share up, striking volume down, watch `decisionPct` | ◐ control 34.9%, decisions 50.0% → 50.6%, and volume went *up* |
+| 4 | `grind` stops being free | ✅ the referee separates 1.28 stalled tie-ups a fight |
+
+**The clinch is no longer empty.** The held fighter can strike short or reverse the tie-up; the
+referee breaks one nobody is working; a takedown lands where its entry says it should — a trip puts
+you past the legs, a single leg does not. That is a better simulation than the transit lounge
+§13.2 measured.
+
+**And it failed at the one thing it was for, for a reason no clinch resolver could have fixed.**
+Measured directly:
+
+```
+              chainWrestling  clinchOffence  clinchDefence  subs  scrambling  approach
+wrestling               81.0           79.0           78.0    66          66   wrestle
+judo                    76.0           76.0           70.0    81          75   wrestle
+```
+
+**Wrestling and judo have the same tools.** `DISCIPLINE_META` gives judo `wrestling` 11,
+`submissions` 10, `groundControl` 7, `strength` 6, `scrambling` 6 — which makes it *a wrestler with
+submissions*, and **nothing in the sixteen attributes expresses a throw or a grip**. The planner
+hands both arts the same approach because by every number the engine has, they are the same fighter.
+No amount of clinch content separates two fighters the attribute table has made identical.
+
+This is the same shape as phase 2's ceiling finding, one layer further up: phase 2 found an axis
+whose range was capped by the game plan, and 6B finds a *pair* whose separation is capped by
+`origin.ts`. **§5's "not to touch `origin.ts` until phase 5" has expired**, and D5's question — when
+does `COMBAT_DISCIPLINES` change — now has a concrete answer in front of it: judo is not a
+discipline this engine can express, and it either gets an attribute that carries grip fighting or it
+gets merged with wrestling honestly.
+
+**What 6B cost, recorded rather than smoothed over.**
+
+- **G1 drops from 4 pairs to 3.** `kickboxing/judo` met it on `controlShare`; a kickboxer who can now
+  win a tie-up sometimes lifted their own control share to 0.181, putting the pair at 0.189 — a
+  hundredth under the target.
+- **`kicking`'s win-rate swing falls 7.7 → 5.5.** The engine grew a phase of the fight in which feet
+  do not exist: `clinchOffence` is `strength`, `wrestling` and `strikingOffence` with no `kicking`
+  term, so every knee the two-sided clinch adds dilutes a kicker's edge. Isolated, the clinch half
+  costs 1.4 points and the landing-position half 0.8. `strikingOffence` is unmoved at 9.2, so the
+  hands-beat-feet ordering holds and the G4 bound moves 6 → 4 with the reasoning attached.
+
+**Both costs are real and neither is a reason to revert.** A kicker dragged into the fence loses
+their weapon, and a kickboxer who can win a tie-up is a truer kickboxer. But it is worth saying
+plainly: **step 6B made the simulation better and the programme's headline metric worse.**
+
 ---
 
 **The one-line version:** the engine's missing primitive is a named weapon on the strike, not a
