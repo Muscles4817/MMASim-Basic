@@ -33,6 +33,26 @@ export type StrikeTarget = 'head' | 'body' | 'legs';
 
 export type DamageRegion = StrikeTarget;
 
+/**
+ * What a strike was thrown with.
+ *
+ * The primitive the engine was missing (doc 19 §0 F2). Before this, striking carried a single
+ * `isKick` boolean, and it sat at the wrong scope in three separate ways: it was chosen per
+ * *exchange* while targets were chosen per *shot*, so a "punch" exchange that rolled `legs`
+ * applied leg damage off `strikingOffence` and was then narrated as a calf kick; damage,
+ * flushness and knockdown hazard never saw it at all, so a head kick from a Kicking-95 fighter
+ * landed as flush and hurt as much as their jab; and the clinch knee and the ground elbow had
+ * no name anywhere, being hardcoded prose over a `strength` contest.
+ *
+ * A weapon is per *shot*, chosen with its target rather than independently of it, and carried
+ * through resolution into the play-by-play — which is what makes commentary parity testable
+ * (doc 19 §4 D2). It is deliberately not an attribute: `WEAPON_PROFILE` in `damage.ts` is the
+ * only place a weapon means anything, and every fighter's ability to use one still comes from
+ * the ratings they can train, age out of and be injured in.
+ */
+export const WEAPONS = ['punch', 'kick', 'knee', 'elbow'] as const;
+export type Weapon = (typeof WEAPONS)[number];
+
 /** What a fighter is trying to do this exchange. */
 export type Intent =
   | 'strike'
@@ -62,6 +82,17 @@ export interface FightEvent {
   text: string;
   /** Set for significant moments the UI should emphasise. */
   emphasis?: 'minor' | 'major' | 'critical';
+  /**
+   * What the strike was thrown with, when this event is about one.
+   *
+   * The ground truth the prose is checked against. `commentary.ts` is handed the weapon rather
+   * than choosing a technique itself, so a line that names a knee is a line where a knee was
+   * resolved — and `tests/statistical/commentary-parity.test.ts` can prove it. Two independent
+   * draws, one in the resolver and one in the narrator, would make that test unwritable.
+   */
+  weapon?: Weapon;
+  /** Where it landed, when this event is about a strike. */
+  target?: StrikeTarget;
 }
 
 export type FightEventKind =
@@ -98,6 +129,15 @@ export interface FightStats {
   significantStrikesLanded: number;
   significantStrikesAttempted: number;
   strikesByTarget: Record<StrikeTarget, number>;
+  /**
+   * Landed strikes by what they were thrown with.
+   *
+   * Two one-dimensional projections rather than the full weapon × target matrix, because these
+   * are the two questions anything downstream actually asks — "how much of this fighter's offence
+   * was kicks" and "where did they aim" — and twelve counters would be read as three. Neither is
+   * persisted: `FightStats` lives on a `FightResult`, which no save writes.
+   */
+  strikesByWeapon: Record<Weapon, number>;
   knockdowns: number;
   takedownsLanded: number;
   takedownsAttempted: number;
@@ -164,6 +204,7 @@ export function emptyStats(): FightStats {
     significantStrikesLanded: 0,
     significantStrikesAttempted: 0,
     strikesByTarget: { head: 0, body: 0, legs: 0 },
+    strikesByWeapon: { punch: 0, kick: 0, knee: 0, elbow: 0 },
     knockdowns: 0,
     takedownsLanded: 0,
     takedownsAttempted: 0,

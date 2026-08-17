@@ -58,6 +58,7 @@ import {
   type GroundPosition,
   type Position,
   type StrikeTarget,
+  type Weapon,
 } from './types.js';
 
 export interface CornerConfig {
@@ -190,8 +191,18 @@ export function simulateFight(config: FightConfig): FightResult {
         text: string,
         corner?: Corner,
         emphasis?: FightEvent['emphasis'],
+        shot?: { weapon: Weapon; target: StrikeTarget },
       ) => {
-        events.push({ round, timeSeconds: Math.round(clock), kind, text, corner, emphasis });
+        events.push({
+          round,
+          timeSeconds: Math.round(clock),
+          kind,
+          text,
+          corner,
+          emphasis,
+          weapon: shot?.weapon,
+          target: shot?.target,
+        });
       };
 
       const exchange = resolveExchange({
@@ -366,6 +377,7 @@ interface ExchangeContext {
     text: string,
     corner?: Corner,
     emphasis?: FightEvent['emphasis'],
+    shot?: { weapon: Weapon; target: StrikeTarget },
   ) => void;
   scoreSoFar: readonly Record<Corner, RoundTally>[];
 }
@@ -691,6 +703,66 @@ function pickTarget(rng: Rng, actor: Combatant): StrikeTarget {
 }
 
 /**
+ * How much this fighter reaches for their feet rather than their hands, 0–1.
+ *
+ * Fatigued and leg-impaired, because both are reasons somebody stops kicking. A 50/50 striker
+ * sits at 0.5 and a pure kicker near 0.8; chewed-up legs drag it toward the hands, which is the
+ * other half of what a calf-kick game plan buys.
+ */
+function kickLean(c: Combatant): number {
+  const hands = fatiguedEffect(c.attrs.strikingOffence, 'strikingOffence', c.fatigue);
+  const feet = fatiguedEffect(c.attrs.kicking, 'kicking', c.fatigue) * legImpairment(c);
+  return clamp01(feet / Math.max(1e-6, feet + hands));
+}
+
+/**
+ * What this shot is thrown with, chosen *together* with where it is going.
+ *
+ * The scope fix. `isKick` was chosen once per exchange while `pickTarget` ran per shot and the
+ * two never spoke, so a punching exchange that rolled `legs` applied leg damage through
+ * `strikingOffence` and was then narrated as a calf kick — roughly two thirds of all leg damage
+ * in the game was dealt by a boxing stat (doc 18 §4.1).
+ *
+ * Nobody punches a leg, so a shot to the legs is a kick and the attribute that lands it is
+ * `kicking`. Above the waist the exchange's lean decides, with the odd shot from the other
+ * toolbox, because a burst is a combination rather than four copies of one strike — you throw a
+ * hand to set up the kick.
+ */
+function pickShot(
+  rng: Rng,
+  actor: Combatant,
+  prefersKick: boolean,
+): { target: StrikeTarget; weapon: Weapon } {
+  const target = pickTarget(rng, actor);
+  const lean = kickLean(actor);
+
+  if (target === 'legs') {
+    /*
+     * Going low means throwing a kick, so whether a fighter goes low at all is a question about
+     * their kicking rather than about their plan.
+     *
+     * `GamePlan.targeting` sends 15% of everybody's shots at the legs, and every AI fight in the
+     * game uses the default plan (doc 18 §2.5). Resolving those as kicks — correct in itself —
+     * therefore handed a leg-kick game to fighters who have never thrown one, and measurably: a
+     * boxer's kick share jumped to a kickboxer's, and the win-rate value of `strikingOffence` fell
+     * from 14.5pp to 8.1pp because a sixth of a boxer's offence had been moved onto an attribute
+     * they are bad at. A fighter who cannot kick aims somewhere they can hit instead.
+     *
+     * This is a *floor* on the honesty of the existing targeting split, not a replacement for it.
+     * Phase 2's "tendencies drive selection" is where targeting stops being one table for the whole
+     * roster; until then this keeps the weapon consistent with the fighter throwing it.
+     */
+    if (rng.chance(lean)) return { target, weapon: 'kick' };
+    return { target: rng.chance(0.7) ? 'head' : 'body', weapon: 'punch' };
+  }
+
+  // Above the waist the exchange's lean decides, nudged by what this fighter actually owns, with
+  // the odd shot from the other toolbox — a burst is a combination, not four copies of one strike.
+  const kickChance = prefersKick ? 0.55 + lean * 0.4 : lean * 0.3;
+  return { target, weapon: rng.chance(kickChance) ? 'kick' : 'punch' };
+}
+
+/**
  * A striking exchange: the actor throws, and the fighter in front of them throws back.
  *
  * Two-way exchanges matter for more than realism. Volume is load-bearing in this engine —
@@ -704,12 +776,12 @@ function resolveStrikeExchange(
   ctx: ExchangeContext,
   actor: Combatant,
   target: Combatant,
-  isKick: boolean,
+  prefersKick: boolean,
 ): ExchangeOutcome {
   const { rng } = ctx;
   const seconds = rng.int(6, 14);
 
-  const lead = throwBurst(ctx, actor, target, isKick, 1);
+  const lead = throwBurst(ctx, actor, target, prefersKick, 1);
   if (lead.ending) return { seconds, ending: lead.ending };
 
   // The counter. Smaller than the lead burst — you are reacting, not initiating — unless
@@ -720,7 +792,20 @@ function resolveStrikeExchange(
     // comes back, which is where fights turn.
     const counterScale =
       (target.plan.approach === 'counter' ? 0.9 : 0.55) * riskProfile(actor.plan.riskLevel).exposure;
-    const counter = throwBurst(ctx, target, actor, false, counterScale);
+    /*
+     * The counter is thrown with the counter-fighter's own weapons.
+     *
+     * This argument was the literal constant `false` — `isKick` — so **every counter in the game
+     * was a punch, resolved on `strikingOffence`** (doc 19 §0 F1). That closed the strongest
+     * piece of style expression in the engine, the `counter` approach's 0.90 counter-scale, to
+     * every kicker in the game. And `origin.ts` gives the karate discipline the lowest
+     * `strikingOffence` of the three striking arts on purpose, so the origin built to
+     * counter-strike was the one the counter mechanic could not serve: two systems that shipped
+     * days apart, each defeating the other.
+     *
+     * Once a weapon is per-shot the fix is free — a counter picks weapons like any other burst.
+     */
+    const counter = throwBurst(ctx, target, actor, rng.chance(kickLean(target)), counterScale);
     if (counter.ending) return { seconds, ending: counter.ending };
   }
 
@@ -736,7 +821,7 @@ function throwBurst(
   ctx: ExchangeContext,
   actor: Combatant,
   target: Combatant,
-  isKick: boolean,
+  prefersKick: boolean,
   scale: number,
 ): BurstOutcome {
   const { rng, state, tally, emit, referee } = ctx;
@@ -754,7 +839,8 @@ function throwBurst(
   let landedAny = false;
 
   for (let i = 0; i < burst; i++) {
-    const strikeTarget = pickTarget(rng, actor);
+    const { target: strikeTarget, weapon } = pickShot(rng, actor, prefersKick);
+    const isKick = weapon === 'kick';
     const reads: ReadKey[] = isKick
       ? strikeTarget === 'legs'
         ? ['calfKick']
@@ -787,7 +873,14 @@ function throwBurst(
     tally[actor.corner].strikesAttempted++;
 
     if (!rng.chance(offence / (offence + defence))) {
-      if (i === 0) emit('strike', say.strikeMissed(rng, actor, strikeTarget), actor.corner);
+      // A missed kick is now narrated as a missed kick. `strikeMissed` never received `isKick`,
+      // so every miss in the game read as a missed punch.
+      if (i === 0) {
+        emit('strike', say.strikeMissed(rng, actor, strikeTarget, weapon), actor.corner, undefined, {
+          weapon,
+          target: strikeTarget,
+        });
+      }
       continue;
     }
 
@@ -795,19 +888,19 @@ function throwBurst(
     actor.stats.significantStrikesLanded++;
     tally[actor.corner].significantStrikes++;
 
-    const result = applyStrike(rng, actor, target, strikeTarget);
+    const result = applyStrike(rng, actor, target, strikeTarget, weapon);
     tally[actor.corner].damageDealt += result.damage;
 
-    // Flush head shots open cuts. Cuts end fights via the doctor, not the referee.
-    if (strikeTarget === 'head' && result.flushness > 1.8 && rng.chance(0.14)) {
-      state.cuts[target.corner] += rng.range(8, 22);
-    }
+    // Cuts end fights via the doctor, not the referee. Which weapon opened it is decided in
+    // `applyStrike` now, because an elbow and a jab are not the same risk.
+    if (result.cut) state.cuts[target.corner] += rng.range(8, 22);
 
     emit(
       isKick ? 'kick' : 'strike',
-      say.strikeLanded(rng, actor, strikeTarget, isKick, result.flushness),
+      say.strikeLanded(rng, actor, strikeTarget, weapon, result.flushness),
       actor.corner,
       result.flushness >= 2 ? 'major' : undefined,
+      { weapon, target: strikeTarget },
     );
 
     if (result.knockdown) {
@@ -888,7 +981,8 @@ function resolveKnockdown(
     actor.stats.significantStrikesAttempted++;
     if (!rng.chance(clamp01(instinct / (instinct + survival)))) continue;
 
-    const result = applyStrike(rng, actor, target, 'head');
+    // Hands. A pursuit flurry on a hurt fighter is a fighter swinging, not picking head kicks.
+    const result = applyStrike(rng, actor, target, 'head', 'punch');
     actor.stats.significantStrikesLanded++;
     ctx.tally[actor.corner].significantStrikes++;
     ctx.tally[actor.corner].damageDealt += result.damage;
@@ -1003,16 +1097,21 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
     actor.stats.significantStrikesAttempted++;
     tally[actor.corner].strikesAttempted++;
     if (rng.chance(offence / (offence + defence))) {
-      // Clinch work is body-and-knees work; it is how you drain someone standing up.
+      // Clinch work is body-and-knees work; it is how you drain someone standing up. The prose
+      // always said "knee" and nothing in resolution agreed — the strike was a generic one over
+      // a `strength` contest. It is a knee now, with a knee's mass behind it.
       const strikeTarget: StrikeTarget = rng.chance(0.6) ? 'body' : 'head';
-      const result = applyStrike(rng, actor, target, strikeTarget);
+      const result = applyStrike(rng, actor, target, strikeTarget, 'knee');
       actor.stats.significantStrikesLanded++;
       tally[actor.corner].significantStrikes++;
       tally[actor.corner].damageDealt += result.damage;
+      if (result.cut) state.cuts[target.corner] += rng.range(8, 22);
       emit(
         'strike',
-        `${say.surname(actor)} digs a knee to the ${strikeTarget} in the clinch.`,
+        say.clinchStrikeText(rng, actor, strikeTarget),
         actor.corner,
+        undefined,
+        { weapon: 'knee', target: strikeTarget },
       );
       if (result.knockdown) {
         tally[actor.corner].knockdowns++;
@@ -1148,15 +1247,27 @@ function resolveGroundTop(
 
     const shots = rng.int(1, 4);
     let landed = 0;
+    let landedElbow = false;
     for (let i = 0; i < shots; i++) {
       actor.stats.significantStrikesAttempted++;
       tally[actor.corner].strikesAttempted++;
       if (!rng.chance(offence / (offence + defence))) continue;
       landed++;
-      const result = applyStrike(rng, actor, target, rng.chance(0.75) ? 'head' : 'body');
+      /*
+       * Punches and elbows, and the position decides which.
+       *
+       * The prose said "punches and elbows" and resolution knew about neither. From guard you are
+       * throwing hands; from mount or the back an elbow is available, and an elbow is how a
+       * ground-and-pound fight ends in the doctor's hands rather than the referee's.
+       */
+      const groundWeapon: Weapon = rng.chance(dominance * 0.5) ? 'elbow' : 'punch';
+      const groundTarget: StrikeTarget = rng.chance(0.75) ? 'head' : 'body';
+      const result = applyStrike(rng, actor, target, groundTarget, groundWeapon);
+      if (groundWeapon === 'elbow') landedElbow = true;
       actor.stats.significantStrikesLanded++;
       tally[actor.corner].significantStrikes++;
       tally[actor.corner].damageDealt += result.damage;
+      if (result.cut) state.cuts[target.corner] += rng.range(8, 22);
 
       // A knockdown from top position counts exactly as much as one on the feet: it is the
       // most legible evidence of damage a judge has, and the 10-8 gate reads this field.
@@ -1170,14 +1281,23 @@ function resolveGroundTop(
       if (result.knockdown || target.hurtSeconds > 0) {
         state.unanswered[target.corner]++;
         if (shouldRefereeStop(target, ctx.referee.stoppageTrigger, state.unanswered[target.corner])) {
-          emit('groundStrikes', say.groundStrikesText(rng, actor, true), actor.corner, 'critical');
+          emit(
+            'groundStrikes',
+            say.groundStrikesText(rng, actor, true, landedElbow),
+            actor.corner,
+            'critical',
+          );
           return { seconds: 10, ending: { method: 'tko', winner: actor.corner } };
         }
       }
     }
     if (landed > 0) {
       state.stalledSeconds = 0;
-      emit('groundStrikes', say.groundStrikesText(rng, actor, landed >= 3), actor.corner);
+      emit(
+        'groundStrikes',
+        say.groundStrikesText(rng, actor, landed >= 3, landedElbow),
+        actor.corner,
+      );
     } else {
       state.stalledSeconds += 15;
     }

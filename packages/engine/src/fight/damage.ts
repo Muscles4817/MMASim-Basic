@@ -16,13 +16,70 @@ import type { Rng } from '../core/rng.js';
 import { traitMul } from '../domain/traits.js';
 import { effect, fatiguedEffect, ratingEffect } from '../ratings/curve.js';
 import { effectiveDurability, type Combatant } from './profile.js';
-import type { StrikeTarget } from './types.js';
+import type { StrikeTarget, Weapon } from './types.js';
 
 /** Damage points applied by a fully-clean strike from a Power-50 fighter, per region. */
 const BASE_DAMAGE: Readonly<Record<StrikeTarget, number>> = {
   head: 2.2,
   body: 2.6,
   legs: 2.4,
+};
+
+/**
+ * What each weapon does differently.
+ *
+ * The whole content of doc 19 phase 1. Before this table a kick was a punch with a different
+ * noun: `rollFlushness`, `strikeDamage` and `knockdownHazard` took a target and never asked
+ * what was thrown, so a Kicking-95 / Striking-40 fighter's head kick landed as flush as their
+ * jab, did identical damage, and carried identical knockout hazard. Measured, the consequence
+ * was that sixty rating points of `kicking` were worth −1.3 points of win rate (doc 19 §7.3).
+ *
+ * Four numbers per weapon, and each is a claim about the sport rather than a dial:
+ *
+ * - `damage` — mass behind the strike. A shin is heavier than a fist and a knee is the heaviest
+ *   thing anybody throws; an elbow is the lightest, and earns its place through `cut` instead.
+ * - `hazard` — knockdown probability, over and above the damage. This is the number that makes
+ *   a head kick a *fight-ender* rather than merely a hard shot, which is what it is in reality
+ *   and what the engine could not previously say.
+ * - `cut` — chance a flush head strike opens a cut. Elbows are the reason the doctor exists.
+ * - `accuracy` — which attribute decides how flush it lands. This is the load-bearing entry: it
+ *   is what makes `kicking` a real striking attribute instead of a selector for prose, and it
+ *   is why a kicker's kicks now land better than their hands rather than identically.
+ *
+ * Deliberately *not* here: how often a weapon is thrown, and whether it lands at all. Selection
+ * belongs to the game plan and the fighter's ratios (`simulate.ts`), and the landing roll belongs
+ * to the attribute contest. A weapon profile that also decided frequency would be a fourth way
+ * to say the same thing three systems already say.
+ */
+export interface WeaponProfile {
+  damage: number;
+  hazard: number;
+  cut: number;
+  accuracy: 'strikingOffence' | 'kicking';
+}
+
+export const WEAPON_PROFILE: Readonly<Record<Weapon, WeaponProfile>> = {
+  /** The reference. Everything else is expressed against a punch. */
+  punch: { damage: 1, hazard: 1, cut: 0.14, accuracy: 'strikingOffence' },
+  /*
+   * Heavier and more dangerous than a punch, and harder to time — but "harder to time" is
+   * already priced in the landing roll, where a kick is contested by `kicking` rather than by
+   * `strikingOffence`, and most fighters' kicking is the lower of the two. So the profile only
+   * has to state the part the roll cannot: when a kick lands, it lands with a shin.
+   */
+  kick: { damage: 1.32, hazard: 1.5, cut: 0.1, accuracy: 'kicking' },
+  /*
+   * The heaviest strike in the sport and the one that ends clinch exchanges. Its scarcity is
+   * structural rather than a number here: knees only exist in the clinch, which resolves 0.68
+   * landed strikes per fight (doc 18 §5), so this multiplier is applied rarely by construction.
+   */
+  knee: { damage: 1.4, hazard: 1.45, cut: 0.3, accuracy: 'strikingOffence' },
+  /*
+   * The weapon that wins by cutting rather than by concussing. A quarter less damage than a
+   * punch and three times the chance of opening someone up — which is the first time the
+   * doctor-stoppage path has had a weapon behind it rather than a lucky flush punch.
+   */
+  elbow: { damage: 0.9, hazard: 0.8, cut: 0.42, accuracy: 'strikingOffence' },
 };
 
 /**
@@ -34,8 +91,21 @@ const BASE_DAMAGE: Readonly<Record<StrikeTarget, number>> = {
  *
  * Was 0.026 against a 6.5-strike referee threshold, which produced a sport that finished
  * 77.7% of its fights. See the calibration note on `shouldRefereeStop` below.
+ *
+ * **0.019 → 0.0158 when `WEAPON_PROFILE` landed.** This constant sets the *absolute* level of
+ * danger in the sport and the weapon table sets the *relative* level, so a table that makes kicks
+ * and knees harder than punches necessarily raises the population's hazard: measured over all
+ * 35,627 pairings of the shipped roster, finishes went 49.5% → 52.7% and first-round finishes
+ * 32.0% → 34.7%, which broke the bound docs/19 §3 predicted would be the one to break.
+ *
+ * Absorbing that here rather than by softening the weapon table is the whole point of having the
+ * two separated — the style expression is in the ratios between weapons, and it survives this
+ * change untouched. Measured at 0.0158: KO/TKO 31.0% against a real ~31%, decisions 45.8%,
+ * first-round 32.7%, KO:submission 1.57:1. Four of five axes sit closer to the real sport than the
+ * alternatives tried (0.0172, 0.0165), and first-round finishes land within a point of where they
+ * were before phase 1 rather than banking a realism regression as the price of style.
  */
-export const BASE_KD_HAZARD = 0.019;
+export const BASE_KD_HAZARD = 0.0158;
 
 /**
  * Power is raised to this before the ratio is taken.
@@ -56,6 +126,8 @@ export interface StrikeOutcome {
   knockdown: boolean;
   /** True if this strike put them into (or extended) the hurt state without dropping them. */
   hurt: boolean;
+  /** True if this strike opened a cut. Weapon-dependent — see `WEAPON_PROFILE`. */
+  cut: boolean;
 }
 
 /**
@@ -65,7 +137,12 @@ export interface StrikeOutcome {
  * and occasionally something lands perfectly. Squaring a uniform draw gives that shape
  * cheaply and keeps the tail fat enough that flush shots stay genuinely dangerous.
  */
-export function rollFlushness(rng: Rng, attacker: Combatant, defender: Combatant): number {
+export function rollFlushness(
+  rng: Rng,
+  attacker: Combatant,
+  defender: Combatant,
+  weapon: Weapon,
+): number {
   const u = rng.next();
   const base = 0.25 + u * u * 2.25;
 
@@ -76,7 +153,11 @@ export function rollFlushness(rng: Rng, attacker: Combatant, defender: Combatant
   // the same attribute, and since flushness feeds knockdown hazard which feeds the hurt
   // state which feeds hazard again, a modest accuracy edge compounds into a near-certain
   // knockout. Landing more often is the reward for accuracy; landing harder is Power's job.
-  const accuracy = fatiguedEffect(attacker.attrs.strikingOffence, 'strikingOffence', attacker.fatigue);
+  // Read through the weapon, which is the whole point: a kick's flushness is decided by
+  // `kicking`, so a kicker's kicks land better than their hands instead of identically. This
+  // single line is what `isKick` could never express, because damage never saw it.
+  const attribute = WEAPON_PROFILE[weapon].accuracy;
+  const accuracy = fatiguedEffect(attacker.attrs[attribute], attribute, attacker.fatigue);
   const evasion = fatiguedEffect(defender.attrs.strikingDefence, 'strikingDefence', defender.fatigue);
   const skew = clamp((accuracy / evasion) ** 0.18, 0.75, 1.35);
 
@@ -92,11 +173,12 @@ export function strikeDamage(
   attacker: Combatant,
   target: StrikeTarget,
   flushness: number,
+  weapon: Weapon,
 ): number {
   const power = fatiguedEffect(attacker.attrs.power, 'power', attacker.fatigue);
   // Rehydrating well above the limit is real, transferable force.
   const size = effect(50 + attacker.sizeAdvantage, 1.6) / effect(50, 1.6);
-  return BASE_DAMAGE[target] * power * size * flushness;
+  return BASE_DAMAGE[target] * WEAPON_PROFILE[weapon].damage * power * size * flushness;
 }
 
 /**
@@ -112,6 +194,7 @@ export function knockdownHazard(
   defender: Combatant,
   target: StrikeTarget,
   flushness: number,
+  weapon: Weapon,
 ): number {
   if (target !== 'head') return 0;
 
@@ -129,7 +212,13 @@ export function knockdownHazard(
   const alreadyHurt = defender.hurtSeconds > 0 ? 1.8 : 1;
 
   return clamp01(
-    BASE_KD_HAZARD * (power / chin) * size * flushness * accumulation * alreadyHurt,
+    BASE_KD_HAZARD *
+      WEAPON_PROFILE[weapon].hazard *
+      (power / chin) *
+      size *
+      flushness *
+      accumulation *
+      alreadyHurt,
   );
 }
 
@@ -139,13 +228,15 @@ export function applyStrike(
   attacker: Combatant,
   defender: Combatant,
   target: StrikeTarget,
+  weapon: Weapon,
 ): StrikeOutcome {
-  const flushness = rollFlushness(rng, attacker, defender);
-  const damage = strikeDamage(attacker, target, flushness);
+  const flushness = rollFlushness(rng, attacker, defender, weapon);
+  const damage = strikeDamage(attacker, target, flushness, weapon);
 
   defender.damage[target] = clamp(defender.damage[target] + damage, 0, 100);
   attacker.stats.damageDealt += damage;
   attacker.stats.strikesByTarget[target]++;
+  attacker.stats.strikesByWeapon[weapon]++;
 
   if (target === 'head') {
     // Rate tuned against the long-sim suite: a full twenty-year career should leave a
@@ -154,14 +245,23 @@ export function applyStrike(
       damage * 0.032 * traitMul(defender.fighter.traits, 'headTraumaRate');
   }
 
-  const knockdown = rng.chance(knockdownHazard(attacker, defender, target, flushness));
+  const knockdown = rng.chance(knockdownHazard(attacker, defender, target, flushness, weapon));
 
   // A shot short of a knockdown can still rock someone — a separate, lower hazard that only
   // opens the hurt window rather than putting them on the mat.
   const hurt =
     !knockdown &&
     target === 'head' &&
-    rng.chance(knockdownHazard(attacker, defender, target, flushness) * 1.5);
+    rng.chance(knockdownHazard(attacker, defender, target, flushness, weapon) * 1.5);
+
+  /*
+   * Cuts, which are now a property of what was thrown.
+   *
+   * This roll used to live in `simulate.ts` at a flat 0.14 for every strike in the game, which
+   * meant the doctor-stoppage path was reachable only by a lucky flush punch and an elbow was
+   * indistinguishable from a jab. It belongs here, next to the weapon that decides it.
+   */
+  const cut = target === 'head' && flushness > 1.8 && rng.chance(WEAPON_PROFILE[weapon].cut);
 
   if (knockdown) {
     defender.knockdownsSuffered++;
@@ -173,7 +273,7 @@ export function applyStrike(
     defender.hurtSeconds = Math.max(defender.hurtSeconds, hurtDuration(defender));
   }
 
-  return { damage, flushness, knockdown, hurt };
+  return { damage, flushness, knockdown, hurt, cut };
 }
 
 /** How long this fighter stays compromised after being rocked. */
