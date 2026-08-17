@@ -22,13 +22,18 @@
  *
  * ```
  *              kickShare  legTarget  grappling  subMix  control  distance
- * boxing           0.171      0.026      0.136   0.606    0.213     0.319
- * kickboxing       0.410      0.080      0.127   0.614    0.167     0.319
- * karate           0.484      0.106      0.145   0.563    0.242     0.342
- * wrestling        0.293      0.052      0.213   0.436    0.342     0.321
- * jiuJitsu         0.341      0.065      0.203   0.606    0.258     0.319
- * judo             0.295      0.054      0.231   0.534    0.300     0.292
+ * boxing           0.163      0.031      0.184   0.693    0.201     0.261
+ * kickboxing       0.422      0.128      0.188   0.714    0.179     0.239
+ * karate           0.473      0.144      0.196   0.641    0.244     0.260
+ * wrestling        0.247      0.043      0.297   0.394    0.421     0.291
+ * jiuJitsu         0.374      0.069      0.176   0.502    0.263     0.348
+ * judo             0.241      0.043      0.341   0.471    0.379     0.256
  * ```
+ *
+ * **Measured under the plans the world gives these fighters**, which is `planFor` on both corners
+ * since docs/19 phase 5. That is a change of instrument as well as of engine, and both moved at
+ * once — the previous table, measured on the neutral default that every AI fight used to run on,
+ * is in the git history and in doc 19 §8.1.
  *
  * **Phase 1 moved one axis and one goal.** `kickShare` roughly doubled everywhere and spread out
  * (boxing 0.081 → 0.163, karate 0.358 → 0.430), and G4 is met (see below).
@@ -40,18 +45,23 @@
  * two, and the mechanism responds to attributes far harder than the disciplines exercise it:
  * probed across the plausible range, a hands-only fighter reads 0.003 and a pure kicker 0.132.
  *
- * **That probe is the finding.** `legTargetShare`'s ceiling is the plan's own `legs` weight, and
- * every AI fight in the game uses the default plan's 0.15 (doc 18 §2.5). So the axis cannot
- * produce a 0.20 separation at all until fighters carry plans that match their art — which is
- * phase 5, not a tuning problem here. G1's second axis is not available to a targeting change.
+ * **Phase 5 broke G1 open, and it was the cheapest phase in the programme.** Giving the world real
+ * game plans took `approachWeight` from a table the whole roster read one row of to a table each
+ * art reads its own row of, and **four of the fifteen pairs now meet G1** — boxing/wrestling,
+ * kickboxing/wrestling, kickboxing/judo and karate/wrestling — against zero from the weapon
+ * primitive, the targeting rewrite and the trait work put together.
  *
- * **G1 is therefore still 0 of 15 pairs.** Two pairs are separated on `kickShare` alone
- * (boxing/kickboxing 0.239, boxing/karate 0.313) and no pair has a second axis. One pair got
- * *worse* in phase 1 and stayed there — kickboxing against karate at 0.075, because both are
- * high-kick fighters and the axis that works saturates for both of them, which is Strategy A's
- * ceiling arriving exactly where docs/19 §2 said it would: "cannot reach karate vs TKD".
- * Jiu-jitsu against judo remains the worst pair in the game at 0.072, because it is a position
- * problem and always was.
+ * What came alive is what phase 2 predicted would have to: `submissionMix` and `controlShare`,
+ * the *position* axes. `grapplingShare` spread from 0.13–0.23 to 0.18–0.34 and `controlShare` from
+ * 0.17–0.34 to 0.18–0.42, because a quarter of the roster is now told to wrestle or grind and the
+ * rest are told not to. `legTargetShare` also cleared its old ceiling — kickboxing 0.080 → 0.128,
+ * karate 0.106 → 0.144 — because the plan's `legs` weight is no longer 0.15 for everybody, which
+ * is exactly the cap phase 2 measured and could not lift from inside the engine.
+ *
+ * **The eleven pairs that remain are a shape, not a list.** Every one of them is a pair from the
+ * *same family*: the three striking arts against each other, the three grappling arts against each
+ * other. Plans separate families. Only positions separate members of a family — which is the case
+ * for phase 6, now stated by measurement rather than by argument.
  *
  * Two assertions below are **tripwires**: they assert a defect rather than a design, and they
  * are supposed to break when the phase that fixes them lands. Each says so at the site.
@@ -160,53 +170,84 @@ describe('G1 — separation between the six disciplines', () => {
     ).toBeGreaterThanOrEqual(SEPARATION_TARGET);
   });
 
-  it('does not yet separate a single pair on two axes — the G1 target is unmet', () => {
+  it('separates the striking arts from the grappling arts on a shape, not a number', () => {
     /*
-     * **Tripwire.** This asserts the defect, not the design.
+     * **This was the sharpest tripwire in the file and phase 5 broke it, which is the whole point
+     * of the programme.** It asserted, for three phases, that not one of the fifteen pairs met G1.
      *
-     * G1 asks for `SEPARATION_TARGET` on at least two axes for every pair, because one axis
-     * clear of the error term could be noise while two is a shape. That count is still zero out
-     * of fifteen pairs after two phases, and the reason has changed twice:
+     * Four do now: boxing/wrestling, kickboxing/wrestling, kickboxing/judo and karate/wrestling.
+     * The bound is set at three rather than at four, because what is being defended is "the engine
+     * can tell a striker from a grappler by their shape", not the exact count — and the count is
+     * the number most likely to move by a tenth on any honest change to the world's plans.
      *
-     *  - At the phase 0 baseline it was `applyStrike` — a kick and a punch produced identical
-     *    damage, flushness and hazard, so the arts differed in what they threw and in nothing
-     *    that followed (doc 18 §4.1). Phase 1 fixed that and `kickShare` doubled and spread.
-     *  - Now it is that **`kickShare` is the only axis with the range to clear 0.20 at all.**
-     *    `legTargetShare` is capped by the plan's own `legs` weight of 0.15, and the remaining
-     *    four are position axes that no weapon or targeting change can reach.
-     *
-     * So this tripwire does not break in phase 2, and the phase that breaks it is 5 (plans that
-     * match the art, which lifts the targeting cap) or 6 (positions). When pairs do start
-     * clearing it, replace this with the target — every pair at two axes — and move the count
-     * into the comment as history.
+     * Every one of the four is a striker against a grappler. The eleven that remain are pairs from
+     * the same family, and the axes they would need are positional. That is the case for phase 6,
+     * and this assertion is where it will be proved: when positions land, this should read
+     * fifteen and become the G1 target itself.
      */
     const met = pairs().filter(
       ([a, b]) => separatedAxes(prints().get(a)!, prints().get(b)!).length >= 2,
     );
 
     expect(
+      met.map(([a, b]) => `${a}/${b}`).length,
+      `pairs meeting G1: ${met.map(([a, b]) => `${a}/${b}`).join(', ') || 'none'}`,
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it('has not separated a single same-family pair, which is what phase 6 is for', () => {
+    /*
+     * **Tripwire**, and the successor to the one above: the *complement* of what phase 5 achieved.
+     *
+     * Boxing against kickboxing against karate; wrestling against judo against jiu-jitsu. Six
+     * pairs, none of them meeting G1, and the reason is structural rather than tuned — two arts
+     * that want the same phase of the fight and reach for it with the same intents can only be
+     * told apart by *where inside that phase* they operate, and the engine has one standing
+     * position and one clinch. Kickboxing against karate is 0.073 at its widest, jiu-jitsu against
+     * judo 0.165, wrestling against judo 0.077.
+     *
+     * When phase 6's positions land this breaks. Invert it then to the G1 target for every pair.
+     */
+    const striking: CombatDiscipline[] = ['boxing', 'kickboxing', 'karate'];
+    const grappling: CombatDiscipline[] = ['wrestling', 'jiuJitsu', 'judo'];
+    const sameFamily = pairs().filter(
+      ([a, b]) =>
+        (striking.includes(a) && striking.includes(b)) ||
+        (grappling.includes(a) && grappling.includes(b)),
+    );
+
+    const met = sameFamily.filter(
+      ([a, b]) => separatedAxes(prints().get(a)!, prints().get(b)!).length >= 2,
+    );
+    expect(
       met.map(([a, b]) => `${a}/${b}`),
-      `pairs now meeting G1 — raise the bound and delete this tripwire`,
+      `same-family pairs now meeting G1 — phase 6 has landed, raise this`,
     ).toEqual([]);
   });
 
-  it('cannot tell the two grappling arts apart at all', () => {
+  it('can finally tell the two grappling arts apart, but not clearly enough', () => {
     /*
-     * **Tripwire**, and the sharpest single number in the file: jiu-jitsu against judo is
-     * 0.066 at its widest, less than half the scouting error term. Two disciplines the
-     * creation screen offers as different choices, which the simulator plays identically.
+     * Jiu-jitsu against judo was the sharpest single number in this file: **0.058 at its widest,
+     * less than half the scouting error term** — two disciplines the creation screen offers as
+     * different choices and the simulator played identically. It survived phases 1, 2 and 3
+     * untouched, and the file said plainly that nothing short of positions would move it.
      *
-     * Neither phase 1 nor phase 2 addresses this, and neither was ever going to — it is a
-     * *position* problem rather than a weapon or a targeting problem (doc 18 §4.2), and it is
-     * the honest case for phase 6 rather than for more attributes.
-     * When a phase does separate them, invert this to `toBeGreaterThan(SEPARATION_TARGET)`.
+     * Phase 5 moved it to **0.165**, which is past the scouting error term and still short of the
+     * 0.20 target. Game plans did it: the planner sends judo to `wrestle` or `grind` and jiu-jitsu
+     * to a striking approach, because a jiu-jitsu exemplar's `chainWrestling` cannot get the fight
+     * to the floor against a contender — which is both a real property of the art in MMA and an
+     * accident of the exemplar. So it is bounded from *both* sides here: above the error term, and
+     * short of the target, because the remaining gap is the positional one and claiming otherwise
+     * would be claiming phase 6 had already happened.
      */
     const jiuJitsu = prints().get('jiuJitsu')!;
     const judo = prints().get('judo')!;
+    const separation = maxSeparation(jiuJitsu, judo);
     expect(
-      maxSeparation(jiuJitsu, judo),
+      separation,
       `jiuJitsu ${describeFingerprint(jiuJitsu)} vs judo ${describeFingerprint(judo)}`,
-    ).toBeLessThan(SCOUTING_ERROR);
+    ).toBeGreaterThan(SCOUTING_ERROR);
+    expect(separation).toBeLessThan(SEPARATION_TARGET);
   });
 });
 

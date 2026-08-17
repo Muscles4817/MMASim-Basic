@@ -25,8 +25,13 @@
  *     the scouting error term — `SCOUTING_ERROR` below — which is what makes the G1 target a
  *     claim about *perceptibility* rather than an arbitrary threshold.
  *
- *  3. **Default game plans**, because that is what ~99% of the fights the game produces use
- *     (doc 18 §2.5). Measuring style under hand-tuned plans would measure the plans.
+ *  3. **The plans the world actually gives them**, which is `planFor` on both corners since
+ *     docs/19 phase 5. This rule used to read "default game plans, because that is what ~99% of
+ *     the fights the game produces use" — true when it was written and false the moment the world
+ *     started planning, which is the risk every instrument carries: a justification that decays
+ *     silently while the number it justifies keeps being quoted. A fingerprint measured under a
+ *     plan nobody fights with is a fingerprint of a fight that does not happen. Passing an explicit
+ *     `plan` still overrides both corners, for the tests that need the plan held constant.
  *
  * Known bias, recorded rather than corrected: `distanceShare` reads `stats.distanceSeconds`,
  * and the simulator credits an exchange's seconds to the position the exchange *ended* in. A
@@ -43,6 +48,7 @@ import {
   COMBAT_DISCIPLINES,
   DISCIPLINE_META,
   makeFighter,
+  planFor,
   simulateFight,
   uniformAttributes,
   type AttributeKey,
@@ -121,7 +127,13 @@ export interface FingerprintOptions {
   rounds?: 3 | 5;
   /** The control. Defaults to `ARCHETYPES.contender()` — the level a matchmaker really books. */
   opponent?: Fighter;
-  /** Given to both corners, so the plan is never what is being measured. */
+  /**
+   * Given to both corners, so the plan is held constant rather than derived.
+   *
+   * Omitted, each corner gets `planFor` — what the world would hand them. Set it when the claim
+   * being made is about the fighters *under identical instructions*, which is a different and
+   * narrower claim than "how does this fighter fight".
+   */
   plan?: GamePlan;
   seedPrefix?: string;
 }
@@ -199,8 +211,8 @@ export function measureFingerprint(fighter: Fighter, opts: FingerprintOptions = 
       boutId: `${prefix}:${i}`,
       seed: `${prefix}:${i}`,
       rounds: opts.rounds ?? 3,
-      red: { fighter, plan: opts.plan },
-      blue: { fighter: opponent, plan: opts.plan },
+      red: { fighter, plan: opts.plan ?? planFor(fighter, opponent) },
+      blue: { fighter: opponent, plan: opts.plan ?? planFor(opponent, fighter) },
     });
 
     const stats = result.stats.red;

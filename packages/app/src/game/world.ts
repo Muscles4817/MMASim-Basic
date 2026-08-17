@@ -48,7 +48,7 @@ import {
   contractFairness,
   createAgreement,
   debutNews,
-  defaultGamePlan,
+  planFor,
   defaultTerms,
   displayName,
   fighterAge,
@@ -787,8 +787,10 @@ export function runCardBout(ctx: {
   const boutId = bout.boutId;
   const result = simulateFight({
     boutId,
-    red: { fighter: red, plan: defaultGamePlan() },
-    blue: { fighter: blue, plan: defaultGamePlan() },
+    // Both corners bring a plan built from who they are and who is in front of them. Every
+    // fight the world simulates used to run on the neutral default (docs/19 §11).
+    red: { fighter: red, plan: planFor(red, blue) },
+    blue: { fighter: blue, plan: planFor(blue, red) },
     // Card position decides the distance, which is one of the things having a card buys.
     rounds: bout.rounds,
     seed: `${getWorld(db).seed}:${boutId}`,

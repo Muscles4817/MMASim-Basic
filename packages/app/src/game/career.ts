@@ -15,6 +15,7 @@ import {
   asPromotionId,
   createRng,
   defaultGamePlan,
+  planFor,
   offerOpponents,
   readinessDelay,
   retirementReason,
@@ -635,50 +636,9 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
 /**
  * A plausible plan for an AI fighter.
  *
- * Chosen from their own strengths against the opponent's weaknesses, so the player is
- * facing someone who also had a camp. Reads are drawn from the opponent's real tendencies,
- * which means the AI is *correctly* prepared — the player has to beat a plan, not a blank.
+ * Moved into the engine as `planFor` by docs/19 phase 5, and kept here as a name because the
+ * *interesting* half of that move was where it was called from rather than what it did: this
+ * function existed, worked, and was applied to exactly one fight in the game — the player's
+ * opponent — while `night.ts` and `world.ts` handed both corners `defaultGamePlan()`.
  */
-export function aiPlanFor(fighter: Fighter, opponent: Fighter): GamePlan {
-  const a = fighter.attributes;
-  const o = opponent.attributes;
-
-  const wrestlingEdge = a.wrestling - o.takedownDefence;
-  const strikingEdge = a.strikingOffence - o.strikingDefence;
-
-  const approach =
-    wrestlingEdge > strikingEdge + 8
-      ? a.groundControl > 70
-        ? 'wrestle'
-        : 'grind'
-      : strikingEdge > 8
-        ? 'pressure'
-        : 'counter';
-
-  // Attack the legs of anyone who needs their base, and the body of anyone with a tank.
-  const targeting =
-    o.wrestling > 70
-      ? { head: 0.45, body: 0.2, legs: 0.35 }
-      : o.cardio > 80
-        ? { head: 0.45, body: 0.4, legs: 0.15 }
-        : { head: 0.6, body: 0.25, legs: 0.15 };
-
-  const reads = (
-    [
-      o.wrestling > 65 ? ('doubleLeg' as const) : undefined,
-      o.wrestling > 65 ? ('singleLeg' as const) : undefined,
-      o.kicking > 75 ? ('calfKick' as const) : undefined,
-      o.strikingOffence > 75 ? ('leadHook' as const) : undefined,
-      o.groundControl > 75 ? ('guardPassing' as const) : undefined,
-      o.submissions > 75 ? ('guillotine' as const) : undefined,
-    ].filter(Boolean) as ('doubleLeg' | 'singleLeg' | 'calfKick' | 'leadHook' | 'guardPassing' | 'guillotine')[]
-  ).slice(0, 3);
-
-  return {
-    approach,
-    targeting,
-    riskLevel: 0.5,
-    campQuality: 0.7,
-    preppedReads: reads.map((read) => ({ read, drillQuality: 0.7, confidence: 0.7 })),
-  };
-}
+export const aiPlanFor = planFor;

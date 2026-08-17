@@ -5,6 +5,7 @@ import {
   defaultGamePlan,
   makeFighter,
   type GamePlan,
+  planFor,
 } from '@mmasim/engine';
 import { describeSummary, runMatchup } from '../helpers/sim.js';
 
@@ -254,6 +255,79 @@ describe('preparation is worth more than a few rating points', () => {
       (prepared.redWinRate - base.redWinRate) * 100,
       `prep bought ${((prepared.redWinRate - base.redWinRate) * 100).toFixed(1)} points`,
     ).toBeGreaterThan(2);
+  });
+
+  it('is worth less when the other man also had a camp, which is the world the player fights in', () => {
+    /*
+     * The test above measures a prepared player against an opponent with no plan at all. That was
+     * the whole world until docs/19 phase 5 — `defaultGamePlan()` in both corners of every fight
+     * the game simulated — and it is now the world *nowhere*, so this measures the same camp
+     * against the same opponent under the plan `planFor` would give them.
+     *
+     * Measured, 2,500 fights per cell, the same underdog matchup:
+     *
+     * ```
+     *                     base   +1 read   +4 reads
+     * opponent unplanned   9.4%     13.4%      13.8%
+     * opponent planned     7.5%      8.7%       9.8%
+     * ```
+     *
+     * **The camp is worth about half what it was: +4.4 points becomes +2.3.** Both halves of that
+     * are the design working — the underdog's base falls because the grinder now has a plan built
+     * to exploit them, and the camp still buys a real edge on top of a harder fight. It is recorded
+     * here because it is the kind of movement that would otherwise show up as "preparation feels
+     * weaker" three months later with nothing to point at.
+     */
+    const bluePlan = planFor(ARCHETYPES.grinder(), ARCHETYPES.contender());
+    const base = runMatchup(ARCHETYPES.contender(), ARCHETYPES.grinder(), {
+      fights: 1500,
+      bluePlan,
+      seedPrefix: 'prep-world',
+    });
+    const prepared = runMatchup(ARCHETYPES.contender(), ARCHETYPES.grinder(), {
+      fights: 1500,
+      redPlan: preparedAgainstWrestler(),
+      bluePlan,
+      seedPrefix: 'prep-world',
+    });
+
+    expect(
+      prepared.redWinRate,
+      `unprepared ${describeSummary(base)} vs prepared ${describeSummary(prepared)}`,
+    ).toBeGreaterThan(base.redWinRate);
+  });
+
+  it('buys almost nothing for a second read in a phase the camp already covers', () => {
+    /*
+     * **The granularity question docs/19 §11d asks, answered with a number.**
+     *
+     * `prepBonus` takes the *best* matching read rather than the sum, so two reads that resolve at
+     * the same site are one read. Measured against the unplanned opponent: one read (`doubleLeg`)
+     * buys +4.0 points, and adding `singleLeg` — the other takedown-phase read, drilled to the same
+     * quality — buys **+0.0**. All four together buy +4.4, and the extra 0.4 comes from the two
+     * that cover *ground* phases the first two do not.
+     *
+     * Fifteen read keys over eight resolution sites, and a camp holds four. So the read space is
+     * not too coarse, it is **too fine in the phases the engine resolves most often**: a player who
+     * drills the single and the double has spent half their camp twice, and nothing in the game
+     * tells them so. That is a UI and read-table problem rather than an engine one, which is why it
+     * is recorded here rather than fixed inside a phase about game plans.
+     */
+    const one = runMatchup(ARCHETYPES.contender(), ARCHETYPES.grinder(), {
+      fights: 1500,
+      redPlan: { ...preparedAgainstWrestler(), preppedReads: preparedAgainstWrestler().preppedReads.slice(0, 1) },
+      seedPrefix: 'prep-granularity',
+    });
+    const two = runMatchup(ARCHETYPES.contender(), ARCHETYPES.grinder(), {
+      fights: 1500,
+      redPlan: { ...preparedAgainstWrestler(), preppedReads: preparedAgainstWrestler().preppedReads.slice(0, 2) },
+      seedPrefix: 'prep-granularity',
+    });
+
+    expect(
+      Math.abs(two.redWinRate - one.redWinRate) * 100,
+      `one read ${describeSummary(one)} vs two ${describeSummary(two)}`,
+    ).toBeLessThan(1.5);
   });
 
   it('wastes the camp entirely when the read is wrong', () => {

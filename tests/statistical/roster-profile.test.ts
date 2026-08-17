@@ -37,19 +37,32 @@
  * extra danger a weapon table introduces, so the movement is small and mostly toward the sport:
  *
  * ```
- *                    2026 before phase 1   now      real UFC
- * finishes                        49.5%   50.7%       ~48%
- * KO/TKO                          30.1%   31.0%       ~31%
- * submission                      19.4%   19.8%       ~17%
- * decisions                       46.9%   45.8%       ~52%
- * KO : submission                1.55:1  1.57:1      ~1.8:1
- * first-round finish              32.0%   32.7%         —
- * draw                            2.97%   2.90%      ~0.5%
+ *                    2026 before phase 1   after 1   now (phase 5)   real UFC
+ * finishes                        49.5%     50.7%           47.1%      ~48%
+ * KO/TKO                          30.1%     31.0%           28.9%      ~31%
+ * submission                      19.4%     19.8%           18.1%      ~17%
+ * decisions                       46.9%     45.8%           49.5%      ~52%
+ * KO : submission                1.55:1    1.57:1          1.59:1     ~1.8:1
+ * first-round finish              32.0%     32.7%           30.9%        —
+ * draw                            2.97%     2.90%           2.76%     ~0.5%
  * ```
  *
- * On the roster the player actually plays, the engine is already close to the real sport on
- * every axis except the draw rate — and the calibration gap the damage constants agonise over
- * was an artefact of profiling the legacy roster.
+ * **The phase 5 column is the world getting game plans**, and it is the largest deliberate
+ * movement in this file's history: every fight in the world now runs on `planFor` rather than on
+ * `defaultGamePlan`, roughly a quarter of the roster is handed a grappling approach, and the
+ * population answers exactly as docs/19 §11 predicted it would — more decisions, fewer knockouts,
+ * first-round finishes down. Measured against the same 35,627 pairings on the neutral default the
+ * same day: finishes 50.6%, KO 31.1%, decisions 45.6%, first-round 33.2%. **Every one of those
+ * moves is toward the real sport**, which is not something the phase was aiming for and is worth
+ * saying out loud.
+ *
+ * This file profiles *planned* fights for the same reason `fingerprint.ts` does: an instrument
+ * whose justification has quietly expired is worse than no instrument, and "the world fights on
+ * default plans" stopped being true the moment phase 5 landed.
+ *
+ * On the roster the player actually plays, the engine is close to the real sport on every axis
+ * except the draw rate — and the calibration gap the damage constants agonise over was an
+ * artefact of profiling the legacy roster.
  *
  * **The draw assertion had never tested anything.** It counted `method === 'decisionDraw'`,
  * which is not a member of `FinishMethod` — the member is `draw` — so `drawPct` was
@@ -61,7 +74,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_ERA, createNewGame } from '@mmasim/data';
-import { isDecisionMethod, isKoMethod, simulateFight, type Fighter } from '@mmasim/engine';
+import { isDecisionMethod, isKoMethod, planFor, simulateFight, type Fighter } from '@mmasim/engine';
 
 interface Profile {
   fights: number;
@@ -99,12 +112,18 @@ async function profileRoster(rounds: 3 | 5): Promise<Profile> {
     const pool = all.filter((f) => f.divisionId === division);
     for (let i = 0; i < pool.length; i++) {
       for (let j = i + 1; j < pool.length; j++) {
+        const red = pool[i]!;
+        const blue = pool[j]!;
         const result = simulateFight({
           boutId: `p${n}`,
           seed: `profile_${rounds}_${n}`,
           rounds,
-          red: { fighter: pool[i]! },
-          blue: { fighter: pool[j]! },
+          // Both corners bring the plan the world would give them. Until docs/19 phase 5 this
+          // profiled fights on the neutral default, which is what the game ran — and the moment
+          // the world started planning, an unplanned profile would have been measuring a
+          // population that no longer exists. Same decay the fingerprint's third rule suffered.
+          red: { fighter: red, plan: planFor(red, blue) },
+          blue: { fighter: blue, plan: planFor(blue, red) },
         });
         n++;
         if (n % 2_000 === 0) await breathe();

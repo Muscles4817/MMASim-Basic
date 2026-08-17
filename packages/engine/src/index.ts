@@ -51,6 +51,7 @@ export * from './progression/createFighter.js';
 
 // Camp
 export * from './camp/scouting.js';
+export * from './camp/planner.js';
 
 // Business
 export * from './business/matchmaking.js';

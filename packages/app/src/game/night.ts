@@ -18,7 +18,7 @@ import {
   broadcastFor,
   buildCard,
   createRng,
-  defaultGamePlan,
+  planFor,
   displayName,
   drawWeight,
   eventId,
@@ -173,8 +173,9 @@ export function runSupportingCard(
 
     const result = simulateFight({
       boutId: bout.boutId,
-      red: { fighter: red, plan: defaultGamePlan() },
-      blue: { fighter: blue, plan: defaultGamePlan() },
+      // The rest of the card gets the same treatment the player's opponent always got.
+      red: { fighter: red, plan: planFor(red, blue) },
+      blue: { fighter: blue, plan: planFor(blue, red) },
       rounds: bout.rounds,
       seed: `${world.seed}:${bout.boutId}`,
     });
