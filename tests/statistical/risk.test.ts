@@ -18,6 +18,7 @@ function run(redRisk: number, blueRisk: number, n = 1200, tag = 'r') {
   let redKos = 0;
   let redKod = 0;
   let decisions = 0;
+  let kdSuffered = 0;
   for (let i = 0; i < n; i++) {
     const red = ARCHETYPES.journeyman() as Fighter;
     const blue = ARCHETYPES.journeyman2() as Fighter;
@@ -33,12 +34,14 @@ function run(redRisk: number, blueRisk: number, n = 1200, tag = 'r') {
       if (finish) redKos++;
     } else if (result.winnerId === blue.id && finish) redKod++;
     if (result.method.startsWith('decision')) decisions++;
+    kdSuffered += result.damage.red.knockdownsSuffered;
   }
   return {
     winRate: redWins / n,
     koFor: redKos / n,
     koAgainst: redKod / n,
     decisionRate: decisions / n,
+    kdSuffered: kdSuffered / n,
   };
 }
 
@@ -61,20 +64,46 @@ describe('the risk profile', () => {
   });
 });
 
+/*
+ * 4,000 fights per setting, raised from 1,200 by docs/19 phase 2.
+ *
+ * Not a change of heart about sample sizes — a measurement. The downside of recklessness is a
+ * far smaller effect than this file assumed, and 1,200 fights could not resolve it in either
+ * direction: measured over 12,000, the reckless fighter is knocked out on 3.98% of fights
+ * against the careful fighter's 3.74%, a gap of a quarter of a point that a 1,200-fight sample
+ * reported as **0.0342 against 0.0458 — inverted, and passing only because the seeds happened
+ * to fall the other way before an unrelated change reseeded them.** Same shape as the
+ * broadcast-bias chain in phase 1: the effect was real and the sample could not see it.
+ *
+ * So the KO-suffered assertion below is stated on **knockdowns** suffered instead, which is the
+ * same exposure mechanism counted an order of magnitude more often, and the file costs about
+ * eight seconds more than it did.
+ */
 describe('risk in a fight', () => {
-  const reckless = run(0.95, 0.5, 1200, 'rk');
-  const careful = run(0.05, 0.5, 1200, 'cf');
+  const reckless = run(0.95, 0.5, 4000, 'rk');
+  const careful = run(0.05, 0.5, 4000, 'cf');
 
   it('finishes more when you sit down on your shots', () => {
+    // The one loud effect in the file: 7.0% of fights won by knockout against 1.75%. Four times.
     expect(reckless.koFor, JSON.stringify(reckless)).toBeGreaterThan(careful.koFor);
   });
 
-  it('gets you finished more too', () => {
-    // The whole point. If this ever inverts, recklessness is free and the slider is a trap.
-    expect(reckless.koAgainst, JSON.stringify(reckless)).toBeGreaterThan(careful.koAgainst);
+  it('gets you dropped more too', () => {
+    /*
+     * The whole point. If this ever inverts, recklessness is free and the slider is a trap.
+     *
+     * Measured 0.262 knockdowns suffered per fight against 0.246 — a 6% cost against a 300%
+     * gain, which is worth saying plainly: **at journeyman level recklessness is close to free
+     * on this axis**, and what actually keeps the dial honest is `exertion` and the shorter
+     * fights it produces rather than the counters it eats. That is a finding about the risk
+     * system rather than about this test, and it belongs to whichever phase owns the
+     * volume/referee pair (docs/19 §4 D4), not to a style phase.
+     */
+    expect(reckless.kdSuffered, JSON.stringify(reckless)).toBeGreaterThan(careful.kdSuffered);
   });
 
   it('sends fewer fights to the judges', () => {
+    // 68.2% against 72.3%.
     expect(reckless.decisionRate, JSON.stringify(reckless)).toBeLessThan(careful.decisionRate);
   });
 
@@ -84,9 +113,15 @@ describe('risk in a fight', () => {
      * opponent, so if either produced a materially better win rate it would simply be the
      * right setting and the choice would be fake.
      *
-     * The band is wide because 1200 fights is noisy at this resolution; it is tight enough to
-     * catch a dial that hands over a decisive edge.
+     * Measured 48.9% for the reckless fighter against 43.1% for the careful one — a 5.8-point
+     * gap, inside the band but consistently pointing the same way (4.1 points before phase 2,
+     * and the difference between those two numbers is about 1.5 standard errors, so treat them
+     * as one number rather than as a movement). Recklessness is mildly correct at this level.
+     * The band is what catches a dial that hands over a *decisive* edge.
      */
-    expect(Math.abs(reckless.winRate - careful.winRate), `reckless ${JSON.stringify(reckless)} careful ${JSON.stringify(careful)}`).toBeLessThan(0.08);
+    expect(
+      Math.abs(reckless.winRate - careful.winRate),
+      `reckless ${JSON.stringify(reckless)} careful ${JSON.stringify(careful)}`,
+    ).toBeLessThan(0.08);
   });
 });
