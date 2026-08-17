@@ -1271,6 +1271,41 @@ two clocks disagreeing, which is the defect with a smaller radius rather than a 
    clock. If a pair's separation changes materially, the fingerprint was reading a measurement
    artefact and the G1 baseline needs restating with that said out loud.
 
+#### 6.0 — landed, and F5 was real but small
+
+| | Predicted | Happened |
+|---|---|---|
+| 1 | `distanceShare` rises, most for position-changers | ◐ it rose **+0.017 to +0.022**, uniformly across all six arts rather than concentrated |
+| 2 | `controlShare` falls; scorecards move toward strikers | ◐ directionally yes — control 35.0% → 34.2%, the smotherer 77.8% → 77.0% against a striker — but under a point |
+| 3 | less fatigue, so finishes rise | ❌ **nothing moved**: finishes 46.8% → 46.7%, head damage identical at 21.6 |
+| 4 | style separation unmoved | ✅ separations identical to three decimals |
+
+**The honest summary is that a caveat this programme carried for four phases was worth two points of
+one axis and under a point of anybody's win rate.** §7.4 called F5 "not only a measurement defect"
+because the judges read `distanceSeconds`, and §13.3 made it ship alone on that basis. Shipping it
+alone was still right — it is exactly how you find out that something is small — but the plan
+over-weighted it, and the fingerprint's four-phase-old warning to prefer the other five axes turns
+out to have been costing more caution than the defect cost accuracy.
+
+**Two things fell out of it that matter more than the fix itself.**
+
+**F12 — the corner-symmetry assertion was wrong, not tight.** `balance.test.ts` pinned `redWinRate`
+inside 0.44–0.56, a band centred on 0.50 — and 0.50 is the symmetric answer only when nobody draws.
+Two identical fighters draw about 12% of the time, so the symmetric answer is ≈0.44 and **the centre
+of the distribution was sitting exactly on the lower bound**. It had been passing on whatever margin
+the draw rate happened to leave it, and a change worth less than a point of clock knocked it over.
+Stated between the corners now — red's share of *decisive* fights, measured 49.9% — which is the
+claim it always meant to make.
+
+**F13 — the test suite was building a monument to fights nobody looks at.** The integration tier
+began dying with `Fatal process out of memory: Zone` while every file in it passed alone.
+`runMatchup` retained every `FightResult`, each carrying its full play-by-play, on the summary it
+returned — and **nothing in the repo has ever read them**. Harmless at 400 fights; not harmless once
+the suite grew to 2,500-fight statistical files whose fights carry more events than they used to. It
+counts as it goes now. Worth noting as a class: this programme has added four statistical files and
+roughly doubled what the tier simulates, and the tier's *own* resource envelope was never part of
+anybody's plan.
+
 ---
 
 **The one-line version:** the engine's missing primitive is a named weapon on the strike, not a
