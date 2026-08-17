@@ -20,6 +20,16 @@ import {
 import { hire, sign } from '../../packages/app/src/game/contracts';
 import { runTraining } from '../../packages/app/src/game/progression';
 
+/**
+ * `sign` returns a result rather than a fighter, because it now refuses when the fighter is
+ * still under contract elsewhere — a rule that did not exist when these tests were written and
+ * that they all satisfy, since each signs with the fighter's own promotion.
+ */
+const mustSign = (result: ReturnType<typeof sign>): Fighter => {
+  if (!result.ok) throw new Error(`sign refused: ${result.reason}`);
+  return result.fighter;
+};
+
 const game = () => createNewGame({ adapter: undefined });
 const player = (db: ReturnType<typeof game>) => (db.fighters.findAll() as Fighter[])[0]!;
 
@@ -182,7 +192,7 @@ describe('the contract actually pays', () => {
     const promotion = promotionOf(db, me)!;
 
     // Sign for a pittance, then become a star.
-    const signed = sign(db, { ...me, bank: 0 }, promotion, {
+    const signed = mustSign(sign(db, { ...me, bank: 0 }, promotion, {
       showPurse: 2,
       winBonus: 2,
       signingBonus: 0,
@@ -192,7 +202,7 @@ describe('the contract actually pays', () => {
       matchingRights: false,
       exclusive: true,
       outsideBouts: 0,
-    });
+    }));
 
     const nowAStar = { ...signed, starPower: 95, reputation: 90 };
     db.fighters.upsert(nowAStar as Fighter & { id: string });

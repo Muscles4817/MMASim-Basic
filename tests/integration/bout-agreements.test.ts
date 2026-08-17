@@ -34,6 +34,16 @@ import {
 } from '../../packages/app/src/game/promoting';
 import { sign } from '../../packages/app/src/game/contracts';
 
+/**
+ * `sign` returns a result rather than a fighter, because it now refuses when the fighter is
+ * still under contract elsewhere — a rule that did not exist when these tests were written and
+ * that they all satisfy, since each signs with the fighter's own promotion.
+ */
+const mustSign = (result: ReturnType<typeof sign>): Fighter => {
+  if (!result.ok) throw new Error(`sign refused: ${result.reason}`);
+  return result.fighter;
+};
+
 const game = () => createNewGame({ adapter: undefined, era: '2026' });
 const leader = (db: ReturnType<typeof game>) =>
   (db.promotions.findAll() as unknown as Promotion[])
@@ -247,7 +257,7 @@ describe('what saying no costs', () => {
     // The seed puts nobody under a written agreement — those arrive through free agency as the
     // world runs — so the test signs one rather than hunting for a fighter who happens to have
     // it and silently passing when nobody does.
-    const signed = sign(db, a, promotion, {
+    const signed = mustSign(sign(db, a, promotion, {
       showPurse: 20,
       winBonus: 20,
       signingBonus: 0,
@@ -257,7 +267,7 @@ describe('what saying no costs', () => {
       matchingRights: false,
       exclusive: true,
       outsideBouts: 0,
-    });
+    }));
     const before = db.agreements.findById(signed.agreementId as string) as PromotionalAgreement;
 
     tollForRefusal(db, signed.id as string, 30);

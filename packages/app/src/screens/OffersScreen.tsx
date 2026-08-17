@@ -30,6 +30,7 @@ export function OffersScreen() {
   const { navigate } = useRouter();
   const [pending, setPending] = useState<string | undefined>();
   const [confirmingManager, setConfirmingManager] = useState<string | undefined>();
+  const [refusal, setRefusal] = useState<string | undefined>();
 
   const offers = useMemo(
     () => (playerFighter ? offersOnTheTable(db, playerFighter) : []),
@@ -152,6 +153,11 @@ export function OffersScreen() {
           </p>
         ) : (
           <div className="stack" style={{ gap: 'var(--space-3)' }}>
+            {refusal && (
+              <Alert tone="warn" title="You cannot sign this">
+                {refusal}
+              </Alert>
+            )}
             {offers.map((offer) => (
               <OfferCard
                 key={offer.promotion.id as string}
@@ -166,7 +172,15 @@ export function OffersScreen() {
                   )
                 }
                 onAccept={() => {
-                  sign(db, playerFighter, offer.promotion, offer.terms);
+                  // `sign` refuses rather than corrupting when the fighter is still under
+                  // contract. The card is already gated on `canSign`, so a refusal here means
+                  // the gate and the rule disagreed — say so rather than navigating away as
+                  // though something happened.
+                  const result = sign(db, playerFighter, offer.promotion, offer.terms);
+                  if (!result.ok) {
+                    setRefusal(result.reason);
+                    return;
+                  }
                   commit();
                   navigate({ name: 'hub' });
                 }}

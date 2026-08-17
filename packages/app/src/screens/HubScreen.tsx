@@ -18,7 +18,6 @@ import {
   type Fighter,
   type MatchupAppraisal,
   type Gym,
-  type Promotion,
   type Rivalry,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
@@ -26,7 +25,7 @@ import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty } from '../ui';
 import { Alert, Fact, FighterRead, ICON, Icon, KeyStat, OverallRating, StreakBadge } from '../ui/signals';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
-import { getLadderStatus, signWith, type LadderStatus } from '../game/progression';
+import { getLadderStatus, type LadderStatus } from '../game/progression';
 import { getRivalry, previousMeetings } from '../game/rivalries';
 import { advanceWorld, readNews } from '../game/world';
 import { NewsFeed } from '../ui/NewsFeed';
@@ -36,8 +35,10 @@ import {
   acceptRepaperOffer,
   adviceOn,
   boutMerit,
+  canSignWith,
   contractStanding,
   repaperOnTheTable,
+  requestRelease,
 } from '../game/contracts';
 import { formatGameDay } from '../shell/Shell';
 
@@ -52,6 +53,7 @@ export function HubScreen() {
   const { db, world, playerFighter, commit, updateWorld } = useGame();
   const { navigate } = useRouter();
   const [confirmCancel, setConfirmCancel] = useState(false);
+  const [releaseWord, setReleaseWord] = useState<string | undefined>();
   const [confirmingRepaper, setConfirmingRepaper] = useState(false);
   const [signedRepaper, setSignedRepaper] = useState<RepaperOffer | undefined>();
   const [pendingOffer, setPendingOffer] = useState<MatchupAppraisal | undefined>();
@@ -218,7 +220,34 @@ export function HubScreen() {
         )}
       </Card>
 
-      {ladder && <LadderCard ladder={ladder} onSign={(p) => { signWith(db, fighter, p); commit(); }} />}
+      {ladder && (
+        <LadderCard
+          ladder={ladder}
+          lock={
+            // Interest arrives whatever your contract says — seeing what you are worth is most
+            // of the drama of being stuck on a bad deal. Acting on it is what the deal governs.
+            ladder.offers.length > 0 && ladder.offers[0]
+              ? (() => {
+                  const eligibility = canSignWith(db, fighter, ladder.offers[0]!.promotion);
+                  return eligibility.allowed
+                    ? undefined
+                    : { reason: eligibility.reason, releasable: eligibility.releasable };
+                })()
+              : undefined
+          }
+          onGoToOffers={() => navigate({ name: 'offers' })}
+          onAskRelease={() => {
+            const outcome = requestRelease(db, fighter);
+            setReleaseWord(outcome.reason);
+            commit();
+          }}
+        />
+      )}
+      {releaseWord && (
+        <Alert tone="info" title="You asked for your release">
+          {releaseWord}
+        </Alert>
+      )}
 
       {!booking && ladder?.titleShot.eligible && (ladder.champion || ladder.position === 1) && (
         <Card title="Title fight" raised>
@@ -788,10 +817,23 @@ function OfferRow({
  */
 function LadderCard({
   ladder,
-  onSign,
+  lock,
+  onGoToOffers,
+  onAskRelease,
 }: {
   ladder: LadderStatus;
-  onSign(promotion: Promotion): void;
+  /*
+    Why the player cannot act on the interest below, if they cannot.
+   
+    This card used to carry its own "Sign with X" button wired to a three-line `signWith` that set
+    `promotionId` and nothing else — no agreement, no bonus paid, no old deal closed — so a player
+    who used it ended up at their new promotion still on the old one's contract. Signing now lives
+    in exactly one place, the offers screen, and this card's job is to say who is interested and
+    what is standing in the way.
+  */
+  lock?: { reason: string; releasable: boolean };
+  onGoToOffers(): void;
+  onAskRelease(): void;
 }) {
   const { promotion, position, isChampion, titleShot, offers, progress } = ladder;
 
@@ -865,14 +907,37 @@ function LadderCard({
                   {offer.pitch}
                 </p>
                 <div className="row" style={{ marginTop: 'var(--space-2)', flexWrap: 'wrap' }}>
-                  <Chip tone="positive">Signing bonus £{offer.bonus}k</Chip>
-                  <Button size="sm" variant="primary" onClick={() => onSign(offer.promotion)}>
-                    Sign with {offer.promotion.shortName}
-                  </Button>
+                  {/*
+                    Described as a likely bonus rather than promised as a figure. The old label
+                    said "Signing bonus £Xk" next to a button that never paid it, and the real
+                    number is negotiated on the offers screen.
+                  */}
+                  <Chip tone="positive">Around £{offer.bonus}k to sign</Chip>
                 </div>
               </div>
             ))}
           </div>
+
+          {lock ? (
+            <div style={{ marginTop: 'var(--space-3)' }}>
+              <Alert tone="warn" title="You are under contract">
+                {lock.reason}
+                {lock.releasable && (
+                  <div className="row" style={{ marginTop: 'var(--space-2)' }}>
+                    <Button size="sm" onClick={onAskRelease}>
+                      Ask to be released
+                    </Button>
+                  </div>
+                )}
+              </Alert>
+            </div>
+          ) : (
+            <div className="row" style={{ marginTop: 'var(--space-3)' }}>
+              <Button size="sm" variant="primary" onClick={onGoToOffers}>
+                See the terms
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </Card>

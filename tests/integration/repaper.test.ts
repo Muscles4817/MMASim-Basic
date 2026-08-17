@@ -31,6 +31,16 @@ import {
 } from '../../packages/app/src/game/contracts';
 import { promotionOf } from '../../packages/app/src/game/money';
 
+/**
+ * `sign` returns a result rather than a fighter, because it now refuses when the fighter is
+ * still under contract elsewhere — a rule that did not exist when these tests were written and
+ * that they all satisfy, since each signs with the fighter's own promotion.
+ */
+const mustSign = (result: ReturnType<typeof sign>): Fighter => {
+  if (!result.ok) throw new Error(`sign refused: ${result.reason}`);
+  return result.fighter;
+};
+
 const game = () => createNewGame({ adapter: undefined });
 const player = (db: ReturnType<typeof game>) => (db.fighters.findAll() as Fighter[])[0]!;
 
@@ -49,7 +59,7 @@ function underpaidStar(db: ReturnType<typeof game>) {
   const me = player(db);
   const promotion = promotionOf(db, me)!;
   const worth = marketValue(me, promotion);
-  const signed = sign(db, { ...me, bank: 0 }, promotion, {
+  const signed = mustSign(sign(db, { ...me, bank: 0 }, promotion, {
     showPurse: round1(worth * 0.35),
     winBonus: round1(worth * 0.35),
     signingBonus: 0,
@@ -59,7 +69,7 @@ function underpaidStar(db: ReturnType<typeof game>) {
     matchingRights: false,
     exclusive: true,
     outsideBouts: 0,
-  });
+  }));
   // And then they grew. Modestly — enough that `valueAtSigning` is genuinely a different
   // number when the deal is restamped, without reopening the implausible-gap problem above.
   const star = {
@@ -98,7 +108,7 @@ describe('when a promotion tears a deal up', () => {
     // subject is a seeded star, so "60" is not a fair deal for them and the fixture has to
     // ask the same question the mechanic does.
     const worth = marketValue(me, promotion);
-    const fair = sign(db, me, promotion, {
+    const fair = mustSign(sign(db, me, promotion, {
       showPurse: round1(worth / 2),
       winBonus: round1(worth / 2),
       signingBonus: 0,
@@ -108,7 +118,7 @@ describe('when a promotion tears a deal up', () => {
       matchingRights: false,
       exclusive: true,
       outsideBouts: 0,
-    });
+    }));
     const winning = { ...fair, summary: { ...fair.summary, streak: 5 } };
     expect(
       repaperOffer({ agreement: agreementFor(db, fair), fighter: winning, promotion }),

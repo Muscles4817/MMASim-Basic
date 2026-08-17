@@ -256,14 +256,6 @@ function advanceRoster(db: GameDb, fromDay: number, toDay: number, exceptId: Fig
   advanceWorld(db, fromDay, toDay, exceptId);
 }
 
-/** Accept a promotional offer. Returns the updated fighter. */
-export function signWith(db: GameDb, fighter: Fighter, promotion: Promotion): Fighter {
-  const updated: Fighter = { ...fighter, promotionId: promotion.id };
-  db.fighters.upsert(updated);
-  db.save();
-  return updated;
-}
-
 /**
  * Award a title after a win.
  *

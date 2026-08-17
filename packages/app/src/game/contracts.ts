@@ -10,6 +10,7 @@
 import {
   adviseOnBout,
   agreementStatus,
+  clamp,
   consumeFight,
   contractFairness,
   createAgreement,
@@ -19,6 +20,9 @@ import {
   marketValue,
   offersFor,
   recordAdvice,
+  releaseDecision,
+  signingEligibility,
+  type SigningEligibility,
   acceptRepaper,
   repaperOffer,
   resentmentFrom,
@@ -84,14 +88,72 @@ export function contractStanding(db: GameDb, fighter: Fighter): ContractStanding
   };
 }
 
-/** Put a fighter under contract. */
+/**
+ * Whether this fighter may sign with this promotion right now.
+ *
+ * Exported so a screen can gate its own button and show the reason, rather than each screen
+ * inventing its own idea of what being under contract means — which is exactly how the hub ended
+ * up with a signing path that ignored contracts altogether.
+ */
+export function canSignWith(
+  db: GameDb,
+  fighter: Fighter,
+  promotion: Promotion,
+): SigningEligibility {
+  const standing = contractStanding(db, fighter);
+  return signingEligibility({
+    status: standing.status,
+    incumbentName: standing.promotion?.shortName ?? 'your promotion',
+    targetIsIncumbent: standing.promotion?.id === promotion.id,
+  });
+}
+
+export type SignResult =
+  | { ok: true; fighter: Fighter }
+  | { ok: false; reason: string; releasable: boolean };
+
+/**
+ * Put a fighter under contract.
+ *
+ * Three things this did not used to do, each of which was visible in play.
+ *
+ * It did not check whether the fighter was *already* under contract. `AgreementStatus.expired`
+ * has always been documented as "true when the fighter is free to sign elsewhere" and nothing
+ * consulted it on the way in, so the fights-remaining countdown was a number with no consequence
+ * attached to it.
+ *
+ * It did not close the outgoing agreement, which left the old deal sitting in the database as a
+ * live record of an obligation nobody was tracking any more.
+ *
+ * And it was not the only way to change promotion — `signWith` set `promotionId` on its own and
+ * nothing else, so a fighter could end up at their new promotion still pointing at the old
+ * promotion's contract: new opponents, old purse, old fights-remaining on the hub, and the
+ * signing bonus the button advertised never paid. That function is gone; this is the only door.
+ */
 export function sign(
   db: GameDb,
   fighter: Fighter,
   promotion: Promotion,
   terms: OfferTerms,
-): Fighter {
+): SignResult {
+  const eligibility = canSignWith(db, fighter, promotion);
+  if (!eligibility.allowed) {
+    return { ok: false, reason: eligibility.reason, releasable: eligibility.releasable };
+  }
+
   const world = getWorld(db);
+
+  // Close the outgoing deal rather than orphaning it. It is spent, not merely unreferenced, and
+  // the difference matters the moment anything wants to look at contract history.
+  const outgoing = agreementOf(db, fighter);
+  if (outgoing && outgoing.id !== undefined) {
+    db.agreements.upsert({
+      ...outgoing,
+      fightsRemaining: 0,
+      expiresDay: Math.min(outgoing.expiresDay, world.day),
+    } as StoredAgreement);
+  }
+
   const agreement = createAgreement({ fighter, promotion, terms, day: world.day });
   db.agreements.upsert(agreement as StoredAgreement);
 
@@ -105,7 +167,73 @@ export function sign(
   };
   db.fighters.upsert(updated as Fighter & { id: string });
   db.save();
-  return updated;
+  return { ok: true, fighter: updated };
+}
+
+/**
+ * Ask to be let out of the deal early.
+ *
+ * The counterpart to being held to it. Without this the "locked in" rule is a wall rather than a
+ * situation: a fighter buried on a roster that has no plans for them would simply wait, and
+ * waiting is not a decision. Asking is — because a promotion that says no now knows you want out,
+ * and that is not free.
+ */
+export function requestRelease(
+  db: GameDb,
+  fighter: Fighter,
+): { released: boolean; reason: string; fighter: Fighter } {
+  const standing = contractStanding(db, fighter);
+  const agreement = standing.agreement;
+  const promotion = standing.promotion;
+
+  if (!agreement || !promotion || !standing.status || standing.status.expired) {
+    return { released: false, reason: 'You are not under contract.', fighter };
+  }
+
+  /*
+   * What the promotion thinks it has in you, on the same 0–100 scale the rest of the business
+   * layer speaks. Star power carries it because a release is a commercial decision rather than a
+   * sporting one — a promotion keeps somebody who sells tickets whatever their record says.
+   */
+  const standingScore = clamp(
+    fighter.starPower * 0.6 + fighter.reputation * 0.25 + fighter.summary.streak * 5,
+    0,
+    100,
+  );
+
+  const decision = releaseDecision({
+    standing: standingScore,
+    status: standing.status,
+    isChampion: promotion.champions[fighter.divisionId] === fighter.id,
+  });
+
+  if (!decision.released) {
+    // Being turned down is not nothing. They know you want out now.
+    const updated: Fighter = {
+      ...fighter,
+      resentment: Math.min(100, fighter.resentment + 8),
+    };
+    db.fighters.upsert(updated as Fighter & { id: string });
+    db.save();
+    return { released: false, reason: decision.reason, fighter: updated };
+  }
+
+  const world = getWorld(db);
+  db.agreements.upsert({
+    ...agreement,
+    fightsRemaining: 0,
+    expiresDay: Math.min(agreement.expiresDay, world.day),
+  } as StoredAgreement);
+
+  const updated: Fighter = {
+    ...fighter,
+    promotionId: undefined,
+    agreementId: undefined,
+    resentment: 0,
+  };
+  db.fighters.upsert(updated as Fighter & { id: string });
+  db.save();
+  return { released: true, reason: decision.reason, fighter: updated };
 }
 
 /**
@@ -343,7 +471,7 @@ export function signFirstDeal(db: GameDb, fighter: Fighter): Fighter | undefined
   if (!bottom) return undefined;
 
   const base = defaultTerms(fighter, bottom);
-  return sign(db, fighter, bottom, {
+  const result = sign(db, fighter, bottom, {
     showPurse: base.showPurse,
     winBonus: base.winBonus,
     signingBonus: 0,
@@ -354,6 +482,9 @@ export function signFirstDeal(db: GameDb, fighter: Fighter): Fighter | undefined
     exclusive: false,
     outsideBouts: 2,
   });
+  // An unsigned fighter is by definition eligible, so a refusal here is a bug rather than a
+  // game state — surfacing it as `undefined` keeps the caller's existing handling honest.
+  return result.ok ? result.fighter : undefined;
 }
 
 // --- The re-paper -------------------------------------------------------------------------------

@@ -205,6 +205,111 @@ export function agreementStatus(
   return { expired, daysRemaining, fightsRemaining, heldByBelt, summary };
 }
 
+/**
+ * Whether this fighter may sign with somebody else right now, and if not, why not.
+ *
+ * Nothing enforced this. `AgreementStatus.expired` was documented as "true when the fighter is
+ * free to sign elsewhere" and **no signing path ever consulted it** — a fighter owing three
+ * fights could sign with anyone, which made the fights-remaining countdown on the hub a number
+ * with no consequences attached to it.
+ *
+ * The rule is the one the sport actually runs on: you are held to the deal until it runs out or
+ * the promotion lets you go. Offers still *arrive* while you are held — seeing what you are worth
+ * is most of the drama of being under a bad contract — they simply cannot be accepted.
+ */
+export interface SigningEligibility {
+  allowed: boolean;
+  /** Empty when allowed. Otherwise the sentence the screen shows in place of the button. */
+  reason: string;
+  /** True when asking for a release is the move, so the UI can offer it. */
+  releasable: boolean;
+}
+
+export function signingEligibility(input: {
+  /** Absent for a genuine free agent with no deal at all. */
+  status?: AgreementStatus;
+  /** How the incumbent is named in the refusal. */
+  incumbentName?: string;
+  /** Re-signing with your own promotion is always allowed — that is a renewal, not a jump. */
+  targetIsIncumbent?: boolean;
+}): SigningEligibility {
+  const { status, incumbentName = 'your promotion', targetIsIncumbent = false } = input;
+
+  if (!status || status.expired) return { allowed: true, reason: '', releasable: false };
+  if (targetIsIncumbent) return { allowed: true, reason: '', releasable: false };
+
+  // The belt is a stronger hold than the term, and it is worth saying so separately: a champion
+  // asking for a release is asking for something nobody has ever been given.
+  if (status.heldByBelt) {
+    return {
+      allowed: false,
+      reason: `You cannot leave ${incumbentName} while you hold their belt.`,
+      releasable: false,
+    };
+  }
+
+  const owed =
+    status.fightsRemaining === 1
+      ? 'one more fight'
+      : `${status.fightsRemaining} more fights`;
+
+  return {
+    allowed: false,
+    reason: `You owe ${incumbentName} ${owed}. You cannot sign elsewhere until the deal is done or they release you.`,
+    releasable: true,
+  };
+}
+
+/**
+ * Whether a promotion would let a fighter walk early.
+ *
+ * A release is not a favour and it is not a formality — it is a promotion deciding that what it
+ * still owes you is worth less than the roster spot. So the decision runs on how much they value
+ * you against how much of the deal is left: somebody they are building is not going anywhere,
+ * somebody they have no plans for is a cost they will happily stop carrying.
+ *
+ * A champion is never released. Neither is anybody with a single fight left, because at that
+ * point the promotion simply books it and the question answers itself.
+ */
+export function releaseDecision(input: {
+  /** 0–100. What the promotion thinks they have in you. */
+  standing: number;
+  status: AgreementStatus;
+  isChampion?: boolean;
+}): { released: boolean; reason: string } {
+  const { standing, status, isChampion = false } = input;
+
+  if (isChampion || status.heldByBelt) {
+    return { released: false, reason: 'Champions do not get released. Defend it or vacate it.' };
+  }
+
+  if (status.fightsRemaining <= 1) {
+    return {
+      released: false,
+      reason: 'One fight left. They would rather book it than tear the deal up.',
+    };
+  }
+
+  /*
+   * The bar rises with what is left on the deal. Letting somebody out of two fights is a
+   * shrug; letting them out of six is writing off a season of matchmaking, and a promotion
+   * only does that for somebody it genuinely has no use for.
+   */
+  const bar = 28 + Math.min(40, status.fightsRemaining * 6);
+
+  if (standing >= bar) {
+    return {
+      released: false,
+      reason: 'They have plans for you. The answer is no.',
+    };
+  }
+
+  return {
+    released: true,
+    reason: 'They are not building around you, and the roster spot is worth more than the deal.',
+  };
+}
+
 /** Has the promotion kept its side — the only real counter to being shelved. */
 export function activityBreach(
   agreement: PromotionalAgreement,
