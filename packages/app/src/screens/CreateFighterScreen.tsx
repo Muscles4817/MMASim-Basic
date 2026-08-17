@@ -20,11 +20,13 @@ import {
   type CreateFighterSpec,
   type Gym,
   type Sex,
+  findNationality,
+  NATIONALITIES,
 } from '@mmasim/engine';
 import { GROUP_LABELS } from '../game/labels';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Button, Card, Chip, RatingRow, Segmented } from '../ui';
+import { Button, Card, Chip, Flag, RatingRow, Segmented } from '../ui';
 import { Alert } from '../ui/signals';
 import { clearTransientCareerState } from '../game/career';
 import { signFirstDeal } from '../game/contracts';
@@ -50,6 +52,9 @@ export function CreateFighterScreen() {
   const [lastName, setLastName] = useState('');
   const [nickname, setNickname] = useState('');
   const [nationality, setNationality] = useState('USA');
+  // Whether the typed country is one the game knows, which decides the flag and whether the
+  // fighter's generated peers can share a name pool with them.
+  const recognised = findNationality(nationality) !== undefined;
   const [sex, setSex] = useState<Sex>('male');
   const [age, setAge] = useState(22);
   const [background, setBackground] = useState<Background>('wrestler');
@@ -213,12 +218,47 @@ export function CreateFighterScreen() {
             </label>
             <label style={{ flex: '1 1 8rem' }}>
               <span className="section-title">Nationality</span>
+              {/*
+                A real list rather than a free-text box.
+               
+                It used to be an open input defaulting to "USA", so a typo or an invented country
+                was accepted silently and then carried for the rest of the career — and since
+                nothing validated it, that fighter would never get a flag and would never match a
+                name pool. `datalist` is the right control here: it filters as you type, it is
+                keyboard accessible for free, it works properly on a phone keyboard, and it still
+                allows a country the list does not carry rather than trapping the player.
+              */}
               <input
                 className="field"
+                list="nationality-options"
                 value={nationality}
                 onChange={(e) => setNationality(e.target.value)}
                 autoComplete="off"
+                aria-describedby="nationality-hint"
               />
+              <datalist id="nationality-options">
+                {NATIONALITIES.map((n) => (
+                  <option key={n.code} value={n.name} />
+                ))}
+              </datalist>
+              <span
+                id="nationality-hint"
+                className="muted"
+                style={{
+                  fontSize: 'var(--text-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-2)',
+                  marginTop: 'var(--space-1)',
+                  minHeight: '1.4em',
+                }}
+              >
+                {recognised ? (
+                  <Flag nationality={nationality} />
+                ) : (
+                  'Not a country we know — your fighter will have no flag.'
+                )}
+              </span>
             </label>
           </div>
 

@@ -255,7 +255,7 @@ export function advanceWorld(
       // route and the cost of being sure is one pass over five promotions.
       news.push(...replenish(db, day, rng, promotions));
       // Deals run out across the roster too, so the market has other people in it.
-      news.push(...resolveFreeAgency(db, day, rng, promotions));
+      news.push(...resolveFreeAgency(db, day, rng, promotions, exceptId));
     }
 
     /*
@@ -976,11 +976,29 @@ function releaseIfCut(
  * was under contract to anybody. A free agent takes the best offer on the table, which is
  * usually the promotion they were already at — a monopsony rehiring its own.
  */
-function resolveFreeAgency(db: GameDb, day: number, rng: Rng, promotions: readonly Promotion[]): NewsItem[] {
+function resolveFreeAgency(
+  db: GameDb,
+  day: number,
+  rng: Rng,
+  promotions: readonly Promotion[],
+  exceptId: FighterId | undefined,
+): NewsItem[] {
   const news: NewsItem[] = [];
   const fighters = db.fighters.findAll() as Fighter[];
 
   for (const fighter of fighters) {
+    /*
+     * The player is not moved by the world. This was the one loop in `advanceWorld` that did not
+     * take the exclusion — matchmaking took it, ageing took it, free agency did not — so any
+     * advance long enough to reach a quarterly tick would pick a promotion for the player's
+     * fighter at random and sign them to it behind their back.
+     *
+     * Reported from play, and it reads exactly as absurdly as it is: signed with one promotion,
+     * trained for thirty-six weeks, and came out of camp ranked fourth in the UFC with a title
+     * shot they had never agreed to. Who the player fights for is the single decision career mode
+     * is *about*, and the simulation was making it for them every quarter.
+     */
+    if (fighter.id === exceptId) continue;
     if (fighter.retiredDay !== undefined) continue;
 
     const agreement = fighter.agreementId

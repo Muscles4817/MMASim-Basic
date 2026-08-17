@@ -122,12 +122,32 @@ describe('the sport can still afford itself', () => {
   });
 
   it('leaves the bottom of the sport marginal rather than comfortable', () => {
-    // Regional promotions genuinely are marginal businesses, and that pressure is the point of
-    // the phase. What must not happen is them being comfortable, which would mean the costs are
-    // not doing anything at all.
+    /*
+     * Regional promotions genuinely are marginal businesses, and that pressure is the point of
+     * the phase. What must not happen is them being comfortable, which would mean the costs are
+     * not doing anything at all.
+     *
+     * Measured as *relative* growth rather than as absolute decline. The original bound asked
+     * that the smallest promotion end poorer than it started, which was a workable proxy only
+     * while the bottom of the sport was quietly collapsing — measured across three seeds, every
+     * promotion below the top three fell to near zero within a decade, and the single-seed
+     * solvency test above passed only because that one draw happened to leave Cage Warriors a
+     * few thousand above the line. Promotions now earn sponsorship, so the bottom survives, and
+     * "marginal" has to mean what it actually means: not keeping pace with the top.
+     */
     const all = ranked(db);
     const smallest = all[all.length - 1]!;
-    expect(smallest.budget, summary).toBeLessThan(start.get(smallest.id as string)!);
+    const leader = all[0]!;
+
+    // Growth *over* the starting position, in proportional terms, so a promotion that shrinks
+    // scores negative and one that merely holds station scores zero. Comparing the multiples
+    // directly would demand the bottom shrink whenever the top grows, which is the absolute
+    // bound this replaced.
+    const growth = (p: (typeof all)[number]) => p.budget / start.get(p.id as string)! - 1;
+
+    expect(growth(smallest), `${summary} — the bottom kept pace with the top`).toBeLessThan(
+      growth(leader) * 0.5,
+    );
   });
 
   it('keeps the leader clearly ahead, so the ladder survives', () => {

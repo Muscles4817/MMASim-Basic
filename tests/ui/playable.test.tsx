@@ -96,7 +96,10 @@ describe('the game is playable', () => {
     await user.click(khabib);
 
     // 2. The career hub shows who we are and offers opponents.
-    expect(await screen.findByText(/Nurmagomedov/)).toBeTruthy();
+    // `findAll` rather than `find`: the hub now also lists the division's rankings, so the
+    // player's own name legitimately appears twice — once as the fighter, once in the table
+    // with their row marked. The assertion is that the hub is showing them at all.
+    expect((await screen.findAllByText(/Nurmagomedov/)).length).toBeGreaterThan(0);
     const offersCard = await screen.findByText(/Choose your next fight/i);
     expect(offersCard).toBeTruthy();
     expectNoCrash();
@@ -154,20 +157,20 @@ describe('the game is playable', () => {
 
     // 7. Back to the career, with the fight now on the record.
     await user.click(await screen.findByRole('button', { name: /Back to career/i }));
-    expect(await screen.findByText(/Nurmagomedov/)).toBeTruthy();
+    expect((await screen.findAllByText(/Nurmagomedov/)).length).toBeGreaterThan(0);
     expectNoCrash();
   }, 30_000);
 
   it('persists the career across a reload', async () => {
     const user = userEvent.setup();
     const first = renderApp();
-    await user.click(await screen.findByText(/Poirier/));
+    await user.click((await screen.findAllByText(/Poirier/))[0]!);
     expect(await screen.findByText(/Choose your next fight/i)).toBeTruthy();
     first.unmount();
 
     // A fresh mount over the same localStorage is what a page reload does.
     renderApp();
-    expect(await screen.findByText(/Poirier/)).toBeTruthy();
+    expect((await screen.findAllByText(/Poirier/)).length).toBeGreaterThan(0);
     expectNoCrash();
   });
 });

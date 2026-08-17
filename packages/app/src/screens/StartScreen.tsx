@@ -9,7 +9,7 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Button, Card, Chip, Empty, ListItem, Segmented } from '../ui';
+import { Button, Card, Chip, Empty, Flag, ListItem, Segmented } from '../ui';
 import { Alert, OverallRating } from '../ui/signals';
 import { activeDivisionPeers, clearTransientCareerState } from '../game/career';
 
@@ -240,7 +240,7 @@ export function StartScreen() {
                 secondary={
                   <>
                     {getDivision(f.divisionId).shortName} · {recordString(f.summary)} ·{' '}
-                    {f.nationality}
+                    <Flag nationality={f.nationality} />
                   </>
                 }
                 trailing={

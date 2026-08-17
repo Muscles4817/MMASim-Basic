@@ -21,6 +21,7 @@ export * from './domain/fighter.js';
 export * from './domain/personality.js';
 export * from './domain/traits.js';
 export * from './domain/divisions.js';
+export * from './domain/nationalities.js';
 export * from './domain/gameplan.js';
 export * from './domain/officials.js';
 export * from './domain/organisations.js';
@@ -42,6 +43,7 @@ export * from './health/injuries.js';
 export * from './progression/divisionMove.js';
 export * from './progression/retirement.js';
 export * from './progression/generation.js';
+export * from './progression/names.js';
 export * from './progression/development.js';
 export * from './progression/createFighter.js';
 

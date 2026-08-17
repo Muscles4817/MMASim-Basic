@@ -17,7 +17,7 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Button, Card, Chip, Empty, RatingRow } from '../ui';
+import { Button, Card, Chip, Empty, Flag, RatingRow } from '../ui';
 import { Alert, Fact, FighterRead, ICON, Icon, KeyStat, OverallRating } from '../ui/signals';
 import { FightRecordList, RecordSummaryBar } from '../ui/FightRecord';
 import { getLadderStatus } from '../game/progression';
@@ -76,7 +76,7 @@ export function FighterScreen({ id }: { id: string }) {
       <Card raised>
         <h2 style={{ fontSize: 'var(--text-2xl)', lineHeight: 1.15 }}>{displayName(fighter)}</h2>
         <p className="muted">
-          {division.name} · {fighterAge(fighter, world.day)} · {fighter.nationality} ·{' '}
+          {division.name} · {fighterAge(fighter, world.day)} · <Flag nationality={fighter.nationality} /> ·{' '}
           {fighter.stance}
         </p>
         <div style={{ marginTop: 'var(--space-4)' }}>

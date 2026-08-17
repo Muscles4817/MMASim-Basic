@@ -11,7 +11,7 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Card, Empty, ListItem, Segmented } from '../ui';
+import { Card, Empty, Flag, ListItem, Segmented } from '../ui';
 import { OverallRating, StreakBadge } from '../ui/signals';
 
 /**
@@ -145,7 +145,7 @@ export function RosterScreen() {
                 secondary={
                   <span className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
                     <span>
-                      {recordString(f.summary)} · {f.nationality}
+                      {recordString(f.summary)} · <Flag nationality={f.nationality} />
                       {search && ` · ${getDivision(f.divisionId).shortName}`}
                     </span>
                     {Math.abs(f.summary.streak) >= 2 && <StreakBadge streak={f.summary.streak} />}

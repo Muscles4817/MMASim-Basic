@@ -694,3 +694,94 @@ a.list__item:hover {
     margin: 0 0 var(--space-1);
   }
 }
+
+/*
+  The division table on the hub.
+
+  Numbers are tabular and the place column is fixed-width so the names form a clean left edge —
+  a ranking that jitters as the digits change reads as a list rather than a standing.
+*/
+.rankings {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rankings__row {
+  display: grid;
+  grid-template-columns: 2rem 1fr auto;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  border-bottom: 1px solid var(--border);
+}
+
+.rankings__row:last-child {
+  border-bottom: none;
+}
+
+/* Your own row, which is the reason the table is on this screen at all. */
+.rankings__row[data-you='true'] {
+  background: var(--accent-soft);
+  font-weight: 650;
+}
+
+.rankings__place {
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.rankings__row[data-you='true'] .rankings__place {
+  color: var(--accent);
+}
+
+.rankings__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rankings__badge {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  color: var(--on-accent);
+  flex-shrink: 0;
+}
+
+.rankings__record {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/*
+  A flag beside a country name.
+
+  The glyph gets its own line-height so an emoji does not push the row taller than its text
+  neighbours — a table of two hundred fighters is very sensitive to that.
+*/
+.flag {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35em;
+  white-space: nowrap;
+}
+
+.flag__glyph {
+  line-height: 1;
+  font-size: 1.05em;
+}

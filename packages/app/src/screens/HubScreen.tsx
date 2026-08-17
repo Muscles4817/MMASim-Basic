@@ -22,7 +22,7 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Button, Card, Chip, Empty } from '../ui';
+import { Button, Card, Chip, Empty, Flag } from '../ui';
 import { Alert, Fact, FighterRead, ICON, Icon, KeyStat, OverallRating, StreakBadge } from '../ui/signals';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
 import { getLadderStatus, type LadderStatus } from '../game/progression';
@@ -148,7 +148,8 @@ export function HubScreen() {
               {displayName(fighter)}
             </h2>
             <p className="muted">
-              {division.name} · {fighterAge(fighter, world.day)} years old · {fighter.nationality}
+              {division.name} · {fighterAge(fighter, world.day)} years old ·{' '}
+              <Flag nationality={fighter.nationality} />
             </p>
           </div>
         </div>
@@ -223,6 +224,8 @@ export function HubScreen() {
       {ladder && (
         <LadderCard
           ladder={ladder}
+          fighterId={fighter.id as string}
+          divisionName={getDivision(fighter.divisionId).name}
           lock={
             // Interest arrives whatever your contract says — seeing what you are worth is most
             // of the drama of being stuck on a bad deal. Acting on it is what the deal governs.
@@ -817,11 +820,16 @@ function OfferRow({
  */
 function LadderCard({
   ladder,
+  fighterId,
+  divisionName,
   lock,
   onGoToOffers,
   onAskRelease,
 }: {
   ladder: LadderStatus;
+  /** So the player's own row can be marked in the table rather than only counted. */
+  fighterId: string;
+  divisionName: string;
   /*
     Why the player cannot act on the interest below, if they cannot.
    
@@ -835,7 +843,8 @@ function LadderCard({
   onGoToOffers(): void;
   onAskRelease(): void;
 }) {
-  const { promotion, position, isChampion, titleShot, offers, progress } = ladder;
+  const { promotion, position, isChampion, titleShot, offers, progress, ranked, champion } =
+    ladder;
 
   const standing = isChampion
     ? 'Champion'
@@ -887,6 +896,53 @@ function LadderCard({
       <p className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
         {titleShot.reason}
       </p>
+
+      {/*
+        The division, which the game has always computed and never shown.
+       
+        `getLadderStatus` has returned the full ranked list since the ladder shipped and the hub
+        used only your own position out of it — so the screen could say "Ranked #4" without ever
+        saying who the three people above you were. A ranking you cannot see the rest of is a
+        number, not a standing: the whole reason to care about being fourth is knowing who is
+        first and who is directly in front of you.
+      */}
+      {ranked.length > 0 && (
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          <h3 className="section-title">
+            {promotion ? `${promotion.shortName} ${divisionName}` : divisionName}
+          </h3>
+          <ol className="rankings">
+            {ranked.slice(0, 10).map((entry, index) => {
+              const isChamp = champion?.id === entry.fighter.id;
+              const isYou = entry.fighter.id === fighterId;
+              return (
+                <li
+                  key={entry.fighter.id as string}
+                  className="rankings__row"
+                  data-you={isYou ? 'true' : undefined}
+                  aria-current={isYou ? 'true' : undefined}
+                >
+                  <span className="rankings__place">{isChamp ? 'C' : index + 1}</span>
+                  <span className="rankings__name">
+                    {displayName(entry.fighter)}
+                    {isYou && <span className="rankings__badge">You</span>}
+                  </span>
+                  <span className="rankings__record">
+                    {entry.fighter.summary.wins}-{entry.fighter.summary.losses}
+                    {entry.fighter.summary.draws > 0 && `-${entry.fighter.summary.draws}`}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+          {position !== undefined && position > 10 && (
+            <p className="muted" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
+              You are #{position} of {ranked.length}. The top ten is what the promotion talks
+              about.
+            </p>
+          )}
+        </div>
+      )}
 
       {offers.length > 0 && (
         <div style={{ marginTop: 'var(--space-4)' }}>

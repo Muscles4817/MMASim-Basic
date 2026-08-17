@@ -30,6 +30,7 @@ import {
   type Attributes,
   type Naturals,
 } from '../ratings/attributes.js';
+import { generateName } from './names.js';
 
 export interface GenerationOptions {
   id: string;
@@ -48,23 +49,6 @@ export interface GenerationOptions {
   lastName?: string;
   nationality?: string;
 }
-
-const FIRST_NAMES = [
-  'Aiden', 'Bruno', 'Caleb', 'Dmitri', 'Elias', 'Farid', 'Gabriel', 'Hugo', 'Ivan', 'Jonas',
-  'Kai', 'Lucas', 'Mateo', 'Niko', 'Omar', 'Pavel', 'Rashid', 'Sami', 'Tomas', 'Viktor',
-  'Ana', 'Bianca', 'Carla', 'Daniela', 'Elena', 'Fatima', 'Gina', 'Hana', 'Irina', 'Jade',
-];
-
-const LAST_NAMES = [
-  'Abara', 'Baptiste', 'Cordero', 'Duran', 'Espinoza', 'Falk', 'Gomes', 'Haddad', 'Ivanov',
-  'Jensen', 'Kowal', 'Lindqvist', 'Marchetti', 'Novak', 'Okonkwo', 'Petrov', 'Quintero',
-  'Reyes', 'Silva', 'Tanaka', 'Ulloa', 'Vega', 'Whitfield', 'Yamada', 'Zborowski',
-];
-
-const NATIONALITIES = [
-  'USA', 'Brazil', 'Russia', 'England', 'Mexico', 'Japan', 'Poland', 'Nigeria', 'Australia',
-  'France', 'Georgia', 'South Korea', 'Sweden', 'Canada', 'Kazakhstan',
-];
 
 /**
  * Roll the hidden physiology.
@@ -188,11 +172,20 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
   const losses = Math.round(proBouts * rng.range(0, 0.25));
   const summary = { ...emptyRecordSummary(), wins: proBouts - losses, losses, streak: 1 };
 
+  /*
+   * Name and nationality together, because they were drawn independently and it showed.
+   *
+   * The old pools were one flat list of thirty first names with no sex tagging and no link to
+   * where anybody was from, so `rng.pick` produced men with women's names (231 of 661, measured)
+   * and combinations like a Hiroshi Kowalski from Nigeria. `generateName` reads both.
+   */
+  const named = generateName(rng, options.sex, options.nationality);
+
   return {
     id: asFighterId(options.id),
-    firstName: options.firstName ?? rng.pick(FIRST_NAMES),
-    lastName: options.lastName ?? rng.pick(LAST_NAMES),
-    nationality: options.nationality ?? rng.pick(NATIONALITIES),
+    firstName: options.firstName ?? named.firstName,
+    lastName: options.lastName ?? named.lastName,
+    nationality: named.nationality,
     sex: options.sex,
     birthDay: birthDayForAge(age, options.day, rng.int(1, 12), rng.int(1, 28)),
     walkingWeightLbs,

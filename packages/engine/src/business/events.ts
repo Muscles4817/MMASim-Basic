@@ -372,13 +372,38 @@ export function eventRevenue(input: {
   const production = Math.round(
     venue.capacity / 150 + (broadcast === 'ppv' ? 300 : broadcast === 'televised' ? 90 : 25),
   );
+  /*
+   * Sponsorship, which the model simply did not have.
+   *
+   * A promotion's income was gate plus broadcast and nothing else, and for anybody not selling
+   * pay-per-view that is most of a business missing. Real regional promotions run on local
+   * sponsors, venue and casino deals, and betting partnerships — banners, mat logos and cage
+   * wraps are the visible half of it — and those scale with the size of the room and the
+   * standing of the promotion rather than with how the card is broadcast.
+   *
+   * Measured before this, across three independent seeds, **every promotion below the top three
+   * collapsed within a decade**: RIZIN from 5,400 to between 538 and 3,467, Cage Warriors from
+   * 1,400 to between 151 and 281, and LFA from 1,200 to between 137 and 434. The bottom of the
+   * sport could not survive, which makes a career that starts there unplayable and contradicts
+   * the whole premise of the regional tier feeding the majors.
+   *
+   * It was hidden because the one solvency test in the suite ran a single seed and happened to
+   * land on the draw where Cage Warriors finished a few thousand above zero — so an unrelated
+   * change to *name generation* was enough to reshuffle the world and expose it.
+   *
+   * Scaled on attendance rather than gate so it does not simply amplify the ticket price, and
+   * on prestige so a promotion nobody has heard of cannot sell the same board as one everybody
+   * has.
+   */
+  const sponsorship = Math.round((attendance / 1000) * (8 + promotion.prestige * 0.35));
+
   const costs = Math.round(purses + bonuses + production);
 
   return {
     gate,
-    broadcast: broadcastRevenue,
+    broadcast: broadcastRevenue + sponsorship,
     costs,
-    profit: gate + broadcastRevenue - costs,
+    profit: gate + broadcastRevenue + sponsorship - costs,
     attendance,
   };
 }

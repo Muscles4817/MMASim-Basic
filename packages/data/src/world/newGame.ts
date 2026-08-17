@@ -92,9 +92,43 @@ export function loadOrCreateGame(adapter: StorageAdapter, options: NewGameOption
   const db = createGameDb(adapter);
   if (db.world.findById('world') !== undefined) {
     backfillCommentators(db);
+    repairContractMismatch(db);
     return db;
   }
   return createNewGame({ ...options, adapter });
+}
+
+/**
+ * Put fighters back at the promotion they are actually signed to.
+ *
+ * A fighter carries two facts about who they fight for: `promotionId`, which drives matchmaking
+ * and rankings, and `agreementId`, which points at the signed deal. They are supposed to agree,
+ * and two separate defects used to pull them apart.
+ *
+ * The hub's old `signWith` set `promotionId` alone, leaving the fighter at a new promotion on
+ * the old one's contract. And `resolveFreeAgency` — the one loop in `advanceWorld` that did not
+ * take the player exclusion — would pick a promotion at random and sign the *player* to it every
+ * quarter. Together they produced saves where a fighter owed one promotion three fights while
+ * being ranked, matched and offered title shots by another.
+ *
+ * Both causes are fixed, but saves made before the fixes still carry the damage, and the damage
+ * is invisible until it produces something absurd. The agreement wins because it is the signed
+ * document: a `promotionId` with no agreement behind it is the corruption, not the truth.
+ */
+function repairContractMismatch(db: GameDb): void {
+  for (const row of db.fighters.findAll()) {
+    const fighter = row as Entity & { promotionId?: string; agreementId?: string };
+    if (!fighter.agreementId) continue;
+
+    const agreement = db.agreements.findById(fighter.agreementId) as
+      | (Entity & { promotionId?: string })
+      | undefined;
+    if (!agreement?.promotionId) continue;
+    if (agreement.promotionId === fighter.promotionId) continue;
+
+    db.fighters.upsert({ ...fighter, promotionId: agreement.promotionId } as never);
+  }
+  db.save();
 }
 
 /**
