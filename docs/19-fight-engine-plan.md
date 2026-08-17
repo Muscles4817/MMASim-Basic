@@ -1,11 +1,20 @@
 # 19 — Making the fight engine express style
 
-**Status:** proposal, produced from the four reviews in [`reviews/`](reviews/) plus an independent
-trace of the engine. Not yet approved. Decision points in §4 are open.
+**Status:** **phase 0 has landed** (§7). Phases 1–6 remain a proposal, and the decision points in
+§4 are still open — D1 and D2 are the gate on phase 1 and want an answer before it starts.
 
 > Findings marked **verified** were checked directly against source. The two measurements this
 > plan leans on — the clinch rate and the 2026 roster profile — have both been independently
 > reproduced (doc 18 §5), so §6's contingency branches do not fire.
+>
+> Phase 0 built the instrument the rest of the plan is unfalsifiable without, and it recorded a
+> baseline sharper than the one argued for above: **no pair of the six disciplines is separated
+> enough for a player to perceive it, and sixty rating points of `kicking` are worth −1.3 points
+> of win rate.** It also found five things this plan did not know (§7.4). One — the discipline
+> table charging forty points for an art that cannot use them — is a stronger argument for phase 1
+> first than anything in §3. Another (**F7**) is a live correctness bug outside this programme
+> entirely: **bouts are written to fighters' records twice**, and it may deserve to jump the queue
+> ahead of phase 1.
 
 ---
 
@@ -111,7 +120,7 @@ A is the instrument and foundation for B, not a substitute.
 
 | Phase | Lands | Effort | Risk |
 |---|---|---|---|
-| **0** | Era fix, draw-bound fix, knife-edge bounds, **fingerprint suite**, guard-player archetype | 3–4 days | none — pure measurement |
+| **0** ✅ | Era fix, draw-bound fix, knife-edge bounds, **fingerprint suite**, guard-player archetype | landed — §7 | none — no engine source touched |
 | **1** | **`Weapon` primitive**, kick profile, weapon×target stats, **commentary parity test** | 4–6 days | moves finish rate; 2 files |
 | **2** | `strikeLean` fix, tendencies drive selection, takedown entry becomes a recorded fact | 4–6 days | first change to who wins |
 | **3** | `takedownRate` traits, attribute-aware trait generation, `stance` consumer, kill `cageIq` | 3–4 days | low; stance magnitude is the variable |
@@ -123,6 +132,13 @@ A is the instrument and foundation for B, not a substitute.
 rest of the plan, and without the era fix you tune against a 139-fighter world nobody plays.
 Expect the 2026 profile to fail its first bounds — that is the point; you are recording a
 baseline, not defending one.
+
+> **Scored.** Half right. Every outcome bound the 2026 profile inherited passed on the wider
+> population, and two got *further* from their limits rather than closer (KO:sub 3.32 → 1.55
+> against a `< 3.6` ceiling; five-round decisions 24% → 37.9%). The one that failed was the one
+> nobody could see: the draw rate, at 2.97% against `< 3`, because that assertion had never been
+> able to run at all (§7.4 F6). The prediction was right about needing a baseline and wrong about
+> where it would hurt — the risk was not in the calibration, it was in the instrument.
 
 **Phase 1's parity test lands before the distinctions exist**, so it guards them from birth rather
 than being retrofitted onto a divergence already shipped. Expect finish rate and KO:sub to move:
@@ -170,6 +186,12 @@ fourth striking attribute later, which makes it phase 6's real content.
 **D5 — When does `COMBAT_DISCIPLINES` grow past six?** → *Recommend after phase 5*, gated on the
 fingerprint suite showing ≥0.20 separation for the proposed pair. Then `origin.ts:118-127` gets
 rewritten with a measurement rather than an argument — which is this codebase's culture.
+
+> The gate now exists and can be read: `tests/statistical/styles.test.ts`, baseline in §7.2. It
+> currently answers *no* for all fifteen existing pairs, which makes this decision easy for the
+> moment — and it sharpens the question. §7.4 F3 shows two of the six are not separated *and* not
+> equally good, so the live problem is that six is already one or two more than the engine can
+> honestly carry, not that six is too few.
 
 **D6 — `reachInches` / `heightInches`?** → *Recommend nothing, and say so in the doc.* Unlike
 stance, reach has no natural discrete contest until a range concept exists in phase 6. A small
@@ -234,6 +256,194 @@ owner disagrees, disagree explicitly — it changes the risk profile of every ph
 
 ---
 
+## 7. Phase 0 — landed
+
+Pure measurement, as promised: **not one line of engine, data or app behaviour changed.** The only
+edits under `packages/` are a new fixture (`ARCHETYPES.guardPlayer`) and a new test file, both of
+which ship in `src` by the existing convention for shared test builders. So every number below is
+the engine exactly as it stood before this plan was written.
+
+### 7.1 What shipped
+
+| | |
+|---|---|
+| `tests/helpers/fingerprint.ts` | The instrument. Six 0–1 behavioural axes, measured against a fixed control opponent, with exemplars derived from `DISCIPLINE_META` so the suite measures the six arts the game actually offers rather than six hand-authored guesses. |
+| `tests/statistical/styles.test.ts` | G1 and G4, with the baseline recorded in the header and three **tripwires** — assertions that state a defect and are meant to break when the phase that fixes them lands. 7s. |
+| `tests/statistical/roster-profile.test.ts` | Profiles 2026 by name, counts draws through `FinishMethod`, bounds set where the engine honestly is, and no longer runs the 35,627-fight pass twice. 46s. |
+| `ARCHETYPES.guardPlayer` + `fight/profile.test.ts` | The missing submission specialist, and the first test of `deriveTendencies`. Reproduces `strikeLean = 0.529` exactly. |
+| `tsconfig.tests.json` | The tests tier is now typechecked. Not in the plan; see F4. |
+
+`npm test` goes from 75s to ~90s, almost all of it the roster profile: 2026 is 44× the pairings of
+2020. Bought deliberately — the alternative is sampling, and an exactly-reproducible population
+number is worth fifteen seconds to a suite whose whole job is to be trusted. One wrinkle worth
+knowing: nineteen seconds of uninterrupted synchronous simulation starves vitest's reporter RPC and
+produces an unhandled `Timeout calling "onTaskUpdate"` on an otherwise green run, so the profile
+loop yields every 2,000 fights.
+
+### 7.2 The G1 baseline
+
+Six exemplars, equal to `ARCHETYPES.contender()` in total rating points to within one, 400 fights
+each against it, default game plans both sides:
+
+```
+             kickShare  legTarget  grappling  subMix  control  distance
+boxing           0.081      0.115      0.132   0.622    0.224     0.318
+kickboxing       0.265      0.120      0.134   0.618    0.175     0.324
+karate           0.358      0.121      0.147   0.569    0.253     0.349
+wrestling        0.127      0.097      0.209   0.415    0.334     0.323
+jiuJitsu         0.171      0.112      0.200   0.600    0.266     0.315
+judo             0.142      0.102      0.235   0.535    0.314     0.291
+```
+
+**Of fifteen pairs, zero meet G1** (0.20 on two axes) and five clear 0.20 on even one. Jiu-jitsu
+against judo is 0.065 at its widest — less than half the scouting error term, two arts the engine
+plays identically. Boxing against jiu-jitsu is 0.090.
+
+The instrument is not simply blind: the same measurement separates `striker` from `smotherer` on
+three axes at once (kickShare 0.282 vs 0.028, controlShare 0.157 vs 0.625).
+
+One column is flat by construction: `pickTarget` reads the game plan and nothing else, so where a
+fighter aims is a property of their plan, never of their art. It is in the fingerprint because it
+is what phase 1's weapon × target stats are supposed to bring to life.
+
+### 7.3 The G4 baseline
+
+Sixty rating points on one attribute, everything else held at contender level, paired seeds:
+
+| Attribute | 38 → 98 | Swing |
+|---|---|---|
+| `strikingOffence` | 41.7% → 56.3% | **+14.5pp** |
+| `wrestling` | 40.8% → 54.4% | **+13.6pp** |
+| `submissions` | 48.0% → 59.6% | +11.6pp |
+| `kicking` | 48.9% → 47.7% | **−1.3pp** |
+
+The adversarial review measured ~1pp for `kicking` and called style attributes "strategically
+inert". On paired seeds it is not small, it is *zero, pointing the wrong way*: the kicks land more
+often and then do exactly what a jab does. G4 is met when that row looks like the `wrestling` row.
+
+### 7.4 Five things the plan did not know
+
+**F3 — The discipline table charges forty points for an art that cannot spend them. (Verified.)**
+
+`DISCIPLINE_META` gives every combat discipline exactly 40 bias points, and `origin.ts` says why
+in as many words: *"Equal totals are the point: the choice is shape, not quantity, so no
+discipline is the strong pick."* Measured round-robin, 400 fights per cell, mean win rate against
+the other five:
+
+```
+boxing 56.8%   karate 51.6%   wrestling 50.4%   jiuJitsu 48.5%   judo 43.8%   kickboxing 34.5%
+```
+
+A 22-point spread across six choices designed to be equal, and the art at the bottom is the one
+that spends the most of its forty on `kicking` — sixteen points, where karate spends fifteen but
+recovers most of it through eleven points of `speed`, which the engine reads everywhere. Head to
+head, boxing beats kickboxing **66.5% to 30.5%**.
+
+This is the same bug as §7.3 seen from the character-creation screen, and it is a *broken promise*
+in the §3 sense rather than a legibility gap — the game offers "Kickboxing / Muay Thai" as a peer
+of "Boxing" and hands over a fighter who loses two out of three. It strengthens the case for phase
+1 without changing it: the fix is in `applyStrike`, not in the table, and §5's "not to touch
+`origin.ts` until phase 5" still holds — after phase 1 the table may need no change at all, which
+is exactly why it should not be touched first.
+
+**F4 — The tests tier was never typechecked, and that is why the dead draw assertion survived.**
+
+`npm run typecheck` covered `packages/engine`, `packages/data` and `packages/app`. It did not cover
+`tests/`. TypeScript rejects `method === 'decisionDraw'` outright — `FinishMethod` has no such
+member — so the defect doc 18 §5 found by reading was already detectable by the compiler and had
+simply never been compiled. Adding `tsconfig.tests.json` surfaced 13 errors, of which two were
+live defects in suites nobody suspected:
+
+- `promotion-finance.test.ts` read `bouts[i].result` where the field is `outcome`, so
+  `lostByStoppage` was always false and **the 30-day medical-suspension assertion had never once
+  been evaluated.** Running it failed immediately — see F7.
+- `championships.test.ts` called `defend(title)` without the `day` argument, writing
+  `lastContestedDay: undefined` into a lineage the assertion never inspected.
+
+The lesson generalises past this plan: an assertion that cannot fail is worse than no assertion,
+and one whole tier of this repo's assertions was outside the tool that proves they can.
+
+**F5 — `distanceSeconds` mis-credits every position change, and the judges read it.**
+
+`applyPassiveEffects` books an exchange's seconds against the position the exchange *ended* in, and
+it runs after the exchange resolves. So a takedown or a clinch entry credits its whole duration to
+the ground or the clinch, and distance time is systematically under-counted for whoever changes
+position. `FightStats.distanceSeconds` is documented as "used by judges assessing octagon control",
+so this is not only a measurement defect. Left alone deliberately: fixing it moves scorecards, and
+phase 0 moves nothing. `distanceShare` carries the caveat at its definition.
+
+**F6 — The dead draw assertion was hiding a live number.**
+
+Correcting the field alone would have failed the suite: the real 2026 draw rate is **2.97%** against
+the bound of `< 3` that had never been reachable. Real MMA runs near 0.5%, so the engine draws three
+to six times too often, and the cause is scoring arithmetic — every 10-8 round makes a card sum to
+56 rather than 57 — exposed to far more samples by the recalibration that sent more fights to the
+judges. Recorded at `< 4` with the reason, plus a floor of `> 0.5` so a metric can never silently
+go dead again. Closing the gap is a scoring change and belongs with the judging work, not here.
+
+**F7 — Bouts are written to fighters' records twice, and the schedule never held them.**
+
+Found by reviving the assertion in F4, which failed on the first run: `Ngannou fought 0d after
+being stopped`. Diagnosed over a simulated year of the 2020 world — 45 cards, 139 fighters:
+
+| | |
+|---|---|
+| Same-day record pairs | **65** |
+| …of which the identical bout written twice | **52** (same day, same opponent, same method) |
+| …two genuinely different bouts on one day | 13 |
+| Fighters appearing twice on one day *in the schedule* | **0** |
+| Suspension violations once same-day pairs are excluded | **0** — minimum real gap after a stoppage is **70 days** |
+| Settled bouts still reading `result: undefined` on their night | **all of them** |
+
+So the schedule is right and the suspension system is right; the **record** is wrong. One
+fighter's year reads `day 28 loss/ko vs dos Santos`, `day 28 win/ko vs Cormier`, `day 98
+loss/tko vs Blaydes`, `day 98 loss/tko vs Blaydes` — against exactly two scheduled bouts, and the
+dos Santos fight has no scheduled counterpart at all. A duplicated bout inflates records, KO
+counts, rankings and purses, which makes this a correctness bug rather than a cosmetic one.
+
+Two things point at the mechanism without proving it: night ids are deterministic per promotion
+and day (`evt_p_apex_28`), so a card built twice for one day would *overwrite* its predecessor
+while both were simulated and recorded — which is exactly the shape of the evidence, a recorded
+bout with no surviving schedule row. And because a settled bout's `result` is never written back,
+nothing in the loop can tell that a card has already been resolved.
+
+**Not fixed, deliberately.** It lives in the card runner and the aftermath path, it moves career
+distributions and every long-sim baseline, and landing it inside a fight-engine programme would
+destroy the attribution that §5 exists to protect. It is recorded as a tripwire in
+`promotion-finance.test.ts` so it is visible and cannot get quietly worse, and it wants its own
+piece of work — arguably before phase 1, because it is a live data defect where phase 1 is an
+expressiveness gap.
+
+### 7.5 What to expect when phase 1 lands
+
+Three tripwires should break, and each is a checkpoint rather than a regression:
+
+1. `styles.test.ts` — "does not yet separate a single pair on two axes". Pairs starting to clear
+   G1 is the headline result of phase 1.
+2. `styles.test.ts` — "makes being a far better kicker worth nothing at all". Raise the bound
+   toward the `wrestling` yardstick rather than deleting the test.
+3. `styles.test.ts` — "charges the same forty points … does not deliver the same fighter". Tighten
+   toward parity; this one is a promise to the player.
+
+`roster-profile.test.ts`'s `firstRoundPct < 34` is the bound closest to its limit at 31.96%, and
+phase 1 pushes it from both directions. A fourth tripwire waits on phase 2: `profile.test.ts`
+asserts that a pure guard player scouts as the busier striker, which the `strikeLean` fix inverts.
+A fifth waits on nothing in this plan at all — the F7 record tripwire in
+`promotion-finance.test.ts`.
+
+**And phases 1–6 remain unapproved.** D1 (`Weapon` enum vs threading `isKick`) and D2 (does
+commentary read the fighter or the event?) both gate phase 1, and D2 in particular cannot be
+deferred past it: if the narrator and the resolver each pick a technique independently, the parity
+test that phase 1 is supposed to land is unwritable. Phase 0 does not settle either — it makes them
+answerable, which is different.
+
+---
+
 **The one-line version:** the engine's missing primitive is a named weapon on the strike, not a
 new attribute — and the missing discipline is a test that can tell two fighting styles apart.
 Build the second, then the first, and the case for growing past six disciplines makes itself.
+
+Phase 0 built the second, and the instrument's first reading is that **the engine expresses style
+in what a fighter throws and in the prose describing it, and then makes it strategically
+irrelevant** — 0.277 of separation between boxing and karate on shot selection, −1.3 points of win
+rate for sixty points of the attribute doing the selecting.
