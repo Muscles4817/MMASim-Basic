@@ -1,7 +1,13 @@
 # 19 — Making the fight engine express style
 
-**Status:** **phases 0, 1, 2, 3 and 5 have landed** (§7, §7.7, §8.1, §9.1, §11.1). Phase 4 and phase 6
-remain a proposal; D3–D6 in §4 are still open, and D1/D2 are answered.
+**Status:** **phases 0 through 5 have landed** (§7, §7.7, §8.1, §9.1, §11.1, §12.1). **Phase 6 is
+the only phase left**, and it is the only one this document has never sized honestly. D3 is answered
+(the striking focus is split); D4, D5 and D6 remain open.
+
+**Three of the four goals are met.** G2 since phase 1 (a passing parity test), G4 since phase 1
+(`kicking` worth 8.2 points of win rate against `wrestling`'s 13.6), G3 since phase 4 (a kickboxer
+is still a kickboxer after twenty-four camps). **G1 is met on 4 of 15 pairs**, and the eleven that
+remain are every same-family pair in the game.
 
 **G1 is met on 4 of 15 pairs**, all of them a striking art against a grappling art, and every pair
 still unseparated is a *same-family* pair. Phase 5 — the world getting real game plans — did all
@@ -134,7 +140,7 @@ A is the instrument and foundation for B, not a substitute.
 | **1** ✅ | **`Weapon` primitive**, kick profile, weapon×target stats, **commentary parity test** | landed — §7.7 | moved finish rate +1.2pp after recalibration; 4 files |
 | **2** ✅ | `strikeLean` fix, targeting reads the fighter, takedown entry becomes a recorded fact | landed — §8.1 | held: every population number moved under a point |
 | **3** ✅ | `takedownRate` traits, attribute-aware trait generation, `stance` consumer, kill `cageIq` | landed — §9.1 | held; and it found F10, which is larger than the phase |
-| **4** | Split the striking training focus; persistence assertion | 1–2 weeks | career distributions; long-sim re-baseline |
+| **4** ✅ | Split the striking training focus; **fighters train what they are**; persistence assertion | landed — §12.1 | the long-sim caught a 30% development nerf the fast tier could not see |
 | **5** ✅ | Real game plans for the world; reads from real tendencies; **re-ask granularity with a number** | landed — §11.1 | moved the population 3.5pp and needed no recalibration |
 | **6** | Strategy B — standing sub-states, two-sided clinch, then attributes | 3–6 weeks | a real project |
 
@@ -1045,6 +1051,53 @@ pointed at the start.
    whatever has the most room, calling that "the worst sensible strategy" — that harness is now
    also *not what the world does*, so its numbers describe a player strategy rather than a
    population. Expect to re-state, not to fix.
+
+### 12.1 Phase 4 — landed, and it corrected the goal it was written to meet
+
+Four predictions, four held, and one of them turned into a correction of §1.
+
+| | Predicted | Happened |
+|---|---|---|
+| 1 | G3 becomes assertable and passes | ✅ a 30-point kicking lead is **still 30** after 24 camps |
+| 2 | careers get more extreme, not better | ✅ within-fighter spread 6.84 → 7.32 over 24 camps |
+| 3 | career distributions move; the re-baselining is the work | ✅ and it caught a real mistake — see below |
+| 4 | `created-career.test.ts` is the file at risk | ✅ it failed, and it was right to |
+
+**G3, measured.** With `pickTrainingFocus` and the split table, a kickboxer's lead over their own
+hands holds at 30 points across twenty-four camps — kicks 80 → 84 against hands 50 → 54, from a
+career mix of eleven kicking camps, five boxing camps and eight spread across the rest of the sport.
+The wrestler control holds at 32 → 33.
+
+**And §1's statement of the defect does not survive being measured.** The goal table lists G3's
+current state as *"a kickboxer's striking/kicking gap closes to 0 in 24 camps"*. On a fighter with
+room left in both attributes it does not:
+
+```
+old table, random focus draw (what the world did)     gap 30 → 27
+old table, striking camp every single time            gap 30 → 22
+phase 4                                               gap 30 → 30
+```
+
+The direction was real and the magnitude was argued rather than measured. The merged block erodes a
+kicker by about a quarter of their identity over eight years, not all of it, and it bites hardest on
+a fighter whose kicking is already at its ceiling — every striking camp they take can only move
+their hands. **This is the fourth number in this programme that turned out to be an argument wearing
+a measurement's clothes**, after the clinch rate, the 1pp kicking swing and the "closes to 0" here.
+The other three were somebody else's; this one is the plan's own.
+
+**The mistake the long-sim caught, which is the whole reason phase 4 has a long-sim.** The first cut
+of the split summed to 2.1 and 2.05 of attribute weight against the merged block's 2.95 —
+`BASE_GAIN_PER_BLOCK` applies to the primary attribute and the rest scale off it, so **a striking
+camp quietly became worth 30% less than the camp it replaced.** Nothing in the fast tier noticed.
+`created-career.test.ts` failed on the best of forty careers peaking at 76.9 against a champion bar
+of 78.4, and `generations.test.ts` on the best developed newcomer reading 66.9 against a bound of
+68. Both are ceiling-reach assertions and both were right. A camp is a camp whatever is in it, and
+the weights now sum in line with the other four focuses.
+
+**What phase 4 cost.** One integration bound re-stated with its reason — championship vacancies
+going 2 to 3 of 74 over a ten-year world, which is a training change three systems upstream
+changing who retires when — and ninety seconds instead of sixty for the five-round profile pass,
+because planned fights genuinely cost more time. No engine constant was re-fitted.
 
 ---
 
