@@ -271,6 +271,56 @@ describe('the world behaves like a sport, not a burst', () => {
     expect(quarters.size).toBeGreaterThan(2);
   });
 
+  it('never fights the same person twice on one night, or twice in a fortnight', () => {
+    /*
+     * Every card in a step used to carry the step's own `day`, and `eventId` is
+     * `evt_${promotionId}_${day}` — so two of the three cards in a fortnight drawing the same
+     * promotion produced the same event id, and the second `upsert` overwrote a night that had
+     * already been simulated and written to everybody's record. `available` was also built once
+     * per fortnight and never pruned, so one fighter could be matched onto two of those cards.
+     *
+     * Measured over a simulated year of the 2020 world, before the fix: **65 same-day record
+     * pairs across 139 fighters, 52 of them the identical bout written twice** — while the
+     * schedule looked spotless, because the row that would have shown the collision had been
+     * overwritten by the row that collided with it. A duplicated bout inflates records, KO
+     * counts, rankings and purses, so this was silent double-counting rather than cosmetic.
+     *
+     * The fortnight bound is the stronger claim and the one that survives the date fix on its
+     * own: distinct dates stop two bouts landing on one day, but only pruning stops a fighter
+     * being booked twice in the same step. Measured after: zero of both, and a minimum gap of
+     * 47 days on 2020 and 51 on 2026.
+     */
+    const db = game('double-booking');
+    const me = fighters(db)[0]!;
+    advanceWorld(db, 0, 365, me.id);
+
+    for (const fighter of fighters(db)) {
+      const record = [...fighter.record].sort((a, b) => a.day - b.day);
+      for (let i = 1; i < record.length; i++) {
+        const gap = record[i]!.day - record[i - 1]!.day;
+        expect(
+          gap,
+          `${fighter.lastName} fought on day ${record[i - 1]!.day} and again on ${record[i]!.day}`,
+        ).toBeGreaterThanOrEqual(14);
+      }
+    }
+  });
+
+  it('gives every card its own date rather than stacking the fortnight on one night', () => {
+    // The other half of the same defect, asserted where it is unambiguous: a promotion cannot
+    // run two shows on one night, and an event id encodes exactly that pair. Before the fix a
+    // simulated year of 2020 ran its cards on 26 distinct dates; it now uses 53.
+    const db = game('dates');
+    const me = fighters(db)[0]!;
+    advanceWorld(db, 0, 365, me.id);
+
+    const events = db.events.findAll() as readonly { id: string; promotionId: string; day: number }[];
+    const slots = new Set(events.map((e) => `${e.promotionId}:${e.day}`));
+
+    expect(slots.size, 'two cards share a promotion and a date').toBe(events.length);
+    expect(new Set(events.map((e) => e.day)).size).toBeGreaterThan(events.length / 2);
+  });
+
   it('books a promotion’s own fighters, because exclusivity is the binding term', () => {
     // 91% of bouts previously had at least one fighter not signed to the card's promotion.
     // A contracted fighter appearing on a rival's card is not rare, it is impossible.

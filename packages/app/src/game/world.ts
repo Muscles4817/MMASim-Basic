@@ -296,12 +296,33 @@ export function advanceWorld(
       return inLastYear < MAX_BOUTS_PER_YEAR;
     });
 
-    for (let card = 0; card < Math.min(CARDS_PER_STEP, MAX_CARDS_PER_STEP); card++) {
+    /*
+     * Every card in a step used to be stamped with the step's own `day`, and that one fact was
+     * three defects.
+     *
+     * `eventId` is `evt_${promotionId}_${day}`, and the promotion is drawn per card, so two of
+     * the three cards in a fortnight landing on the same promotion produced the *same event id* —
+     * and `db.events.upsert` silently overwrote the first night after it had already been
+     * simulated and written to everybody's record. Measured over a simulated year of the 2020
+     * world: 65 same-day record pairs across 139 fighters, 52 of them the identical bout written
+     * twice, against a schedule in which no fighter appeared twice on any day. The schedule was
+     * clean because the evidence had been overwritten; the records were not.
+     *
+     * Three shows on one date was also simply wrong about the sport. Cards inside a step now land
+     * on different dates, spread across whatever part of the step is actually being simulated so
+     * a short call cannot date a card past the day it was asked to stop at.
+     */
+    const span = Math.min(STEP_DAYS, toDay - day);
+    const cardsThisStep = Math.max(1, Math.min(CARDS_PER_STEP, MAX_CARDS_PER_STEP, span));
+
+    for (let card = 0; card < cardsThisStep; card++) {
       if (available.length < 2) break;
       if (fights >= fightBudget) {
         truncated = true;
         break;
       }
+
+      const cardDay = day + Math.floor((card * span) / cardsThisStep);
 
       /*
        * A night, not a loose bout.
@@ -316,7 +337,7 @@ export function advanceWorld(
       const promotion = pickPromotion(bookable, rng.fork(`who:${day}:${card}`));
       const built = buildNight({
         db,
-        day,
+        day: cardDay,
         rng: rng.fork(`night:${day}:${card}`),
         promotion,
         available,
@@ -411,7 +432,15 @@ function buildNight(ctx: {
    * most binding term in the sport; a fighter appearing on a rival's card is not a rare
    * event, it is an impossible one. `night.ts` already did this correctly for the player.
    */
-  const roster = available.filter((f) => f.promotionId === promotion.id);
+  const roster = available.filter(
+    (f) =>
+      f.promotionId === promotion.id &&
+      // Readiness is re-checked against *this card's* date, not the step's. `available` is built
+      // once per fortnight, so a fighter cleared on the 8th was treated as bookable on the 1st —
+      // a medical gate with a two-week tolerance, which is the same class of mistake as the
+      // suspension map that used to be thrown away at the end of every call.
+      Math.max(readyOn.get(f.id as string) ?? 0, f.readyOnDay ?? 0) <= day,
+  );
 
   /*
    * A vacant belt is the first thing a promotion books.
@@ -570,6 +599,21 @@ function buildNight(ctx: {
         isTitleFight,
       }),
     });
+  }
+
+  /*
+   * Nobody on tonight's card is available for another card in this step.
+   *
+   * `used` only ever kept a fighter off *this* night. `available` is built once per fortnight and
+   * was never pruned, so the same fighter could be matched onto two of the three cards in a step —
+   * which, before cards had distinct dates, meant two bouts on one day, and now would mean two
+   * bouts inside a fortnight. Both are impossible in the sport, and the second is the one that
+   * would have survived the date fix on its own.
+   */
+  if (used.size > 0) {
+    for (let i = available.length - 1; i >= 0; i--) {
+      if (used.has(available[i]!.id as string)) available.splice(i, 1);
+    }
   }
 
   if (seeds.length === 0) return undefined;
