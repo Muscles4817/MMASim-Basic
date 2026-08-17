@@ -1,8 +1,11 @@
 # 19 — Making the fight engine express style
 
 **Status:** **phases 0 through 5 have landed** (§7, §7.7, §8.1, §9.1, §11.1, §12.1). **Phase 6 is
-the only phase left**, and it is the only one this document has never sized honestly. D3 is answered
-(the striking focus is split); D4, D5 and D6 remain open.
+approved and is the only phase left** — broken down in §13, with its decisions taken in §13.4: a
+sixteenth attribute (`footwork`), the clinch before the range model, and D4 and F10 folded into its
+recalibration window. D3 is answered (the striking focus is split) and D6 is reversed — reach gets
+the contest it was waiting for. D5 remains open and is now answerable: the gate it asked for is
+`styles.test.ts`, and it currently says four of fifteen.
 
 **Three of the four goals are met.** G2 since phase 1 (a passing parity test), G4 since phase 1
 (`kicking` worth 8.2 points of win rate against `wrestling`'s 13.6), G3 since phase 4 (a kickboxer
@@ -142,7 +145,7 @@ A is the instrument and foundation for B, not a substitute.
 | **3** ✅ | `takedownRate` traits, attribute-aware trait generation, `stance` consumer, kill `cageIq` | landed — §9.1 | held; and it found F10, which is larger than the phase |
 | **4** ✅ | Split the striking training focus; **fighters train what they are**; persistence assertion | landed — §12.1 | the long-sim caught a 30% development nerf the fast tier could not see |
 | **5** ✅ | Real game plans for the world; reads from real tendencies; **re-ask granularity with a number** | landed — §11.1 | moved the population 3.5pp and needed no recalibration |
-| **6** | Strategy B — standing sub-states, two-sided clinch, then attributes | 3–6 weeks | a real project |
+| **6** | Strategy B — **two-sided clinch first**, then standing sub-states and `footwork` | §13, one to two sessions | the only phase that adds an attribute and the only one that recalibrates everything |
 
 **Phase 0** is first because without the fingerprint suite there is no falsifiable claim in the
 rest of the plan, and without the era fix you tune against a 139-fighter world nobody plays.
@@ -227,9 +230,14 @@ rewritten with a measurement rather than an argument — which is this codebase'
 > equally good, so the live problem is that six is already one or two more than the engine can
 > honestly carry, not that six is too few.
 
-**D6 — `reachInches` / `heightInches`?** → *Recommend nothing, and say so in the doc.* Unlike
-stance, reach has no natural discrete contest until a range concept exists in phase 6. A small
-additive term in the landing roll is a tuning coefficient wearing a style costume.
+**D6 — `reachInches` / `heightInches`?** → *Recommended nothing, on the grounds that reach has no
+natural discrete contest until a range concept exists in phase 6.* Unlike stance, a small additive
+term in the landing roll is a tuning coefficient wearing a style costume.
+
+> **Reversed by the owner, and the condition it was waiting for is the one phase 6 creates.** Phase
+> 6.1 builds the range contest, so reach acquires exactly the thing this decision said it lacked: a
+> discrete state whose entry it can honestly decide. It is no longer an additive fudge in a landing
+> roll — it is one of the terms in "who gets to fight where". See §13.4 D7.
 
 ---
 
@@ -1173,33 +1181,66 @@ and therefore the judges' share-of-total arithmetic. Expect `BASE_KD_HAZARD`,
 `BASE_FATIGUE_PER_SECOND` and the roster-profile bounds to move. **3–5 days, and this is the step
 that is always underestimated.**
 
-Total: **13–22 days**, against §3's "3–6 weeks" — which is about right, and the estimate is now
-attached to steps rather than to a vibe.
+### 13.3.1 A note on what those numbers mean
 
-### 13.4 What has to be decided before it starts
+The day counts above are **developer-days**, inherited from §3's framing, and they are the wrong
+unit for how this project is actually being built. The evidence is this document: phases 2, 3, 4
+and 5 are sized here at 4–6 days, 3–4 days, 1–2 weeks and 1–2 weeks — call it four to six
+developer-weeks — and they landed in a single working session, tests, measurements, re-baselines
+and write-ups included.
 
-**D7 — does phase 6 add an attribute?** §5 says not to add one "until phases 1–5 show a distinction
-survives all four" tests of trainability, ageing, injury and suppression. They have. A fourth
-striking attribute — footwork, or timing — is the natural owner of range control, and 6.1 is written
-above to avoid needing it. *Recommend deciding this at 6.1's measurement, not before: if range
-separates the striking arts on `speed` and `fightIq` alone, the attribute is a tuning coefficient
-wearing a style costume (§4 D6), and if it does not, it is the honest fix.*
+So the honest estimate for phase 6 is **one to two sessions of the same kind**, and the day counts
+should be read as *relative* sizing between the steps rather than as elapsed time. What actually
+costs, in this workflow:
 
-**D8 — 6A or 6B first?** 6A separates three pairs and is the harder engineering; 6B separates two
-and has the sharper measurement behind it (13.2). *Recommend 6B first* — it is cheaper, it is
-better evidenced, and it does not touch the striking loop that every calibration constant hangs off.
+| | What it costs |
+|---|---|
+| Writing the code | Almost nothing. It is the smallest part of every phase so far. |
+| **Measurement loops** | The real cost. Every calibration claim needs a measure → change → re-measure cycle, and the fast suite is ~110 seconds a run. Phase 2 took four of those loops to find that its habit vector was importing formula constants; phase 4 took three to find the 30% development nerf. |
+| **The wrong turn you cannot see coming** | Phase 4's split blocks summed to less than the block they replaced, and *nothing in the fast tier noticed* — the long-sim caught it. Budget for one of these per phase, because there has been one in every phase. |
+| Verification by the owner | Light per step, deep at the end — which is what makes the revertable-step structure load-bearing rather than stylistic. |
 
-**D9 — what about F10 and D4?** F10 (a trait is worth more than an attribute) and D4 (the
-volume/referee compensating error) are both *calibration* work that phase 6 will disturb anyway.
-*Recommend doing neither before phase 6 and both immediately after*, in the same re-baselining
-window, because doing them separately means paying for the same population re-measurement twice.
+**What would make phase 6 genuinely longer than that** is 6.1 and 6.4 specifically: adding a
+sixteenth attribute touches ~26 files and a missed consumer surfaces as a long-sim failure minutes
+later rather than as a compile error, and the recalibration is iterative by nature — it is the one
+step where the number of loops is not knowable in advance.
 
-**D10 — is phase 6 worth it at all?** The honest alternative is to stop at four pairs of fifteen and
-spend the three weeks on the game around the fight — doc 20's save quota is real, and the fight
-engine now meets three of its four goals. *No recommendation: this is the owner's call about what
-the game is for.* What can be said is that the six remaining pairs are the ones a player would
-describe as "these two feel the same", and that they are the arts the creation screen offers as
-distinct choices.
+### 13.4 Decided
+
+**D7 — a sixteenth attribute: `footwork`. Decided: yes.** The owner's reasoning, and it is a better
+argument than the one this document was going to make: **range is what gives reach a job.** §4 D6
+declined `reachInches` because it had no discrete contest to decide, and 6.1 builds precisely that
+contest — so the attribute and the physical measurement arrive together, with `footwork` deciding
+who *can* control range and reach deciding what it is worth once they do.
+
+This is the first new attribute the programme has added, and §5's bar for one is met: phases 1–5
+showed that stylistic distinctions survive being trained (§12.1), aged and suppressed. What it
+costs, so nobody is surprised by it:
+
+- `ATTRIBUTE_KEYS` goes from fifteen to sixteen, and roughly two dozen files read that shape.
+- **997 hand-authored seed fighters** are built through `attrs([physical], [striking], [grappling],
+  [mental])`, which takes positional arrays and requires every attribute. The plan is to make the
+  new value *optional and derived* — from `speed`, `fightIq` and `cardio` — so no seed fighter needs
+  editing and the handful who deserve a hand-authored number (the out-fighters) get one deliberately
+  rather than everybody getting one by obligation.
+- Age curves, potential, naturals, generation, the editor, the training focuses and doc 02 all
+  gain a row. The `boxing` training focus is the natural home for it.
+
+**D8 — 6B before 6A. Decided by the owner.** The clinch first: cheaper, better evidenced (13.2), and
+it does not touch the striking loop every calibration constant hangs off.
+
+**D9 — F10 and D4 relative to phase 6.** Neither is a design question, so this is recorded as a
+technical sequencing call rather than an owner decision. In plain terms: **F10** is that a trait is
+worth more win rate than an attribute — `cardioMachine` measures +23.4 points against sixty rating
+points of `wrestling` being worth 13.6 — because `fatigueRate` and `strikeOutput` are far more
+potent hooks than anyone realised. **D4** is that burst size is attribute-free while the referee's
+stoppage threshold sits at 5.5–9.5 unanswered strikes when its own comment says the real mark is
+three or four; the two errors compensate for each other, which is why neither shows up in the
+outcome distributions. Both are *calibration* work on the same population numbers phase 6 will move
+anyway. **Doing them in phase 6's re-baselining window rather than before it** means paying for one
+population re-measurement instead of three.
+
+**D10 — is phase 6 worth it? Decided: yes.**
 
 ---
 
