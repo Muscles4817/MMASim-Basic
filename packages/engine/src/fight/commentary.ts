@@ -221,6 +221,25 @@ export function clinchText(rng: Rng, attacker: Combatant): string {
   ]);
 }
 
+/**
+ * The tie-up changes hands.
+ *
+ * New with the two-sided clinch (docs/19 §13.6): before it, control could only be won on entry and
+ * lost by the fight leaving the position, so there was no such moment to narrate.
+ */
+export function clinchReversalText(rng: Rng, attacker: Combatant, defender: Combatant): string {
+  return rng.pick([
+    `${surname(attacker)} switches the underhook and turns ${surname(defender)} into the fence.`,
+    `${surname(attacker)} fights the grip, gets the angle, and now it is ${surname(defender)} with their back to the cage.`,
+    `Reversed — ${surname(attacker)} takes over in the tie-up.`,
+  ]);
+}
+
+/** The referee separating a clinch nobody is working in. */
+export function clinchSeparationText(): string {
+  return 'The referee has seen enough of that — they are separated and brought back to the centre.';
+}
+
 export function clinchBreakText(rng: Rng, defender: Combatant): string {
   return rng.pick([
     `${surname(defender)} frames off and circles back out to open space.`,

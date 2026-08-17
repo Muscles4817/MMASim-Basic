@@ -1156,6 +1156,37 @@ function shiftMomentum(gainer: Combatant, loser: Combatant, amount: number): voi
 // --- Takedowns ----------------------------------------------------------------------------
 
 /**
+ * Where a takedown puts you, which depends on how you got there.
+ *
+ * Phase 2c made the entry a resolved fact and deliberately left it descriptive: *"giving a trip a
+ * different landing position than a double leg is a real idea and a distribution move, which makes
+ * it somebody else's phase"*. This is that phase (docs/19 §13.6b), and it is the judo identity the
+ * fingerprint could not see — `wrestling` against `judo` measured 0.077 at its widest, the closest
+ * pair in the game, because both arts arrived on the floor in exactly the same place.
+ *
+ * A throw lands you past the legs; a shot lands you in front of them. That is the whole of it, and
+ * it is why a judoka's takedown is worth more than a wrestler's while a wrestler gets more of them.
+ * `groundControl` still helps everybody, because knowing what to do on landing is its own skill.
+ */
+function landingPosition(rng: Rng, actor: Combatant, entry: TakedownEntry): GroundPosition {
+  const skilled = actor.attrs.groundControl > 80 && rng.chance(0.35);
+  switch (entry) {
+    case 'trip':
+      // Over the hip and past the guard. The best landing in the game, and the rarest.
+      if (rng.chance(0.3)) return 'sideControl';
+      return rng.chance(0.45) || skilled ? 'halfGuard' : 'guard';
+    case 'bodyLock':
+      // Chest to chest on the way down: you land heavy, but in front of the hips.
+      return rng.chance(0.35) || skilled ? 'halfGuard' : 'guard';
+    case 'singleLeg':
+      // You have one leg, so they keep the other between you.
+      return skilled && rng.chance(0.5) ? 'halfGuard' : 'guard';
+    default:
+      return skilled ? 'halfGuard' : 'guard';
+  }
+}
+
+/**
  * How this fighter is trying to put them down, chosen before the contest is resolved.
  *
  * Where the shot starts decides what is available — you cannot double-leg somebody you are already
@@ -1227,9 +1258,7 @@ function resolveTakedown(
     tally[actor.corner].takedowns++;
     state.position = 'ground';
     state.groundTop = actor.corner;
-    // A dominant wrestler lands in better positions, not merely more often.
-    state.groundPosition =
-      actor.attrs.groundControl > 80 && rng.chance(0.35) ? 'halfGuard' : 'guard';
+    state.groundPosition = landingPosition(rng, actor, entry);
     state.stalledSeconds = 0;
     shiftMomentum(actor, target, 0.25);
     emit(
@@ -1260,19 +1289,140 @@ function resolveTakedown(
 
 // --- Clinch -------------------------------------------------------------------------------
 
-function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant): ExchangeOutcome {
+/**
+ * How long a stalled tie-up survives before the referee breaks it.
+ *
+ * The ground has had `maybeRefStandUp` since the beginning and the clinch had nothing, so a fighter
+ * who won the tie-up and did nothing paid nothing — which made `grind` a plan with no ceiling
+ * (docs/19 §13.6c). Shorter tolerance than the ground's: a referee will let a top position run and
+ * will not watch two men lean on the fence.
+ */
+function clinchBreakThreshold(ctx: ExchangeContext): number {
+  return clamp(55 - (ctx.referee.standUpSpeed / 100) * 30, 25, 55);
+}
+
+/**
+ * One knee, from whoever is throwing it.
+ *
+ * Pulled out of the controller's branch so the fighter being held can throw too. Being held is a
+ * real disadvantage and `heldPenalty` is where it lives: short shots from underneath land, and they
+ * land less than the ones coming down on top of you.
+ */
+function throwClinchStrike(
+  ctx: ExchangeContext,
+  actor: Combatant,
+  target: Combatant,
+  heldPenalty: number,
+): Ending | undefined {
   const { rng, state, tally, emit } = ctx;
+
+  const offence =
+    fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) * heldPenalty;
+  const defence = fatiguedEffect(target.derived.clinchDefence, 'strength', target.fatigue);
+  actor.stats.significantStrikesAttempted++;
+  tally[actor.corner].strikesAttempted++;
+
+  if (!rng.chance(offence / (offence + defence))) return undefined;
+
+  // Clinch work is body-and-knees work; it is how you drain someone standing up.
+  const strikeTarget: StrikeTarget = rng.chance(0.6) ? 'body' : 'head';
+  const result = applyStrike(rng, actor, target, strikeTarget, 'knee');
+  actor.stats.significantStrikesLanded++;
+  tally[actor.corner].significantStrikes++;
+  tally[actor.corner].damageDealt += result.damage;
+  state.stalledSeconds = 0;
+  if (result.cut) state.cuts[target.corner] += rng.range(8, 22);
+  emit('strike', say.clinchStrikeText(rng, actor, strikeTarget), actor.corner, undefined, {
+    weapon: 'knee',
+    target: strikeTarget,
+  });
+
+  if (result.knockdown) {
+    tally[actor.corner].knockdowns++;
+    emit('knockdown', say.knockdownText(rng, actor, target), actor.corner, 'critical');
+    return resolveKnockdown(ctx, actor, target, result.flushness);
+  }
+  return undefined;
+}
+
+/**
+ * The clinch, from both sides.
+ *
+ * It used to have one side. The fighter in control chose between shooting, a knee and standing
+ * there; the fighter being held had a single branch, which was to try to leave. Measured, that
+ * produced a position the fight entered **three times a night and got 0.66 landed strikes out of**
+ * (docs/19 §13.2) — not a rare phase, an empty one: a transit lounge on the way to a takedown.
+ *
+ * Both fighters have a fight now. The held man can strike short, or **reverse** the tie-up and
+ * become the man in control, which is what makes the position two-sided rather than a countdown to
+ * somebody else's takedown. And the referee separates a tie-up in which neither of them does
+ * anything, which is the ceiling the `grind` approach never had.
+ */
+function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant): ExchangeOutcome {
+  const { rng, state, emit } = ctx;
   const controlling = state.clinchControl === actor.corner;
 
   if (!controlling) {
-    // The controlled fighter is trying to get out.
+    /*
+     * Being held is not the same as being finished with. Three ways out and only one of them is the
+     * door: leave, land something short, or take the position off them.
+     *
+     * The reversal reads `scrambling` against the holder's `clinchOffence` — hand-fighting and hip
+     * position rather than raw strength, which is what separates a fighter who is *comfortable* in
+     * a tie-up from one who is merely strong in it. And a fighter whose plan wants the clinch is in
+     * no hurry to leave it, which is why the break weight is divided by the approach's appetite for
+     * the position rather than multiplied by it.
+     */
+    const clinchAppetite = approachWeight(actor.plan.approach, 'clinch');
+    const breakW =
+      fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) / clinchAppetite;
+    /*
+     * Weighted toward the door, because that is what the sport does: a fighter with their back to
+     * the fence is mostly trying to get off it, and the short shots and the reversal are what they
+     * do when leaving is not working. The first cut had these at 0.55 and 0.8 and the clinch ate
+     * enough distance time to drag `kicking`'s win-rate swing from 8.2 points to 5.9 — a two-sided
+     * clinch is worth having and it is not worth having at the cost of a goal that is already met.
+     */
+    const strikeW = fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) * 0.32;
+    const reverseW =
+      fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * clinchAppetite * 0.45;
+
+    const intent = rng.pickWeighted(
+      ['breakAway', 'clinchStrike', 'reverse'] as const,
+      (i) => (i === 'breakAway' ? breakW : i === 'clinchStrike' ? strikeW : reverseW),
+    );
+
+    if (intent === 'clinchStrike') {
+      // 0.75: a short shot from underneath is a real weapon and a worse one.
+      const ending = throwClinchStrike(ctx, actor, target, 0.75);
+      state.stalledSeconds += 6;
+      return { seconds: rng.int(6, 12), ending };
+    }
+
+    if (intent === 'reverse') {
+      const attack = fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue);
+      const hold = fatiguedEffect(target.derived.clinchOffence, 'strength', target.fatigue);
+      if (rng.chance(attack / (attack + hold))) {
+        state.clinchControl = actor.corner;
+        state.stalledSeconds = 0;
+        shiftMomentum(actor, target, 0.2);
+        emit('clinch', say.clinchReversalText(rng, actor, target), actor.corner);
+        return { seconds: rng.int(6, 12) };
+      }
+      state.stalledSeconds += 8;
+      return { seconds: rng.int(6, 12) };
+    }
+
     const escape = fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue);
     const hold = fatiguedEffect(target.derived.clinchOffence, 'strength', target.fatigue);
     if (rng.chance(escape / (escape + hold))) {
       state.position = 'distance';
       state.clinchControl = undefined;
+      state.stalledSeconds = 0;
       emit('clinchBreak', say.clinchBreakText(rng, actor), actor.corner);
+      return { seconds: rng.int(6, 14) };
     }
+    state.stalledSeconds += 8;
     return { seconds: rng.int(6, 14) };
   }
 
@@ -1291,40 +1441,24 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
   if (intent === 'takedown') return resolveTakedown(ctx, actor, target, 'clinch');
 
   if (intent === 'clinchStrike') {
-    const offence = fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue);
-    const defence = fatiguedEffect(target.derived.clinchDefence, 'strength', target.fatigue);
-    actor.stats.significantStrikesAttempted++;
-    tally[actor.corner].strikesAttempted++;
-    if (rng.chance(offence / (offence + defence))) {
-      // Clinch work is body-and-knees work; it is how you drain someone standing up. The prose
-      // always said "knee" and nothing in resolution agreed — the strike was a generic one over
-      // a `strength` contest. It is a knee now, with a knee's mass behind it.
-      const strikeTarget: StrikeTarget = rng.chance(0.6) ? 'body' : 'head';
-      const result = applyStrike(rng, actor, target, strikeTarget, 'knee');
-      actor.stats.significantStrikesLanded++;
-      tally[actor.corner].significantStrikes++;
-      tally[actor.corner].damageDealt += result.damage;
-      if (result.cut) state.cuts[target.corner] += rng.range(8, 22);
-      emit(
-        'strike',
-        say.clinchStrikeText(rng, actor, strikeTarget),
-        actor.corner,
-        undefined,
-        { weapon: 'knee', target: strikeTarget },
-      );
-      if (result.knockdown) {
-        tally[actor.corner].knockdowns++;
-        emit('knockdown', say.knockdownText(rng, actor, target), actor.corner, 'critical');
-        const ko = resolveKnockdown(ctx, actor, target, result.flushness);
-        if (ko) return { seconds: 12, ending: ko };
-      }
-    }
-    return { seconds: rng.int(6, 14) };
+    const ending = throwClinchStrike(ctx, actor, target, 1);
+    return { seconds: rng.int(6, 14), ending };
   }
 
-  // Stalling on the fence: cheap for nobody, but far more expensive for the fighter pinned.
+  // Stalling on the fence: cheap for nobody, more expensive for the fighter pinned — and now on a
+  // clock, because a referee who will stand two men up off the floor will not watch them lean on
+  // the fence indefinitely.
+  const seconds = rng.int(10, 20);
+  state.stalledSeconds += seconds;
   emit('note', `${say.surname(actor)} keeps them pinned against the fence, working the body.`);
-  return { seconds: rng.int(10, 20) };
+
+  if (state.stalledSeconds >= clinchBreakThreshold(ctx)) {
+    state.position = 'distance';
+    state.clinchControl = undefined;
+    state.stalledSeconds = 0;
+    emit('refStandUp', say.clinchSeparationText());
+  }
+  return { seconds };
 }
 
 // --- Ground -------------------------------------------------------------------------------
