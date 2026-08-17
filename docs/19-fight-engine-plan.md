@@ -1,13 +1,13 @@
 # 19 — Making the fight engine express style
 
-**Status:** **phases 0, 1, 2 and 3 have landed** (§7, §7.7, §8.1, §9.1). Phases 4–6 remain a proposal; D3–D6
-in §4 are still open, and D1/D2 are answered.
+**Status:** **phases 0, 1, 2, 3 and 5 have landed** (§7, §7.7, §8.1, §9.1, §11.1). Phase 4 and phase 6
+remain a proposal; D3–D6 in §4 are still open, and D1/D2 are answered.
 
-Phase 2's prediction was recorded before the work and scored four of six (§8.1). The one that failed
-is the one that matters: **`kickShare` is the only axis in the fingerprint with the range to meet
-G1's threshold at all**, so a two-axis goal cannot be reached by any weapon or targeting change.
-That is the strongest evidence yet that phase 6 — or at least phase 5's real game plans — is
-load-bearing rather than optional, and it arrived four phases before §2 expected it.
+**G1 is met on 4 of 15 pairs**, all of them a striking art against a grappling art, and every pair
+still unseparated is a *same-family* pair. Phase 5 — the world getting real game plans — did all
+four; phases 1, 2 and 3 together did none. The remaining work is therefore precisely stated for the
+first time: **plans separate families, positions separate members of a family**, and phase 6 is
+what the six same-family pairs need.
 
 Doc 20 (persistence and save size) is deferred by the owner rather than dropped: the quota failure it
 measures is real but there is no player other than the developer, so a bug that costs a save nobody
@@ -135,7 +135,7 @@ A is the instrument and foundation for B, not a substitute.
 | **2** ✅ | `strikeLean` fix, targeting reads the fighter, takedown entry becomes a recorded fact | landed — §8.1 | held: every population number moved under a point |
 | **3** ✅ | `takedownRate` traits, attribute-aware trait generation, `stance` consumer, kill `cageIq` | landed — §9.1 | held; and it found F10, which is larger than the phase |
 | **4** | Split the striking training focus; persistence assertion | 1–2 weeks | career distributions; long-sim re-baseline |
-| **5** | Real game plans for the world; reads from real tendencies; **re-ask granularity with a number** | 1–2 weeks | largest single distribution move; ship alone |
+| **5** ✅ | Real game plans for the world; reads from real tendencies; **re-ask granularity with a number** | landed — §11.1 | moved the population 3.5pp and needed no recalibration |
 | **6** | Strategy B — standing sub-states, two-sided clinch, then attributes | 3–6 weeks | a real project |
 
 **Phase 0** is first because without the fingerprint suite there is no falsifiable claim in the
@@ -938,6 +938,55 @@ four-read camp can cover.
    instrument has to measure fighters under the plans the world actually gives them, and the G1
    baseline moves with it — which is the one place in this programme where a *measurement* change
    and a *behaviour* change land together, so both numbers go in the doc.
+
+### 11.1 Phase 5 — landed, and it is the phase that worked
+
+Four predictions, four held, and one of them was the programme's whole purpose.
+
+| | Predicted | Happened |
+|---|---|---|
+| 1 | G1 goes from 0 of 15 to about 3 | ✅ **4 of 15** |
+| 2 | the population moves; `firstRoundPct` falls | ✅ finishes 50.6% → 47.1%, first-round 33.2% → 30.9%, and **no constant re-fitted** |
+| 3 | the player's camp is worth less against a prepared world | ✅ **+4.4 points becomes +2.3** |
+| 4 | `fingerprint.ts`'s third rule stops being true | ✅ the instrument now measures planned fights, and so does the roster profile |
+
+**G1: four pairs.** boxing/wrestling, kickboxing/wrestling, kickboxing/judo, karate/wrestling —
+against **zero** from the weapon primitive, the targeting rewrite and the trait work combined. The
+axes that carried it are `submissionMix` and `controlShare`, the position axes phase 2 named as the
+only remaining route. `grapplingShare` spread from 0.13–0.23 to 0.18–0.34; `controlShare` from
+0.17–0.34 to 0.18–0.42; and `legTargetShare` cleared the 0.15 plan cap that phase 2 proved could
+not be lifted from inside the engine.
+
+**Jiu-jitsu against judo moved.** It was the sharpest number in the whole programme — 0.058, less
+than half the scouting error term, and this document said twice that it was a position problem that
+only phase 6 could touch. It is **0.165**: past the error term, short of the target. The plan
+sends judo to `wrestle` and jiu-jitsu to a striking approach, because a jiu-jitsu exemplar cannot
+get a contender to the floor. That is a real property of the art in MMA and it is partly an artefact
+of the exemplar, and both are worth saying.
+
+**Every pair still unseparated is a same-family pair.** The three striking arts against each other,
+the three grappling arts against each other, six pairs, none of them meeting G1. That is not a list
+of leftovers, it is a *shape*: **plans separate families, positions separate members of a family.**
+It is the sharpest statement of what phase 6 is for that this programme has produced, and it is now
+a measurement rather than the argument §2 made from first principles.
+
+**The population moved toward the sport by accident.** Finishes 47.1% against a real ~48%, KO 28.9%
+against ~31%, decisions 49.5% against ~52%. All three were further away before. Nothing was tuned
+to achieve that — the world simply started wrestling.
+
+**F11 — the read space is too fine where the engine resolves most often.** Measured: one read buys
++4.0 points of win rate, adding a second read *in the same phase* buys **+0.0**, and all four buy
++4.4 because the last two cover phases the first two do not. `prepBonus` takes the best matching
+read rather than the sum, so fifteen keys over eight resolution sites means a player who drills the
+single leg and the double leg has spent half their camp twice — and nothing in the game says so.
+That answers §11d: the granularity is not too coarse, it is too fine in the takedown and striking
+phases, and the fix is in the read table and the camp UI rather than in the engine.
+
+**What phase 5 cost, and what it did not.** No damage constant, hazard constant or bound was
+re-fitted — the movement was absorbed by the suite's existing tolerances, which is the first time
+in this programme a phase of this size has landed without a recalibration. What it did cost is the
+comfort of the old prep numbers: a camp against a prepared opponent is worth half what it was worth
+against a blank, and `balance.test.ts` now measures both.
 
 ---
 
