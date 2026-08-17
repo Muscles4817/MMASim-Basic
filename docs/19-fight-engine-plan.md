@@ -1306,6 +1306,44 @@ counts as it goes now. Worth noting as a class: this programme has added four st
 roughly doubled what the tier simulates, and the tier's *own* resource envelope was never part of
 anybody's plan.
 
+### 13.6 Step 6B — the prediction, written first
+
+The clinch is entered **3.05 times per fight** and produces **0.66 landed strikes** (§13.2). The
+reason is in `resolveClinch`: the fighter who is *not* in control has exactly one branch — try to
+leave — and the fighter who is picks between shooting, one knee, and standing there. It is a
+one-sided position in a sport where the clinch is the most two-sided place a fight goes.
+
+Three changes:
+
+**(a) The non-controller gets a fight.** Short strikes from the inside, and a **reversal** that
+takes control of the tie-up rather than surrendering it. Control changes hands, which is what makes
+the position two-sided rather than a countdown to somebody's takedown.
+
+**(b) The entry decides where the fight lands.** Phase 2c resolved *how* a takedown was entered and
+deliberately kept it descriptive — "giving a trip a different landing position than a double leg is
+a real idea and a distribution move, which makes it somebody else's phase". This is that phase. A
+throw puts you on top in a better position than a shot does, which is the judo identity the
+fingerprint cannot currently see: `wrestling` against `judo` is **0.077**, the worst pair in the game.
+
+**(c) The referee separates a stalled clinch.** The ground has `maybeRefStandUp` and a stall clock;
+the clinch has neither, so a fighter who wins the tie-up and does nothing pays nothing and the
+`grind` approach has no natural ceiling.
+
+**What should happen:**
+
+1. **Landed clinch strikes per fight rise from 0.66**, because two fighters are throwing instead of
+   one. Somewhere around double is the honest target; much more than that and the clinch has become
+   a striking position, which it is not.
+2. **`wrestling` against `judo` separates.** It is the pair 6B exists for. If it does not clear the
+   scouting error term, (b) is too weak or landing position is not the axis the fingerprint reads —
+   and the second of those would be the more useful finding.
+3. **The population's control share rises and its striking volume falls slightly**, because the
+   clinch stops resolving instantly. **`decisionPct` is the number to watch**: a stickier clinch is
+   fewer distance exchanges, and the judges score share-of-total.
+4. **The `grind` approach stops being free.** Phase 5 gave a quarter of the roster a grappling
+   approach; if the referee break lands correctly, `grind` should be worth *less* than it is now
+   against a fighter who can reverse, and that is the intended cost rather than a regression.
+
 ---
 
 **The one-line version:** the engine's missing primitive is a named weapon on the strike, not a
