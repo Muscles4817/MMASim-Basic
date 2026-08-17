@@ -49,6 +49,7 @@ import {
   createAgreement,
   debutNews,
   planFor,
+  pickTrainingFocus,
   defaultTerms,
   displayName,
   fighterAge,
@@ -1212,7 +1213,9 @@ function develop(
 
   const trained = applyTraining({
     fighter,
-    focuses: [rng.pick(['striking', 'wrestling', 'submissions', 'conditioning', 'strategy'] as const)],
+    // What they are, and where they still have room — not `rng.pick` over the five, which is what
+    // this was and which pulled every fighter in the world toward the same shape (docs/19 §12).
+    focuses: [pickTrainingFocus(rng, fighter)],
     weeks,
     gym,
     coach,

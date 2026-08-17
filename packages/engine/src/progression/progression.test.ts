@@ -88,7 +88,7 @@ describe('training moves attributes', () => {
     const before = prospect();
     const { fighter: after, gains } = applyTraining({
       fighter: before,
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym,
       coach: coach(),
@@ -97,11 +97,39 @@ describe('training moves attributes', () => {
     });
 
     expect(after.attributes.strikingOffence).toBeGreaterThan(before.attributes.strikingOffence);
-    expect(after.attributes.kicking).toBeGreaterThan(before.attributes.kicking);
-    // Wrestling is not part of a striking camp.
+    /*
+     * **A boxing camp does not train kicks, and this assertion said it did until docs/19 phase 4.**
+     *
+     * There was one striking focus, and it trained `strikingOffence` at 1.0 and `kicking` at 0.85
+     * in the same block — so the game offered "Kickboxing / Muay Thai" as an identity and then sold
+     * that fighter a camp which moved them toward being a boxer. Splitting the focus is what makes
+     * G3 assertable (`persistence.test.ts`), and this line is where the split is visible from the
+     * training system's own side.
+     */
+    expect(after.attributes.kicking).toBe(before.attributes.kicking);
+    // Wrestling is not part of a striking camp either.
     expect(after.attributes.wrestling).toBe(before.attributes.wrestling);
     expect(gains.strikingOffence).toBeGreaterThan(0);
+    expect(gains.kicking).toBeUndefined();
     expect(gains.wrestling).toBeUndefined();
+  });
+
+  it('trains the kicks in the camp that is about kicks', () => {
+    // The other half of the split, so neither block can quietly stop working.
+    const before = prospect();
+    const { fighter: after, gains } = applyTraining({
+      fighter: before,
+      focuses: ['kicking'],
+      weeks: 8,
+      gym,
+      coach: coach(),
+      day: 0,
+      rng: createRng('t1-kicks'),
+    });
+
+    expect(after.attributes.kicking).toBeGreaterThan(before.attributes.kicking);
+    expect(after.attributes.strikingOffence).toBe(before.attributes.strikingOffence);
+    expect(gains.strikingOffence).toBeUndefined();
   });
 
   it('never lowers an attribute that was trained', () => {
@@ -126,7 +154,7 @@ describe('training moves attributes', () => {
     for (let i = 0; i < 200; i++) {
       fighter = applyTraining({
         fighter,
-        focuses: ['striking'],
+        focuses: ['boxing'],
         weeks: 10,
         gym,
         coach: coach(),
@@ -154,7 +182,7 @@ describe('training moves attributes', () => {
     const start = prospect();
     const oneCamp = applyTraining({
       fighter: start,
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym,
       coach: coach(),
@@ -182,7 +210,7 @@ describe('training moves attributes', () => {
     for (let i = 0; i < 8; i++) {
       long = applyTraining({
         fighter: long,
-        focuses: ['striking'],
+        focuses: ['boxing'],
         weeks: 8,
         gym,
         coach: coach(),
@@ -203,7 +231,7 @@ describe('training moves attributes', () => {
       });
       return applyTraining({
         fighter: f,
-        focuses: ['striking'],
+        focuses: ['boxing'],
         weeks: 8,
         gym: { ...gym, quality: opts.gymQuality ?? 60 },
         coach: coach(opts.coachDev ?? 60),
@@ -220,7 +248,7 @@ describe('training moves attributes', () => {
   it('punishes training with no coach', () => {
     const withCoach = applyTraining({
       fighter: prospect(),
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym,
       coach: coach(),
@@ -229,7 +257,7 @@ describe('training moves attributes', () => {
     }).gains.strikingOffence!;
     const alone = applyTraining({
       fighter: prospect(),
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym,
       day: 0,
@@ -241,7 +269,7 @@ describe('training moves attributes', () => {
   it('splits effort across two focuses rather than doubling it', () => {
     const single = applyTraining({
       fighter: prospect(),
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym,
       coach: coach(),
@@ -250,7 +278,7 @@ describe('training moves attributes', () => {
     });
     const double = applyTraining({
       fighter: prospect(),
-      focuses: ['striking', 'wrestling'],
+      focuses: ['boxing', 'wrestling'],
       weeks: 8,
       gym,
       coach: coach(),
@@ -290,7 +318,7 @@ describe('training moves attributes', () => {
         attributes: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 45])) as never,
         potential: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 85])) as never,
       }),
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym,
       coach: coach(),
@@ -304,7 +332,7 @@ describe('training moves attributes', () => {
         attributes: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 45])) as never,
         potential: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 85])) as never,
       }),
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym,
       coach: coach(),
@@ -323,7 +351,7 @@ describe('training moves attributes', () => {
     });
     const result = applyTraining({
       fighter: maxed,
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym,
       coach: coach(),
@@ -338,7 +366,7 @@ describe('training moves attributes', () => {
     const snapshot = JSON.stringify(before);
     applyTraining({
       fighter: before,
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym,
       coach: coach(),

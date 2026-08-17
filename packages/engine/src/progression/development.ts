@@ -29,7 +29,8 @@ import {
 
 /** What a training block concentrates on. Maps to coach specialisms. */
 export const TRAINING_FOCUSES = [
-  'striking',
+  'boxing',
+  'kicking',
   'wrestling',
   'submissions',
   'conditioning',
@@ -49,16 +50,44 @@ export interface TrainingFocusMeta {
 /**
  * What each focus actually trains.
  *
- * Weights are deliberately uneven and overlapping. A striking camp builds the hands most,
- * the kicks nearly as much, and a little speed — it does not raise five unrelated numbers by
- * the same amount, which is what makes choosing between focuses a real decision.
+ * Weights are deliberately uneven and overlapping. A boxing camp builds the hands most, the
+ * defence nearly as much, and a little speed — it does not raise five unrelated numbers by the
+ * same amount, which is what makes choosing between focuses a real decision.
+ *
+ * **Striking is two focuses, since docs/19 phase 4.** It was one — `strikingOffence` at 1.0 and
+ * `kicking` at 0.85 in the same block — and that made the game's own promise unkeepable: it offers
+ * "Kickboxing / Muay Thai" as an identity and then hands the kickboxer a camp that moves them
+ * toward being a boxer every time they take it. Measured, the gap closed to nothing inside
+ * twenty-four camps. A fighter cannot persist as a kicker if the only striking camp available
+ * makes them less of one, which is goal G3.
+ *
+ * Both halves map to the same `striking` coach specialism, deliberately: a striking coach coaches
+ * striking, and splitting the *coach* table would have invalidated every gym in both seed rosters
+ * to express something no player would ever see.
+ *
+ * **The weights sum to what a block is worth, not to what a discipline is worth.** `BASE_GAIN_PER_
+ * BLOCK` applies to the primary attribute and the rest scale off it, so the *total* rating points a
+ * camp delivers is the sum of its weights — 2.9 for wrestling, 2.35 for submissions, 2.3 for
+ * conditioning. The first cut of this split summed to 2.1 and 2.05, which quietly made a striking
+ * camp worth 30% less than the merged block it replaced: the long-sim caught it as careers peaking
+ * a point and a half lower and the best created fighter no longer reaching champion level. A camp
+ * is a camp, whatever is in it.
  */
 export const TRAINING_META: Readonly<Record<TrainingFocus, TrainingFocusMeta>> = {
-  striking: {
-    key: 'striking',
-    label: 'Striking',
-    blurb: 'Hands, kicks and the craft of not being there. Slow to build, slow to leave.',
-    attributes: { strikingOffence: 1, kicking: 0.85, strikingDefence: 0.8, speed: 0.3 },
+  boxing: {
+    key: 'boxing',
+    label: 'Boxing',
+    blurb: 'Hands, head movement and the craft of not being there. Slow to build, slow to leave.',
+    attributes: { strikingOffence: 1, strikingDefence: 0.9, speed: 0.4 },
+    specialism: 'striking',
+  },
+  kicking: {
+    key: 'kicking',
+    label: 'Kicks',
+    blurb: 'Shins, timing and range. The weapons that need a body built to throw them.',
+    // `strength` where boxing takes `speed`: a kicking camp is conditioning for the legs as much
+    // as it is technique, and it is what makes the two blocks feel different to spend a camp on.
+    attributes: { kicking: 1, strikingDefence: 0.65, speed: 0.3, strength: 0.4 },
     specialism: 'striking',
   },
   wrestling: {

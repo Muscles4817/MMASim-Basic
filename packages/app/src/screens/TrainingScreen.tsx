@@ -60,7 +60,7 @@ const WEEK_OPTIONS = [
 export function TrainingScreen() {
   const { db, world, playerFighter, commit } = useGame();
   const { navigate } = useRouter();
-  const [focuses, setFocuses] = useState<TrainingFocus[]>(['striking']);
+  const [focuses, setFocuses] = useState<TrainingFocus[]>(['boxing']);
   const [weeks, setWeeks] = useState<'4' | '8' | '12'>('8');
   const [outcome, setOutcome] = useState<TrainingOutcome | undefined>();
 

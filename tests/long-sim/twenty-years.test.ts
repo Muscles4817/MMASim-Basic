@@ -10,6 +10,7 @@ import {
   applyTraining,
   fighterAge,
   generateFighter,
+  pickTrainingFocus,
   isDecisionMethod,
   isKoMethod,
   offerOpponents,
@@ -156,15 +157,11 @@ function runLongSim(seed: string): SimSummary {
 
         const trained = applyTraining({
           fighter: f,
-          focuses: [
-            trainRng.pick([
-              'striking',
-              'wrestling',
-              'submissions',
-              'conditioning',
-              'strategy',
-            ] as const),
-          ],
+          // `pickTrainingFocus`, not a local `rng.pick` over the five — this harness drives its
+          // own booking loop rather than `advanceWorld` (see docs/19 §7.6 on what that cost last
+          // time), so a copy of the world's training policy that drifts from the world's is a
+          // twenty-year regression suite measuring a game nobody plays.
+          focuses: [pickTrainingFocus(trainRng, f)],
           weeks: 8,
           gym,
           coach,

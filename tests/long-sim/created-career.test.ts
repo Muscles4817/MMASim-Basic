@@ -51,7 +51,7 @@ const CHAMPION_BAR = rosterOveralls[rosterOveralls.length - 5]!;
 const ROSTER_FLOOR = rosterOveralls[0]!;
 
 function bestFocus(f: Fighter): TrainingFocus {
-  let best: TrainingFocus = 'striking';
+  let best: TrainingFocus = 'boxing';
   let bestRoom = -1;
   for (const focus of TRAINING_FOCUSES) {
     const keys = Object.keys(TRAINING_META[focus].attributes) as AttributeKey[];
@@ -220,7 +220,7 @@ describe('what a single camp is worth depends on who is in it', () => {
   const oneCamp = (f: Fighter, seed: string, age = 0) =>
     applyTraining({
       fighter: f,
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 10,
       gym: elite,
       coach: coachFor(elite),
@@ -251,7 +251,7 @@ describe('what a single camp is worth depends on who is in it', () => {
     for (let i = 0; i < 30; i++) {
       veteran = applyTraining({
         fighter: veteran,
-        focuses: ['striking'],
+        focuses: ['boxing'],
         weeks: 10,
         gym: elite,
         coach: coachFor(elite),
@@ -271,7 +271,7 @@ describe('what a single camp is worth depends on who is in it', () => {
     for (let i = 0; i < 6; i++) {
       f = applyTraining({
         fighter: f,
-        focuses: ['striking'],
+        focuses: ['boxing'],
         weeks: 8,
         gym: gyms[0]!,
         day: 0,

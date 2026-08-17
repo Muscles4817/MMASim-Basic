@@ -39,7 +39,7 @@ describe('a camp costs money', () => {
     const me = player(db);
     db.fighters.upsert({ ...me, bank: 100 } as Fighter & { id: string });
 
-    runTraining(db, db.fighters.getById(me.id as string) as Fighter, ['striking'], 8);
+    runTraining(db, db.fighters.getById(me.id as string) as Fighter, ['boxing'], 8);
 
     const after = db.fighters.getById(me.id as string) as Fighter;
     expect(after.bank).toBeLessThan(100);

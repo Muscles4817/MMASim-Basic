@@ -52,7 +52,7 @@ describe('the forecast cannot lie', () => {
     const fighter = prospect();
     const forecast = forecastTraining({
       fighter,
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym: gym(),
       coach: coach(),
@@ -62,7 +62,7 @@ describe('the forecast cannot lie', () => {
     for (let seed = 0; seed < 300; seed++) {
       const actual = applyTraining({
         fighter,
-        focuses: ['striking'],
+        focuses: ['boxing'],
         weeks: 8,
         gym: gym(),
         coach: coach(),
@@ -86,7 +86,7 @@ describe('the forecast cannot lie', () => {
     const fighter = prospect();
     const actual = applyTraining({
       fighter,
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym: gym(),
       coach: coach(),
@@ -95,7 +95,7 @@ describe('the forecast cannot lie', () => {
     });
     const forecast = forecastTraining({
       fighter,
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym: gym(),
       coach: coach(),
@@ -130,7 +130,7 @@ describe('the forecast answers the question the screen asks', () => {
     const run = (weeks: number) =>
       forecastTraining({
         fighter,
-        focuses: ['striking'],
+        focuses: ['boxing'],
         weeks,
         gym: gym(),
         coach: coach(),
@@ -166,7 +166,7 @@ describe('the forecast answers the question the screen asks', () => {
     const fighter = prospect();
     const single = forecastTraining({
       fighter,
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 8,
       gym: gym(),
       coach: coach(),
@@ -174,7 +174,7 @@ describe('the forecast answers the question the screen asks', () => {
     });
     const split = forecastTraining({
       fighter,
-      focuses: ['striking', 'wrestling'],
+      focuses: ['boxing', 'wrestling'],
       weeks: 8,
       gym: gym(),
       coach: coach(),
@@ -188,7 +188,7 @@ describe('the forecast answers the question the screen asks', () => {
 
   it('shows a coach and a good room being worth something', () => {
     const fighter = prospect();
-    const base = { fighter, focuses: ['striking'] as const, weeks: 8, day: TEST_DAY };
+    const base = { fighter, focuses: ['boxing'] as const, weeks: 8, day: TEST_DAY };
 
     const alone = forecastTraining({ ...base, gym: gym(30) }).totalExpected;
     const supported = forecastTraining({ ...base, gym: gym(90), coach: coach() }).totalExpected;
@@ -202,7 +202,7 @@ describe('the forecast answers the question the screen asks', () => {
     });
     const forecast = forecastTraining({
       fighter: finished,
-      focuses: ['striking'],
+      focuses: ['boxing'],
       weeks: 12,
       gym: gym(),
       coach: coach(),

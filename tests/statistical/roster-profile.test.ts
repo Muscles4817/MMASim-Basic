@@ -259,6 +259,14 @@ describe('the shipped roster fights like the sport', () => {
   });
 });
 
+/*
+ * Ninety seconds rather than the tier's sixty.
+ *
+ * The five-round pass is 35,627 championship-length fights, and since docs/19 phase 5 each one
+ * also builds two game plans and spends more of itself grappling — it went from 26 seconds to 61
+ * against a 60-second limit, which is a *cost* rather than a defect and should be paid explicitly
+ * rather than by quietly shrinking the sample. The three-round pass is well inside the default.
+ */
 describe('championship distance', () => {
   it('still sends plenty of five-round fights to the cards', async () => {
     // Real five-round main events go to decision roughly 40–45% of the time. The engine had it
@@ -268,7 +276,7 @@ describe('championship distance', () => {
     // rounds are two more chances to be finished.
     const five = await profile(5);
     expect(five.decisionPct, JSON.stringify(five)).toBeGreaterThan(20);
-  });
+  }, 90_000);
 
   it('finishes more often over five rounds than three, but not overwhelmingly', async () => {
     // 59.8% over five against 50.7% over three.
