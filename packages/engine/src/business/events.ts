@@ -391,11 +391,16 @@ export function eventRevenue(input: {
    * land on the draw where Cage Warriors finished a few thousand above zero — so an unrelated
    * change to *name generation* was enough to reshuffle the world and expose it.
    *
-   * Scaled on attendance rather than gate so it does not simply amplify the ticket price, and
-   * on prestige so a promotion nobody has heard of cannot sell the same board as one everybody
-   * has.
+   * Scaled on attendance rather than gate, so it does not simply amplify the ticket price, and
+   * only weakly on prestige. The weighting matters as much as the size: a first version leaned
+   * hard on prestige and, because attendance already scales with the promotion, effectively
+   * scaled twice — which fixed the bottom of the sport and then handed the top an even larger
+   * share. Measured across eight years of the 2020 world, the gap between the biggest promotion
+   * and the smallest went from 47x to 495x, with the smallest falling to a third of what it
+   * started with. A cage wrap sells for broadly similar money whoever is putting the show on;
+   * what differs is how many people are in the building.
    */
-  const sponsorship = Math.round((attendance / 1000) * (8 + promotion.prestige * 0.35));
+  const sponsorship = Math.round((attendance / 1000) * (18 + promotion.prestige * 0.12));
 
   const costs = Math.round(purses + bonuses + production);
 

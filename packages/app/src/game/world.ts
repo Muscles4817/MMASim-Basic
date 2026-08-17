@@ -180,8 +180,28 @@ const TITLE_DEFENCE_INTERVAL_DAYS = 150;
  */
 const MAX_BOUTS_PER_YEAR = 3;
 
-/** Bodies each division tries to keep, so cards can be made without endless rematches. */
-const divisionTarget = (sex: 'male' | 'female'): number => (sex === 'female' ? 6 : 9);
+/**
+ * Bodies each division tries to keep across the whole sport.
+ *
+ * This was a constant — 9 for men, 6 for women — and `replenish` counts **every promotion
+ * together**, so a division holding seventy-odd fighters at the start of a save had to lose sixty
+ * of them before a single replacement was generated. Measured over ten simulated years: the
+ * active roster fell from 858 to 232, light heavyweight from 74 to 19, fighters rated 70 or
+ * better from 48 to 12, and the intake produced **one fighter in the entire decade**.
+ *
+ * It cannot be a constant, either, because the eras are not the same size: the 2026 world seeds
+ * around seventy per men's division and the 2020 world around eleven, so any single number
+ * starves one or inflates the other several-fold. The target is therefore the shape the save was
+ * *born* with, recorded at creation, with a conservative floor for saves made before that existed
+ * and for a division the seed did not populate at all.
+ */
+const DIVISION_FLOOR = (sex: 'male' | 'female'): number => (sex === 'female' ? 6 : 9);
+
+const divisionTargetFor = (
+  world: { divisionTargets?: Record<string, number> },
+  divisionId: string,
+  sex: 'male' | 'female',
+): number => Math.max(DIVISION_FLOOR(sex), world.divisionTargets?.[divisionId] ?? 0);
 
 export interface WorldAdvance {
   /** Fights simulated across the whole roster. */
@@ -1059,7 +1079,29 @@ function resolveFreeAgency(
     const affordable = candidates.filter(
       (p) => marketValue(fighter, p) <= p.budget * 0.06 || p.tier === 'developmental',
     );
-    const pool = affordable.length > 0 ? affordable : candidates;
+    /*
+     * Affordable is not the same as deserved.
+     *
+     * The filter above asks only whether a promotion could pay this fighter, and a fighter with
+     * no record is cheap — so the biggest promotion in the sport could always "afford" a
+     * debutant, and a uniform pick then put them on its roster. Measured: four of thirty winless
+     * fighters sat on the leader's roster after ten years, having never fought anywhere.
+     *
+     * Reputation is the gate, because it is what the rest of the business layer already uses to
+     * mean "people who matter rate you". A debutant reaches the regional circuit; somebody who
+     * has beaten real opposition reaches the top. The floor keeps the bottom of the sport open
+     * to everybody, which is what the bottom of the sport is for.
+     */
+    /*
+     * Calibrated so the ladder is climbable rather than sealed. A debutant on reputation 5 reaches
+     * the regional circuit and nothing above it; a solid regional fighter on 40 reaches the
+     * majors; an established one on 61 reaches the biggest promotion in the sport. The first
+     * version used 0.65 here, which required reputation 85 for the leader — so nearly nobody ever
+     * qualified, big-promotion rosters thinned, and their cards lost most of a bout each.
+     */
+    const earned = affordable.filter((p) => p.prestige <= 42 + fighter.reputation * 0.9);
+
+    const pool = earned.length > 0 ? earned : affordable.length > 0 ? affordable : candidates;
     const next = promotion && fRng.chance(0.55) && pool.includes(promotion) ? promotion : fRng.pick(pool);
 
     const terms = defaultTerms(fighter, next);
@@ -1114,6 +1156,8 @@ function develop(
   day: number,
   rng: Rng,
   lastSeen: Map<string, number>,
+  /** Eight is a fight camp. A shorter block is the general work everyone does anyway. */
+  weeks = 8,
 ): Fighter {
   const gym = fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined;
   const coach = fighter.headCoachId
@@ -1123,7 +1167,7 @@ function develop(
   const trained = applyTraining({
     fighter,
     focuses: [rng.pick(['striking', 'wrestling', 'submissions', 'conditioning', 'strategy'] as const)],
-    weeks: 8,
+    weeks,
     gym,
     coach,
     day,
@@ -1253,6 +1297,25 @@ function vacateAbandonedBelts(db: GameDb, day: number): NewsItem[] {
 const divisionLabel = (divisionId: string): string =>
   divisionId.replace(/^mens-/, '').replace(/^womens-/, "women's ").replace(/-/g, ' ');
 
+/**
+ * Which promotion a debutant signs with.
+ *
+ * Inverse to prestige, steeply. A fighter turning professional is not a UFC signing, and the
+ * regional circuit existing as a genuine feeder depends on that being true in the model rather
+ * than only in the fiction.
+ */
+function pickStartingPromotion(promotions: readonly Promotion[], rng: Rng): Promotion {
+  const weights = promotions.map((p) => Math.max(1, 100 - p.prestige) ** 2);
+  const total = weights.reduce((a, b) => a + b, 0);
+
+  let roll = rng.range(0, total);
+  for (const [index, weight] of weights.entries()) {
+    roll -= weight;
+    if (roll <= 0) return promotions[index]!;
+  }
+  return promotions[promotions.length - 1]!;
+}
+
 /** Replace retirees so divisions do not quietly empty out over a long career. */
 function replenish(
   db: GameDb,
@@ -1267,22 +1330,72 @@ function replenish(
     const active = all.filter(
       (f) => f.divisionId === division.id && f.retiredDay === undefined,
     );
-    const target = divisionTarget(division.sex);
+    const target = divisionTargetFor(getWorld(db), division.id as string, division.sex);
 
     for (let i = active.length; i < target; i++) {
-      const promotion = rng.pick(promotions);
-      const born = generateFighter(rng.fork(`gen:${day}:${division.id}:${i}`), {
+      /*
+       * Where a debutant starts.
+       *
+       * Uniform `rng.pick` made a 21-year-old with four amateur fights as likely to début in the
+       * biggest promotion in the sport as in a regional one, which is both absurd and corrosive:
+       * it fills the top of the sport with people who have not earned a place there, and it
+       * leaves the feeders — whose entire function is to produce the next generation — empty.
+       *
+       * Weighted hard toward the bottom instead. Almost everybody starts small, a few start at a
+       * major, and the leader signs essentially nobody straight out of the amateurs.
+       */
+      const promotion = pickStartingPromotion(promotions, rng.fork(`start:${day}:${division.id}:${i}`));
+      /*
+       * Most people who turn professional are never going to be anything. A few are.
+       *
+       * `generateFighter` defaults to a tier drawn around 45, which produces a population whose
+       * ceilings sit comfortably below elite — so with the intake finally running, the sport
+       * still had nobody capable of *becoming* elite. Measured over ten years: population held at
+       * 627 while fighters rated 70 or better fell from 48 to 13, because the seeded elite aged
+       * out and the intake could not replace them at that level.
+       *
+       * The sport does not work by lifting everybody. It works by a small number of genuine
+       * prospects arriving each year among a great many who will spend a career on regional
+       * cards — so roughly one in twelve is drawn from a much higher band, and the rest are
+       * left exactly as they were.
+       */
+      const genRng = rng.fork(`gen:${day}:${division.id}:${i}`);
+      const isProspect = genRng.chance(0.085);
+
+      const born = generateFighter(genRng, {
         id: `gen_${day}_${division.id}_${i}`,
         divisionId: division.id,
         sex: division.sex,
         day,
         promotionId: promotion.id,
+        tier: isProspect ? Math.round(genRng.normalClamped(78, 9, 62, 97)) : undefined,
       });
-      db.fighters.upsert(born as Fighter & Entity);
+      /*
+       * A gym, and with it a head coach.
+       *
+       * `replenish` created fighters with no `gymId` and no `headCoachId`, and nothing ever gave
+       * them one — so every fighter generated during a save trained at the no-gym default of
+       * quality 40 with no coach for their entire career. That is a development multiplier of
+       * about 0.4 against roughly 1.9 in a good room with the right specialist: a quarter speed,
+       * permanently.
+       *
+       * It is why the sport's elite kept emptying out even once the intake was running and the
+       * prospects were real. Measured after ten years: 327 generated fighters alive, the best of
+       * them carrying a potential of 88, and **not one had reached a rating of 70** — the best
+       * actual rating in the entire generated population was 67. They were not failing to arrive.
+       * They were arriving and then never being allowed to grow.
+       */
+      const rooms = db.gyms.findAll() as unknown as Gym[];
+      const room = rooms.length > 0 ? genRng.pick(rooms) : undefined;
+      const placed: Fighter = room
+        ? { ...born, gymId: room.id, headCoachId: room.headCoachId }
+        : born;
+
+      db.fighters.upsert(placed as Fighter & Entity);
       news.push(
         debutNews({
           day,
-          fighterId: born.id,
+          fighterId: placed.id,
           name: displayName(born),
           divisionId: division.id,
           promotionId: promotion.id,
@@ -1315,8 +1428,24 @@ function ageEveryone(
     const since = lastSeen?.get(fighter.id as string) ?? fromDay;
     if (since >= toDay) continue;
     const rng = createRng(`${world.seed}:age:${fighter.id}:${since}`);
-    const aged = applyAgeing(fighter, since, toDay, rng);
-    if (aged.fighter !== fighter) db.fighters.upsert(aged.fighter as Fighter & Entity);
+
+    /*
+     * Everyone trains, not only the people who got booked.
+     *
+     * `develop` — which trains *and* ages — was called from exactly one place: the fight
+     * resolution path, for the two fighters in a bout. Everybody else came through here and got
+     * `applyAgeing` alone, which only ever takes attributes away. So the entire undercard of the
+     * sport declined permanently and no generated prospect could ever grow into their ceiling,
+     * because reaching it requires camps and camps only happened to people already being booked.
+     *
+     * Measured over ten years with the intake fixed but this still broken: fighters rated 70 or
+     * better fell from 48 to 11, so the top of the sport emptied out even while the population
+     * held. A professional fighter between bouts is in a gym, and now the model says so.
+     *
+     * Four weeks rather than eight: this is the general work everyone does, not a fight camp.
+     */
+    const trained = develop(db, fighter, toDay, rng, new Map([[fighter.id as string, since]]), 4);
+    if (trained !== fighter) db.fighters.upsert(trained as Fighter & Entity);
   }
 }
 

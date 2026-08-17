@@ -64,8 +64,22 @@ export function createNewGame(options: NewGameOptions = {}): GameDb {
   db.managers.upsertMany(seed.managers as unknown as (Manager & Entity)[]);
   db.championships.upsertMany(seed.championships as unknown as (Championship & Entity)[]);
 
+  /*
+   * The shape the sport starts in, so the intake can hold it.
+   *
+   * Measured rather than assumed: the two eras differ by a factor of six in division depth, and
+   * a custom world could differ by more again.
+   */
+  const divisionTargets: Record<string, number> = {};
+  for (const row of db.fighters.findAll()) {
+    const fighter = row as { divisionId?: string; retiredDay?: number };
+    if (!fighter.divisionId || fighter.retiredDay !== undefined) continue;
+    divisionTargets[fighter.divisionId] = (divisionTargets[fighter.divisionId] ?? 0) + 1;
+  }
+
   setWorld(db, {
     day: seed.day,
+    divisionTargets,
     seed: options.seed ?? `mmasim-${era}`,
     era,
     playerRole: options.playerRole,

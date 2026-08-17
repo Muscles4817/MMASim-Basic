@@ -74,6 +74,17 @@ export interface WorldMeta extends Entity {
   playerGymId?: string;
   playerPromotionId?: string;
   createdAtIso?: string;
+  /**
+   * How many active fighters each division held when the save was created.
+   *
+   * The intake needs a target, and a hardcoded one cannot serve both eras: the 2026 world seeds
+   * around seventy fighters per men's division and the 2020 world around eleven, so any constant
+   * either starves one or inflates the other four-fold. Recording the shape the world was born
+   * with lets `replenish` hold *that* shape, and makes a hand-edited world work too.
+   *
+   * Absent on saves made before this existed, which fall back to a conservative constant.
+   */
+  divisionTargets?: Record<string, number>;
   schemaVersion: number;
 }
 
