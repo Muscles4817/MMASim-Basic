@@ -1,6 +1,6 @@
 # 19 — Making the fight engine express style
 
-**Status:** **phases 0, 1, 2 and 3 have landed** (§7, §7.7, §8.1, §9.1). Phases 3–6 remain a proposal; D3–D6
+**Status:** **phases 0, 1, 2 and 3 have landed** (§7, §7.7, §8.1, §9.1). Phases 4–6 remain a proposal; D3–D6
 in §4 are still open, and D1/D2 are answered.
 
 Phase 2's prediction was recorded before the work and scored four of six (§8.1). The one that failed
@@ -823,6 +823,65 @@ same reason phase 0 recorded rather than fixed: re-scaling those hooks moves eve
 distribution in the game, and doing it inside a programme that depends on attribution would
 destroy the attribution. It belongs with D4's volume/referee work, and it is now the largest
 unaddressed defect the programme has found — larger than anything phases 3 through 5 propose to do.
+
+---
+
+## 10. What real game plans would buy — measured, before deciding when to build them
+
+Phase 2 established that **`kickShare` is the only fingerprint axis with the range to clear G1's
+0.20 threshold**, and inferred from that that the second axis has to come from phase 5 (plans) or
+phase 6 (positions). That inference had a hole in it: nobody had checked whether plans could move
+the *position* axes, and the check is cheap, because the mechanism already exists.
+
+`approachWeight` (`simulate.ts`) is a real table — `wrestle` weights takedowns at 2.0 where
+`pressure` weights them 0.8, and `grind` weights the clinch at 2.0 against `counter`'s 0.6. It
+feeds the intent lottery directly, which is what `grapplingShare`, `controlShare` and
+`submissionMix` measure. **Every AI fighter in the game carries `approach: 'pressure'`**, so that
+table is a constant across the entire roster — the same shape of defect phase 2 found in targeting,
+one level up.
+
+Probed: each exemplar given the approach its art implies, against the same control on the default
+plan, 400 fights per cell.
+
+| | G1 pairs (≥0.20 on two axes) | What comes alive |
+|---|---|---|
+| Default plan, as shipped | **0 of 15** | `kickShare` only, on three pairs |
+| Approach per art | **3 of 15** | `grapplingShare`, `controlShare`, `submissionMix` |
+| Approach **and** targeting per art | **4 of 15** | the above, plus `legTargetShare` clearing its old ceiling |
+
+```
+approach per art        kickShare legTarget grapplng   subMix  control distance
+boxing                      0.174    0.029    0.135    0.605    0.223    0.324
+kickboxing                  0.447    0.087    0.127    0.529    0.173    0.319
+karate                      0.523    0.108    0.113    0.605    0.209    0.368
+wrestling                   0.224    0.039    0.309    0.392    0.413    0.265
+jiuJitsu                    0.263    0.049    0.332    0.527    0.333    0.265
+judo                        0.277    0.046    0.292    0.410    0.344    0.271
+```
+
+`grapplingShare` spreads from 0.13–0.24 to 0.11–0.33 and `controlShare` from 0.18–0.34 to
+0.17–0.41 — on **one field per fighter**, with no engine change at all.
+
+**Three things this settles and one it does not.**
+
+1. **Phase 5 is a G1 phase, not only a realism phase.** It is worth three pairs on its own and four
+   with targeting, where phases 1, 2 and 3 together were worth zero.
+2. **Phase 6 is still needed, and now for a smaller and better-defined job.** The pairs that stay at
+   zero are the *same-family* ones — jiu-jitsu against judo, kickboxing against karate — which are
+   exactly the pairs §2 said Strategy A could never reach. Plans separate families; only positions
+   separate members of a family.
+3. **The ordering should change.** Phase 4 is the only phase that moves *career* distributions and
+   §3 says its re-baselining is the work; phase 5 moves *fight* distributions for the whole world,
+   and fight distributions propagate into careers. Running 4 before 5 pays the long-sim
+   re-baselining twice. **5 before 4.**
+
+What it does not settle is the cost. This probe gives every fighter a plan and leaves the control on
+the default, so part of what it measures is *having a plan against somebody who has not got one* —
+which is the real situation for a player with a camp, and not the situation between two AI fighters.
+And the approaches here were hand-assigned by me rather than derived from the fighter, which is the
+actual phase 5 problem. Neither weakens the result: **the axes moved, and they are the axes G1
+needs.** What the probe cannot tell you is what happens to the finish rate when the whole world
+starts wrestling, and §3's warning about that stands unchanged.
 
 ---
 
