@@ -54,10 +54,16 @@ a merely elite fighter.
 [01 — Architecture](docs/01-architecture.md) covers package boundaries, determinism and the
 testing tiers.
 
+Two open plans: [19 — Fight engine](docs/19-fight-engine-plan.md) (phases 0 and 1 landed) and
+[20 — Persistence and save size](docs/20-persistence-and-save-size.md), which is a live problem
+rather than an improvement — a fresh 2026 save is 2.80 MB against a `localStorage` budget of
+about 5 MB shared across every save.
+
 ## Non-negotiables
 
 - The engine is a pure function of `(state, inputs, seed)`. No `Math.random`, no `Date`, no
   I/O. Enforced by lint and tests.
 - Ratings are absolute, never weight-class relative.
-- Nothing derived is ever stored.
+- Nothing derived is ever stored. *(Doc 20 §1.1: the seed roster is the one place this is
+  broken, and it costs 2.73 MB per save.)*
 - Seed ratings are honest. Every fighter has a hole.
