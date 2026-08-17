@@ -47,14 +47,30 @@ describe('overall finish distribution', () => {
   });
 
   it('is symmetric between corners for identical fighters', () => {
+    /*
+     * **Stated between the two corners rather than against a fixed band, because the band was
+     * quietly wrong.**
+     *
+     * It asserted `redWinRate` inside 0.44–0.56, which is a claim centred on 0.50 — and 0.50 is only
+     * the symmetric answer when nobody draws. Two clones draw about 12% of the time (see the test
+     * above), so the symmetric answer is (1 − 0.12) / 2 ≈ 0.44: **the centre of the distribution
+     * was sitting exactly on the lower bound**, and the assertion had been passing on the margin
+     * between 0.44 and whatever the draw rate happened to be that phase. Step 6.0 moved the clock
+     * by less than a point and it fell over, reading 0.4395.
+     *
+     * Share of *decisive* fights is the claim that was always meant: neither corner may be favoured
+     * by the initiative or the scoring code, whatever fraction of fights ends in a draw. Measured
+     * 49.9%.
+     */
     const s = runMatchup(
       makeFighter({ id: 'fighter_a', lastName: 'A' }),
       makeFighter({ id: 'fighter_b', lastName: 'B' }),
       { fights: 2000, seedPrefix: 'symmetry' },
     );
-    // No corner advantage may leak in from the initiative or scoring code.
-    expect(s.redWinRate, describeSummary(s)).toBeGreaterThan(0.44);
-    expect(s.redWinRate, describeSummary(s)).toBeLessThan(0.56);
+    const decisive = s.redWins + s.blueWins;
+    const redShare = s.redWins / decisive;
+    expect(redShare, `${describeSummary(s)} redShare=${(redShare * 100).toFixed(1)}%`).toBeGreaterThan(0.45);
+    expect(redShare, `${describeSummary(s)} redShare=${(redShare * 100).toFixed(1)}%`).toBeLessThan(0.55);
   });
 
   it('produces close decisions often enough to be dramatic, but not constantly', () => {

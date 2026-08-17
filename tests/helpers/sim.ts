@@ -39,13 +39,26 @@ export interface MatchupSummary {
   /** Fraction of decisions that were split or majority. */
   closeDecisionRate: number;
   meanRound: number;
-  results: readonly FightResult[];
 }
 
+/**
+ * Run `fights` bouts and count what happened, **without keeping the fights**.
+ *
+ * This used to retain every `FightResult` — each carrying its full play-by-play — on the summary it
+ * returned, and nothing in the repo ever read them. Harmless at 400 fights; not harmless once the
+ * suite grew to statistical files running 2,500–4,000 bouts each and the world started planning
+ * (more exchanges, more events per fight). The integration tier began dying with
+ * `Fatal process out of memory: Zone` when its files ran in parallel, while every one of them
+ * passed alone — the signature of memory pressure rather than a defect, and the fix is to stop
+ * building a monument to fights nobody looks at.
+ *
+ * A caller that wants the transcripts should loop `simulateFight` itself, as
+ * `commentary-parity.test.ts` does.
+ */
 export function runMatchup(red: Fighter, blue: Fighter, opts: MatchupOptions = {}): MatchupSummary {
   const fights = opts.fights ?? 400;
   const prefix = opts.seedPrefix ?? `${red.id}-vs-${blue.id}`;
-  const results: FightResult[] = [];
+  const tally = emptyMatchupTally();
 
   for (let i = 0; i < fights; i++) {
     const config: FightConfig = {
@@ -55,63 +68,74 @@ export function runMatchup(red: Fighter, blue: Fighter, opts: MatchupOptions = {
       rounds: opts.rounds ?? 3,
       seed: `${prefix}:${i}`,
     };
-    results.push(simulateFight(config));
+    accumulate(tally, simulateFight(config), red);
   }
 
-  return summarise(results, red, blue);
+  return finaliseMatchup(tally, fights);
 }
 
-export function summarise(
-  results: readonly FightResult[],
-  red: Fighter,
-  _blue: Fighter,
-): MatchupSummary {
-  const n = results.length;
-  let redWins = 0;
-  let blueWins = 0;
-  let draws = 0;
-  let ko = 0;
-  let sub = 0;
-  let dec = 0;
-  let round1Finishes = 0;
-  let finishes = 0;
-  let closeDecisions = 0;
-  let roundSum = 0;
+interface MatchupTally {
+  redWins: number;
+  blueWins: number;
+  draws: number;
+  ko: number;
+  sub: number;
+  dec: number;
+  round1Finishes: number;
+  finishes: number;
+  closeDecisions: number;
+  roundSum: number;
+}
 
-  for (const r of results) {
-    if (!r.winnerId) draws++;
-    else if (r.winnerId === red.id) redWins++;
-    else blueWins++;
+function emptyMatchupTally(): MatchupTally {
+  return {
+    redWins: 0,
+    blueWins: 0,
+    draws: 0,
+    ko: 0,
+    sub: 0,
+    dec: 0,
+    round1Finishes: 0,
+    finishes: 0,
+    closeDecisions: 0,
+    roundSum: 0,
+  };
+}
 
-    if (isKoMethod(r.method)) {
-      ko++;
-      finishes++;
-      if (r.round === 1) round1Finishes++;
-    } else if (r.method === 'submission') {
-      sub++;
-      finishes++;
-      if (r.round === 1) round1Finishes++;
-    } else if (isDecisionMethod(r.method)) {
-      dec++;
-      if (r.method !== 'decisionUnanimous') closeDecisions++;
-    }
-    roundSum += r.round;
+function accumulate(t: MatchupTally, r: FightResult, red: Fighter): void {
+  if (!r.winnerId) t.draws++;
+  else if (r.winnerId === red.id) t.redWins++;
+  else t.blueWins++;
+
+  if (isKoMethod(r.method)) {
+    t.ko++;
+    t.finishes++;
+    if (r.round === 1) t.round1Finishes++;
+  } else if (r.method === 'submission') {
+    t.sub++;
+    t.finishes++;
+    if (r.round === 1) t.round1Finishes++;
+  } else if (isDecisionMethod(r.method)) {
+    t.dec++;
+    if (r.method !== 'decisionUnanimous') t.closeDecisions++;
   }
+  t.roundSum += r.round;
+}
 
+function finaliseMatchup(t: MatchupTally, n: number): MatchupSummary {
   return {
     fights: n,
-    redWins,
-    blueWins,
-    draws,
-    redWinRate: redWins / n,
-    koRate: ko / n,
-    submissionRate: sub / n,
-    decisionRate: dec / n,
-    finishRate: finishes / n,
-    earlyFinishRate: finishes === 0 ? 0 : round1Finishes / finishes,
-    closeDecisionRate: dec === 0 ? 0 : closeDecisions / dec,
-    meanRound: roundSum / n,
-    results,
+    redWins: t.redWins,
+    blueWins: t.blueWins,
+    draws: t.draws,
+    redWinRate: t.redWins / n,
+    koRate: t.ko / n,
+    submissionRate: t.sub / n,
+    decisionRate: t.dec / n,
+    finishRate: t.finishes / n,
+    earlyFinishRate: t.finishes === 0 ? 0 : t.round1Finishes / t.finishes,
+    closeDecisionRate: t.dec === 0 ? 0 : t.closeDecisions / t.dec,
+    meanRound: t.roundSum / n,
   };
 }
 

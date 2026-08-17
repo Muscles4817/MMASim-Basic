@@ -168,6 +168,11 @@ async function profile(rounds: 3 | 5): Promise<Profile> {
 }
 
 describe('the shipped roster fights like the sport', () => {
+  /*
+   * The two tests that pay for the memoised passes carry their own budgets — 35,627 fights each,
+   * and since docs/19 phase 5 every one of them builds two game plans and spends more of itself
+   * grappling. The tier default of sixty seconds was set when a profile pass took twenty.
+   */
   it('is profiling the world the player is given', async () => {
     // The guard on everything below. If the era this suite builds is ever silently changed —
     // or `DEFAULT_ERA` moves to a world with thin divisions — every bound in the file starts
@@ -175,7 +180,7 @@ describe('the shipped roster fights like the sport', () => {
     // 2026 pairs 35,627 same-division bouts; 2020 pairs 801.
     const three = await profile(3);
     expect(three.fights, JSON.stringify(three)).toBeGreaterThan(30_000);
-  });
+  }, 120_000);
 
   it('goes to the judges about half the time', async () => {
     // The single most important number in the whole engine, and the one the archetype-based
@@ -276,7 +281,7 @@ describe('championship distance', () => {
     // rounds are two more chances to be finished.
     const five = await profile(5);
     expect(five.decisionPct, JSON.stringify(five)).toBeGreaterThan(20);
-  }, 90_000);
+  }, 120_000);
 
   it('finishes more often over five rounds than three, but not overwhelmingly', async () => {
     // 59.8% over five against 50.7% over three.

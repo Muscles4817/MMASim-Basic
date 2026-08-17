@@ -33,14 +33,14 @@
  *     plan nobody fights with is a fingerprint of a fight that does not happen. Passing an explicit
  *     `plan` still overrides both corners, for the tests that need the plan held constant.
  *
- * Known bias, recorded rather than corrected: `distanceShare` reads `stats.distanceSeconds`,
- * and the simulator credits an exchange's seconds to the position the exchange *ended* in. A
- * takedown or a clinch entry therefore books its whole duration to the ground or the clinch,
- * so distance time is systematically under-credited for whoever changes position. It is a
- * measurement defect in a stat the judges also read, and fixing it moves scorecards — so it
- * is out of scope for a phase whose whole point is to move nothing. Treat `distanceShare` as
- * "time spent not changing position at range" and prefer the other five axes when a claim can
- * be made without it.
+ * **The `distanceShare` caveat is gone, and what it was worth is worth knowing.** This header used
+ * to warn that the simulator credited an exchange's seconds to the position it *ended* in, so a
+ * takedown booked its whole duration to the ground and distance time was systematically
+ * under-credited for whoever changed position (docs/19 §7.4 F5). Step 6.0 fixed it: an exchange's
+ * seconds now belong to the position it was fought in. Measured across the six exemplars, the axis
+ * moved **+0.017 to +0.022** — real, uniform across the arts rather than concentrated in the
+ * position-changers, and small enough that every claim this suite made while the caveat stood
+ * still holds. A caveat carried for four phases turned out to be worth two points of one axis.
  */
 
 import {

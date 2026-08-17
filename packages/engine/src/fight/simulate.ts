@@ -398,6 +398,14 @@ function resolveExchange(ctx: ExchangeContext): ExchangeOutcome {
   const actor = corners[initiative];
   const target = corners[OTHER_CORNER[initiative]];
 
+  // Snapshot before anybody moves. A takedown is *distance* work that ends on the floor, and the
+  // clock has to say so — see `exchangeStart`.
+  const start = exchangeStart;
+  start.position = state.position;
+  start.groundTop = state.groundTop;
+  start.groundPosition = state.groundPosition;
+  start.clinchControl = state.clinchControl;
+
   const outcome =
     state.position === 'distance'
       ? resolveDistance(ctx, actor, target)
@@ -407,7 +415,7 @@ function resolveExchange(ctx: ExchangeContext): ExchangeOutcome {
 
   // Time, fatigue and hurt decay apply regardless of what happened.
   const seconds = Math.min(outcome.seconds, Math.max(1, ctx.secondsRemaining));
-  applyPassiveEffects(ctx, seconds);
+  applyPassiveEffects(ctx, seconds, start);
 
   // Fouls resolve after the exchange and after fatigue: it is the tired hand that pokes the
   // eye. A finish already in hand is not overturned by a foul that came with it.
@@ -507,20 +515,54 @@ function applyRecovery(c: Combatant, seconds: number): void {
   c.fatigue = Math.max(0, c.fatigue - benefit * 0.22);
 }
 
-function applyPassiveEffects(ctx: ExchangeContext, seconds: number): void {
+/**
+ * Where the exchange was fought, captured before the resolver moves anybody.
+ *
+ * The whole of F5 (docs/19 §7.4). `applyPassiveEffects` used to read `state` *after* resolution, so
+ * an exchange's seconds were booked against the position it **ended** in: a takedown credited its
+ * entire duration to the ground, a clinch entry credited its entire duration to the clinch, and the
+ * fighter who changed position was charged for arriving as though they had already been there.
+ * `distanceSeconds` is documented as a judging input, so this was not only a measurement defect.
+ */
+interface ExchangeStart {
+  position: Position;
+  groundTop?: Corner;
+  groundPosition: GroundPosition;
+  clinchControl?: Corner;
+}
+
+/**
+ * One snapshot, reused for every exchange of every fight.
+ *
+ * Module-level and mutable, which is the same trade `Combatant` makes and for the same reason
+ * stated at the top of this file: the fight loop must not allocate. A fresh object per exchange is
+ * roughly fifty per fight and tens of millions across the statistical tier, and it took the
+ * integration suite out of memory the first time this was written that way. Safe because
+ * `simulateFight` is synchronous and single-threaded from the first exchange to the last.
+ */
+const exchangeStart: ExchangeStart = {
+  position: 'distance',
+  groundPosition: 'guard',
+};
+
+function applyPassiveEffects(
+  ctx: ExchangeContext,
+  seconds: number,
+  start: ExchangeStart,
+): void {
   const { corners, state, tally } = ctx;
 
   for (const corner of ['red', 'blue'] as const) {
     const c = corners[corner];
     const isControlled =
-      (state.position === 'ground' && state.groundTop === OTHER_CORNER[corner]) ||
-      (state.position === 'clinch' && state.clinchControl === OTHER_CORNER[corner]);
+      (start.position === 'ground' && start.groundTop === OTHER_CORNER[corner]) ||
+      (start.position === 'clinch' && start.clinchControl === OTHER_CORNER[corner]);
 
     accrueFatigue(c, {
-      position: state.position,
-      groundPosition: state.groundPosition,
+      position: start.position,
+      groundPosition: start.groundPosition,
       isControlled,
-      intensity: state.position === 'distance' ? 1 : 1.15,
+      intensity: start.position === 'distance' ? 1 : 1.15,
       seconds,
     });
     const wasHurt = c.hurtSeconds > 0;
@@ -533,11 +575,11 @@ function applyPassiveEffects(ctx: ExchangeContext, seconds: number): void {
       ctx.emit('recovered', `${c.fighter.lastName} has recovered and is fighting back.`, corner);
     }
 
-    if (state.position === 'distance') {
+    if (start.position === 'distance') {
       c.stats.distanceSeconds += seconds;
     } else if (
-      (state.position === 'ground' && state.groundTop === corner) ||
-      (state.position === 'clinch' && state.clinchControl === corner)
+      (start.position === 'ground' && start.groundTop === corner) ||
+      (start.position === 'clinch' && start.clinchControl === corner)
     ) {
       c.stats.controlSeconds += seconds;
       tally[corner].controlSeconds += seconds;

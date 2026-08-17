@@ -22,13 +22,18 @@
  *
  * ```
  *              kickShare  legTarget  grappling  subMix  control  distance
- * boxing           0.163      0.031      0.184   0.693    0.201     0.261
- * kickboxing       0.422      0.128      0.188   0.714    0.179     0.239
- * karate           0.473      0.144      0.196   0.641    0.244     0.260
- * wrestling        0.247      0.043      0.297   0.394    0.421     0.291
- * jiuJitsu         0.374      0.069      0.176   0.502    0.263     0.348
- * judo             0.241      0.043      0.341   0.471    0.379     0.256
+ * boxing           0.161      0.030      0.181   0.692    0.194     0.280
+ * kickboxing       0.423      0.130      0.190   0.710    0.172     0.260
+ * karate           0.471      0.142      0.192   0.640    0.236     0.285
+ * wrestling        0.244      0.043      0.298   0.393    0.420     0.308
+ * jiuJitsu         0.381      0.070      0.175   0.489    0.258     0.372
+ * judo             0.240      0.042      0.340   0.473    0.374     0.278
  * ```
+ *
+ * `distanceShare` is trustworthy for the first time in this table: step 6.0 stopped the simulator
+ * booking a transition's seconds against the position it landed in, which lifted the column by
+ * 0.017–0.022 and cost `controlShare` about 0.005. Nothing else moved — the separations are the
+ * same to three decimal places, which is what a measurement fix should look like.
  *
  * **Measured under the plans the world gives these fighters**, which is `planFor` on both corners
  * since docs/19 phase 5. That is a change of instrument as well as of engine, and both moved at
