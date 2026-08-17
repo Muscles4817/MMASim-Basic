@@ -40,7 +40,7 @@ change, in a career game.
 > **Correction.** The original claimed there was "no style, discipline, or background field" at
 > all. There was no *stored* one, but `Background` was already a six-discipline enum consumed once
 > at generation and discarded — which is precisely the permitted pattern, and the precedent the
-> origin system (doc 19 / `progression/origin.ts`) now follows.
+> origin system (`progression/origin.ts`) now follows.
 
 ---
 
@@ -213,7 +213,7 @@ fifteen reads** — inside the scouting error term at almost any coach rating.
 | `takedownRate` trait hook | wired into every takedown, **no trait declares it** |
 | `tendencies` | computed per fighter, **one read site, scouting only** |
 | `strikesByTarget` | recorded every fight, **never displayed** |
-| `PreppedRead.confidence` | set, persisted, **never read** |
+| `PreppedRead.confidence` | rendered in the camp screen, **never read by the engine** |
 | `FinishMethod: 'retirement'` | commentary and news copy exist, **no code path produces it** |
 
 That is not an absent concept. It is a much cheaper class of problem — and the reason the reviews
