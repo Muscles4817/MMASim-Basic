@@ -161,18 +161,36 @@ in lines is not cheap in risk.
 
 ---
 
-## 4. Decision points — open, for the owner
+## 4. Decision points
 
 **D1 — `Weapon` enum, or just thread `isKick`?** → *Recommend the enum.* Threading the boolean is
 ~2 days cheaper, re-entrenches the wrong scope, leaves the clinch knee and ground elbow
 unnameable, leaves F1 unfixed, and makes the parity test harder to write because there is still no
 ground-truth field to compare prose against.
 
+> **Decided: the enum. Implemented — §7.7.** `type Weapon = 'punch' | 'kick' | 'knee' | 'elbow'`,
+> per shot, chosen *with* its target rather than independently of it, threaded into `applyStrike`
+> and through `rollFlushness`, `strikeDamage` and `knockdownHazard`. One thing the write-up above
+> underrated: the boolean's real cost was not the missing nouns, it was that **weapon and target
+> were chosen by different systems that never spoke** — which is why "two thirds of leg damage is
+> dealt by a boxing stat" was possible at all. An enum alone would not have fixed that; choosing
+> them together is what did.
+
 **D2 — Does commentary read the fighter, or read the event?** → *Recommend the event, strongly.*
 If the narrator picks the technique *and* the resolver picks the technique, they are two
 independent draws that can disagree, with no ground truth — the parity test becomes literally
 unwritable. Resolution decides, records, and passes. Same felt outcome, structurally different
 code. This is the sharpest disagreement with any of the four reviews.
+
+> **Decided: the event. Implemented — §7.7.** `FightEvent` carries `weapon` and `target`, and
+> `commentary.ts` selects prose from a table keyed by them.
+> `tests/statistical/commentary-parity.test.ts` exists, which is the proof the argument was right:
+> it could not have been written the other way round. It found three lies on its first run, all of
+> them in the *vocabulary tables* rather than in the code — the punch list contained "a knee to the
+> midsection" and "a chopping body kick", the kick list contained "a flying knee to the body", and
+> `groundStrikesText` offered "works elbows from the top" on a branch that had never resolved an
+> elbow. Every one of those lines was defensible on its own; nothing was comparing them to
+> anything.
 
 **D3 — Split the striking training focus?** → *Recommend yes*, but this is the defensible thing to
 defer. If deferred, take G3 off the goal list explicitly rather than letting it quietly fail.
@@ -489,6 +507,89 @@ Worth sitting with: that private harness already contained the fix. `for (const 
 blue.id]) { ... available.splice(index, 1) }`, under the comment *"Both are now booked; do not book
 them again in this block."* The correct behaviour was written down, in a test file, next to a loop
 standing in for the one that did not do it.
+
+### 7.7 Phase 1 — landed
+
+D1 and D2 as recommended, and the answer to both was the same shape: **the missing thing was not a
+noun, it was that weapon and target were chosen by different systems that never spoke.**
+
+**What changed.** `WEAPON_PROFILE` in `damage.ts` — four numbers per weapon (damage, knockdown
+hazard, cut chance, and *which attribute decides flushness*), and the last is the load-bearing one:
+a kick's flushness now reads `kicking`, so a kicker's kicks land better than their hands instead of
+identically. `pickShot` chooses weapon and target together, so a shot to the legs is a kick and the
+attribute that lands it is the one the fighter trained for it. The clinch knee is a knee, the ground
+elbow is an elbow and cuts three times as often as a jab, and cut chance moved out of `simulate.ts`
+— where it was a flat 0.14 for every strike in the game — into the weapon that decides it.
+
+**F1 fixed, as a side effect exactly as predicted.** `throwBurst(ctx, target, actor, false, …)` —
+that fourth argument was `isKick`, so every counter in the game was a punch. Once weapons are
+per-shot the counter picks its own, off the counter-fighter's own ratios, and the karate origin
+built to counter-strike is no longer served by the one attribute the origin withholds.
+
+**G4: met.** Sixty rating points, paired seeds, against a contender:
+
+| Attribute | Before | After |
+|---|---|---|
+| `strikingOffence` | +14.5pp | **+12.1pp** |
+| `kicking` | **−1.3pp** | **+9.7pp** |
+| `wrestling` | +13.6pp | +10.9pp |
+| `submissions` | +11.6pp | +11.7pp |
+
+Kicking went from worth *nothing, pointing the wrong way* to comparable with wrestling. Striking as
+a whole became more consequential — 21.8 points across the two striking attributes against 13.2
+before — and is now split across both rather than concentrated in the hands. Grappling gave up
+ground in relative terms because the striking half of the sport got more dangerous, which is the
+trade phase 1 was asking for rather than a regression.
+
+**G1: not met, and it barely moved. Still 0 of 15 pairs.** This is the important result, and it was
+not the expected one. `kickShare` roughly doubled and spread (boxing 0.081 → 0.163, karate 0.358 →
+0.430), and `legTargetShare` came alive as a style axis — a boxer aims low on 3% of shots against a
+karateka's 7%, where before every fighter sat at 0.115 because the default plan sends 15% of
+*everybody's* shots at the legs. Two pairs now clear 0.20 on `kickShare` alone. But G1 asks for two
+axes, and the other four are position and targeting axes that phase 1 never touched.
+
+One pair got **worse**: kickboxing against karate fell from 0.109 to 0.066, because both are now
+high-kick fighters and the one axis that finally works saturates for both of them. That is
+Strategy A's ceiling arriving precisely where §2 said it would — *"cannot reach karate vs TKD"* —
+and it arrived in phase 1 rather than phase 5. Jiu-jitsu against judo remains the worst pair in the
+game at 0.058, untouched, because it is a position problem and always was.
+
+**The recalibration.** `BASE_KD_HAZARD` 0.019 → 0.0158. The weapon table sets *relative* danger and
+this constant sets *absolute*, so a table where kicks and knees are harder than punches necessarily
+raises the population's hazard: finishes went 49.5% → 52.7% and first-round finishes 32.0% → 34.7%,
+breaking the one bound §3 predicted would break. Absorbing it in the global constant rather than by
+softening the weapon table is why the two are separate — the style expression survives untouched.
+
+| | Before | After |
+|---|---|---|
+| Finishes | 49.5% | 50.7% |
+| KO/TKO | 30.1% | 31.0% |
+| Submission | 19.4% | 19.8% |
+| Decisions | 46.9% | 45.8% |
+| KO : submission | 1.55:1 | 1.57:1 |
+| First-round | 32.0% | 32.7% |
+
+Landed weapon mix across the whole roster: **punch 65%, kick 25%, knee 2.4%, elbow 7.7%** — against
+roughly 70/20/small in the real sport, from a table that was never fitted to it.
+
+**Three knife-edge bounds broke in suites phase 1 does not own**, and one of them is worth naming
+because it was not a regression at all. `broadcast.test.ts` asserts that a booth agrees with the
+judges less the more biased it is, over four bias levels at 400 fights. Measured, adjacent levels
+differ by about one point of agreement, and at 400 fights the first two are *inverted* — so the
+monotone chain had been passing on luck. At 1,600 and at 4,000 it is clean and identical in both.
+The file's own header describes this happening to its 150-fight ancestor: *"the effect was real and
+the sample simply could not resolve it."* It happened again, one order of magnitude up. The other
+two — a draw ceiling for two identical fighters, and the preparation ratio — were re-stated with
+their measurements and, in the prep case, from both sides at once, because a ratio bound and an
+absolute bound are each hostage to the other's denominator.
+
+**What phase 1 says about the plan.** §2 argued Strategy A reaches "about nine" disciplines and
+stops. Phase 1 is the first evidence, and it points slightly worse than that: the weapon axis is
+*one* axis, it saturates, and the arts that need separating most (Muay Thai vs Dutch kickboxing,
+karate vs TKD, judo vs sambo) are the ones it cannot separate because they all sit at the same end
+of it. G1 needs the position and targeting axes, which is phases 2, 5 and 6. The plan's ordering
+still holds — G4 was unreachable without this, and phase 2 wires the narrator to a formula that is
+now correct — but the case that **B is unavoidable** is stronger than when it was written.
 
 ---
 
