@@ -1,8 +1,13 @@
 # 19 — Making the fight engine express style
 
-**Status:** **phases 0 and 1 have landed** (§7, §7.7). **Phase 2 is in progress** — its prediction is
-recorded in §8 before the work, per §7.5's convention. Phases 3–6 remain a proposal; D3–D6 in §4 are
-still open, and D1/D2 are answered.
+**Status:** **phases 0, 1 and 2 have landed** (§7, §7.7, §8.1). Phases 3–6 remain a proposal; D3–D6
+in §4 are still open, and D1/D2 are answered.
+
+Phase 2's prediction was recorded before the work and scored four of six (§8.1). The one that failed
+is the one that matters: **`kickShare` is the only axis in the fingerprint with the range to meet
+G1's threshold at all**, so a two-axis goal cannot be reached by any weapon or targeting change.
+That is the strongest evidence yet that phase 6 — or at least phase 5's real game plans — is
+load-bearing rather than optional, and it arrived four phases before §2 expected it.
 
 Doc 20 (persistence and save size) is deferred by the owner rather than dropped: the quota failure it
 measures is real but there is no player other than the developer, so a bug that costs a save nobody
@@ -127,7 +132,7 @@ A is the instrument and foundation for B, not a substitute.
 |---|---|---|---|
 | **0** ✅ | Era fix, draw-bound fix, knife-edge bounds, **fingerprint suite**, guard-player archetype | landed — §7 | none — no engine source touched |
 | **1** ✅ | **`Weapon` primitive**, kick profile, weapon×target stats, **commentary parity test** | landed — §7.7 | moved finish rate +1.2pp after recalibration; 4 files |
-| **2** | `strikeLean` fix, tendencies drive selection, takedown entry becomes a recorded fact | 4–6 days | first change to who wins |
+| **2** ✅ | `strikeLean` fix, targeting reads the fighter, takedown entry becomes a recorded fact | landed — §8.1 | held: every population number moved under a point |
 | **3** | `takedownRate` traits, attribute-aware trait generation, `stance` consumer, kill `cageIq` | 3–4 days | low; stance magnitude is the variable |
 | **4** | Split the striking training focus; persistence assertion | 1–2 weeks | career distributions; long-sim re-baseline |
 | **5** | Real game plans for the world; reads from real tendencies; **re-ask granularity with a number** | 1–2 weeks | largest single distribution move; ship alone |
@@ -669,6 +674,63 @@ narrated from the record.
 6. **(c) finds at least one lie.** The entry list is offered whole to a resolver that knows whether
    the shot came from the clinch, so "a trip" and "a body lock" are already narrating distance
    shots. Parity tests have found something on every run so far; assume this one does too.
+
+### 8.1 Phase 2 — landed, and scored four of six
+
+All three edits landed. The suite is green at 1,087 tests and no bound was re-fitted.
+
+| | Predicted | Happened |
+|---|---|---|
+| 1 | (a) inverts the fourth tripwire, moves nothing else | ✅ 0.333 → 0.094 against the control wrestler's 0.117 |
+| 2 | (b) gives G1 its second axis | ❌ **and this is the phase's finding** — see below |
+| 3 | jiu-jitsu against judo does not move | ✅ 0.058 → 0.066, still inside the error term |
+| 4 | F3's spread does not narrow | ✅ boxing still beats kickboxing 65% |
+| 5 | the outcome bounds hold without a recalibration | ✅ every population number moved by under a point |
+| 6 | (c) finds at least one lie | ➖ it found one, and the liar was the test |
+
+**The failed prediction is the useful one.** `legTargetShare` widened — boxing against karate went
+0.044 → 0.080, and a boxer now aims low on 2.6% of shots against a karateka's 10.6% — but G1 is
+still 0 of 15 pairs, and the probe says it always will be from here. Driven across the plausible
+attribute range, the axis runs **0.003 for a hands-only fighter to 0.132 for a pure kicker**: its
+ceiling is the plan's own `legs` weight of 0.15, and ~99% of the game's fights use the default
+plan. **`kickShare` is the only axis in the fingerprint with the dynamic range to clear 0.20 at
+all**, and G1 asks for two.
+
+So the honest statement after two phases of Strategy A is sharper than §2's "about nine and stops":
+*the weapon axis is the only axis Strategy A owns, and one axis cannot satisfy a two-axis goal.*
+The second axis has to come from plans that differ per fighter (phase 5) or from positions
+(phase 6). Neither is a tuning problem, and neither is available cheaply.
+
+**What phase 2 cost, and it is worth naming.** `kicking`'s win-rate swing fell from 9.7 to 8.2
+points. Targeting now reads the fighter, so a fighter who cannot kick **stops aiming at the legs**
+rather than throwing kicks they are bad at — the low end of the swing rose 1.4 points while the
+high end barely moved. That is adaptive behaviour compressing an attribute's consequence, which is
+a permanent tension between G4 and realism rather than a bug: every piece of "fighters play to
+their strengths" the engine grows will do this. Measured, the alternative is worse — dropping the
+relative gate returns `kicking` to 9.5 and drops `strikingOffence` to 8.6, buying the number back
+by making the feet beat the hands.
+
+**Two things nobody predicted.**
+
+**F8 — `risk.test.ts` was measuring a quarter-point effect at 1,200 fights.** Its "recklessness
+gets you finished more too" assertion inverted under an unrelated reseed. Measured over 12,000
+fights the effect is real and tiny: 3.98% knocked out against 3.74%. Restated on knockdowns
+suffered at 4,000 fights (0.262 against 0.246) with the finding recorded at the site — **at
+journeyman level recklessness is close to free**, buying 4× the finishes for a 6% rise in getting
+dropped, and what keeps the dial honest is `exertion` and shorter fights rather than the counters
+it eats. That belongs to whoever owns D4, not to a style phase. Third instrument defect this
+programme has found in a suite nobody suspected, after F4 and F6.
+
+**F9 — the engine throws four times too few leg strikes.** Population landed targeting is
+**67.9% head / 28.1% body / 4.0% legs** against a real sport that runs roughly 62/22/16. The plan
+asks for 15% legs, the honesty gate halves it, and leg kicks then land less often than the shots
+above the waist. Recorded rather than fixed: it is a *plans* problem before it is an engine one,
+which puts it with phase 5, and moving it moves the whole damage distribution.
+
+**And the trip does not read as judo.** The takedown entry mix separates a wrestler from a striker
+(singles 35% against 25%; reactive shots 12% against 21%) but not a judoka from anybody — trips run
+10.9% for judo against boxing's 11.6%, because trips are clinch-only and the clinch barely happens
+(§6). The plan's considered decision to leave the clinch alone has a visible cost, and this is it.
 
 ---
 

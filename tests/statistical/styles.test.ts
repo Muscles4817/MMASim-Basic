@@ -236,10 +236,10 @@ describe('G4 — style decides whether you win, not just how', () => {
 
   it('makes being a far better wrestler worth winning fights', () => {
     // The yardstick G4 is measured against: 41.1% → 54.7%, a 13.6-point swing, and the largest
-    // of the four. It has moved twice — 13.6 at the phase 0 baseline, 10.9 after phase 1 gave
-    // the striking half of the sport more danger, and back to 13.6 after phase 2, because a
-    // fighter who aims where they can actually hit spends fewer shots on a phase they are bad
-    // at, and the fighter who benefits most from that is the one whose game is not striking.
+    // of the four. 13.6 at the phase 0 baseline, 10.9 after phase 1 gave the striking half of
+    // the sport more danger, and 12.5 on this same probe immediately before phase 2 — so the
+    // 1.1 points between that and the number above are inside the measurement's own noise and
+    // should be read as unchanged rather than as phase 2 moving it.
     const wrestling = swing('wrestling');
     expect(wrestling.pp, `wrestling swing ${wrestling.pp.toFixed(1)}pp`).toBeGreaterThan(8);
   });
