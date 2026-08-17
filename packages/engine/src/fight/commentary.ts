@@ -9,47 +9,64 @@
 import type { Rng } from '../core/rng.js';
 import { displayName } from '../domain/fighter.js';
 import type { Combatant } from './profile.js';
-import type { GroundPosition, StrikeTarget } from './types.js';
+import type { GroundPosition, StrikeTarget, Weapon } from './types.js';
 
 export const surname = (c: Combatant): string => c.fighter.lastName;
 export const fullDisplayName = (c: Combatant): string => displayName(c.fighter);
 
-const HEAD_STRIKES = [
-  'a stiff jab',
-  'a right hand down the pipe',
-  'a short left hook',
-  'an overhand right',
-  'a check hook',
-  'a straight left',
-  'a lead uppercut',
-  'a blistering 1-2',
-];
-
-const BODY_STRIKES = [
-  'a hook to the liver',
-  'a straight right to the ribs',
-  'a knee to the midsection',
-  'a chopping body kick',
-  'a short shovel hook to the body',
-];
-
-const LEG_STRIKES = [
-  'a calf kick',
-  'a low kick to the thigh',
-  'an inside leg kick',
-  'a chopping leg kick',
-];
-
-const KICKS: Readonly<Record<StrikeTarget, readonly string[]>> = {
-  head: ['a head kick', 'a switch high kick', 'a question-mark kick', 'a spinning back kick'],
-  body: ['a body kick', 'a flying knee to the body', 'a teep to the midsection'],
-  legs: LEG_STRIKES,
-};
-
-const STRIKES: Readonly<Record<StrikeTarget, readonly string[]>> = {
-  head: HEAD_STRIKES,
-  body: BODY_STRIKES,
-  legs: LEG_STRIKES,
+/**
+ * What each weapon looks like, per target.
+ *
+ * **Resolution decides, records, and passes; this module reports.** That is decision D2 in doc 19,
+ * and it is a structural claim rather than a stylistic one: if the narrator picked the technique
+ * *and* the resolver picked the technique, they would be two independent draws that can disagree,
+ * with no ground truth anywhere — and a test that commentary never names a technique the resolver
+ * did not use becomes literally unwritable. The felt outcome is identical; the difference is that
+ * `tests/statistical/commentary-parity.test.ts` can now prove the prose.
+ *
+ * Which required cleaning these tables, because the old ones could not have passed such a test.
+ * The punch list contained *"a knee to the midsection"* and *"a chopping body kick"*, and the kick
+ * list contained *"a flying knee to the body"* — so a resolved punch was regularly narrated as a
+ * knee, and neither the strike nor the prose was wrong on its own terms. Nothing could tell,
+ * because nothing was comparing them.
+ */
+const VOCABULARY: Readonly<Record<Weapon, Readonly<Record<StrikeTarget, readonly string[]>>>> = {
+  punch: {
+    head: [
+      'a stiff jab',
+      'a right hand down the pipe',
+      'a short left hook',
+      'an overhand right',
+      'a check hook',
+      'a straight left',
+      'a lead uppercut',
+      'a blistering 1-2',
+    ],
+    body: [
+      'a hook to the liver',
+      'a straight right to the ribs',
+      'a short shovel hook to the body',
+      'a digging left to the body',
+    ],
+    // Nobody punches a leg, and `pickShot` will never ask for this — but a total table is worth
+    // more than a clever one, and if it ever *is* asked the answer must not be a kick.
+    legs: ['a chopping right to the thigh'],
+  },
+  kick: {
+    head: ['a head kick', 'a switch high kick', 'a question-mark kick', 'a spinning back kick'],
+    body: ['a body kick', 'a teep to the midsection', 'a roundhouse to the ribs'],
+    legs: ['a calf kick', 'a low kick to the thigh', 'an inside leg kick', 'a chopping leg kick'],
+  },
+  knee: {
+    head: ['a knee up the middle', 'a jumping knee to the head'],
+    body: ['a knee to the midsection', 'a knee to the ribs in the clinch'],
+    legs: ['a knee to the thigh'],
+  },
+  elbow: {
+    head: ['a short elbow', 'a slicing elbow', 'a downward elbow'],
+    body: ['an elbow to the ribs'],
+    legs: ['an elbow to the thigh'],
+  },
 };
 
 const MISS_VERBS = [
@@ -79,10 +96,10 @@ export function strikeLanded(
   rng: Rng,
   attacker: Combatant,
   target: StrikeTarget,
-  isKick: boolean,
+  weapon: Weapon,
   flushness: number,
 ): string {
-  const move = rng.pick(isKick ? KICKS[target] : STRIKES[target]);
+  const move = rng.pick(VOCABULARY[weapon][target]);
   const name = surname(attacker);
   if (flushness >= 2.0) return `${name} lands ${move} — flush, and that hurt.`;
   if (flushness >= 1.3) return `${name} lands ${move} clean.`;
@@ -90,8 +107,25 @@ export function strikeLanded(
   return `${name} lands ${move}.`;
 }
 
-export function strikeMissed(rng: Rng, attacker: Combatant, target: StrikeTarget): string {
-  return `${surname(attacker)} ${rng.pick(MISS_VERBS)} ${rng.pick(STRIKES[target])}.`;
+export function strikeMissed(
+  rng: Rng,
+  attacker: Combatant,
+  target: StrikeTarget,
+  weapon: Weapon,
+): string {
+  // Takes the weapon, which it never used to. `strikeMissed` was called without `isKick`, so
+  // every missed kick in the game was narrated as a missed punch.
+  return `${surname(attacker)} ${rng.pick(MISS_VERBS)} ${rng.pick(VOCABULARY[weapon][target])}.`;
+}
+
+/**
+ * A knee in the clinch.
+ *
+ * Every clinch strike in the game used to be the same hardcoded sentence, built in `simulate.ts`
+ * where no other line lives. It is prose, so it belongs here, and it varies like everything else.
+ */
+export function clinchStrikeText(rng: Rng, attacker: Combatant, target: StrikeTarget): string {
+  return `${surname(attacker)} ${rng.pick(['digs', 'drives', 'thuds'])} ${rng.pick(VOCABULARY.knee[target])} in against the fence.`;
 }
 
 export function knockdownText(rng: Rng, attacker: Combatant, defender: Combatant): string {
@@ -166,14 +200,35 @@ export function refStandUpText(): string {
   return `The referee stands them up — not enough work from the top.`;
 }
 
-export function groundStrikesText(rng: Rng, attacker: Combatant, heavy: boolean): string {
+export function groundStrikesText(
+  rng: Rng,
+  attacker: Combatant,
+  heavy: boolean,
+  landedElbow = false,
+): string {
+  /*
+   * One line summarises a burst of up to four shots, which is why this is the one strike line
+   * that does not name a specific technique — it is a claim about a sequence rather than about a
+   * strike. But it is still *told*: the old list offered "works elbows from the top" at random,
+   * on a branch that had never resolved an elbow in its life, and now the elbow is only mentioned
+   * when an elbow actually landed. Without that, elbows would be invisible to the player, and a
+   * distinction the prose cannot carry does not exist for them (doc 18 §4.6).
+   */
   if (heavy) {
-    return `${surname(attacker)} is landing heavy ground-and-pound — the referee is watching closely.`;
+    return landedElbow
+      ? `${surname(attacker)} is dropping elbows from the top — the referee is watching closely.`
+      : `${surname(attacker)} is landing heavy ground-and-pound — the referee is watching closely.`;
+  }
+  if (landedElbow) {
+    return rng.pick([
+      `${surname(attacker)} works short elbows from the top.`,
+      `${surname(attacker)} posts up and slices an elbow down.`,
+    ]);
   }
   return rng.pick([
     `${surname(attacker)} postures up and lands short shots.`,
-    `${surname(attacker)} works elbows from the top.`,
-    `${surname(attacker)} keeps busy with punches to the body and head.`,
+    `${surname(attacker)} keeps busy from the top, working to the body and head.`,
+    `${surname(attacker)} stays heavy and picks his shots from above.`,
   ]);
 }
 
