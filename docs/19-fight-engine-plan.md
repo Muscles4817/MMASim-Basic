@@ -1,6 +1,6 @@
 # 19 — Making the fight engine express style
 
-**Status:** **phases 0, 1 and 2 have landed** (§7, §7.7, §8.1). Phases 3–6 remain a proposal; D3–D6
+**Status:** **phases 0, 1, 2 and 3 have landed** (§7, §7.7, §8.1, §9.1). Phases 3–6 remain a proposal; D3–D6
 in §4 are still open, and D1/D2 are answered.
 
 Phase 2's prediction was recorded before the work and scored four of six (§8.1). The one that failed
@@ -133,7 +133,7 @@ A is the instrument and foundation for B, not a substitute.
 | **0** ✅ | Era fix, draw-bound fix, knife-edge bounds, **fingerprint suite**, guard-player archetype | landed — §7 | none — no engine source touched |
 | **1** ✅ | **`Weapon` primitive**, kick profile, weapon×target stats, **commentary parity test** | landed — §7.7 | moved finish rate +1.2pp after recalibration; 4 files |
 | **2** ✅ | `strikeLean` fix, targeting reads the fighter, takedown entry becomes a recorded fact | landed — §8.1 | held: every population number moved under a point |
-| **3** | `takedownRate` traits, attribute-aware trait generation, `stance` consumer, kill `cageIq` | 3–4 days | low; stance magnitude is the variable |
+| **3** ✅ | `takedownRate` traits, attribute-aware trait generation, `stance` consumer, kill `cageIq` | landed — §9.1 | held; and it found F10, which is larger than the phase |
 | **4** | Split the striking training focus; persistence assertion | 1–2 weeks | career distributions; long-sim re-baseline |
 | **5** | Real game plans for the world; reads from real tendencies; **re-ask granularity with a number** | 1–2 weeks | largest single distribution move; ship alone |
 | **6** | Strategy B — standing sub-states, two-sided clinch, then attributes | 3–6 weeks | a real project |
@@ -775,6 +775,54 @@ was never wired up: it is a name for a thing the engine already does twice.
 4. **Nothing here touches G1.** Phase 2 established that the fingerprint's second axis is not
    available to weapons, targeting or traits. Phase 3 is legibility and coherence work, and the
    plan should stop pretending any of it is separation work.
+
+### 9.1 Phase 3 — landed, and it found something bigger than itself
+
+All four items landed. The suite is green at 1,102 tests across 67 files, and every prediction held
+— including the one that mattered, that the population's outcome numbers would not move: finishes
+50.2% against 49.7% before, first-round 32.6% against 32.3%, which at 10,356 fights is the
+resampling noise of having changed the order the dice come out in.
+
+| | Predicted | Happened |
+|---|---|---|
+| 1 | (a) and (b) move coherence, not outcomes | ✅ a Cardio Machine now averages 50.2 `cardio` against the roster's 41.8; the two were the same number before |
+| 2 | (c) is small, or the magnitude comes down | ✅ +1.9 / +1.2 / +0.2 points against a dull, average and smart opponent |
+| 3 | (d) changes no behaviour | ✅ nothing failed when `cageIq` was deleted |
+| 4 | nothing here touches G1 | ✅ and it did not pretend to |
+
+Two things worth keeping from the work itself. The stance magnitude was **set by measurement**: 6%
+on the offence term read 0.90 / 0.63 / 0.30 points, which is inside the noise of anything cheaper
+than six thousand fights, and an edge nobody can measure is a field that is still dead — 10% reads
+cleanly at a quarter of the sample. And `stance.test.ts` reproduced the phase-2 lesson about
+*pairing*: its first cut put the stance in the seed prefix, reseeded every fight, and measured
+−0.1 points while the mechanism was working perfectly.
+
+**F10 — a trait is worth more than an attribute, and nothing had ever priced one.**
+
+Measuring the new traits against a control turned up the scale of the old ones. Against an
+identical contender over paired seeds:
+
+```
+cardioMachine     +23.4pp        chainWrestler      −1.1pp
+volumeMachine     +14.6pp        lateStarter        −8.2pp
+sprawlAndBrawl     +0.6pp        fastStarter       −10.5pp
+ironChin           +0.6pp        headhunter        −16.1pp
+finisher           +0.4pp        weightCutGambler  −16.5pp
+```
+
+**Sixty rating points of `wrestling` are worth 13.6 points of win rate. `cardioMachine` is worth
+23.4, and a generated fighter can be handed three traits.** The two hooks doing it are
+`fatigueRate` and `strikeOutput`, and their sensitivity is the finding underneath the finding:
+`fatigueRate` 1.12 measured **−11 points** and 1.05 still measured −5.8, so every trait carrying
+one as its "cost" is paying far more than whoever wrote it can have intended — which is also why
+the first cut of `chainWrestler` read −8.2 while the hook it was written to exercise is worth +2.9
+on its own.
+
+Recorded rather than fixed, in `tests/statistical/trait-cost.test.ts` with two tripwires, for the
+same reason phase 0 recorded rather than fixed: re-scaling those hooks moves every population
+distribution in the game, and doing it inside a programme that depends on attribution would
+destroy the attribution. It belongs with D4's volume/referee work, and it is now the largest
+unaddressed defect the programme has found — larger than anything phases 3 through 5 propose to do.
 
 ---
 
