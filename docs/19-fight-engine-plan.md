@@ -885,6 +885,62 @@ starts wrestling, and §3's warning about that stands unchanged.
 
 ---
 
+## 11. Phase 5 — the prediction, written first
+
+§3 calls this the largest single distribution move in the plan and says to ship it alone. §10
+measured what it buys: **3 of 15 pairs meet G1 on approach alone, 4 with targeting**, against zero
+from phases 1, 2 and 3 combined.
+
+**The state of it is worse than "the world has no plans".** `aiPlanFor` already exists in
+`career.ts` — approach from the fighter's edges against the opponent's holes, targeting that
+attacks a wrestler's legs and a cardio machine's body, three prepped reads drawn from the
+opponent's ratings. **It is applied to exactly one fight in the game: the player's.** Both other
+call sites — `night.ts` for the rest of the player's card, `world.ts` for every fight the world
+simulates — pass `defaultGamePlan()` to both corners. So the game already knows how to give a
+fighter a plan and does it for one man on a card of twelve.
+
+Four items:
+
+**(a) The planner moves into the engine and every fight uses it.** It is simulation policy, not
+app flow, and one of the three call sites having it is how a system ends up measured only on the
+path the developer walks.
+
+**(b) Reads come from real tendencies.** The current reads are chosen off the opponent's raw
+*attributes* — `o.wrestling > 65` — while `prepValue` is gated on the opponent's *tendency* for
+that read. Those are different numbers: `deriveTendencies` puts traits, `fightIq` and `strikeLean`
+between the attribute and the behaviour, which is the whole reason it exists. Choosing a read
+without consulting it is drilling for a threat the man may not carry.
+
+**(c) `riskLevel` stops being 0.5 for everybody.** It comes off personality, in a band, so the
+dial `risk.test.ts` proves is live is actually turned by somebody other than the player.
+
+**(d) Re-ask read granularity with a number.** Fifteen keys, four drillable, and eight resolution
+sites that consult them. The question §5 deferred — is fifteen the right count? — is answerable
+once the world drills reads: measure what a camp is worth per key and how much of the engine a
+four-read camp can cover.
+
+**What should happen:**
+
+1. **G1 goes from 0 of 15 to about 3.** §10 measured it under hand-assigned approaches; a planner
+   that derives them from the fighter should land near that and could land short, because the
+   planner reads the *matchup* and §10 read the *art*. Anything less than 2 means the derivation is
+   washing out the arts and the mapping is wrong.
+2. **The population's outcome numbers move, and this is the phase where that is expected.** More
+   `wrestle` and `grind` in the world means more takedowns, more control time and fewer knockouts.
+   `firstRoundPct` should *fall*. If nothing moves, the plans are not reaching the fights.
+3. **The prep bounds in `balance.test.ts` are the ones to watch.** A prepared player is currently
+   measured against an unprepared world; after this the world is prepared too, so the *relative*
+   value of the player's camp should fall even though nothing about the camp changed. Both forms of
+   that bound exist precisely because of this class of move, and re-stating them with measurements
+   is expected work rather than a failure.
+4. **`fingerprint.ts`'s third rule stops being true.** "Default game plans, because that is what
+   ~99% of fights use" is the instrument's own justification, and this phase makes it false. The
+   instrument has to measure fighters under the plans the world actually gives them, and the G1
+   baseline moves with it — which is the one place in this programme where a *measurement* change
+   and a *behaviour* change land together, so both numbers go in the doc.
+
+---
+
 **The one-line version:** the engine's missing primitive is a named weapon on the strike, not a
 new attribute — and the missing discipline is a test that can tell two fighting styles apart.
 Build the second, then the first, and the case for growing past six disciplines makes itself.
