@@ -785,3 +785,58 @@ a.list__item:hover {
   line-height: 1;
   font-size: 1.05em;
 }
+
+/*
+  The camp report's gains table.
+
+  A grid rather than a flex row so the arrows and the ceiling notes line up down the column —
+  with six attributes moving by different amounts, ragged columns make it much harder to read
+  which one actually moved.
+*/
+.gains {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.gains__row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas: 'name value trend' 'room room room';
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  border-bottom: 1px solid var(--border);
+}
+
+.gains__row:last-child {
+  border-bottom: none;
+}
+
+.gains__name { grid-area: name; }
+
+.gains__value {
+  grid-area: value;
+  font-variant-numeric: tabular-nums;
+}
+
+.gains__room {
+  grid-area: room;
+  font-size: var(--text-xs);
+}
+
+.gains__room:empty {
+  display: none;
+}
+
+/* Wide enough and the ceiling note sits on the same line as everything else. */
+@media (min-width: 30rem) {
+  .gains__row {
+    grid-template-columns: 1fr auto auto auto;
+    grid-template-areas: 'name value trend room';
+  }
+}

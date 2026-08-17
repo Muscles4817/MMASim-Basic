@@ -105,7 +105,9 @@ describe('the training screen shows what the decision is about', () => {
     goTo('#/training');
 
     await user.click(await screen.findByRole('button', { name: /Train for 8 weeks/i }));
-    expect(await screen.findByText(/8 weeks passed/i)).toBeTruthy();
+    // The camp report is its own screen now rather than a card under the form, and it leads with
+    // the work done rather than with the clock — the date and the fighter's new age sit under it.
+    expect(await screen.findByText(/8 weeks of work/i)).toBeTruthy();
   });
 });
 

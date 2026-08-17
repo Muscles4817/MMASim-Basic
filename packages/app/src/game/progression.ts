@@ -113,6 +113,24 @@ export interface TrainingOutcome {
   days: number;
   /** Set when this block produced a new injury. The camp report leads with it. */
   injury?: Injury;
+  /*
+    Everything below exists so the camp report can say what a camp *did* rather than only what
+    it added. A list of deltas answers "what changed" and none of "where am I now", which on the
+    screen that consumes months of a career at a time is most of what the player wants to know.
+  */
+  /** Ratings before and after, so the report can show 68 → 71 rather than a bare +3. */
+  before?: Partial<Record<AttributeKey, number>>;
+  after?: Partial<Record<AttributeKey, number>>;
+  /** How much room is left to the ceiling, per attribute trained. Why a camp stopped paying. */
+  headroom?: Partial<Record<AttributeKey, number>>;
+  /** Injuries that healed while the camp ran, which is a real benefit and was never reported. */
+  healed?: readonly string[];
+  /** Age on the way in and on the way out. A long camp can cross a birthday. */
+  ageBefore?: number;
+  ageAfter?: number;
+  /** What the camp cost and what is left, kept structured so the screen can format it. */
+  cost?: number;
+  bankAfter?: number;
 }
 
 /**
@@ -184,16 +202,43 @@ export function runTraining(
   advanceRoster(db, world.day, toDay, fighter.id);
   db.save();
 
+  /*
+   * The before-and-after picture, assembled here because this is the only place that holds both
+   * ends of it. `applyTraining` returns deltas and `applyAgeing` runs after it, so neither knows
+   * what the fighter looked like when the camp started.
+   */
+  const before: Partial<Record<AttributeKey, number>> = {};
+  const after: Partial<Record<AttributeKey, number>> = {};
+  const headroom: Partial<Record<AttributeKey, number>> = {};
+  for (const key of Object.keys(trained.gains) as AttributeKey[]) {
+    before[key] = fighter.attributes[key];
+    after[key] = withInjury.attributes[key];
+    headroom[key] = Math.max(0, fighter.potential[key] - withInjury.attributes[key]);
+  }
+
+  // Healing is a benefit of time passing and the report never mentioned it, so a fighter came
+  // out of a twelve-week camp with a knee that had quietly mended and no acknowledgement of it.
+  const healedNow = existing
+    .filter((i) => i.healedDay > world.day && i.healedDay <= toDay)
+    .map((i) => describeInjury(i, toDay));
+
   return {
     gains: trained.gains,
     notes: [
-      `The camp cost £${cost}k. You have £${Math.round(paid.bank * 10) / 10}k left.`,
       ...(injury ? [describeInjury(injury, toDay)] : []),
       ...trained.notes,
       ...aged.notes,
     ],
     days,
     injury,
+    before,
+    after,
+    headroom,
+    healed: healedNow,
+    ageBefore: Math.floor((world.day - fighter.birthDay) / 365),
+    ageAfter: Math.floor((toDay - fighter.birthDay) / 365),
+    cost,
+    bankAfter: Math.round(paid.bank * 10) / 10,
   };
 }
 

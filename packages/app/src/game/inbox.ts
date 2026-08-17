@@ -14,6 +14,7 @@
 
 import {
   displayName,
+  agreementStatus,
   inboxId,
   isBlocking,
   resolve,
@@ -139,23 +140,103 @@ export function scanForInbox(db: GameDb, day: number): number {
   }
 
   // --- Fighter: your own career -----------------------------------------------------------------
+  /*
+   * Rewritten because almost none of it fired.
+   *
+   * `scanForInbox` runs **once**, at the end of an advance, with the final day — and the old
+   * fighter checks were written as though it ran every day. "You are cleared to fight" required
+   * `readyOnDay === day` exactly, an exact match against a clock that moves in fourteen-day steps
+   * and in twelve-week jumps when a player trains, so it essentially never fired. The only other
+   * item required an unexpired agreement to exist. A fighter's inbox was therefore empty almost
+   * always, which is why it reads as broken: it was.
+   *
+   * So every check below describes a *state* rather than an instant. A state is still true at the
+   * end of a long advance, which is the only moment this function is ever called, and the item id
+   * is what stops it being raised twice.
+   */
   if (world.playerRole === 'fighter' && world.playerFighterId) {
     const me = db.fighters.findById(world.playerFighterId) as Fighter | undefined;
     if (me) {
       const agreement = me.agreementId
         ? (db.agreements.findById(me.agreementId as string) as PromotionalAgreement | undefined)
         : undefined;
+      const promotion = me.promotionId
+        ? (db.promotions.findById(me.promotionId) as Promotion | undefined)
+        : undefined;
 
-      if (agreement) {
-        const daysLeft = agreement.expiresDay - day;
-        if (daysLeft > 0 && daysLeft <= 60) {
+      const status = agreement
+        ? agreementStatus(agreement, day, {
+            isChampion: promotion?.champions[me.divisionId] === me.id,
+          })
+        : undefined;
+
+      /*
+       * You are out of contract.
+       *
+       * The single most consequential thing that can happen to a fighter without them pressing a
+       * button, and it was not reported anywhere. A player who trains through the end of their
+       * deal finds out by noticing their own hub has changed — which is exactly the "it just gets
+       * lost" failure the inbox was built to fix.
+       *
+       * A decision rather than a notice, so it blocks: being a free agent and not knowing it
+       * means sitting idle, and sitting idle is how a career quietly ends.
+       */
+      /*
+       * Two different situations wear the same name, and only one of them is an emergency.
+       *
+       * A fighter with no promotion at all is genuinely adrift and this must block the advance.
+       * A fighter who has a promotion but no written agreement is the *seeded* default — every
+       * fighter in the starting world is in that state — and blocking there would stop the clock
+       * on the first step of every taken-over career for a situation that is not a problem.
+       */
+      const unattached = !me.promotionId;
+      const lapsed = agreement !== undefined && status?.expired === true;
+
+      if (unattached || lapsed) {
+        raised += raise(db, {
+          id: inboxId(Math.floor(day / 30) * 30, 'freeagent'),
+          day,
+          kind: 'contract',
+          priority: unattached ? 'decision' : 'notable',
+          title: promotion ? `You are out of contract at ${promotion.shortName}` : 'You have no promotion',
+          body: promotion
+            ? `Your deal with ${promotion.shortName} is done. Nobody is obliged to book you, and every week without a fight is a week your name gets smaller. See who wants you.`
+            : 'You are not signed to anybody. No promotion has to offer you a fight, and time out of the cage costs you.',
+          actions: unattached
+            ? [
+                {
+                  id: 'acknowledge',
+                  label: 'Understood',
+                  detail: 'Handle it yourself.',
+                  isDismiss: true,
+                },
+              ]
+            : undefined,
+          link: { route: 'offers' },
+          fighterId: me.id,
+        })
+          ? 1
+          : 0;
+      } else if (status) {
+        // The warning shot. Notable at two months, a decision inside one — the difference between
+        // "worth knowing" and "act now" is what makes the priority mean anything.
+        const daysLeft = status.daysRemaining;
+        const nearlyOut = status.fightsRemaining <= 1 || daysLeft <= 60;
+
+        if (nearlyOut) {
           raised += raise(db, {
             id: inboxId(Math.floor(day / 30) * 30, 'yourdeal'),
             day,
             kind: 'contract',
-            priority: 'notable',
-            title: 'Your contract is nearly up',
-            body: `${daysLeft} days and ${agreement.fightsRemaining} fights left. Worth knowing what else is out there.`,
+            priority: daysLeft <= 30 || status.fightsRemaining === 0 ? 'decision' : 'notable',
+            title: `Your ${promotion?.shortName ?? 'contract'} deal is nearly up`,
+            body: `${daysLeft} days and ${status.fightsRemaining} ${
+              status.fightsRemaining === 1 ? 'fight' : 'fights'
+            } left. Once it lapses you are a free agent and nobody owes you a booking — worth knowing what else is out there before then.`,
+            actions:
+              daysLeft <= 30 || status.fightsRemaining === 0
+                ? [{ id: 'acknowledge', label: 'Understood', isDismiss: true }]
+                : undefined,
             link: { route: 'offers' },
             fighterId: me.id,
           })
@@ -164,14 +245,40 @@ export function scanForInbox(db: GameDb, day: number): number {
         }
       }
 
-      if (me.readyOnDay !== undefined && me.readyOnDay === day) {
+      /*
+       * Off suspension. Keyed on the day the suspension *ends* rather than on today, so it is
+       * raised exactly once no matter when the scan happens to catch it — which is the fix for
+       * the exact-match bug that made this unreachable.
+       */
+      if (me.readyOnDay !== undefined && me.readyOnDay <= day) {
         raised += raise(db, {
-          id: inboxId(day, 'cleared'),
+          id: inboxId(me.readyOnDay, 'cleared'),
           day,
           kind: 'medical',
           priority: 'notable',
           title: 'You are cleared to fight',
           body: 'The suspension is served. You can take a booking again.',
+          link: { route: 'hub' },
+          fighterId: me.id,
+        })
+          ? 1
+          : 0;
+      }
+
+      // Healed up. Time passing is not only a cost, and nothing ever said so.
+      const carrying = (me.injuries ?? []).filter((i) => i.healedDay > day);
+      const lastHeal = (me.injuries ?? [])
+        .map((i) => i.healedDay)
+        .filter((d) => d <= day)
+        .sort((a, b) => b - a)[0];
+      if (carrying.length === 0 && lastHeal !== undefined) {
+        raised += raise(db, {
+          id: inboxId(lastHeal, 'healed'),
+          day,
+          kind: 'medical',
+          priority: 'notable',
+          title: 'You are fully fit',
+          body: 'Nothing is carrying. This is as good as your body is going to feel before a camp.',
           link: { route: 'hub' },
           fighterId: me.id,
         })

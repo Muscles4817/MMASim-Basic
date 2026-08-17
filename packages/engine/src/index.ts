@@ -44,6 +44,7 @@ export * from './progression/divisionMove.js';
 export * from './progression/retirement.js';
 export * from './progression/generation.js';
 export * from './progression/names.js';
+export * from './progression/ringRust.js';
 export * from './progression/development.js';
 export * from './progression/createFighter.js';
 

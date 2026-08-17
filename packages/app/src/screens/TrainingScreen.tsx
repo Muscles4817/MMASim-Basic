@@ -24,6 +24,7 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
+import { CampReport } from './CampReport';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
 import { money, spendLine } from '../ui/format';
 import {
@@ -34,7 +35,7 @@ import {
   runTraining,
   type TrainingOutcome,
 } from '../game/progression';
-import { Alert, FighterRead, KeyStat, Trend } from '../ui/signals';
+import { Alert, FighterRead, KeyStat } from '../ui/signals';
 import { getBooking } from '../game/career';
 import { formatGameDay } from '../shell/Shell';
 import { campCostFor, solvencyOf } from '../game/money';
@@ -126,6 +127,32 @@ export function TrainingScreen() {
       }),
     [fighter, focuses, weeks, gym, coach, world.day],
   );
+
+  /*
+    A finished camp takes the whole screen.
+   
+    The report used to be a card appended below the training form, so reading it meant scrolling
+    past the controls that produced it while a division picker and a gym list stayed on screen
+    competing for attention. Pressing one button consumes months of a career, and the result of
+    that was a footnote under the form.
+   
+    Handing the screen over rather than routing to one keeps the outcome in component state,
+    which matters: a route would need the outcome stashed somewhere global and would put a camp
+    report in the back-button history, where re-entering it would show a stale one.
+  */
+  if (outcome) {
+    return (
+      <CampReport
+        outcome={outcome}
+        day={world.day}
+        onDone={() => {
+          setOutcome(undefined);
+          navigate({ name: 'hub' });
+        }}
+        onAgain={() => setOutcome(undefined)}
+      />
+    );
+  }
 
   const toggleFocus = (focus: TrainingFocus) => {
     setOutcome(undefined);
@@ -492,53 +519,6 @@ export function TrainingScreen() {
           {restAdvice(fighter.injuries ?? [], world.day)}
         </p>
       </div>
-
-      {/*
-        Live region, and below the action rather than above it. Tapping "Train" used to
-        insert this card *above* the button, pushing the button down and often landing the
-        result off-screen — the outcome of the screen's primary action, invisible and
-        unannounced.
-      */}
-      {outcome && (
-        <Card title="Camp report" role="status">
-          {/*
-            What happened to the calendar. The report listed attribute deltas and never once
-            said that months had passed, how old the fighter now was, or what the date was —
-            on the only screen in the game that moves the world clock.
-          */}
-          <p style={{ marginBottom: 'var(--space-3)', fontWeight: 600 }}>
-            {Math.round(outcome.days / 7)} weeks passed. It is {formatGameDay(world.day)} and
-            you are {fighterAge(fighter, world.day)}.
-          </p>
-          {Object.keys(outcome.gains).length === 0 ? (
-            <p className="muted">Nothing measurable changed.</p>
-          ) : (
-            <ul style={{ marginBottom: 'var(--space-3)' }}>
-              {(Object.entries(outcome.gains) as [AttributeKey, number][])
-                .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-                .map(([key, delta]) => (
-                  <li
-                    key={key}
-                    className="row"
-                    style={{ justifyContent: 'space-between', fontSize: 'var(--text-sm)' }}
-                  >
-                    <span>{ATTRIBUTE_META[key].label}</span>
-                    {/* Trend rather than a hand-rolled coloured number: it carries a ▲/▼
-                        glyph and a hidden "up"/"down", so the direction survives greyscale
-                        and reaches a screen reader. It already existed and was unused. */}
-                    <Trend delta={delta} />
-                  </li>
-                ))}
-            </ul>
-          )}
-          {outcome.notes.map((note) => (
-            <p key={note} className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
-              {note}
-            </p>
-          ))}
-        </Card>
-      )}
-
 
       <DivisionPicker />
 

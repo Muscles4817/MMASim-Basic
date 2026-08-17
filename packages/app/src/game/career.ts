@@ -25,6 +25,9 @@ import {
   aggravationChance,
   fightInjuryChance,
   injuredAttributes,
+  rustFor,
+  rustedAttributes,
+  daysSinceLastBout,
   rollInjury,
   setChampion,
   campPurchaseEffects,
@@ -295,9 +298,22 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
   const day = booking.bout.day;
   const boughtEffects = campPurchaseEffects(booking.purchases ?? []);
 
+  /*
+   * Rust, applied on top of injury.
+   *
+   * `Condition.ringRust` was written into the fighter model and never once read or written, so
+   * time out of the cage cost nothing whatsoever — which is the whole reason free agency did not
+   * feel like a threat. It suppresses timing rather than ability, so a fighter back from two
+   * years out hits exactly as hard and sees it coming much later.
+   */
+  const rustOf = (f: Fighter) => rustFor(daysSinceLastBout(f.record, day) ?? 0);
+
   const redHurt: Fighter = {
     ...red,
-    attributes: injuredAttributes(red.attributes, red.injuries ?? [], day),
+    attributes: rustedAttributes(
+      injuredAttributes(red.attributes, red.injuries ?? [], day),
+      rustOf(red),
+    ),
     // The recovery block. Applied to the condition the fighter *walks in with* rather than to
     // anything inside the fight, because that is what it buys: physio, soft tissue work and
     // time, so a body that would have arrived worn arrives closer to fresh. It cannot make
@@ -310,7 +326,10 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
   };
   const blueHurt: Fighter = {
     ...blue,
-    attributes: injuredAttributes(blue.attributes, blue.injuries ?? [], day),
+    attributes: rustedAttributes(
+      injuredAttributes(blue.attributes, blue.injuries ?? [], day),
+      rustOf(blue),
+    ),
   };
 
   /*

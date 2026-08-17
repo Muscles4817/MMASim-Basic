@@ -3,7 +3,11 @@ import {
   currentHeat,
   describeAdviceRecord,
   describeFairness,
+  daysSinceLastBout,
   describeReleaseRisk,
+  describeRust,
+  rustFor,
+  rustLabel,
   describeHeat,
   describeStable,
   describeTrigger,
@@ -102,6 +106,8 @@ export function HubScreen() {
   const repaper = repaperOnTheTable(db, fighter);
   const jobRisk =
     standing.promotion && !standing.freeAgent ? releaseRisk(fighter, standing.promotion) : 0;
+  // How long since they last competed, which is now a real cost rather than a stored zero.
+  const rust = rustFor(daysSinceLastBout(fighter.record, world.day) ?? 0);
   const opponent = booking
     ? (db.fighters.findById(booking.opponentId) as Fighter | undefined)
     : undefined;
@@ -394,11 +400,22 @@ export function HubScreen() {
       <Card title="Your situation">
         {standing.freeAgent || !standing.agreement ? (
           <>
-            <p className="prose" style={{ marginBottom: 'var(--space-3)' }}>
-              <strong>You are a free agent.</strong> Nobody owes you a fight and you owe nobody
-              one.
-            </p>
-            <Button variant="primary" onClick={() => navigate({ name: 'offers' })}>
+            {/*
+              Being unsigned used to read as neutral — "nobody owes you a fight and you owe
+              nobody one" is very nearly a boast. It is the most dangerous state in a career and
+              the screen has to say so, because the cost of it is invisible until the day you
+              cannot get booked.
+            */}
+            <Alert tone="warn" title="You are a free agent">
+              Nobody is obliged to offer you anything. Every week without a booking is a week your
+              name gets smaller and your timing gets worse, and nothing here is going to happen
+              until you sign something.
+            </Alert>
+            <Button
+              variant="primary"
+              onClick={() => navigate({ name: 'offers' })}
+              style={{ marginTop: 'var(--space-3)' }}
+            >
               See what is on the table
             </Button>
           </>
@@ -414,6 +431,17 @@ export function HubScreen() {
             <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
               {describeFairness(standing.fairness ?? 1)}
             </p>
+            {/*
+              What the layoff has cost. `Condition.ringRust` was in the model from the start and
+              was never written or read by anything, so sitting out was free — which is exactly
+              why the pressure the contract layer is built on never arrived.
+            */}
+            {rust > 0 && (
+              <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
+                <Chip tone={rust > 0.5 ? 'warning' : 'neutral'}>{rustLabel(rust)}</Chip>{' '}
+                {describeRust(rust)}
+              </p>
+            )}
             {triggers.length > 0 && (
               <Alert tone="info" title="You have grounds to reopen this">
                 {describeTrigger(triggers[0]!)}
