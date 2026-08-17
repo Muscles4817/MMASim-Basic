@@ -390,6 +390,12 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     day: booking.bout.day,
     divisionId: booking.bout.divisionId,
     promotionId: red.promotionId ?? asPromotionId('p_apex'),
+    // Where it happened, so reputation is worth what the room is worth.
+    promotionPrestige: (
+      red.promotionId
+        ? (db.promotions.findById(red.promotionId) as Promotion | undefined)
+        : undefined
+    )?.prestige,
     isTitleFight: booking.bout.isTitleFight,
     rng: createRng(`${world.seed}:aftermath:${booking.bout.id}`),
   });

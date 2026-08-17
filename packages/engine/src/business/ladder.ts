@@ -16,6 +16,7 @@ import type { GameDay } from '../core/clock.js';
 import type { DivisionId, FighterId, PromotionId } from '../core/ids.js';
 import type { Fighter } from '../domain/fighter.js';
 import { isActive } from '../domain/fighter.js';
+import { standingScore } from './standing.js';
 import type { Promotion, PromotionTier } from '../domain/organisations.js';
 
 export const TIER_ORDER: readonly PromotionTier[] = [
@@ -48,15 +49,49 @@ export function rankDivision(
   promotionId: PromotionId,
   day: GameDay,
   championId?: FighterId,
+  /**
+   * Every promotion, so a fighter's outside standing can be discounted by the gap between the
+   * room it was earned in and this one. Optional so existing callers keep working, at the cost
+   * of the older and less informed score.
+   */
+  promotions?: readonly Promotion[],
 ): RankedFighter[] {
+  /*
+   * What you have done *here*, plus what is left of what you did elsewhere.
+   *
+   * This was `reputation * 1.6 + streak + starPower * 0.25`, which had no notion of where any of
+   * it was earned: reputation banked beating regional opposition counted identically to
+   * reputation banked beating contenders. Measured, a 58-rated light heavyweight arriving from a
+   * feeder promotion entered the UFC's rankings at #4 without having fought anybody in the
+   * division. See `standing.ts` for the model and why the carry-in fades rather than vanishes.
+   *
+   * Falls back to the old shape when the caller cannot supply the promotion — `rankDivision` is
+   * called from several places and a ranking that silently returned nothing would be a far worse
+   * failure than one that is merely less informed.
+   */
+  const promotion = promotions?.find((p) => p.id === promotionId);
+
   const score = (f: Fighter): number => {
-    const streak = f.summary.streak;
-    return (
-      f.reputation * 1.6 +
-      Math.max(0, streak) * 4 +
-      Math.min(0, streak) * 7 +
-      f.starPower * 0.25
-    );
+    if (!promotion) {
+      const streak = f.summary.streak;
+      return (
+        f.reputation * 1.6 +
+        Math.max(0, streak) * 4 +
+        Math.min(0, streak) * 7 +
+        f.starPower * 0.25
+      );
+    }
+
+    // Where their outside standing was built: the last promotion they fought for that is not
+    // this one. Undefined for somebody who has never fought anywhere else.
+    const elsewhere = f.record
+      .filter((r) => r.promotionId !== promotionId)
+      .sort((a, b) => b.day - a.day)[0];
+    const previous = elsewhere
+      ? promotions?.find((p) => p.id === elsewhere.promotionId)
+      : undefined;
+
+    return standingScore({ fighter: f, promotion, previous, day });
   };
 
   /**

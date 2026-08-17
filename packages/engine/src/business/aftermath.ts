@@ -6,7 +6,7 @@
  * Monte-Carlo'd without anybody's career being affected.
  */
 
-import { clamp } from '../core/math.js';
+import { clamp, remap } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import type { GameDay } from '../core/clock.js';
 import type { DivisionId, PromotionId } from '../core/ids.js';
@@ -23,6 +23,16 @@ export interface AftermathInput {
   day: GameDay;
   divisionId: DivisionId;
   promotionId: PromotionId;
+  /**
+   * The prestige of the promotion the fight happened at, 0–100.
+   *
+   * Reputation used to move by a flat `2 + opponent.reputation / 40` wherever the fight took
+   * place, so twenty wins on the regional circuit built exactly as much standing as twenty wins
+   * at the top of the sport. Since reputation is what the rankings and the market both read,
+   * that is how a fighter arrived from a feeder promotion already carrying a contender's
+   * standing. Optional so older callers keep working; they get the neutral middle.
+   */
+  promotionPrestige?: number;
   isTitleFight?: boolean;
   rng: Rng;
 }
@@ -150,10 +160,20 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
       100,
     );
 
-    // Reputation tracks results and the level of opposition, and moves far more slowly than
-    // star power — that gap is the whole point of having both numbers.
+    /*
+     * Reputation tracks results and the level of opposition, and moves far more slowly than
+     * star power — that gap is the whole point of having both numbers.
+     *
+     * Now scaled by where the win happened. A win at the biggest promotion in the sport is worth
+     * roughly two and a half times one on the regional circuit, which is the difference between
+     * reputation meaning "people who matter rate you" and meaning "you have had a lot of fights".
+     * Losses are *not* discounted: losing at a small show hurts your standing every bit as much,
+     * and arguably more.
+     */
+    const prestige = input.promotionPrestige ?? 50;
+    const level = clamp(remap(prestige, 30, 95, 0.6, 1.5), 0.5, 1.5);
     const reputation = clamp(
-      fighter.reputation + (won ? 2 + opponent.reputation / 40 : -3),
+      fighter.reputation + (won ? (2 + opponent.reputation / 40) * level : -3),
       1,
       100,
     );

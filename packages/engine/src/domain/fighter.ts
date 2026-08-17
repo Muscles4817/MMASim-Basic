@@ -67,6 +67,16 @@ export interface FightRecordEntry {
   wasTitleFight: boolean;
   /** Set when the fighter took this on under two weeks' notice. */
   shortNotice?: boolean;
+  /**
+   * A bonus the promotion paid for this performance, if any.
+   *
+   * `awardBonuses` has been picking Performance and Fight of the Night since the events layer
+   * shipped and the award was paid and then forgotten — it reached the purse and never the
+   * record, so nothing downstream could ever know a fighter had won one. It is the promotion
+   * publicly calling a night one of the best on the card, which is exactly the thing that moves
+   * somebody up a queue faster than their bare record justifies.
+   */
+  bonus?: 'performance' | 'fight';
 }
 
 /** Career totals, denormalised for fast list rendering. Rebuildable from `record`. */

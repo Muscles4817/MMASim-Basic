@@ -186,6 +186,7 @@ export function runSupportingCard(
       day,
       divisionId: red.divisionId,
       promotionId: promotion.id,
+      promotionPrestige: promotion.prestige,
       isTitleFight: bout.isTitleFight,
       rng: rng.fork(`a:${bout.boutId}`),
     });
@@ -228,8 +229,28 @@ export function runSupportingCard(
 
   if (playerBonus > 0) {
     const current = db.fighters.getById(player.id as string) as Fighter;
+
+    /*
+     * Stamp the award on the record, not only on the bank.
+     *
+     * `awardBonuses` has picked Performance and Fight of the Night since the events layer
+     * shipped, and the award was paid and then forgotten — it reached the purse and never the
+     * fight record, so nothing downstream could know a fighter had ever won one. It is the
+     * promotion publicly calling a night one of the best on the card, which is exactly what
+     * should move somebody up a queue faster than their bare record justifies. See
+     * `standing.ts`, which now reads it.
+     */
+    const bonusKind: 'performance' | 'fight' = awards.performanceOfTheNight.includes(player.id)
+      ? 'performance'
+      : 'fight';
+
+    const record = current.record.map((entry, index) =>
+      index === current.record.length - 1 ? { ...entry, bonus: bonusKind } : entry,
+    );
+
     db.fighters.upsert({
       ...current,
+      record,
       bank: round1(current.bank + playerBonus),
       lifetimeGross: round1(current.lifetimeGross + playerBonus),
       lifetimeNet: round1(current.lifetimeNet + playerBonus * 0.6),

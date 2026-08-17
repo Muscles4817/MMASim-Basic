@@ -416,6 +416,8 @@ function buildNight(ctx: {
       divisionId,
       promotion.id,
       day,
+      undefined,
+      db.promotions.findAll() as unknown as Promotion[],
     );
     /*
      * Two, because two is what a title fight takes.
@@ -525,6 +527,7 @@ function buildNight(ctx: {
           promotion.id,
           day,
           champion as FighterId,
+          db.promotions.findAll() as unknown as Promotion[],
         ),
         promotion,
         championId: champion as string,
@@ -614,8 +617,23 @@ function buildNight(ctx: {
   for (const id of bonusRecipients) {
     const fighter = db.fighters.findById(id) as Fighter | undefined;
     if (!fighter) continue;
+
+    /*
+     * The award goes on the record as well as into the bank, exactly as it does on the player's
+     * own cards. Without this the world's fighters would build standing purely on results while
+     * the player's benefited from bonuses too, and the rankings would quietly favour the player
+     * for reasons nobody could see.
+     */
+    const kind: 'performance' | 'fight' = awards.performanceOfTheNight.includes(fighter.id)
+      ? 'performance'
+      : 'fight';
+    const record = fighter.record.map((entry) =>
+      entry.day === day && entry.promotionId === promotion.id ? { ...entry, bonus: kind } : entry,
+    );
+
     db.fighters.upsert({
       ...fighter,
+      record,
       bank: round1(fighter.bank + awards.perAward),
       lifetimeGross: round1(fighter.lifetimeGross + awards.perAward),
       lifetimeNet: round1(fighter.lifetimeNet + awards.perAward * 0.55),
@@ -693,6 +711,7 @@ export function runCardBout(ctx: {
     promotion.id,
     day,
     promotion.champions[red.divisionId],
+    db.promotions.findAll() as unknown as Promotion[],
   );
   const rankOfId = (id: FighterId): number | undefined => {
     const index = divisionRanked.findIndex((r) => r.fighter.id === id);
@@ -718,6 +737,7 @@ export function runCardBout(ctx: {
     day,
     divisionId: red.divisionId,
     promotionId: red.promotionId ?? promotion.id,
+    promotionPrestige: promotion.prestige,
     isTitleFight,
     rng: rng.fork('aftermath'),
   });

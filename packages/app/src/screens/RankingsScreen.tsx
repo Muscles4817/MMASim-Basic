@@ -97,8 +97,9 @@ export function RankingsScreen() {
       promotion.id,
       world.day,
       promotion.champions[division.id],
+      promotions,
     ).slice(0, 15);
-  }, [all, division, promotion, promotionId, world.day]);
+  }, [all, division, promotion, promotions, promotionId, world.day]);
 
   const isP4P = promotionId === P4P;
 

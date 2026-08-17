@@ -73,7 +73,14 @@ export function getLadderStatus(db: GameDb, fighter: Fighter): LadderStatus {
   const championId = promotion?.champions[fighter.divisionId];
 
   const ranked = promotion
-    ? rankDivision(fighters, fighter.divisionId, promotion.id, world.day, championId)
+    ? rankDivision(
+        fighters,
+        fighter.divisionId,
+        promotion.id,
+        world.day,
+        championId,
+        db.promotions.findAll() as unknown as Promotion[],
+      )
     : [];
 
   const position = rankOf(ranked, fighter.id);
