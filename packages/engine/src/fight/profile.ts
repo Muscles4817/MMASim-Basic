@@ -38,16 +38,29 @@ export function deriveTendencies(f: Fighter): TendencyProfile {
   // merely average at something does not read as "this is their signature move".
   const p = (rating: number) => clamp01(remap(rating, 25, 95, 0.05, 0.95));
 
-  // Relative preference: does this fighter reach for striking or for grappling first?
-  const strikeLean = clamp01(
-    remap(
-      (a.strikingOffence + a.kicking) / 2 - (a.wrestling + a.groundControl) / 2,
-      -30,
-      30,
-      0.15,
-      0.85,
-    ),
+  /*
+   * Relative preference: does this fighter reach for striking or for grappling first?
+   *
+   * The two sides are deliberately not the same shape, because the two phases are not.
+   *
+   * Striking is **one** phase — hands and feet are thrown from the same place, at the same
+   * opponent, so how much a fighter wants to stand is the average of what they own standing.
+   *
+   * Grappling is **two games**. There is a top game — `wrestling` to get there, `groundControl`
+   * to keep it there — and a bottom game — `submissions` off the back, `scrambling` to get up or
+   * reverse — and *either one on its own* is a reason to want the fight on the floor. Averaging
+   * all four made a fighter who owns one of them read as half a grappler, which is precisely the
+   * defect this fixes (docs/19 §8a): a guard player with 92 submissions and 40 wrestling read
+   * 0.529, striker-leaning, and every tendency scaled by this scalar was scaled the wrong way.
+   * Only jiu-jitsu and the guard-player fixture move; the other five disciplines' best grappling
+   * route is their top game either way.
+   */
+  const striking = (a.strikingOffence + a.kicking) / 2;
+  const grappling = Math.max(
+    (a.wrestling + a.groundControl) / 2,
+    (a.submissions + a.scrambling) / 2,
   );
+  const strikeLean = clamp01(remap(striking - grappling, -30, 30, 0.15, 0.85));
 
   const tendencies: TendencyProfile = {
     leadHook: p(a.strikingOffence) * (0.5 + strikeLean * 0.5),

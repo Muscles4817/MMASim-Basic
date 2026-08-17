@@ -36,21 +36,22 @@ describe('a scouting report reads the fighter it is looking at', () => {
     expect(wrestler.singleLeg).toBeGreaterThan(striker.singleLeg);
   });
 
-  it('scouts a pure guard player as the busier striker of the two — which is wrong', () => {
+  it('does not scout a pure guard player as the busier striker', () => {
     /*
-     * A tripwire, asserting a defect rather than a design.
+     * **The fourth tripwire, inverted by docs/19 phase 2a.** History, because the number is the
+     * argument for the fix:
      *
-     * `strikeLean` (profile.ts) is `(strikingOffence + kicking) / 2` against `(wrestling +
-     * groundControl) / 2`. It never reads `submissions` or `scrambling`, so a fighter whose
-     * entire game is those two attributes reads 0.529 — striker-leaning — and every read
-     * scaled by that scalar is scaled the wrong way. `highVolume` is the clearest of them:
-     * measured 0.333 for the guard player against 0.117 for a control wrestler who has
-     * *twelve more points of cardio*. The report says the submission specialist is nearly
-     * three times likelier to be the volume striker in the room.
+     * `strikeLean` weighed striking against `(wrestling + groundControl) / 2` and never read
+     * `submissions` or `scrambling` at all, so a fighter whose entire game is those two read
+     * 0.529 — striker-leaning. `highVolume` was the clearest casualty: **0.333 for the guard
+     * player against 0.117 for a control wrestler who has twelve more points of cardio.** The
+     * scouting report said the submission specialist was nearly three times likelier to be the
+     * volume striker in the room.
      *
-     * When docs/19 phase 2 puts `submissions` and `scrambling` into `strikeLean`, this
-     * assertion breaks. That is the fix landing: invert it to `toBeLessThan` and move the
-     * measured numbers into the comment above it.
+     * Now 0.094 against 0.117, and the guard player is the quieter of the two despite the
+     * cardio deficit pointing the other way — which is the honest reading, because his hands
+     * (48/42) are *worse* than the wrestler's (60/42) as well as his grappling being better.
+     * Both sit near the 0.15 floor, as two grapplers should.
      */
     const guard = deriveTendencies(ARCHETYPES.guardPlayer());
     const wrestler = deriveTendencies(ARCHETYPES.smotherer());
@@ -58,6 +59,24 @@ describe('a scouting report reads the fighter it is looking at', () => {
     expect(
       guard.highVolume,
       `guard player highVolume ${guard.highVolume.toFixed(3)} vs wrestler ${wrestler.highVolume.toFixed(3)}`,
-    ).toBeGreaterThan(wrestler.highVolume);
+    ).toBeLessThan(wrestler.highVolume);
+  });
+
+  it('reads a guard player’s grappling off the game he actually plays', () => {
+    /*
+     * The positive statement of the same fix, so a future regression to a four-way mean fails
+     * something that says why rather than only the inverted tripwire above.
+     *
+     * A guard player and a top wrestler are both grapplers and must both read as grapplers,
+     * arriving there by different routes: 88.5 of bottom game against the wrestler's 95 of top
+     * game. `singleLeg` is the read that separates *how* — the wrestler shoots and the guard
+     * player does not, and that is an attribute difference, not a lean difference.
+     */
+    const guard = deriveTendencies(ARCHETYPES.guardPlayer());
+    const wrestler = deriveTendencies(ARCHETYPES.smotherer());
+
+    expect(wrestler.singleLeg).toBeGreaterThan(guard.singleLeg * 2);
+    // Both read as grapplers: neither is a volume striker.
+    expect(Math.max(guard.highVolume, wrestler.highVolume)).toBeLessThan(0.2);
   });
 });
