@@ -1101,6 +1101,108 @@ because planned fights genuinely cost more time. No engine constant was re-fitte
 
 ---
 
+## 13. Phase 6 — the shape of the work
+
+Not a prediction: phase 6 is not approved and this section exists to size it honestly, which §2 and
+§3 never did. **It is two independent projects sharing a name**, and the case for that separation is
+now a measurement rather than a preference.
+
+### 13.1 What is actually left
+
+Six pairs, and each one names the mechanism it needs:
+
+| Pair | Widest axis | What separates them in the sport |
+|---|---|---|
+| kickboxing / karate | **0.073** | range — one lives in the pocket, the other in and out |
+| wrestling / judo | **0.077** | the clinch — one shoots, the other throws from grips |
+| boxing / kickboxing | 0.258, one axis | range again: the pocket against the outside |
+| boxing / karate | 0.310, one axis | range |
+| jiu-jitsu / judo | 0.165 | how the fight reaches the floor |
+| karate / jiu-jitsu | 0.139 | range, then the floor |
+
+So: **6A is a range model and 6B is a clinch model**, and they separate different pairs. Either
+ships alone and is worth something; neither needs the other to exist.
+
+### 13.2 The clinch measurement that changes the argument
+
+§6 took a side in a disagreement between the reviews and cited 0.68 landed clinch strikes per fight
+as the reason the systems review's top recommendation "unlocks almost nothing, because the phase it
+improves barely happens". Measured now, on planned fights:
+
+```
+clinch entries per fight        3.05
+landed clinch strikes per fight 0.66
+takedowns landed per fight      3.52
+distance strikes per fight      21.7
+```
+
+**The clinch is entered three times a fight and produces two thirds of one strike.** It is not rare
+— it is *empty*: a transit lounge on the way to a takedown, because the controller mostly shoots or
+stalls and the non-controller has exactly one option, which is to leave. §6's conclusion was drawn
+from the strike count without the entry count beside it, and with both numbers in view the systems
+review was more right than this plan allowed. **§6 is hereby corrected**: the clinch is worth
+re-composing, and the reason is that the fight already goes there.
+
+### 13.3 The work, in revertable steps
+
+**6.0 — Fix F5 first, alone.** `applyPassiveEffects` books an exchange's seconds against the
+position it *ended* in, so every takedown credits its whole duration to the ground (§7.4 F5).
+Phase 6 changes position accounting throughout, and building on a clock that mis-credits transitions
+would corrupt every measurement the phase is judged by. It moves scorecards — `controlSeconds` is a
+judging input — so it ships alone with its own re-baseline. **1–2 days.**
+
+**6.1 — Range as a state.** `distance` becomes `outside | pocket`, with an entry and exit contest.
+No new attribute: entry is pressure against footwork off `speed`, `fightIq` and `cardio`, which is
+the same shape as the clinch entry contest that already exists. **3–5 days**, touching
+`resolveExchange`, `resolveDistance`, `POSITION_COST` and `FightState`.
+
+**6.2 — Give the two ranges different content.** Jab, teep, head kick and the counter at outside;
+hooks, uppercuts, elbows and the takedown entry in the pocket. This is where kickboxing stops
+reading like karate: the karate exemplar's eleven points of `speed` buy the outside, and
+kickboxing's power and durability buy the pocket. Prose and the parity test extend with it.
+**2–4 days.**
+
+**6.3 — A two-sided clinch.** The non-controller gets options other than leaving — short strikes,
+reversing the position, a trip of their own — and the controller pays for stalling. This is the
+`wrestling`/`judo` separator, and 13.2 says the fight is already there three times a night.
+**4–6 days.**
+
+**6.4 — Recalibrate and re-baseline.** The whole suite's tolerances are fitted to a two-position
+world with ~50 exchanges per fight; a third standing state changes exchange count, strike volume,
+and therefore the judges' share-of-total arithmetic. Expect `BASE_KD_HAZARD`,
+`BASE_FATIGUE_PER_SECOND` and the roster-profile bounds to move. **3–5 days, and this is the step
+that is always underestimated.**
+
+Total: **13–22 days**, against §3's "3–6 weeks" — which is about right, and the estimate is now
+attached to steps rather than to a vibe.
+
+### 13.4 What has to be decided before it starts
+
+**D7 — does phase 6 add an attribute?** §5 says not to add one "until phases 1–5 show a distinction
+survives all four" tests of trainability, ageing, injury and suppression. They have. A fourth
+striking attribute — footwork, or timing — is the natural owner of range control, and 6.1 is written
+above to avoid needing it. *Recommend deciding this at 6.1's measurement, not before: if range
+separates the striking arts on `speed` and `fightIq` alone, the attribute is a tuning coefficient
+wearing a style costume (§4 D6), and if it does not, it is the honest fix.*
+
+**D8 — 6A or 6B first?** 6A separates three pairs and is the harder engineering; 6B separates two
+and has the sharper measurement behind it (13.2). *Recommend 6B first* — it is cheaper, it is
+better evidenced, and it does not touch the striking loop that every calibration constant hangs off.
+
+**D9 — what about F10 and D4?** F10 (a trait is worth more than an attribute) and D4 (the
+volume/referee compensating error) are both *calibration* work that phase 6 will disturb anyway.
+*Recommend doing neither before phase 6 and both immediately after*, in the same re-baselining
+window, because doing them separately means paying for the same population re-measurement twice.
+
+**D10 — is phase 6 worth it at all?** The honest alternative is to stop at four pairs of fifteen and
+spend the three weeks on the game around the fight — doc 20's save quota is real, and the fight
+engine now meets three of its four goals. *No recommendation: this is the owner's call about what
+the game is for.* What can be said is that the six remaining pairs are the ones a player would
+describe as "these two feel the same", and that they are the arts the creation screen offers as
+distinct choices.
+
+---
+
 **The one-line version:** the engine's missing primitive is a named weapon on the strike, not a
 new attribute — and the missing discipline is a test that can tell two fighting styles apart.
 Build the second, then the first, and the case for growing past six disciplines makes itself.
