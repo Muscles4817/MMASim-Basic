@@ -1242,6 +1242,35 @@ population re-measurement instead of three.
 
 **D10 — is phase 6 worth it? Decided: yes.**
 
+### 13.5 Step 6.0 — the prediction, written first
+
+`applyPassiveEffects` runs *after* the resolver has mutated `state.position`, so an exchange's
+seconds are booked against the position it **ended** in. A takedown credits its whole duration to
+the ground; a clinch entry credits its whole duration to the clinch; the fighter who changes
+position is charged for arriving as though they had already been there. Found in phase 0 (§7.4 F5),
+left alone deliberately because it moves scorecards and phase 0 moved nothing.
+
+**The rule it becomes:** an exchange's seconds belong to the position it was *fought* in, which is
+the position it started in. One rule, applied to the stats, the fatigue and the control credit
+together — the alternative of fixing the stats and leaving fatigue on the end position would leave
+two clocks disagreeing, which is the defect with a smaller radius rather than a fix.
+
+**What should happen:**
+
+1. **`distanceShare` rises, most for the fighters who change position most.** A wrestler's shots
+   currently donate their entire duration to the ground. This is the axis the fingerprint's own
+   header warns is unreliable, and after this it stops being.
+2. **`controlShare` falls for takedown-heavy fighters**, and `controlSeconds` is a judging input
+   with its own bias weight — so **scorecards move, toward strikers, in close rounds**. That is the
+   whole reason this ships alone.
+3. **The population gets slightly less tired.** `POSITION_COST` charges 0.75 at distance against
+   1.15 on the ground and 1.45 in the clinch, so transition exchanges become cheaper. Less fatigue
+   means more output, which means more damage: **expect finishes to rise slightly**, and if they
+   rise by more than a point the fatigue half needs its own look rather than a shrug.
+4. **Nothing about style separation should move.** G1 is a claim about behaviour, not about the
+   clock. If a pair's separation changes materially, the fingerprint was reading a measurement
+   artefact and the G1 baseline needs restating with that said out loud.
+
 ---
 
 **The one-line version:** the engine's missing primitive is a named weapon on the strike, not a
