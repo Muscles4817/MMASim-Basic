@@ -67,6 +67,43 @@ Ground carries a **sub-position ladder** (`guard → halfGuard → sideControl �
 because "he's on top" and "he's on your back" are not the same sentence. Advancing the
 ladder is what Ground Control buys you; the ladder is what makes Submissions dangerous.
 
+**Where a takedown lands depends on how it was entered.** A trip puts the thrower past the legs;
+a single leg does not, because they kept the other one between you. That is the mechanical
+difference between a throwing art and a shooting art, and it is why the takedown entry is a
+resolved fact rather than a phrase the commentary picks.
+
+**The clinch is two-sided.** The fighter who is not in control can strike short or *reverse* the
+tie-up and become the fighter who is; the referee separates a clinch nobody is working in. It was
+one-sided until then — the held fighter's only branch was to try to leave — and it showed:
+measured, the fight entered the clinch three times a night and got **0.66 landed strikes** out of
+it. Not a rare phase, an empty one, and a transit lounge on the way to a takedown.
+
+## What a strike is
+
+Every strike carries a **weapon** — `punch`, `kick`, `knee`, `elbow` — chosen per shot, *together
+with its target* rather than independently of it. `WEAPON_PROFILE` gives each one its own damage,
+knockdown hazard, cut chance, and **which attribute decides whether it lands flush**: a kick's
+flushness reads `kicking`, so a kicker's kicks land better than their hands instead of identically.
+
+Nobody punches a leg, so a shot to the legs is a kick and the attribute that lands it is the one
+the fighter trained for it. The clinch knee is a knee. The ground elbow is an elbow, and it cuts
+three times as often as a jab.
+
+The weapon is carried into the play-by-play, which is what makes the prose checkable: the narrator
+is *told* what was thrown rather than choosing a technique of its own, and
+`tests/statistical/commentary-parity.test.ts` proves no line names a technique the resolver did
+not resolve. Two independent draws — one in the resolver, one in the narrator — would make that
+test unwritable.
+
+## Stance
+
+`stance` is read in the landing contest. A southpaw takes a small edge against an orthodox
+fighter, scaled down by that fighter's Fight IQ, because the mechanism is unfamiliarity rather
+than geometry and a smart fighter solves it inside a round. A switch-stance fighter neither takes
+the edge nor gives it, which is what stops `switch` being strictly the best stance to be born
+with. Measured over paired seeds: +1.9 points of win rate against a dull opponent, +1.2 against an
+average one, +0.2 against a smart one.
+
 ## The exchange loop
 
 Per exchange, for each fighter:
@@ -157,9 +194,18 @@ Combined with `chainWrestling` (doc 02), that is the whole phenomenon, from two 
 The camp produces a `GamePlan` (see [05 — Prep & Camps](./05-prep-and-camps.md)) that
 enters the fight as:
 
-- **Primary approach** — `pressure`, `counter`, `wrestle`, `grind`, `pointFight`, `finish`.
-  Shifts intent weights.
-- **Targeting** — head / body / legs distribution.
+- **Primary approach** — `pressure`, `counter`, `wrestle`, `grind`, `pointFight`, `submit`,
+  `finish`. Shifts intent weights.
+
+  `submit` exists because a submission specialist could not reach any of the other six. The
+  planner's cascade tested a wrestling edge, then a clinch edge, then striking — and a fighter
+  whose game is `submissions` and `scrambling` has neither of the first two, so the submission
+  art fell through to the striking arm and was handed `pointFight`, whose `submit` weight is the
+  lowest in the table. The engine was telling its most dangerous grappler to point-fight.
+
+- **Targeting** — head / body / legs distribution, bent at resolution time by the fighter's own
+  habits. The plan sets the shape; a headhunter with a third of the body work aims higher than
+  their corner asked, and a fighter who cannot kick rarely aims at legs at all.
 - **Prepped counters** — up to N specific reads on the opponent (`expectsLeadHook`,
   `expectsSingleLeg`, `expectsFenceClinch`, …).
 

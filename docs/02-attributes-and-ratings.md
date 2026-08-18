@@ -75,7 +75,6 @@ Clinch Offence   = 0.45·Strength + 0.35·Wrestling + 0.20·StrikingOffence
 Clinch Defence   = 0.45·Strength + 0.40·TakedownDefence + 0.15·StrikingDefence
 Submission Def   = 0.40·Scrambling + 0.30·Submissions + 0.20·FightIQ + 0.10·Strength
 Ground & Pound   = 0.55·GroundControl + 0.45·Power
-Cage IQ          = 0.60·FightIQ + 0.40·Composure
 ```
 
 Exact weights live in `packages/engine/src/ratings/derived.ts` and are unit-tested against

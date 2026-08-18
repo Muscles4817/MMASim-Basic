@@ -1530,8 +1530,13 @@ building a second one in a smaller room.*
 
 #### The agreed sequence
 
-1. **Route submission specialists in `pickApproach`.** Ships alone — it moves `subPct`, which the
-   roster profile bounds.
+1. ✅ **Route submission specialists in `pickApproach`.** Landed. A seventh approach, `submit`, and
+   one branch that reaches it. All three grappling pairs moved and none at another's expense —
+   wrestling/jiu-jitsu 0.156 → 0.195, jiu-jitsu/judo 0.101 → **0.191**, wrestling/judo held at
+   0.193. That is 0.077 / 0.156 / 0.101 before §13.7 and §13.8: **all three now sit within a
+   hundredth of the target**, and the last hundredth is left alone deliberately, because the plan
+   weights are a design question about how hard a specialist's corner leans rather than a dial to
+   turn until a threshold clears. Population held: finishes 46.6%, submissions 19.0%, KO:sub 1.45.
 2. **The knee reads `kicking`.** A knee is a leg strike and `kicking` appears nowhere in its
    resolution, which is why 6B cost 2.2 points of the `kicking` swing. It buys back the G4 margin
    any further clinch work would spend, and it gives Muay Thai a clinch identity of its own.
@@ -1563,7 +1568,13 @@ unattached** and gym quality and coach specialisms only ever act on the player. 
 up at a wrestling gym should read as a wrestler on arrival. A generation change with a career-
 distribution tail, so it belongs with the phase-4 machinery rather than with the fight engine.
 
-**Q2 — A debutant is not a worse athlete than a veteran, and generation says otherwise.**
+**Q2 — A debutant is not a worse athlete than a veteran. ✅ Fixed, pulled forward at the owner's
+request.** One arrival band per attribute, documented in doc 06. The owner's addition is what
+changed the design: **athletic freaks have to exist and generate from time to time.** A first cut
+had strength arriving at 62% of ceiling, which put one per cent of debutants above a median
+thirty-year-old and produced no strong young fighters at all — so the Lesnar case could not occur.
+At 78% it does: 42% of debutants are now faster than the median thirty-year-old, and the top of a
+heavyweight cohort reaches the Elite band for strength. The measurement that prompted it:
 Measured, as a share of each fighter's own ceiling:
 
 ```

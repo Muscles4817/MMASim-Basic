@@ -33,6 +33,24 @@ for it to be listening, then opens a browser attached to the debugger — breakp
 | `npm run lint`          | ESLint, incl. the determinism and layering rules        |
 | `npm run format`        | Prettier                                                |
 
+## Playing it on a phone
+
+Pushing to `master` builds and publishes the app to GitHub Pages —
+**https://muscles4817.github.io/MMASim-Basic/** — after typecheck and the full suite pass. A build
+that ships a broken game is worse than one that fails loudly, so the gate is deliberate and the
+deploy takes a few minutes.
+
+It installs: open it on a phone and use *Add to Home Screen*. The service worker caches the shell,
+so it opens and plays with no connection, and saves live in `localStorage` on the device. Nothing
+is synced between devices — a save made on a phone stays on that phone.
+
+The build is base-path agnostic (`VITE_BASE`), so it works served from a domain root or from a
+project subpath. To reproduce a Pages build locally:
+
+```bash
+VITE_BASE=/MMASim-Basic/ npm run build --workspace @mmasim/app
+```
+
 ## Layout
 
 ```

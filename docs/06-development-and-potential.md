@@ -1,7 +1,44 @@
 # 06 — Development & Potential
 
-> Status: living document. Generation, ageing shape and retirement are built; the
-> attribute-development tick is designed here and not yet implemented.
+> Status: living document. Generation, ageing, retirement and the training tick are all built —
+> `applyTraining`, `applyAgeing` and `applyIdleDecay` in `progression/development.ts`, exercised
+> by the long-sim tier. What this document still describes ahead of the code is called out where
+> it occurs.
+
+## What a fighter already is on debut
+
+Potential is a ceiling; **arrival** is how much of it they have on the day they turn pro, and it
+is one band per attribute rather than one number for the fighter. The split is by how much of the
+quality is *built* rather than *born*:
+
+| | at 20 | at 30 | why |
+| --- | --- | --- | --- |
+| `speed` | 0.92 | 0.99 | The most innate thing in the sport. Everything after is decline. |
+| `durability` | 0.92 | 0.99 | A chin is at its best before anybody has hit it. |
+| `power` | 0.85 | 0.98 | Mostly explosiveness, with some technique in it. |
+| `strength` | 0.78 | 0.97 | Genuinely built — the weight-room years are worth about a fifth. |
+| `cardio` | 0.68 | 0.96 | The most trainable quality a fighter has. |
+| everything technical | 0.55 | 0.85 | Wrestling and fight IQ take a decade. |
+
+This was one `development` factor applied to all sixteen attributes with a flat +0.1 for the
+physical group, which put a 21-year-old's **speed at 69% of their own ceiling** — a debutant
+generated a third slower than they will ever be. And the decline is modelled *separately*, in
+`PEAK_AGE` and the per-attribute rates below, so youth was penalised at both ends and peak speed
+landed near 28.
+
+**The point of the change is the freak.** The ceilings always allowed one — `explosiveness` rolls
+with a standard deviation of 14 up to 97 — and arriving at 69% of them is what made every
+21-year-old average. Measured now: 42% of debutants are faster than the median thirty-year-old,
+and in the heavyweight division the top of a 400-fighter cohort reaches the Elite band for
+strength while the top 5% match the median peak fighter. Rare, and it happens.
+
+A first cut had strength arriving at 0.62, which put **one per cent** of debutants above a median
+thirty-year-old and produced no strong young fighters at all. A 21-year-old professional who has
+been lifting since school is not at two thirds of his eventual maximum.
+
+Guarded from both sides in `progression/arrival.test.ts`: the freak must occur, *and* the
+technical gap between the cohorts must stay decisive — otherwise "physicals arrive early" has
+quietly become "everybody arrives finished" and the climb the game is about disappears.
 
 ## There is no potential number
 
