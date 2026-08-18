@@ -181,6 +181,54 @@ export function generateTraits(rng: Rng, count = 2, attributes?: Attributes): Tr
 }
 
 /**
+ * How much of a given attribute's ceiling a fighter has already reached when they turn pro.
+ *
+ * One number per attribute, at 20 and at 30, because **"physical" is not one thing** and treating
+ * it as one was the defect this replaces. Generation used a single `development` factor with a flat
+ * +0.1 for the physical group, which put a 21-year-old's speed at **69% of their own ceiling** — a
+ * debutant generated a third slower than they will ever be. Meanwhile the engine *already* models
+ * the decline, in `PEAK_AGE` and the per-attribute decline rates in `development.ts`, so the young
+ * were slow and the old were slow and peak speed landed somewhere near 28.
+ *
+ * The split is by how much of the quality is *built* rather than *born*:
+ *
+ *  - **`speed`** is the most innate thing in the sport. A 21-year-old is as fast as they will ever
+ *    be, and everything after that is decline.
+ *  - **`durability`** is a chin, and a chin is at its best before anybody has hit it. The engine
+ *    erodes it separately through career `headTrauma`, so arriving near the ceiling is not a gift —
+ *    it is the top of the only slope it has.
+ *  - **`power`** is mostly explosiveness, with some technique in it.
+ *  - **`strength`** is genuinely built, and the numbers still have to be sane: a 21-year-old
+ *    professional who has been lifting since school is not at two thirds of their eventual max.
+ *    The weight-room years are worth about a fifth, not a third — a first cut at 0.62 put **one
+ *    per cent** of debutants above the median thirty-year-old's strength and produced no strong
+ *    young fighters at all, which is not the sport. Brock Lesnar at 21 was stronger than most of
+ *    the division's peak.
+ *  - **`cardio`** is the most trainable quality a fighter has, and fight-specific conditioning is
+ *    the thing camps exist for — but the same sanity check applies.
+ *  - **Everything technical and mental** keeps the old `development` curve unchanged. Wrestling and
+ *    fight IQ take a decade, which was never the part that was wrong.
+ *
+ * The consequence is deliberate and is the point: **an athletic freak now reads as one on the day
+ * they debut.** The ceilings for it were always there — `explosiveness` rolls with a standard
+ * deviation of 14 up to 97 — and arriving at 69% of them is what made every 21-year-old average.
+ */
+const ARRIVAL: Readonly<Partial<Record<AttributeKey, readonly [number, number]>>> = {
+  speed: [0.92, 0.99],
+  durability: [0.92, 0.99],
+  power: [0.85, 0.98],
+  strength: [0.78, 0.97],
+  cardio: [0.68, 0.96],
+};
+
+function arrivalFactor(key: AttributeKey, age: number, development: number): number {
+  const band = ARRIVAL[key];
+  if (!band) return development;
+  // The same jitter the technical attributes get, so two fighters of the same age are not clones.
+  return remap(age, 20, 30, band[0], band[1]) + (development - remap(age, 20, 30, 0.55, 0.85));
+}
+
+/**
  * Generate a debuting fighter.
  *
  * Current attributes are their ceiling scaled by how much of a career they have had. A
@@ -203,14 +251,11 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
 
   const attributes = {} as Attributes;
   for (const key of ATTRIBUTE_KEYS) {
-    // Physical attributes arrive closer to their ceiling than technical ones — a 21-year-old
-    // is already fast and strong, and is not yet a good wrestler.
-    const physical: AttributeKey[] = ['power', 'speed', 'cardio', 'durability', 'strength'];
-    const factor = physical.includes(key) ? development + 0.1 : development;
+    const factor = arrivalFactor(key, age, development);
     // Clamped to the ceiling: the jitter could otherwise push a starting attribute a point
     // or two above its own potential, an invariant the seed roster is tested for.
     attributes[key] = toRating(
-      Math.min(potential[key], potential[key] * clamp(factor, 0.35, 0.98) + rng.range(-3, 3)),
+      Math.min(potential[key], potential[key] * clamp(factor, 0.35, 0.99) + rng.range(-3, 3)),
     );
   }
 
