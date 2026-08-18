@@ -10,6 +10,15 @@
 import {
   applyAftermath,
   applyAgeing,
+  applyTraining,
+  forecastTraining,
+  pickTrainingFocus,
+  ATTRIBUTE_META,
+  TRAINING_META,
+  type AttributeKey,
+  type Coach,
+  type TrainingFocus,
+  type TrainingForecast,
   displayName,
   fightNews,
   asPromotionId,
@@ -120,8 +129,24 @@ export function getBooking(playerFighterId?: string): Booking | undefined {
   return booking;
 }
 
-export const clearBooking = (): void => sessionStorage.removeItem(BOOKING_KEY);
-export const clearResult = (): void => sessionStorage.removeItem(RESULT_KEY);
+/**
+ * Guarded like `readJson` and `writeJson` above, which these two were not.
+ *
+ * Every other door into session storage in this module tolerates its absence; these reached for
+ * the global directly, so any environment without one — a locked-down browser, or the node test
+ * tier that drives a real fight without a DOM — threw from inside `runBookedFight` *after* the
+ * fight had been simulated and settled. Losing a booking is not worth losing a result over.
+ */
+const forget = (key: string): void => {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    /* Nothing to clear, which is the state the caller wanted anyway. */
+  }
+};
+
+export const clearBooking = (): void => forget(BOOKING_KEY);
+export const clearResult = (): void => forget(RESULT_KEY);
 
 /** Clear all transient career state. Call when switching fighters or resetting the world. */
 export function clearTransientCareerState(): void {
@@ -253,6 +278,84 @@ export function bookFight(
   return booking;
 }
 
+// --- The fight camp develops you ---------------------------------------------------------------
+
+/**
+ * What the camp before a fight is worth, as development.
+ *
+ * It was worth nothing. `runBookedFight` aged the player, paid them and burned a fight off the
+ * deal, and never once called `applyTraining` — while `world.ts:develop()` gave every AI fighter
+ * a full eight-week block of it around every bout they took, under a comment reading "the same
+ * loop the player is in". It was not the same loop. Measured over four years and eight fights,
+ * an AI fighter gained +0.63 overall and +5.58 cardio from their camps; the player gained
+ * exactly zero and aged at the same rate.
+ *
+ * So the fight camp now runs the identical call: same function, same weeks, same gym and coach,
+ * same focus-picking. A player who fights twice a year develops like a fighter who fights twice
+ * a year, which is the only defensible answer.
+ *
+ * The focus is picked the way the AI's is — what you are, and where you still have room — rather
+ * than from the game plan. A camp for a wrestler is a wrestling camp whatever the plan says about
+ * this particular opponent, and making the plan drive development would quietly turn a tactical
+ * choice into a permanent one.
+ */
+export interface CampDevelopment {
+  focus: TrainingFocus;
+  weeks: number;
+  gym?: Gym;
+  coach?: Coach;
+}
+
+/** Camp length in whole weeks, from the booking. The one definition, used by both sides. */
+export const campWeeksOf = (booking: Booking): number =>
+  Math.max(1, Math.round((booking.bout.day - booking.campStartDay) / 7));
+
+/**
+ * The plan for this camp's development.
+ *
+ * Seeded on the bout rather than on the day, so the forecast the player is shown on the camp
+ * screen and the training actually applied at the fight are the same camp. A forecast computed
+ * from a different draw would be a lie told with real arithmetic.
+ */
+export function campDevelopmentPlan(
+  db: GameDb,
+  fighter: Fighter,
+  booking: Booking,
+): CampDevelopment {
+  const world = getWorld(db);
+  return {
+    focus: pickTrainingFocus(
+      createRng(`${world.seed}:campdev:${booking.bout.id}`),
+      fighter,
+    ),
+    weeks: campWeeksOf(booking),
+    gym: fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined,
+    coach: fighter.headCoachId
+      ? (db.coaches.findById(fighter.headCoachId) as Coach | undefined)
+      : undefined,
+  };
+}
+
+/** What the camp is expected to build, for the screen the player looks at during it. */
+export function forecastCampDevelopment(
+  db: GameDb,
+  fighter: Fighter,
+  booking: Booking,
+): TrainingForecast & { focus: TrainingFocus } {
+  const plan = campDevelopmentPlan(db, fighter, booking);
+  return {
+    ...forecastTraining({
+      fighter,
+      focuses: [plan.focus],
+      weeks: plan.weeks,
+      gym: plan.gym,
+      coach: plan.coach,
+      day: getWorld(db).day,
+    }),
+    focus: plan.focus,
+  };
+}
+
 /**
  * Answer a bout the promotion put in front of you.
  *
@@ -332,6 +435,30 @@ export interface FightOutcome {
  */
 export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
   const world = getWorld(db);
+
+  /*
+   * The camp, before the cage.
+   *
+   * Applied here rather than at booking because a camp that has not happened yet should not
+   * have improved anybody — and applied *before* the fighter is read for the simulation,
+   * because you walk in having done the work rather than having it credited afterwards.
+   */
+  const campPlan = campDevelopmentPlan(
+    db,
+    db.fighters.getById(booking.bout.redId as string) as Fighter,
+    booking,
+  );
+  const camp = applyTraining({
+    fighter: db.fighters.getById(booking.bout.redId as string) as Fighter,
+    focuses: [campPlan.focus],
+    weeks: campPlan.weeks,
+    gym: campPlan.gym,
+    coach: campPlan.coach,
+    day: world.day,
+    rng: createRng(`${world.seed}:campgain:${booking.bout.id}`),
+  });
+  db.fighters.upsert(camp.fighter as Fighter & { id: string });
+
   const red = db.fighters.getById(booking.bout.redId as string) as Fighter;
   const blue = db.fighters.getById(booking.bout.blueId as string) as Fighter;
 
@@ -633,8 +760,30 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     }
   }
 
+  /*
+   * What the camp built, said out loud.
+   *
+   * The camp is the majority of a career's elapsed time and it used to report nothing, because
+   * it did nothing. Now that it develops the fighter, staying silent about it would be the same
+   * failure in a new place — a system the player cannot see is a system they cannot plan around.
+   */
+  const campNotes: string[] = [];
+  const campGains = (Object.entries(camp.gains) as [AttributeKey, number][])
+    .filter(([, gain]) => gain >= 0.05)
+    .sort((a, b) => b[1] - a[1]);
+  if (campGains.length > 0) {
+    campNotes.push(
+      `${campPlan.weeks} weeks of ${TRAINING_META[campPlan.focus].label.toLowerCase()}: ` +
+        campGains
+          .map(([key, gain]) => `${ATTRIBUTE_META[key].label} +${Math.round(gain * 10) / 10}`)
+          .join(', '),
+    );
+  }
+  campNotes.push(...camp.notes);
+
   const notes = [
     ...titleNotes,
+    ...campNotes,
     ...weighInNotes,
     ...(night?.notes ?? []),
     ...(earnings?.notes ?? []),
