@@ -31,6 +31,7 @@ import { clamp, remap, round } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import type { Fighter } from '../domain/fighter.js';
 import { campGainMultiplier, idleDecayMultiplier } from '../domain/personality.js';
+import { recoverConfidence } from '../domain/confidence.js';
 import { coachEffectiveness, type Coach, type CoachSpecialism, type Gym } from '../domain/organisations.js';
 import { traitMul } from '../domain/traits.js';
 import {
@@ -251,11 +252,91 @@ const PEAK_AGE: Readonly<Record<AgeCurve, number>> = {
 };
 
 /**
- * How fast a fighter still learns, by age.
+ * The two ends of each attribute's learning curve: what it is worth at twenty, and where it
+ * bottoms out at the far end of a career.
+ *
+ * This was a single `0.55` applied to all fifteen, which said that a 38-year-old learns
+ * submissions exactly as poorly as they build top speed. Doc 25 §3 is the argument against it,
+ * and the short version is that the engine was charging age twice for the same thing: the
+ * physical substrate declining with age is already modelled, in full, by `DECLINE_RATE` and
+ * `applyAgeing`. Taking it out of the learning rate as well left craft unable to grow late for a
+ * reason that had nothing to do with craft.
+ *
+ * Worse, it quietly reintroduced the ceiling doc 23 went to some trouble to remove. That document
+ * replaced a hard skill ceiling with a *rate*, so that where a fighter ends up is the point at
+ * which their gains stop outrunning their decline. But if the rate itself collapses on a fixed
+ * schedule against a birthday, the equilibrium is set by age rather than by the fighter — which is
+ * a ceiling again, drawn in a different colour. Measured before this change: created fighters
+ * landed at 29–52% of their headroom more or less regardless of talent, schedule or record.
+ *
+ * So the floors now follow `PEAK_OFFSET`, which already ranks these fifteen by how much of each is
+ * craft and how much is body. Fight IQ and composure are close to flat for life — a fighter can
+ * still be learning to read an opponent at forty, and the sport is full of people who did. Top
+ * speed and one-punch power fall away hard, and are allowed to, because decline handles them and
+ * a late-career athlete genuinely cannot rebuild them.
+ *
+ * The intended shape of a career is the one `PEAK_OFFSET`'s own comment describes: a rising skill
+ * curve crossing a falling physical one. That only happens if the two are allowed to move at
+ * different speeds.
+ */
+const LEARNING_CURVE: Readonly<Record<AttributeKey, readonly [young: number, floor: number]>> = {
+  /*
+   * Craft: nearly flat, both ends.
+   *
+   * Tactical knowledge and temperament are the last things to go — `DECLINE_RATE` already says
+   * so, at 0.0 a year for composure and 0.1 for fight IQ — so their floors sit close to their
+   * young-age value and a fighter can still be learning to read an opponent at forty.
+   *
+   * The young end is left where it has always been, at 1.45 for all fifteen. An earlier draft
+   * brought it down for craft on the theory that a steep young-age bonus on a *skill* is novice
+   * gains by another name, and therefore double-counts `skillResistance`. The theory is sound and
+   * the measurement rejected it anyway: over ten world years at the app's own cadence it cost the
+   * sport its top end, taking fighters rated 75 or better from 18 to 8. Whatever the young-age
+   * term is standing in for, the elite is built out of it, and this document is about the tail.
+   */
+  fightIq: [1.45, 0.95],
+  composure: [1.45, 0.95],
+  submissions: [1.45, 0.88],
+  groundControl: [1.45, 0.85],
+  strikingOffence: [1.45, 0.82],
+  strikingDefence: [1.45, 0.78],
+  wrestling: [1.45, 0.78],
+  takedownDefence: [1.45, 0.78],
+  kicking: [1.45, 0.7],
+  // The most athletic of the grappling qualities, and the fastest-fading of them.
+  scrambling: [1.45, 0.65],
+
+  /*
+   * Body: steep, and left steep.
+   *
+   * A twenty-year-old really is more trainable than a thirty-eight-year-old in a way that has
+   * nothing to do with how much they already know, and nobody rebuilds fast twitch late. These
+   * keep the original curve's young end and fall further than it did.
+   */
+  cardio: [1.45, 0.55],
+  strength: [1.45, 0.5],
+  durability: [1.45, 0.45],
+  power: [1.45, 0.4],
+  speed: [1.45, 0.35],
+};
+
+/**
+ * How fast a fighter still learns, by age and by what they are learning.
  *
  * Never reaches zero: a 38-year-old can still add a technique, they just cannot add much.
  * This is separate from decline — a veteran can be improving and shrinking at once, which is
- * exactly what a late-career technical fighter looks like.
+ * exactly what a late-career technical fighter looks like, and with per-attribute floors it is
+ * now something the model can actually produce rather than merely permit.
+ *
+ * **Why there is no training-age term here.** Doc 25 §3.4 proposed indexing the steep early phase
+ * on how long a fighter has been doing this rather than on how old they are, on the grounds that a
+ * 30-year-old with eight fights is not the same learner as one with forty. That is true, and the
+ * model already says it — twice. `skillResistance` makes the next point harder as a function of
+ * the rating itself, so the fighter who is genuinely new to something is genuinely faster at it;
+ * and `aptitudeRate` carries how fast this particular fighter learns this particular family, which
+ * is what separates somebody who has drilled wrestling for eight years and is simply bad at it
+ * from somebody who has never tried. A third clock measuring the same thing would double-count it.
+ * What was actually wrong was the floor, and that is what changed.
  */
 export function learningRate(age: number, curve: AgeCurve, key?: AttributeKey): number {
   /*
@@ -268,22 +349,25 @@ export function learningRate(age: number, curve: AgeCurve, key?: AttributeKey): 
    * which of the two it is looking at.
    */
   const peak = PEAK_AGE[curve] + (key ? PEAK_OFFSET[key] : 0);
-  if (age <= 20) return 1.45;
+  // No key means "the fighter in general", which is what the callers without one want.
+  const [young, floor] = key ? LEARNING_CURVE[key] : ([1.45, 0.55] as const);
+  if (age <= 20) return young;
   /*
-   * The tail is deliberately fat now, and this is a shape change rather than a level one.
+   * The tail is deliberately fat, and this is a shape change rather than a level one.
    *
-   * The old curve ran 1.45 at twenty to a 0.25 floor by roughly thirty-five, which meant a
+   * The original curve ran 1.45 at twenty to a 0.25 floor by roughly thirty-five, which meant a
    * career had about twenty productive camps in it before learning effectively stopped and
    * decline took over. Twenty camps is not enough to carry anybody from a debutant to a
    * champion at any per-camp gain that keeps a single camp from jumping a whole rating band
-   * — so the two constraints were in direct conflict and the mode could not satisfy both.
+   * — so the two constraints were in direct conflict and the model could not satisfy both.
    *
-   * A floor of 0.55 rather than 0.25 roughly doubles the productive length of a career
-   * without making any individual camp larger, which resolves it. It is also the more
-   * truthful curve: fighters demonstrably keep adding craft into their late thirties, and
-   * the engine already models the physical decline separately.
+   * Raising the floor resolved it, and `LEARNING_CURVE` then made *both* ends a property of what
+   * is being learned rather than one pair of numbers for all fifteen. Fighters demonstrably keep
+   * adding craft into their late thirties; nobody rebuilds their top speed at thirty-eight.
    */
-  return clamp(remap(age, 20, peak + 8, 1.45, 0.55), 0.5, 1.45);
+  // Clamped at the attribute's own floor rather than a global 0.5: past `peak + 8` the remap
+  // extrapolates, and the floor is the whole point of the table above.
+  return clamp(remap(age, 20, peak + 8, young, floor), floor, young);
 }
 
 /**
@@ -429,6 +513,14 @@ function rawGain(input: {
   gym?: Gym;
   coach?: Coach;
   age: number;
+  /**
+   * `LESSON_BONUS` when this is the thing their last fight exposed, else 1.
+   *
+   * Passed in rather than derived here so that `applyTraining` and `forecastTraining` cannot
+   * drift apart: the forecast the player is shown on the camp screen has to be the camp they
+   * actually get, and the only way to guarantee that is one arithmetic path.
+   */
+  lessonBonus?: number;
 }): number {
   const { fighter, focus, key, weight, current, blocks, focusShare, gym, coach, age } = input;
 
@@ -451,6 +543,7 @@ function rawGain(input: {
     campGainMultiplier(fighter.personality) *
     traitMul(fighter.traits, 'developmentRate') *
     learningRate(age, fighter.naturals.ageCurve, key) *
+    (input.lessonBonus ?? 1) *
     room
   );
 }
@@ -464,6 +557,7 @@ export function applyTraining(input: TrainingInput): TrainingResult {
 
   const age = ageOn(fighter.birthDay, day);
   const blocks = trainingBlocks(weeks);
+  const lesson = activeLesson(fighter, day);
 
   // Splitting focus costs: two focuses get 65% each, not 100% each.
   const focusShare = focuses.length > 1 ? 0.65 : 1;
@@ -489,6 +583,7 @@ export function applyTraining(input: TrainingInput): TrainingResult {
         gym,
         coach,
         age,
+        lessonBonus: key === lesson ? LESSON_BONUS : 1,
       });
       if (raw <= 0) continue;
 
@@ -647,6 +742,7 @@ export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingFor
 
   const age = ageOn(fighter.birthDay, day);
   const blocks = trainingBlocks(weeks);
+  const lesson = activeLesson(fighter, day);
   const focusShare = focuses.length > 1 ? 0.65 : 1;
 
   const expected: Partial<Record<AttributeKey, number>> = {};
@@ -669,6 +765,7 @@ export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingFor
         gym,
         coach,
         age,
+        lessonBonus: key === lesson ? LESSON_BONUS : 1,
       });
       if (raw <= 0) continue;
 
@@ -802,6 +899,50 @@ const FOCUSES_FOR_ATTRIBUTE = (() => {
   }
   return out;
 })();
+
+/**
+ * How long a lesson from a fight stays live. Roughly the next camp or two.
+ *
+ * A fighter who has just been taken down nine times in front of a crowd works on it, and works
+ * on it harder than they would have from a coach's suggestion. Then it fades, because the next
+ * fight overwrites it and because nobody stays that motivated about one hole forever.
+ */
+export const LESSON_WINDOW_DAYS = 200;
+
+/**
+ * What being shown a hole is worth, as a multiplier on the camp that follows.
+ *
+ * Deliberately a *rate* rather than points, which is the whole argument of docs/27 §2.4: being
+ * outwrestled for fifteen minutes does not make anybody better at wrestling. It tells them —
+ * loudly, expensively, in public — what to fix, and the gain comes from the camp they then spend
+ * on it. A fight grants direction; the gym still does the work.
+ */
+export const LESSON_BONUS = 1.5;
+
+/**
+ * The attribute a fighter's most recent fight told them to work on, if it is still live.
+ *
+ * Read off the record rather than stored as mutable state on the fighter: a lesson belongs to
+ * the night that taught it, `FightRecordEntry` is already immutable-once-written, and an expiry
+ * expressed as "was that fight recent" cannot drift out of sync with anything.
+ */
+export function activeLesson(fighter: Fighter, day: GameDay): AttributeKey | undefined {
+  const last = fighter.record[fighter.record.length - 1];
+  if (!last?.lesson) return undefined;
+  return day - last.day <= LESSON_WINDOW_DAYS ? last.lesson : undefined;
+}
+
+/**
+ * The camp that best works a given attribute.
+ *
+ * Used to turn a lesson into something the player can actually be offered on the camp screen.
+ * Highest weight wins; ties break on the focus order, which is stable.
+ */
+export function focusForAttribute(key: AttributeKey): TrainingFocus | undefined {
+  const trainers = FOCUSES_FOR_ATTRIBUTE[key];
+  if (!trainers || trainers.length === 0) return undefined;
+  return trainers.reduce((best, next) => (next[1] > best[1] ? next : best))[0];
+}
 
 /**
  * Days since this attribute was last genuinely worked.
@@ -1111,16 +1252,146 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
     );
   }
 
+  /*
+   * Self-belief drifts back toward where this fighter rests.
+   *
+   * Here because this function's job already is what elapsed time did to somebody, and because
+   * it is the one place every caller goes through — the world tick, a camp, a layoff, a fight.
+   * Confidence had no recovery at all before this and was therefore the only part of
+   * `condition` that behaved like a permanent injury; docs/27 §1.1.1 has the measurements, and
+   * `domain/confidence.ts` has the reasoning.
+   *
+   * `recoverConfidence` is exponential precisely so that putting it here is safe: the callers
+   * age fighters in spans from a fortnight to a year and the same elapsed time has to give the
+   * same answer however it was chopped up.
+   */
+  const condition = {
+    ...fighter.condition,
+    confidence: recoverConfidence(fighter.condition.confidence, fighter.personality, years),
+    freshness: recovered,
+  };
+
   return {
-    fighter: {
-      ...fighter,
-      attributes,
-      trainingCarry: carry,
-      condition: { ...fighter.condition, freshness: recovered },
-    },
+    fighter: { ...fighter, attributes, trainingCarry: carry, condition },
     losses,
     notes,
   };
+}
+
+// --- Ring experience -----------------------------------------------------------------------
+
+/**
+ * What a hard fight is worth in fight IQ, before anything scales it.
+ *
+ * Small, and it has to be. Measured before this existed: a fighter taking 3.8 bouts a year
+ * developed *less* than one taking 1.7, because fights contributed nothing and displaced camps —
+ * the model actively contradicting the reason anybody fights on the regional circuit. The fix is
+ * not to make fighting lucrative, it is to stop it being free. See docs/27 §2.2.
+ */
+const RING_EXPERIENCE_BASE = 0.55;
+
+/**
+ * How fast the lesson of simply being in there wears off.
+ *
+ * A debut teaches enormously; the fortieth fight teaches almost nothing. Without a taper this
+ * steep the mechanic is an XP grind and the optimal play is to fight every eight weeks forever,
+ * which is neither realistic nor a game. At six professional bouts a fighter is already getting
+ * half of what they got on debut, and at thirty about a sixth.
+ */
+const RING_EXPERIENCE_HALF_LIFE = 6;
+
+export interface RingExperienceInput {
+  /** Seconds actually spent in the cage. A twelve-second knockout teaches nobody anything. */
+  secondsFought: number;
+  /** Professional bouts before this one. Drives the taper. */
+  priorBouts: number;
+  knockdownsSuffered: number;
+  /** Submissions this fighter had to survive. Deep water of a different kind. */
+  submissionsFaced: number;
+  day: GameDay;
+}
+
+/**
+ * The part of a fight a gym cannot give you.
+ *
+ * You do not get stronger or faster in a fight — you get damaged, and the model already says so.
+ * What a fight gives is the thing training genuinely cannot simulate: reading a live opponent who
+ * is trying to take your head off, adrenaline, cage craft, knowing what the fifth round feels
+ * like, and finding out what you do when you are hurt. Fighters call it octagon time and treat it
+ * as a separate currency from training, which is exactly what it is here.
+ *
+ * It lands on fight IQ and composure and on nothing else — the two qualities `PEAK_OFFSET`
+ * already marks as peaking six years after everything physical, and until now the only two a
+ * fighter could acquire solely by sitting in a gym.
+ *
+ * Three things bound it, because the obvious version of this mechanic breaks the game. It scales
+ * with **time in the cage**, so a first-round blowout is worth nearly nothing. It **tapers hard**
+ * with bouts already had. And it is paid for in trauma and wear by the same fight, which is what
+ * keeps the trade honest rather than making constant activity strictly correct.
+ */
+export function applyRingExperience(
+  fighter: Fighter,
+  input: RingExperienceInput,
+): { fighter: Fighter; gains: Partial<Record<AttributeKey, number>>; notes: readonly string[] } {
+  const gains: Partial<Record<AttributeKey, number>> = {};
+  const notes: string[] = [];
+  if (input.secondsFought <= 0) return { fighter, gains, notes };
+
+  const age = ageOn(fighter.birthDay, input.day);
+
+  // Fraction of a full three-round fight. A five-rounder goes past 1, which is the point.
+  const depth = input.secondsFought / 900;
+  const greenness = 1 / (1 + Math.max(0, input.priorBouts) / RING_EXPERIENCE_HALF_LIFE);
+
+  /*
+   * Adversity, capped.
+   *
+   * Being dropped and getting back up is the single most instructive thing that can happen to a
+   * fighter, and surviving a submission is the same lesson in a different position. Capped
+   * because a fight cannot be arbitrarily educational, and because an uncapped version rewards
+   * taking horrific punishment.
+   */
+  const adversity =
+    1 + Math.min(0.6, input.knockdownsSuffered * 0.2 + input.submissionsFaced * 0.1);
+
+  const attributes: Attributes = { ...fighter.attributes };
+  const carry: Partial<Record<AttributeKey, number>> = { ...fighter.trainingCarry };
+
+  for (const [key, weight] of [
+    ['fightIq', 1],
+    ['composure', 0.8],
+  ] as [AttributeKey, number][]) {
+    const current = attributes[key];
+    const gain =
+      RING_EXPERIENCE_BASE *
+      weight *
+      depth *
+      greenness *
+      adversity *
+      learningRate(age, fighter.naturals.ageCurve, key) *
+      difficulty(fighter, key, current);
+    if (gain <= 0) continue;
+
+    // Banked through the same ledger a camp uses, for the same reason: these are tenths, and
+    // `toRating(current + gain)` would round every one of them away.
+    const banked = (carry[key] ?? 0) + gain;
+    const whole = Math.floor(banked);
+    carry[key] = round(banked - whole, 4);
+    if (whole > 0) attributes[key] = toRating(current + whole);
+    gains[key] = round(gain, 2);
+  }
+
+  if ((gains.fightIq ?? 0) + (gains.composure ?? 0) < 0.02) {
+    return { fighter, gains: {}, notes };
+  }
+
+  // Worth saying only when the fight was genuinely formative — which, by construction, means a
+  // young fighter in deep water rather than a veteran clocking in.
+  if (depth >= 0.8 && greenness >= 0.5) {
+    notes.push(`Rounds like that are what ${fighter.lastName} cannot get in a gym.`);
+  }
+
+  return { fighter: { ...fighter, attributes, trainingCarry: carry }, gains, notes };
 }
 
 // --- Idle decay ----------------------------------------------------------------------------

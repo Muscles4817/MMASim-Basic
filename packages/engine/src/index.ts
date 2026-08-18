@@ -19,6 +19,7 @@ export * from './ratings/derived.js';
 // Domain
 export * from './domain/fighter.js';
 export * from './domain/personality.js';
+export * from './domain/confidence.js';
 export * from './domain/traits.js';
 export * from './domain/divisions.js';
 export * from './domain/nationalities.js';
@@ -59,6 +60,7 @@ export * from './camp/planner.js';
 // Business
 export * from './business/matchmaking.js';
 export * from './business/aftermath.js';
+export * from './business/lessons.js';
 export * from './business/ladder.js';
 export * from './business/heat.js';
 export * from './business/money.js';

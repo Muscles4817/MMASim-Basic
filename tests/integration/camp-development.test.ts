@@ -21,11 +21,13 @@ import {
   createRng,
   overallRating,
   pickTrainingFocus,
+  TRAINING_FOCUSES,
   type Fighter,
 } from '@mmasim/engine';
 import {
   bookFight,
   campDevelopmentPlan,
+  saveBookingFocus,
   campWeeksOf,
   forecastCampDevelopment,
   runBookedFight,
@@ -74,6 +76,39 @@ describe('a fight camp is training', () => {
 
     const after = developed(db.fighters.getById(me.id as string) as Fighter);
     expect(after, 'the camp built nothing at all').toBeGreaterThan(before);
+  });
+
+  it('spends the camp on what the player chose, not on what the game picked for them', () => {
+    /*
+     * Every other training block in the game is the player's decision. The block attached to a
+     * fight — which for an active fighter is most of the blocks in their career — was the
+     * game's, decided by `pickTrainingFocus` behind a seeded RNG. See docs/25 §2.1.
+     */
+    const { db, me, opponent } = career();
+    const booking = bookFight(db, me, opponent, { weeks: 8 });
+    const theirs = campDevelopmentPlan(db, me, booking).focus;
+
+    // Any focus the fighter would not otherwise have been given, so the assertion has teeth.
+    const mine = TRAINING_FOCUSES.find((f) => f !== theirs)!;
+    const chosen = campDevelopmentPlan(db, me, saveBookingFocus(booking, mine));
+    expect(chosen.focus).toBe(mine);
+
+    // And it reaches the forecast the player is shown, not only the plan behind it.
+    const forecast = forecastCampDevelopment(db, me, saveBookingFocus(booking, mine));
+    expect(forecast.focus).toBe(mine);
+  });
+
+  it('hands the decision back to the fighter when the player clears it', () => {
+    // `undefined` is a real value: it means "I have not chosen", and a fighter left to their own
+    // devices trains whatever they most need.
+    const { db, me, opponent } = career();
+    const booking = bookFight(db, me, opponent, { weeks: 8 });
+    const theirs = campDevelopmentPlan(db, me, booking).focus;
+    const mine = TRAINING_FOCUSES.find((f) => f !== theirs)!;
+
+    const overridden = saveBookingFocus(booking, mine);
+    expect(campDevelopmentPlan(db, me, overridden).focus).toBe(mine);
+    expect(campDevelopmentPlan(db, me, saveBookingFocus(overridden, undefined)).focus).toBe(theirs);
   });
 
   it('gives the player exactly what the world gives an AI fighter', () => {

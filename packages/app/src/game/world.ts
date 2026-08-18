@@ -79,6 +79,7 @@ import {
   retirementReason,
   signingNews,
   setChampion,
+  hasDriftedOut,
   shouldRetire,
   simulateFight,
   streakNews,
@@ -294,6 +295,9 @@ export function advanceWorld(
       // because retirees are filtered out of every card. Swept rather than only handled at
       // the moment of retirement, because a fighter can reach that state by more than one
       // route and the cost of being sure is one pass over five promotions.
+      // Before the intake, so a division that lost somebody this quarter refills in the same
+      // quarter rather than a season later.
+      news.push(...retireTheDrifted(db, day, rng.fork(`drift:${day}`), exceptId));
       news.push(...replenish(db, day, rng, promotions));
       // Deals run out across the roster too, so the market has other people in it.
       news.push(...resolveFreeAgency(db, day, rng, promotions, exceptId));
@@ -1440,6 +1444,66 @@ function pickStartingPromotion(promotions: readonly Promotion[], rng: Rng): Prom
   return promotions[promotions.length - 1]!;
 }
 
+/**
+ * Retire the people the sport stopped calling.
+ *
+ * `shouldRetire` is only ever consulted after a fight, which means it can only end the career of
+ * somebody who is still having them. A fighter who stops getting booked was therefore immortal:
+ * they sat on the roster, aged, and were never replaced — and since `replenish` only tops a
+ * division back up to its target, every one of them was a debutant who never got generated.
+ *
+ * It went unnoticed because the old confidence model retired those fighters by accident. They
+ * lost a few, their belief collapsed with no way back, and they walked. Fixing confidence
+ * (docs/27 §1) removed the accident and exposed the missing mechanic underneath: measured over
+ * ten world years, retirements fell 524 → 305 and the intake fell 501 → 294 with them.
+ *
+ * Never the player. A career that ends because the player did not open the game for a while is
+ * not a career ending, and the player's own inactivity is `playerActivity`'s conversation to have.
+ */
+function retireTheDrifted(
+  db: GameDb,
+  day: number,
+  rng: Rng,
+  exceptId: FighterId | undefined,
+): NewsItem[] {
+  const news: NewsItem[] = [];
+
+  for (const fighter of db.fighters.findAll() as Fighter[]) {
+    if (fighter.id === exceptId || fighter.retiredDay !== undefined) continue;
+
+    /*
+     * Never a champion. The phone does not stop ringing for the person holding the belt, which is
+     * the same rule `enforceActivity` already applies when it refuses to cut or breach one.
+     *
+     * It is also load-bearing rather than merely truthful: a retired champion's belt is vacated,
+     * and a division cannot stage a title fight while its contenders are being rebuilt, so
+     * champions quietly drifting out left belts sitting empty for years. Caught by
+     * `championships.test.ts`, which allows three stale vacancies in a decade and saw five.
+     */
+    if (holdsABeltAnywhere(db, fighter)) continue;
+
+    if (!hasDriftedOut(fighter, day, rng.fork(`drift:${fighter.id}`))) continue;
+
+    const reason = retirementReason(fighter, day);
+    db.fighters.upsert({ ...fighter, retiredDay: day, notes: reason } as Fighter & Entity);
+    news.push(
+      retirementNews({
+        day,
+        fighterId: fighter.id,
+        name: displayName(fighter),
+        reason,
+        divisionId: fighter.divisionId,
+        record: recordString(fighter.summary),
+        // A belt held by somebody who drifted out is swept by `vacateAbandonedBelts` at the end
+        // of the step, which runs over every promotion and cannot get this wrong.
+        wasChampion: holdsABeltAnywhere(db, fighter),
+      }),
+    );
+  }
+
+  return news;
+}
+
 /** Replace retirees so divisions do not quietly empty out over a long career. */
 function replenish(
   db: GameDb,
@@ -1567,6 +1631,13 @@ function ageEveryone(
      * held. A professional fighter between bouts is in a gym, and now the model says so.
      *
      * Four weeks rather than eight: this is the general work everyone does, not a fight camp.
+     *
+     * A flat block per *call* rather than per elapsed week, and that is a known defect rather than
+     * a choice — see docs/27 §7. It makes the fighter you get out depend on how the caller chopped
+     * up the time: the app advances in camp-length spans, so this is four weeks per eight, but the
+     * long-sim harness advances a year per call and every unbooked fighter in the world therefore
+     * trains for one month of it. Scaling it is a real balance change and wants its own measured
+     * pass; it is recorded rather than smuggled in.
      */
     const trained = develop(db, fighter, toDay, rng, new Map([[fighter.id as string, since]]), 4);
     if (trained !== fighter) db.fighters.upsert(trained as Fighter & Entity);

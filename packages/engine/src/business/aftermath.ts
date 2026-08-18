@@ -11,8 +11,12 @@ import type { Rng } from '../core/rng.js';
 import type { GameDay } from '../core/clock.js';
 import type { DivisionId, PromotionId } from '../core/ids.js';
 import type { Fighter, FightRecordEntry, FinishMethod } from '../domain/fighter.js';
-import { careerSummary, isKoMethod } from '../domain/fighter.js';
-import { lossImpactMultiplier, starPowerGrowthMultiplier } from '../domain/personality.js';
+import { careerSummary, isDecisionMethod, isKoMethod } from '../domain/fighter.js';
+import { starPowerGrowthMultiplier } from '../domain/personality.js';
+import { confidenceSwing } from '../domain/confidence.js';
+import { applyRingExperience } from '../progression/development.js';
+import { lessonFrom } from './lessons.js';
+import { overallRating } from '../ratings/attributes.js';
 import { findTraitConflicts, traitMul, type TraitId } from '../domain/traits.js';
 import type { Corner, FightResult } from '../fight/types.js';
 import { exposureFrom } from '../health/injuries.js';
@@ -56,6 +60,29 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
     const damage = result.damage[corner];
     const won = result.winnerId === fighter.id;
     const drew = result.winnerId === undefined;
+    const other: Corner = corner === 'red' ? 'blue' : 'red';
+
+    /*
+     * Seconds actually spent in there, which is what both of the new mechanics are scaled on.
+     * `round` is 1-indexed and `timeSeconds` is the offset into it, so a second-round finish at
+     * 1:30 is one full round plus ninety seconds.
+     */
+    const secondsFought = (result.round - 1) * 300 + result.timeSeconds;
+
+    /*
+     * What this fight told them to go and fix. See `business/lessons.ts` and docs/27 §2.4.
+     *
+     * Deliberately independent of the result: a fighter can win a decision having been put on
+     * their back six times, and that is still the thing to work on.
+     */
+    const lesson = lessonFrom({
+      mine: result.stats[corner],
+      theirs: result.stats[other],
+      damage,
+      method: result.method,
+      lost: !won && !drew,
+      secondsFought,
+    });
 
     const entry: FightRecordEntry = {
       boutId: result.boutId,
@@ -68,9 +95,11 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
       timeSeconds: result.timeSeconds,
       divisionId,
       wasTitleFight: input.isTitleFight ?? false,
+      lesson: lesson?.key,
     };
 
     const record = [...fighter.record, entry];
+    if (lesson) notes.push(lesson.note);
 
     // --- Condition ---------------------------------------------------------------------
     const trauma = clamp(
@@ -84,11 +113,26 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
       100,
     );
 
-    // Confidence moves on results, and how much depends on the person. A resilient fighter
-    // shrugs off a bad night; a fragile one does not recover for a year.
-    const swing = won ? 12 : drew ? 0 : -16 * lossImpactMultiplier(fighter.personality);
-    const finishBonus = won && isKoMethod(result.method) ? 5 : 0;
-    const confidence = clamp(fighter.condition.confidence + swing + finishBonus, 1, 100);
+    /*
+     * Confidence moves on the *shape* of the result, not merely on which side of it you were.
+     *
+     * This was `won ? 12 : -16 * lossImpactMultiplier(...)` — a flat number that could not tell
+     * a nine-second head kick from a five-round split decision, though the method, the
+     * scorecards, the knockdowns, the round and the opponent were all in scope on that very
+     * line. See docs/27 §1 and `domain/confidence.ts`.
+     */
+    const swing = confidenceSwing({
+      personality: fighter.personality,
+      traits: fighter.traits,
+      outcome: drew ? 'draw' : won ? 'win' : 'loss',
+      method: result.method,
+      round: result.round,
+      knockdownsSuffered: damage.knockdownsSuffered,
+      scoreMargin: scoreMarginFor(result, corner),
+      ratingStep: overallRating(opponent.attributes) - overallRating(fighter.attributes),
+      isTitleFight: input.isTitleFight,
+    });
+    const confidence = clamp(fighter.condition.confidence + swing, 1, 100);
 
     /*
      * What the night took out of them, read off the same exposure the injury roll uses.
@@ -191,8 +235,30 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
       100,
     );
 
+    /*
+     * The part of a fight a gym cannot give you. See `applyRingExperience` and docs/27 §2.3.
+     *
+     * Applied here, in the one function all three fight paths already go through — the player's
+     * career loop, the world tick and promoter mode — because the last time a development hook
+     * lived in only one of them, the entire undercard of the sport declined permanently and
+     * nobody noticed for months.
+     *
+     * `fighter.record` rather than `record` for the prior-bout count: this fight is the one being
+     * learned from, not one of the ones that already blunted the lesson.
+     */
+    const experience = applyRingExperience(fighter, {
+      secondsFought,
+      priorBouts: fighter.record.length,
+      knockdownsSuffered: damage.knockdownsSuffered,
+      submissionsFaced: result.stats[other].submissionAttempts,
+      day,
+    });
+    notes.push(...experience.notes);
+
     const updated: Fighter = {
       ...fighter,
+      attributes: experience.fighter.attributes,
+      trainingCarry: experience.fighter.trainingCarry,
       record,
       condition,
       traits,
@@ -210,4 +276,30 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
 function methodFor(method: FinishMethod, drew: boolean): FinishMethod {
   if (drew) return method === 'noContest' ? 'noContest' : 'draw';
   return method;
+}
+
+/**
+ * Mean per-round scorecard margin from one corner's point of view, or `undefined` when the
+ * fight did not reach the judges.
+ *
+ * Per round rather than in total so a three- and a five-rounder land on the same scale, and
+ * averaged across the cards rather than taken from one judge so a single outlier scorecard does
+ * not decide how a fighter feels about the night.
+ *
+ * Gated on the method rather than on `scorecards.length`, because partial cards exist behind an
+ * early finish and nobody remembers a fight they were knocked out of by how the first round was
+ * scored.
+ */
+function scoreMarginFor(result: FightResult, corner: Corner): number | undefined {
+  if (!isDecisionMethod(result.method) && result.method !== 'draw') return undefined;
+  const cards = result.scorecards.filter((card) => card.rounds.length > 0);
+  if (cards.length === 0) return undefined;
+
+  let total = 0;
+  for (const card of cards) {
+    const mine = corner === 'red' ? card.redTotal : card.blueTotal;
+    const theirs = corner === 'red' ? card.blueTotal : card.redTotal;
+    total += (mine - theirs) / card.rounds.length;
+  }
+  return total / cards.length;
 }
