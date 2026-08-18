@@ -393,7 +393,46 @@ export interface TrainingInput {
   coach?: Coach;
   day: GameDay;
   rng: Rng;
+  /**
+   * Effective training blocks, overriding what `weeks` would imply.
+   *
+   * For the continuous work a fighter does between bouts, which is not a camp and must not be
+   * priced like one. `trainingBlocks` models a *camp*: two weeks of ramp that produce nothing,
+   * then diminishing returns as a single peak is approached. Neither applies to somebody simply
+   * training all year, and charging the ramp every time the world happens to tick made the whole
+   * model depend on how the caller chopped up the clock. See `AMBIENT_BLOCKS_PER_WEEK`.
+   *
+   * `weeks` is still read for everything else it drives — injury risk scales with camp length —
+   * so callers pass both.
+   */
+  blocks?: number;
 }
+
+/**
+ * Effective training blocks per elapsed week of ordinary, non-camp work.
+ *
+ * Deliberately **linear**, which is the whole point: blocks accumulated this way add, so two
+ * half-year steps and one full-year step produce exactly the same fighter. `trainingBlocks` is
+ * convex and starts with a dead ramp, so ambient work priced through it was worth
+ * 0.59 blocks per *call* no matter how long the call was — measured, that is 15.5 blocks a year
+ * to a caller stepping a fortnight at a time and 0.59 to one stepping a year, a **26x** spread on
+ * the same fighter in the same game. Worse, the player chose it: a four-week training block
+ * developed the entire rest of the world three times faster than a twelve-week one.
+ *
+ * The value is calibrated on the *world it produces*, not on the formula it replaces, and the
+ * difference between those two matters. Reproducing the old nominal rate — 0.595 blocks every 56
+ * days, so 3.88 a year — needs 0.0746 per week, and that measurably shrinks the sport: fighters
+ * rated 70 or better fall from 45 to 38 over a decade. The reason is that the old flat block was
+ * also *double-counted*, handed to a fighter who had just fought on top of the camp they had
+ * already been paid for, however little of the span was left. So 0.1 per week is what actually
+ * reproduces the world — 44 fighters at 70+ against 45, two at 80+ against two, a best of 86.7
+ * against 86.2 — while every cadence now agrees instead of disagreeing by an order of magnitude.
+ *
+ * For scale: an eight-week fight camp is 1.36 blocks, so a week of ordinary work is worth a little
+ * under 60% of a week of camp, and a year of it is about four camps' worth on top of whatever
+ * camps actually happen.
+ */
+export const AMBIENT_BLOCKS_PER_WEEK = 0.1;
 
 export interface TrainingResult {
   fighter: Fighter;
@@ -556,7 +595,7 @@ export function applyTraining(input: TrainingInput): TrainingResult {
   const gains: Partial<Record<AttributeKey, number>> = {};
 
   const age = ageOn(fighter.birthDay, day);
-  const blocks = trainingBlocks(weeks);
+  const blocks = input.blocks ?? trainingBlocks(weeks);
   const lesson = activeLesson(fighter, day);
 
   // Splitting focus costs: two focuses get 65% each, not 100% each.
@@ -741,7 +780,7 @@ export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingFor
   const focuses = input.focuses.slice(0, 2);
 
   const age = ageOn(fighter.birthDay, day);
-  const blocks = trainingBlocks(weeks);
+  const blocks = input.blocks ?? trainingBlocks(weeks);
   const lesson = activeLesson(fighter, day);
   const focusShare = focuses.length > 1 ? 0.65 : 1;
 

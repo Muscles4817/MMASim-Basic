@@ -1,8 +1,9 @@
 # 27 — Confidence, what a fight teaches, and when learning stops
 
 **Status:** §1 (confidence), §2 (what a fight teaches) and §3 (the learning window) are all
-**built** — see §5, §6 and §7 for what each one measured. §7 also records two defects found on the
-way that are **not** fixed, and one proposal from §3.4 that measurement rejected.
+**built** — see §5, §6 and §7 for what each one measured. §7 also records one proposal from §3.4
+that measurement rejected. §8 is the first of §7.4's two recorded defects, now **fixed**. §9 is the
+next workstream and is **not started**.
 
 Three findings that came out of tracing created careers through the 2026 world. They are filed
 together because they are one story: **a career ends before it develops, and the things that
@@ -620,7 +621,7 @@ Two things it caught:
 
 ### 7.4 Two defects found and not fixed
 
-**`ageEveryone` trains a flat four weeks per _call_, not per elapsed week.** So the fighter you get
+**`ageEveryone` trains a flat four weeks per _call_, not per elapsed week.** _(Fixed — §8.)_ So the fighter you get
 out depends on how the caller chopped up the time — the same defect `recoverConfidence` was written
 to avoid. The app advances in camp-length spans, so this is four weeks per eight; the long-sim
 harness advances a _year_ per call, and every unbooked fighter in the world trains for one month of
@@ -634,3 +635,94 @@ it is empty, so `expect(best).toBeGreaterThan(68)` has never been evaluated. It 
 asserting once these changes let newcomers survive long enough to accumulate a record, which is how
 the `ageEveryone` defect above surfaced at all. A guard that passes vacuously is worse than no guard,
 because it reads as coverage.
+
+---
+
+## 8. Ambient work, priced per week — built
+
+§7.4's first defect. `ageEveryone` gave every unbooked fighter a flat four weeks of training **per
+call**, and priced it through `trainingBlocks`, which describes a _camp_: two weeks of ramp that
+produce nothing, then diminishing returns as a single peak is approached.
+
+Both halves are wrong for continuous work, and together they meant the world depended on how the
+caller happened to chop up the clock:
+
+| Caller span | Calls a year | Blocks per call | **Blocks a year** |
+| ----------- | -----------: | --------------: | ----------------: |
+| 14 days     |         26.1 |           0.595 |         **15.50** |
+| 28 days     |         13.0 |           0.595 |          **7.75** |
+| 56 days     |          6.5 |           0.595 |          **3.88** |
+| 84 days     |          4.3 |           0.595 |          **2.58** |
+| 365 days    |          1.0 |           0.595 |          **0.59** |
+
+Twenty-six times apart, on the same fighter in the same game — and the player was choosing it
+without knowing, because a four-week training block advances the world in four-week steps and a
+twelve-week one in twelve. It is also why the ramp made the naive fix worse: scaling `weeks` down
+to two produces _exactly zero_, because `trainingBlocks(2)` is 0.
+
+`applyTraining` now takes an optional `blocks`, and the ambient path passes
+`elapsedWeeks × AMBIENT_BLOCKS_PER_WEEK` — **linear**, so blocks add and the same elapsed time gives
+the same fighter however it arrives. Camps are untouched and still priced by `trainingBlocks`.
+
+### 8.1 Calibrating on the world, not on the formula
+
+The rate is set by what it _produces_, and the distinction is load-bearing. Reproducing the old
+nominal rate — 3.88 blocks a year — takes 0.0746 per week and measurably shrinks the sport, from 45
+fighters rated 70+ to 38 over a decade. The reason is that the old flat block was **also
+double-counted**: a fighter who had just fought got a full ambient block on top of the camp they had
+already been paid for, however little of the span was left.
+
+So 0.1 per week is what actually reproduces the world. For scale, a week of ordinary work is worth a
+little under 60% of a week of fight camp.
+
+| Ten world years, at 56-day steps | Before | After |
+| -------------------------------- | -----: | ----: |
+| Rated 70+                        |     45 |    44 |
+| Rated 80+                        |      2 |     2 |
+| Best fighter                     |   86.2 |  86.7 |
+
+And across cadences, which is the point:
+
+| Caller span | Before: median / 70+ | After: median / 70+ |
+| ----------- | -------------------: | ------------------: |
+| 28 days     |            52.9 / 63 |           50.6 / 51 |
+| 56 days     |            50.3 / 45 |           50.3 / 44 |
+| 84 days     |            48.4 / 37 |           50.2 / 44 |
+| 182 days    |            47.5 / 27 |           50.0 / 42 |
+| 365 days    |            46.0 / 20 |           49.1 / 35 |
+
+Median spread falls from 6.9 points to 1.5, and the 70+ count from a 3.2× spread to 1.5×.
+
+**The residual is not training.** `enforceActivity`, `playerActivity`, `scanForInbox` and
+`vacateAbandonedBelts` all still run once per _call_ rather than per elapsed step, so a
+year-per-call caller runs them a thirteenth as often. That is what is left of the 365-day column,
+and it is a smaller and separate defect of the same family.
+
+---
+
+## 9. The roster does not move — not started
+
+The talent fix (`generateNaturals`, curved to 97) put real potential in the world, and §8 lets it
+develop consistently. Over twenty years the top fifteen fighters in the sport are now entirely
+home-grown. But the sport's _shape_ is still wrong at the top, and it is no longer a progression
+problem:
+
+> After twenty years the leading promotion's roster is down to **50 fighters, median rating 54, with
+> five rated 70+** — while **71 fighters in the world** are rated 70+.
+
+The good fighters exist. They are not on the big show. `replenish` weights debutants to the bottom
+of the ladder, which is right, and nothing pulls the risen talent back up it.
+
+Two halves, and both are missing:
+
+**What a fighter wants.** Ambition and reputation should make somebody actively seek the biggest
+room that will have them — chase the better promotion, take the fight that gets them seen, leave a
+regional deal that has stopped serving them. Right now a fighter's promotion is close to an accident
+of where they debuted.
+
+**What a promotion wants.** A promotion should be _scouting_: identifying the best unsigned or
+poorly-signed fighters in a division and bidding real money for them, with the bid scaled to
+prestige and budget. `freeAgency.ts` resolves deals that expire; nothing goes looking.
+
+Until both exist, the leading promotion is a retirement home for whoever it happened to sign a
+decade ago, and the ladder the whole career mode is built around does not actually connect.

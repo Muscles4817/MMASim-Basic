@@ -26,6 +26,7 @@ import {
   applyAftermath,
   applyAgeing,
   applyTraining,
+  AMBIENT_BLOCKS_PER_WEEK,
   campInjuryChance,
   rollInjury,
   createRng,
@@ -1263,6 +1264,13 @@ function develop(
   lastSeen: Map<string, number>,
   /** Eight is a fight camp. A shorter block is the general work everyone does anyway. */
   weeks = 8,
+  /**
+   * Effective blocks, when this is ordinary between-bouts work rather than a camp.
+   *
+   * Left undefined for a fight camp, which is priced by `trainingBlocks(weeks)` as it always has
+   * been. `weeks` is still passed either way because camp injury risk reads it.
+   */
+  blocks?: number,
 ): Fighter {
   const gym = fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined;
   const coach = fighter.headCoachId
@@ -1275,6 +1283,7 @@ function develop(
     // this was and which pulled every fighter in the world toward the same shape (docs/19 §12).
     focuses: [pickTrainingFocus(rng, fighter)],
     weeks,
+    blocks,
     gym,
     coach,
     day,
@@ -1630,16 +1639,34 @@ function ageEveryone(
      * better fell from 48 to 11, so the top of the sport emptied out even while the population
      * held. A professional fighter between bouts is in a gym, and now the model says so.
      *
-     * Four weeks rather than eight: this is the general work everyone does, not a fight camp.
+     * Priced per elapsed week, not per call, and not as a camp.
      *
-     * A flat block per *call* rather than per elapsed week, and that is a known defect rather than
-     * a choice — see docs/27 §7. It makes the fighter you get out depend on how the caller chopped
-     * up the time: the app advances in camp-length spans, so this is four weeks per eight, but the
-     * long-sim harness advances a year per call and every unbooked fighter in the world therefore
-     * trains for one month of it. Scaling it is a real balance change and wants its own measured
-     * pass; it is recorded rather than smuggled in.
+     * This was a flat four weeks every time the function ran, which made the fighter you got out
+     * depend entirely on how the caller chopped up the clock — and `trainingBlocks` has a two-week
+     * ramp that produces nothing, so it was worth the same 0.59 blocks whether the call spanned a
+     * fortnight or a year. Measured across the callers that actually exist: 15.5 blocks a year at
+     * a fortnight a step against 0.59 at a year a step, a **26x** spread on the same fighter in
+     * the same game. The player chose it without knowing — a four-week training block developed
+     * the rest of the world three times faster than a twelve-week one.
+     *
+     * `AMBIENT_BLOCKS_PER_WEEK` is linear, so blocks add and the same elapsed time gives the same
+     * fighter however it arrives. Its value is set to reproduce exactly what the app's own dominant
+     * cadence already produced — 3.88 blocks a year — so ordinary play is unchanged and every other
+     * cadence now agrees with it rather than disagreeing by an order of magnitude. See docs/27 §8.
+     *
+     * `weeks` stays at four: it no longer prices the training, but camp injury risk still reads
+     * it, and this is ordinary work rather than a fight camp.
      */
-    const trained = develop(db, fighter, toDay, rng, new Map([[fighter.id as string, since]]), 4);
+    const elapsedWeeks = Math.max(0, toDay - since) / 7;
+    const trained = develop(
+      db,
+      fighter,
+      toDay,
+      rng,
+      new Map([[fighter.id as string, since]]),
+      4,
+      elapsedWeeks * AMBIENT_BLOCKS_PER_WEEK,
+    );
     if (trained !== fighter) db.fighters.upsert(trained as Fighter & Entity);
   }
 }
