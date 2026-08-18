@@ -932,8 +932,10 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
    * Note the ordering it relies on: `applyTraining` runs first and stamps `lastTrained`, so the
    * focus a fighter just worked shows zero neglect and everything they skipped does not.
    */
+  const neglected: Partial<Record<AttributeKey, number>> = {};
   for (const key of ATTRIBUTE_KEYS) {
     const neglect = neglectLoss({ fighter, key, day: toDay, years, age }) * rng.range(0.8, 1.2);
+    if (neglect > 0) neglected[key] = neglect;
     // Skills fade; they do not evaporate. Nobody forgets how to wrestle.
     take(key, neglect, Math.max(15, fighter.potential[key] * 0.5));
   }
@@ -970,10 +972,40 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
   /*
    * Name the neglected thing, because losing it is a consequence of a choice the player made and
    * a loss they cannot connect to a decision is just the number going down.
+   *
+   * Judged on the **annual rate**, and on the neglect charge specifically, because the first
+   * version of this was unreachable and slightly wrong at the same time.
+   *
+   * Unreachable: it read `losses[key] > 0.3`, and `losses` only moves when a whole integer point
+   * actually comes off — everything below that sits in `trainingCarry`. `applyAgeing` is called
+   * once per camp, which is a fifth of a year, so an attribute fading at a very believable point
+   * a year banks 0.2 and reports a loss of zero. Traced across three full careers, one of them a
+   * twenty-two-year specialist who never trained submissions, kicking, fight IQ or composure at
+   * all: the note fired **not once**. The player was never told the thing the mechanic exists to
+   * tell them.
+   *
+   * Wrong: `losses` is the total, so it includes age. A 38-year-old losing speed to time could be
+   * told nobody had worked on his speed, which is both false and unactionable.
    */
+  /*
+   * Half a point a year, roughly, which is set from measurement rather than taste.
+   *
+   * At the sport's median schedule — a camp every 150 days, so every attribute is carried by the
+   * general-maintenance term alone — a completely untrained quality fades at 0.46 a year (kicking)
+   * to 0.70 (cardio) at 26, and half again as fast at 38. Over a career that is ten points, which
+   * the player should be told about. Fight IQ and composure sit at 0.12 and 0.09 and are correctly
+   * left unmentioned: they are barely moving, and a report that names everything names nothing.
+   *
+   * It also has to stay quiet for somebody who is actually busy. At three camps a year nothing
+   * clears this bar until the fighter is in their late thirties, which is right — a note that
+   * fires every camp is noise, not information.
+   */
+  const NAMEABLE_NEGLECT_PER_YEAR = 0.35;
   const rusted = ATTRIBUTE_KEYS.filter(
-    (key) => (losses[key] ?? 0) > 0.3 && neglectDays(fighter, key, toDay) > NEGLECT_GRACE_DAYS * 2,
-  ).sort((a, b) => (losses[b] ?? 0) - (losses[a] ?? 0));
+    (key) =>
+      (neglected[key] ?? 0) / years >= NAMEABLE_NEGLECT_PER_YEAR &&
+      neglectDays(fighter, key, toDay) > NEGLECT_GRACE_DAYS * 2,
+  ).sort((a, b) => (neglected[b] ?? 0) - (neglected[a] ?? 0));
   if (rusted.length > 0) {
     notes.push(
       `Nobody has worked on ${ATTRIBUTE_META[rusted[0]!].label.toLowerCase()} in a long time, and it shows.`,

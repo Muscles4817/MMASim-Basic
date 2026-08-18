@@ -12,5 +12,8 @@
       "@mmasim/data": ["packages/data/src/index.ts"]
     }
   },
-  "include": ["tests/**/*"]
+  // `tools` too: it is not a test tier, but `career-trace.ts` imports the engine, the data layer
+  // and the app's own career loop, and a generator that silently stops compiling produces a
+  // document that silently stops matching the model.
+  "include": ["tests/**/*", "tools/**/*"]
 }

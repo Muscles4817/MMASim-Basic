@@ -157,6 +157,34 @@ describe('through the real functions', () => {
     expect(result.notes.join(' ')).toMatch(/nobody has worked on/i);
   });
 
+  it('names it on a camp-length span, which is the only span the game ever asks about', () => {
+    /*
+     * The regression this exists for. The note was gated on `losses[key] > 0.3`, and `losses`
+     * only moves when a whole integer point comes off — everything under that is banked in
+     * `trainingCarry`. `applyAgeing` is called once per camp, a fifth of a year, so an attribute
+     * fading at a point a year reported a loss of zero every single time. Traced across three
+     * full careers, including a twenty-two-year specialist who never trained submissions,
+     * kicking, fight IQ or composure at all, it fired **not once**.
+     *
+     * So the span here is a real camp rather than a convenient year, and the claim is that the
+     * player is told.
+     */
+    const CAMP = 70;
+    const f = trained({ wrestling: 0 }, { age: 31 });
+    const result = applyAgeing(f, 4 * YEAR, 4 * YEAR + CAMP, createRng('camp'));
+    expect(result.notes.join(' ')).toMatch(/nobody has worked on/i);
+  });
+
+  it('blames neglect for neglect, and never for getting old', () => {
+    // `losses` is the total, so gating on it told a 38-year-old that nobody had worked on his
+    // speed. Speed is not on the neglect list at all — age took it, and saying otherwise is both
+    // false and unactionable.
+    const veteran = trained({ boxing: 0, conditioning: 0, wrestling: 0, submissions: 0, strategy: 0 }, { age: 38 });
+    const result = applyAgeing(veteran, 10 * YEAR, 11 * YEAR, createRng('old'));
+    expect(result.losses.speed ?? 0).toBeGreaterThan(0);
+    expect(result.notes.join(' ')).not.toMatch(/nobody has worked on speed/i);
+  });
+
   it('never takes a skill below half of what the fighter could be', () => {
     // Skills fade; they do not evaporate. Nobody forgets how to wrestle.
     let f = trained({ wrestling: 0 }, { age: 30 });
