@@ -741,6 +741,21 @@ function approachWeight(approach: GamePlan['approach'], action: string): number 
     wrestle: { strike: 0.7, kick: 0.5, takedown: 2.0, clinch: 1.3, advance: 1.2, submit: 1.0 },
     grind: { strike: 0.7, kick: 0.5, takedown: 1.3, clinch: 2.0, advance: 1.4, submit: 0.8 },
     pointFight: { strike: 1.1, kick: 1.1, takedown: 1.0, clinch: 0.8, advance: 0.8, submit: 0.6 },
+    /*
+     * The submission specialist's row, and the reason it had to exist.
+     *
+     * `pickApproach` cascaded wrestling-edge → clinch-edge → striking, and a fighter whose game is
+     * `submissions` and `scrambling` has neither of the first two — so **the submission art fell
+     * through to the striking arm and was handed `pointFight`, whose `submit: 0.6` is the lowest
+     * value in this table.** The engine was telling its most dangerous grappler to point-fight.
+     * Measured, giving the jiu-jitsu exemplar an approach that lets it submit moved its
+     * `submissionMix` from 0.470 to 0.604 and cleared 0.20 against *both* of the pairs the styles
+     * programme was stuck on (docs/19 §13.8).
+     *
+     * Takedowns above `finish`'s but below `wrestle`'s: this fighter needs the floor and is not
+     * especially good at getting there, which is the honest shape of the art in MMA.
+     */
+    submit: { strike: 0.7, kick: 0.55, takedown: 1.2, clinch: 0.9, advance: 1.6, submit: 2.3 },
     finish: { strike: 1.4, kick: 1.2, takedown: 0.9, clinch: 0.8, advance: 1.3, submit: 1.5 },
   };
   return table[approach][action] ?? 1;

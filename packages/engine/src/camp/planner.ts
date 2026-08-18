@@ -67,6 +67,18 @@ function pickApproach(fighter: Fighter, opponent: Fighter): GamePlan['approach']
   const strikingEdge = Math.max(a.strikingOffence, a.kicking) - o.strikingDefence;
   const clinchEdge = derived.clinchOffence - deriveRatings(o).clinchDefence;
 
+  /*
+   * The submission branch, and it comes first because it is the one nothing else could reach.
+   *
+   * A fighter whose game is `submissions` and `scrambling` has no wrestling edge and no clinch
+   * edge, so every cascade below this one fell through to the striking arm and handed the
+   * submission art `pointFight` — the approach that suppresses submissions harder than any other
+   * (docs/19 §13.8). Gated on the submission game being genuinely *this fighter's* game rather
+   * than merely present, so a well-rounded wrestler does not get it.
+   */
+  const submissionGame = (a.submissions + a.scrambling) / 2;
+  if (submissionGame > 70 && submissionGame > derived.chainWrestling + 4) return 'submit';
+
   // Grappling first, because a takedown ends the striking exchange and the reverse is not true.
   if (wrestlingEdge > strikingEdge + 6) {
     // A fighter better in the tie-up than on the shot is told to work there. Before this, every

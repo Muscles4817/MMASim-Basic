@@ -21,6 +21,7 @@ export const APPROACHES = [
   'wrestle',
   'grind',
   'pointFight',
+  'submit',
   'finish',
 ] as const;
 export type Approach = (typeof APPROACHES)[number];
@@ -56,6 +57,11 @@ export const APPROACH_META: Readonly<Record<Approach, ApproachMeta>> = {
     key: 'pointFight',
     label: 'Point Fight',
     blurb: 'Bank rounds, take no risks, get out with the decision.',
+  },
+  submit: {
+    key: 'submit',
+    label: 'Hunt the Submission',
+    blurb: 'Get it to the floor and go looking. Position first, but never for its own sake.',
   },
   finish: {
     key: 'finish',

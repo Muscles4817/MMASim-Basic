@@ -26,7 +26,7 @@
  * kickboxing       0.412      0.131      0.184   0.692    0.178  0.168     0.247
  * karate           0.451      0.144      0.191   0.633    0.245  0.177     0.277
  * wrestling        0.232      0.045      0.299   0.399    0.427  0.105     0.301
- * jiuJitsu         0.365      0.070      0.183   0.470    0.270  0.223     0.356
+ * jiuJitsu         0.336      0.068      0.320   0.594    0.343  0.201     0.310
  * judo             0.277      0.051      0.284   0.403    0.365  0.298     0.302
  * ```
  *
@@ -219,8 +219,10 @@ describe('G1 — separation between the six disciplines', () => {
      * pairs, none of them meeting G1, and the reason is structural rather than tuned — two arts
      * that want the same phase of the fight and reach for it with the same intents can only be
      * told apart by *where inside that phase* they operate, and the engine has one standing
-     * position. Measured: kickboxing/karate 0.067, jiu-jitsu/judo 0.100, wrestling/jiu-jitsu 0.156,
-     * wrestling/judo 0.193 — the last of those a hair under the target and the work of §13.7.
+     * position. Measured: kickboxing/karate 0.067, jiu-jitsu/judo 0.100, wrestling/jiu-jitsu 0.195,
+     * wrestling/judo 0.193, jiu-jitsu/judo 0.191 — **all three grappling pairs within a hundredth
+     * of the target**, from 0.077 / 0.156 / 0.101 before §13.7 and §13.8. The striking family has
+     * not moved and is where 6A is aimed.
      *
      * When phase 6's positions land this breaks. Invert it then to the G1 target for every pair.
      */
@@ -254,6 +256,11 @@ describe('G1 — separation between the six disciplines', () => {
      * it did — 0.072 to 0.193, on the fence-versus-floor axis that change made meaningful. And this
      * pair fell back to 0.100, because judo moved across the space rather than out of it: away from
      * the wrestler and toward the jiu-jitsu player.
+     *
+     * Then §13.8 found what was actually holding it: **jiu-jitsu was being handed the game plan
+     * that suppresses submissions hardest**, because `pickApproach` had no branch a submission
+     * specialist could reach. Giving it one took this pair to **0.191** — past where it stood
+     * before either change, and without costing the wrestling/judo gap a thing.
      *
      * **That is the finding, and it is worth more than either number.** Judo does not occupy its own
      * point in the space this engine models — it sits between the shooting art and the submission
