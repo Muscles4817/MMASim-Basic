@@ -128,8 +128,17 @@ export function effectiveDurability(c: Combatant): number {
   const base = c.attrs.durability;
   const traits = c.fighter.traits;
 
-  // Career trauma erodes the ceiling permanently.
-  const careerErosion = (c.fighter.condition.headTrauma / 100) * 22;
+  /*
+   * Career trauma erodes the ceiling — and now some of that erosion is already permanent.
+   *
+   * Reduced from 22 because doc 25 § 4 makes trauma take durability off the stored attribute
+   * through `applyAgeing`. Leaving this where it was would charge a damaged fighter twice for the
+   * same damage: once on the card and once again on the night. What changes is the *permanence*,
+   * not the total — a fighter who has just been in a war is hurt about as much as before, and one
+   * who has been in wars for a decade is hurt considerably more, because part of it never came
+   * back.
+   */
+  const careerErosion = (c.fighter.condition.headTrauma / 100) * 14;
   // Tonight's damage erodes it further, and compounds — the tenth clean shot lands on a
   // worse chin than the first.
   const tonightErosion = (c.damage.head / 100) * 30 * traitMul(traits, 'durabilityDecay');

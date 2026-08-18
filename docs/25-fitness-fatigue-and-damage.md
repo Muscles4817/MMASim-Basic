@@ -1,8 +1,7 @@
 # 25 — Fitness, fatigue, and what damage actually costs
 
-**Status:** **phases 1-3 shipped** (§3.1 freshness, §3.2 intensity, §3.3 the matrix, §3.4 fight
-night, §3.5 exposure, §3.6 KO to concussion, §3.7 the world, §3.8 the display); §4 remains a
-proposal. Every number in §1 was measured against this codebase at the commit that
+**Status:** **complete — all four phases shipped.** §§13 records what §4 cost; §§9-12 record the
+phases before it. Every number in §1 was measured against this codebase at the commit that
 merged doc 24; nothing here is estimated without saying so. §9 records what phase 1 actually cost.
 
 > **The short version.** Four observations turn out to be one missing idea. A career has no
@@ -747,3 +746,56 @@ and one who had tapered walked to the cage identically. Starting fatigue is now 
 freshness and capped at **0.25** — a quarter of the way to gassed at nothing left in the tank. The
 cap is the guard against the whole idea: freshness must change _where you begin_, not how fast you
 tire, or it becomes a second hidden cardio attribute deciding fights from a menu.
+
+---
+
+## 13. Phase 4, as shipped
+
+Trauma now takes durability off the card, not just off the night.
+
+### What it replaces
+
+Trauma's entire effect was at fight time: `effectiveDurability` subtracted up to 22 points of chin
+and `retirementUrge` read it. The number on a fighter's card never moved however many wars they had
+been in, so two fighters the same age — one with 39 head trauma and one with 5 — declined
+identically.
+
+It is deliberately **not** a higher `DECLINE_RATE` for durability, which would charge every fighter
+equally for damage only some of them took:
+
+```
+traumaDecline = TRAUMA_DECLINE_PER_YEAR × (headTrauma / 100) ^ 1.2 × years
+```
+
+Convex, so the first twenty points of trauma cost almost nothing and the last twenty cost a great
+deal. The fighter who won by absorbing and returning pays for it; the one who never got hit does
+not — which is §3.5's exposure model showing up twenty years later.
+
+### The double-charge, avoided
+
+`effectiveDurability`'s career term drops from **22 to 14**. Leaving it would have charged a damaged
+fighter twice for the same damage, once on the card and once again on the night. What changes is the
+_permanence_, not the immediate total.
+
+Measured on a durability-70 fighter aged 26 to 36:
+
+| Head trauma | Durability lost | Chin at fight time, after ten years |
+| ----------: | --------------: | ----------------------------------: |
+|           0 |               4 |                                66.0 |
+|          40 |               8 |                                56.4 |
+|          80 |          **12** |                            **45.8** |
+
+Damage triples the durability decline across a decade. A fighter who has just been in a war is hurt
+about as much as before; one who has been in wars for ten years is hurt considerably more, because
+part of it never came back.
+
+### It did not cost the careers
+
+`TRAUMA_DECLINE_PER_YEAR = 1.1` is bounded on both sides. Large enough that a career of wars is
+visibly different from a career of decisions; small enough that doc 24's traced careers keep their
+peaks — 65.0, 65.7 and 55.7 against 64.6, 66.0 and 55.7 before it. That was §5's stated calibration
+target and it is met without moving the long-sim's champion bar, which mattered because this is the
+third downward force on a model that already has age and neglect.
+
+Decline observes the same floor age decline does: `max(12, potential × 0.4)`. A former elite is
+diminished, not a novice.

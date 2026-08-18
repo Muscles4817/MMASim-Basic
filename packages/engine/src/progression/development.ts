@@ -920,6 +920,19 @@ const DECLINE_RATE: Readonly<Record<AttributeKey, number>> = {
 /** Rating points lost per year at one year past peak, before per-attribute rates. */
 const BASE_DECLINE_PER_YEAR = 1.1;
 
+/**
+ * Durability lost per year at maximum head trauma. Doc 25 § 4.
+ *
+ * Swept rather than picked. It has to be large enough that a career of wars is visibly different
+ * from a career of decisions, and small enough that doc 24's traced careers keep their peaks —
+ * this is the third downward force on a model that already has age and neglect, and the long-sim's
+ * champion bar has moved once already.
+ */
+const TRAUMA_DECLINE_PER_YEAR = 1.1;
+
+/** Convexity. The first twenty points of trauma are nearly free; the last twenty are not. */
+const TRAUMA_DECLINE_CURVE = 1.2;
+
 export interface AgeingResult {
   fighter: Fighter;
   losses: Partial<Record<AttributeKey, number>>;
@@ -989,6 +1002,26 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
     if (neglect > 0) neglected[key] = neglect;
     // Skills fade; they do not evaporate. Nobody forgets how to wrestle.
     take(key, neglect, Math.max(15, fighter.potential[key] * 0.5));
+  }
+
+  /*
+   * What the damage took, on top of what the years took. Doc 25 § 4.
+   *
+   * Durability only, and deliberately not by raising its `DECLINE_RATE` — that would charge every
+   * fighter equally for damage only some of them took. Two fighters the same age, one with 39 head
+   * trauma and one with 5, previously declined identically: trauma's entire effect was eroding the
+   * chin *at fight time* through `effectiveDurability` and pushing `retirementUrge`, so it never
+   * touched the number on the card.
+   *
+   * Convex, so the first twenty points of trauma cost almost nothing and the last twenty cost a
+   * great deal. That is how the real thing is understood, and it means the fighter who won by
+   * absorbing and returning pays for it while the one who never got hit does not — doc 25 § 3.5's
+   * exposure model showing up twenty years later.
+   */
+  const trauma = fighter.condition.headTrauma / 100;
+  if (trauma > 0) {
+    const traumaDecline = TRAUMA_DECLINE_PER_YEAR * trauma ** TRAUMA_DECLINE_CURVE * years;
+    take('durability', traumaDecline, Math.max(12, fighter.potential.durability * 0.4));
   }
 
   for (const key of ATTRIBUTE_KEYS) {

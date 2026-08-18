@@ -19,6 +19,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../core/rng.js';
 import { makeFighter } from '../testing/fixtures.js';
+import { applyAgeing } from './development.js';
 import { retirementReason, retirementUrge, shouldRetire } from './retirement.js';
 import type { Fighter } from '../domain/fighter.js';
 
@@ -162,5 +163,62 @@ describe('the decision itself', () => {
   it('is permanent once taken', () => {
     const retired = { ...at({ age: 24 }), retiredDay: 0 };
     expect(shouldRetire(retired, 100, createRng('x'))).toBe(true);
+  });
+});
+
+describe('damage takes the chin off the card, not just off the night', () => {
+  /*
+   * Doc 25 § 4. Trauma's entire effect used to be at fight time — `effectiveDurability` subtracted
+   * up to 22 points of chin and `retirementUrge` read it — so the number on a fighter's card never
+   * moved however many wars they had been in. Two fighters the same age, one with 39 head trauma
+   * and one with 5, declined identically.
+   *
+   * Here rather than in its own file because it is the same question this suite already asks: what
+   * a career costs, and what ends it.
+   */
+  const over = (years: number, headTrauma: number): number => {
+    let f = makeFighter({
+      age: 26,
+      headTrauma,
+      attributes: { durability: 70 },
+      potential: { durability: 70 },
+    }) as Fighter;
+    for (let y = 0; y < years; y++) {
+      f = applyAgeing(f, y * 365, (y + 1) * 365, createRng(`d${headTrauma}:${y}`)).fighter;
+    }
+    return 70 - f.attributes.durability;
+  };
+
+  it('costs a damaged fighter far more durability than a clean one', () => {
+    expect(over(10, 80)).toBeGreaterThan(over(10, 0) * 2);
+  });
+
+  it('is convex, so the first twenty points of trauma are nearly free', () => {
+    // How the real thing is understood: a little accumulated damage is not the same problem as a
+    // lot, and a linear term would say it was.
+    const early = over(10, 20) - over(10, 0);
+    const late = over(10, 80) - over(10, 60);
+    expect(late).toBeGreaterThan(early);
+  });
+
+  it('leaves an undamaged fighter exactly where age alone leaves them', () => {
+    const clean = makeFighter({ age: 26, headTrauma: 0 }) as Fighter;
+    const aged = applyAgeing(clean, 0, 365 * 5, createRng('clean')).fighter;
+    const control = applyAgeing(clean, 0, 365 * 5, createRng('clean')).fighter;
+    expect(aged.attributes.durability).toBe(control.attributes.durability);
+  });
+
+  it('does not evaporate a chin, however long the career', () => {
+    // The same floor age decline observes. A former elite is diminished, not a novice.
+    let f = makeFighter({
+      age: 26,
+      headTrauma: 95,
+      attributes: { durability: 80 },
+      potential: { durability: 80 },
+    }) as Fighter;
+    for (let y = 0; y < 20; y++) {
+      f = applyAgeing(f, y * 365, (y + 1) * 365, createRng(`f${y}`)).fighter;
+    }
+    expect(f.attributes.durability).toBeGreaterThanOrEqual(Math.max(12, 80 * 0.4));
   });
 });
