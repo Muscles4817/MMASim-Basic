@@ -2,9 +2,9 @@
   "name": "MMA Sim",
   "short_name": "MMA Sim",
   "description": "A deep MMA simulation: fight, coach, or run a promotion.",
-  "id": "/",
-  "start_url": "/",
-  "scope": "/",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "orientation": "portrait-primary",
   "background_color": "#0e0f12",
@@ -12,13 +12,13 @@
   "categories": ["games", "sports"],
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "./icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/icon-maskable.svg",
+      "src": "./icon-maskable.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "maskable"

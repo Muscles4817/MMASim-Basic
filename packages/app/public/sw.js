@@ -27,10 +27,22 @@
 const VERSION = 'v1';
 const SHELL_CACHE = `mmasim-shell-${VERSION}`;
 const ASSET_CACHE = `mmasim-assets-${VERSION}`;
-const SHELL_URL = '/index.html';
+
+/**
+ * Where this worker is serving from.
+ *
+ * Everything below used to be written against `/`, which is true when the app is served from a
+ * domain root and false on GitHub Pages, where a project site lives at `/<repo>/`. A worker whose
+ * shell cache holds `/index.html` on a site served at `/mmasim/` caches the wrong document, and
+ * its asset test never matches — so offline support silently does nothing. Deriving it from
+ * `self.registration.scope` keeps one worker correct at either address.
+ */
+const BASE = new URL(self.registration.scope).pathname;
+const SHELL_URL = `${BASE}index.html`;
+const ASSET_PREFIX = `${BASE}assets/`;
 
 /** The bare minimum needed to open the game with no network. */
-const SHELL_FILES = ['/', SHELL_URL, '/manifest.webmanifest', '/icon.svg'];
+const SHELL_FILES = [BASE, SHELL_URL, `${BASE}manifest.webmanifest`, `${BASE}icon.svg`];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -77,7 +89,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  if (url.pathname.startsWith('/assets/')) {
+  if (url.pathname.startsWith(ASSET_PREFIX)) {
     event.respondWith(cacheFirst(request, ASSET_CACHE));
     return;
   }
@@ -107,7 +119,7 @@ async function handleNavigation(event) {
     return (
       (await cache.match(event.request)) ??
       (await cache.match(SHELL_URL)) ??
-      (await cache.match('/')) ??
+      (await cache.match(BASE)) ??
       new Response('Offline, and nothing cached yet. Reconnect once to install the game.', {
         status: 503,
         headers: { 'Content-Type': 'text/plain' },

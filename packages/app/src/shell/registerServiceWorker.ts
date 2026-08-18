@@ -19,7 +19,10 @@ export function registerServiceWorker(onUpdateReady?: () => void): void {
 
   window.addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/sw.js', { scope: '/' })
+      // Relative to the deployed base rather than to the origin root: on GitHub Pages the app
+      // lives at `/<repo>/`, and a worker registered at `/sw.js` there is both a 404 and out of
+      // scope. `BASE_URL` is what Vite substituted at build time.
+      .register(`${import.meta.env.BASE_URL}sw.js`, { scope: import.meta.env.BASE_URL })
       .then((registration) => {
         // Already waiting when we arrived — a previous session installed it and never
         // reloaded. This is the common case, and forgetting it means the update prompt

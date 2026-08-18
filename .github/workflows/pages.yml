@@ -1,0 +1,64 @@
+# Build the app and publish it to GitHub Pages.
+#
+# The base path is taken from the repository name rather than hard-coded, because a project site
+# is served from `https://<user>.github.io/<repo>/` and the whole PWA layer — service worker
+# scope, manifest scope, icon paths — is written relative to it. Renaming the repo therefore does
+# not break the deploy, and nothing here needs editing to work in a fork.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master, main]
+  # So a deploy can be re-run without an empty commit.
+  workflow_dispatch:
+
+# Pages needs these; the default token is read-only.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deploys race. `cancel-in-progress: false` so a queued deploy finishes rather than
+# being dropped — a half-published site is worse than a slow one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The gate. A build that publishes a broken game is worse than one that fails loudly, and
+      # the suite is ~2 minutes.
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Build
+        env:
+          VITE_BASE: /${{ github.event.repository.name }}/
+        run: npm run build --workspace @mmasim/app
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/app/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
