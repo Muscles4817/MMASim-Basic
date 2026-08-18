@@ -3,7 +3,7 @@
  *
  * The model this replaces was `won ? 12 : -16 * lossImpactMultiplier(...)` with no recovery
  * term anywhere in the codebase. Every test here is a property that model could not satisfy —
- * see docs/25 §1.
+ * see docs/27 §1.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -121,7 +121,7 @@ describe('the person it happened to', () => {
 
   it('reads the traits that were written to describe exactly this', () => {
     const plain = -swing({ method: 'ko', scoreMargin: undefined });
-    // `durableMind` is acquired by surviving a knockout and, until docs/25, had no bearing on
+    // `durableMind` is acquired by surviving a knockout and, until docs/27, had no bearing on
     // what that knockout cost.
     expect(-swing({ method: 'ko', scoreMargin: undefined, traits: ['durableMind'] })).toBeLessThan(
       plain,

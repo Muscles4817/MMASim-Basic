@@ -1,7 +1,7 @@
 /**
  * What a fight told a fighter about themselves.
  *
- * The claim under test is docs/25 §2.4: a fight grants direction rather than points, the
+ * The claim under test is docs/27 §2.4: a fight grants direction rather than points, the
  * direction is already fully recorded in the stats, and it does not depend on who won.
  */
 

@@ -1,7 +1,7 @@
 /**
  * What a fight teaches, and what a fight then points the next camp at.
  *
- * Two mechanics from docs/25 §2. `applyRingExperience` is the part of a fight a gym cannot give
+ * Two mechanics from docs/27 §2. `applyRingExperience` is the part of a fight a gym cannot give
  * you — octagon time, landing on fight IQ and composure and on nothing else. `LESSON_BONUS` is
  * the other half: a fight names a hole, and the camp that follows works it harder.
  *

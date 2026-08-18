@@ -1,4 +1,4 @@
-# 25 — Confidence, what a fight teaches, and when learning stops
+# 27 — Confidence, what a fight teaches, and when learning stops
 
 **Status:** §1 (confidence), §2 (what a fight teaches) and §3 (the learning window) are all
 **built** — see §5, §6 and §7 for what each one measured. §7 also records two defects found on the
@@ -264,9 +264,12 @@ Measured from doc 24's own tables, share of total career growth banked before tu
 
 | Fighter       | Debut age | Growth to 30 | Growth 30 → peak | Before 30 |
 | ------------- | --------: | -----------: | ---------------: | --------: |
-| Marcus Bell   |        22 |         +9.0 |             +3.3 |   **73%** |
-| Danil Orlov   |        22 |         +8.5 |             +2.8 |   **75%** |
-| Tom Whitfield |        26 |         +1.8 |             +2.2 |       45% |
+| Marcus Bell   |        23 |        +10.9 |             +2.5 |   **81%** |
+| Danil Orlov   |        23 |         +8.8 |             +2.8 |   **76%** |
+| Tom Whitfield |        27 |         +2.1 |             +1.8 |       54% |
+
+The share is inflated by there simply being more career before 30 than after it, which is why §7.1
+measures the _rate_ per year instead. It is the right order of magnitude either way.
 
 ### 3.2 No, people do not stop learning at 30
 

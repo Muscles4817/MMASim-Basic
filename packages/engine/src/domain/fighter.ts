@@ -83,7 +83,7 @@ export interface FightRecordEntry {
    * A fight does not make anybody better at wrestling — being outwrestled for fifteen minutes
    * tells them, expensively and in public, that their wrestling is the problem. The gain comes
    * from the camp that follows, which is why this is a *direction* rather than a gain: see
-   * docs/25 §2.4, `business/lessons.ts` for how it is read off the stats, and
+   * docs/27 §2.4, `business/lessons.ts` for how it is read off the stats, and
    * `progression/development.ts:LESSON_BONUS` for what it is worth.
    *
    * Optional and frequently absent. A fight in which nothing was clearly exposed teaches
@@ -131,6 +131,14 @@ export interface Condition {
   stress: number;
   /** 0–1. Sharpness from recent competition; decays during long layoffs. */
   ringRust: number;
+  /**
+   * 0–100. How recovered they are right now. Falls with training and fighting, returns with time.
+   *
+   * Optional because every save written before doc 25 phase 2 lacks it, and absent must mean
+   * *fresh* rather than *empty* — read it through `freshnessOf`, never directly. See
+   * `health/freshness.ts`, which also explains why this is not the same thing as `fatigue`.
+   */
+  freshness?: number;
 }
 
 /** A fighter's estimated ceiling in one attribute, as the *engine* knows it (true values). */
@@ -326,7 +334,15 @@ export function emptyRecordSummary(): RecordSummary {
 }
 
 export function freshCondition(): Condition {
-  return { fatigue: 0, headTrauma: 0, bodyWear: 0, confidence: 60, stress: 10, ringRust: 0 };
+  return {
+    fatigue: 0,
+    headTrauma: 0,
+    bodyWear: 0,
+    confidence: 60,
+    stress: 10,
+    ringRust: 0,
+    freshness: 100,
+  };
 }
 
 const KO_METHODS: ReadonlySet<FinishMethod> = new Set(['ko', 'tko', 'doctorStoppage']);

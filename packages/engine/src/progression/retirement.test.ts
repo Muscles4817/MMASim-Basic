@@ -1,10 +1,19 @@
 /**
- * Why a career ends, and whether the game can say so honestly.
+ * When a career ends, and why.
  *
- * Two things are under test. That elapsed time actually restores self-belief — the omission
- * docs/25 §1 traced to careers ending at twenty-four — and that the reason a fighter is given
- * is read off the same arithmetic that made the decision, rather than from a separate ladder of
- * thresholds the decision never consulted.
+ * Untested until now, which is how it came to have two defects that only showed up when somebody
+ * played whole careers and counted the endings. Measured across three twenty-year worlds — 525
+ * retirements:
+ *
+ * - **31% happened before 28.** A five-fight skid with the confidence gone produced an identical
+ *   urge at 23 and at 34, both landing on 23.2% per fight, because nothing in the function knew
+ *   how much career was left to come back to. Doc 25 phase 1 made that far worse by giving careers
+ *   real disruption — injuries, suspensions, cancelled fights — while leaving the skid as the only
+ *   exit any of it could lead to.
+ * - **Body wear was dead code.** `wearTerm` began at 50 and the highest body wear ever observed at
+ *   retirement was 51. `traumaTerm` began at 45 against a 90th percentile of 63, so it fired for
+ *   barely the top decile, and the sport's most characteristic ending — being told to stop — was
+ *   arithmetically almost unreachable.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -17,12 +26,213 @@ import {
   retirementDrivers,
   retirementReason,
   retirementUrge,
+  shouldRetire,
 } from './retirement.js';
 import { confidenceBaseline } from '../domain/personality.js';
 import type { Fighter } from '../domain/fighter.js';
 
 const YEAR = 365;
 const rng = () => createRng('retirement-test');
+
+/** A fighter at a given point in a career, with the four things the decision reads. */
+function at(o: {
+  age: number;
+  streak?: number;
+  confidence?: number;
+  headTrauma?: number;
+  bodyWear?: number;
+}): Fighter {
+  const base = makeFighter({ age: o.age, headTrauma: o.headTrauma ?? 5 });
+  return {
+    ...base,
+    condition: {
+      ...base.condition,
+      confidence: o.confidence ?? 60,
+      bodyWear: o.bodyWear ?? 5,
+    },
+    summary: { ...base.summary, streak: o.streak ?? 0 },
+  };
+}
+
+/** Urge is not a probability; `shouldRetire` squares it. This is what a fight actually costs. */
+const perFight = (f: Fighter) => retirementUrge(f, 0) ** 2;
+
+describe('a bad run means something different at 23 than at 35', () => {
+  it('does not end a young fighter’s career over four losses', () => {
+    /*
+     * The sport is full of people who were 4-6 at 24 and 19-8 at 32. What a bad run at 23 gets you
+     * is cut and dropped a level, not retired — and if the game cannot express that, then every
+     * injury, suspension and cancelled fight doc 25 added routes to the same place.
+     */
+    expect(perFight(at({ age: 23, streak: -4, confidence: 10 }))).toBeLessThan(0.03);
+  });
+
+  it('ends a veteran’s over the same four', () => {
+    expect(perFight(at({ age: 35, streak: -4, confidence: 10 }))).toBeGreaterThan(0.1);
+  });
+
+  it('weighs the identical skid several times harder late than early', () => {
+    // The specific defect: these two were exactly equal, to three significant figures.
+    const young = retirementUrge(at({ age: 23, streak: -5, confidence: 5 }), 0);
+    const old = retirementUrge(at({ age: 34, streak: -5, confidence: 5 }), 0);
+    expect(old).toBeGreaterThan(young * 2.5);
+  });
+
+  it('slides rather than switching, so nothing changes on a birthday', () => {
+    const urges = [24, 27, 30, 33, 36].map((age) =>
+      retirementUrge(at({ age, streak: -3, confidence: 20 }), 0),
+    );
+    for (let i = 1; i < urges.length; i++) {
+      expect(urges[i], `${i}`).toBeGreaterThan(urges[i - 1]!);
+    }
+  });
+});
+
+describe('damage ends careers', () => {
+  it('retires a badly damaged fighter who is winning and happy', () => {
+    /*
+     * No skid, no confidence problem, not old. Only the accumulated damage — which is exactly the
+     * fighter the sport tells to stop, and which the old thresholds could not reach: `traumaTerm`
+     * started at 45 against a measured 90th percentile of 63.
+     */
+    const damaged = at({ age: 30, headTrauma: 72, bodyWear: 55, confidence: 65 });
+    const fresh = at({ age: 30, headTrauma: 5, bodyWear: 5, confidence: 65 });
+    expect(perFight(damaged)).toBeGreaterThan(0.1);
+    expect(perFight(damaged)).toBeGreaterThan(perFight(fresh) * 4);
+  });
+
+  it('reads body wear at all, which it did not', () => {
+    // `wearTerm` began at 50 and the highest body wear ever seen at retirement was 51.
+    const worn = at({ age: 30, bodyWear: 45 });
+    const sound = at({ age: 30, bodyWear: 5 });
+    expect(retirementUrge(worn, 0)).toBeGreaterThan(retirementUrge(sound, 0));
+  });
+
+  it('reads trauma from where trauma actually accumulates', () => {
+    // p50 at retirement is 17 and p90 is 63, so a threshold above 45 is a threshold for nobody.
+    expect(retirementUrge(at({ age: 30, headTrauma: 40 }), 0)).toBeGreaterThan(
+      retirementUrge(at({ age: 30, headTrauma: 10 }), 0),
+    );
+  });
+
+  it('still lets a clean fighter fight on into their thirties', () => {
+    // The counterweight. If damage is the new exit it must not become an exit for everybody.
+    expect(perFight(at({ age: 32, headTrauma: 8, bodyWear: 6, confidence: 70 }))).toBeLessThan(0.1);
+  });
+});
+
+describe('age still ends everything', () => {
+  it('is close to certain past the hard age, whatever the fighter wants', () => {
+    // Bodies do not negotiate: past `HARD_AGE` the personality discount stops applying.
+    const stubborn = {
+      ...at({ age: 50, confidence: 90 }),
+      personality: { ...makeFighter().personality, ambition: 95, resilience: 95 },
+    };
+    expect(retirementUrge(stubborn, 0)).toBeGreaterThan(0.6);
+  });
+
+  it('leaves a 22-year-old with a clean record essentially untouched', () => {
+    expect(perFight(at({ age: 22 }))).toBeLessThan(0.01);
+  });
+});
+
+describe('the reason names the thing that actually decided it', () => {
+  it('says medical where the urge came from damage', () => {
+    /*
+     * The threshold here was 70 while the urge starts reading trauma at 25, so a fighter genuinely
+     * driven out by damage was told they had retired on a losing run — the skid being the only
+     * label that fitted. Measured after aligning them: medical went from 5% of all retirements to
+     * 20%, which is a sport rather than a rounding error.
+     */
+    expect(retirementReason(at({ age: 33, headTrauma: 60, streak: -3 }), 0)).toMatch(/medical/i);
+  });
+
+  it('says the losing run where that is what it was', () => {
+    expect(retirementReason(at({ age: 33, headTrauma: 10, streak: -4 }), 0)).toMatch(/losing run/i);
+  });
+
+  it('says age past the hard age', () => {
+    expect(retirementReason(at({ age: 47, headTrauma: 10 }), 0)).toMatch(/age/i);
+  });
+});
+
+describe('the decision itself', () => {
+  it('squares the urge, so thinking about it is not the same as doing it', () => {
+    // Which is what keeps "one fight too many" available, and that is most of the drama.
+    const thinking = at({ age: 34, streak: -2, confidence: 30 });
+    const urge = retirementUrge(thinking, 0);
+    // Genuinely considering it — not idle, not decided.
+    expect(urge).toBeGreaterThan(0.15);
+    expect(urge).toBeLessThan(0.5);
+
+    const went = Array.from({ length: 400 }, (_, i) =>
+      shouldRetire(thinking, 0, createRng(`r${i}`)),
+    ).filter(Boolean).length;
+    expect(went / 400).toBeLessThan(urge);
+  });
+
+  it('is permanent once taken', () => {
+    const retired = { ...at({ age: 24 }), retiredDay: 0 };
+    expect(shouldRetire(retired, 100, createRng('x'))).toBe(true);
+  });
+});
+
+describe('damage takes the chin off the card, not just off the night', () => {
+  /*
+   * Doc 25 § 4. Trauma's entire effect used to be at fight time — `effectiveDurability` subtracted
+   * up to 22 points of chin and `retirementUrge` read it — so the number on a fighter's card never
+   * moved however many wars they had been in. Two fighters the same age, one with 39 head trauma
+   * and one with 5, declined identically.
+   *
+   * Here rather than in its own file because it is the same question this suite already asks: what
+   * a career costs, and what ends it.
+   */
+  const over = (years: number, headTrauma: number): number => {
+    let f = makeFighter({
+      age: 26,
+      headTrauma,
+      attributes: { durability: 70 },
+      potential: { durability: 70 },
+    }) as Fighter;
+    for (let y = 0; y < years; y++) {
+      f = applyAgeing(f, y * 365, (y + 1) * 365, createRng(`d${headTrauma}:${y}`)).fighter;
+    }
+    return 70 - f.attributes.durability;
+  };
+
+  it('costs a damaged fighter far more durability than a clean one', () => {
+    expect(over(10, 80)).toBeGreaterThan(over(10, 0) * 2);
+  });
+
+  it('is convex, so the first twenty points of trauma are nearly free', () => {
+    // How the real thing is understood: a little accumulated damage is not the same problem as a
+    // lot, and a linear term would say it was.
+    const early = over(10, 20) - over(10, 0);
+    const late = over(10, 80) - over(10, 60);
+    expect(late).toBeGreaterThan(early);
+  });
+
+  it('leaves an undamaged fighter exactly where age alone leaves them', () => {
+    const clean = makeFighter({ age: 26, headTrauma: 0 }) as Fighter;
+    const aged = applyAgeing(clean, 0, 365 * 5, createRng('clean')).fighter;
+    const control = applyAgeing(clean, 0, 365 * 5, createRng('clean')).fighter;
+    expect(aged.attributes.durability).toBe(control.attributes.durability);
+  });
+
+  it('does not evaporate a chin, however long the career', () => {
+    // The same floor age decline observes. A former elite is diminished, not a novice.
+    let f = makeFighter({
+      age: 26,
+      headTrauma: 95,
+      attributes: { durability: 80 },
+      potential: { durability: 80 },
+    }) as Fighter;
+    for (let y = 0; y < 20; y++) {
+      f = applyAgeing(f, y * 365, (y + 1) * 365, createRng(`f${y}`)).fighter;
+    }
+    expect(f.attributes.durability).toBeGreaterThanOrEqual(Math.max(12, 80 * 0.4));
+  });
+});
 
 /**
  * A bout on the record, so the fighter reads as active.
@@ -75,17 +285,19 @@ describe('time restores self-belief', () => {
     expect(after.condition.confidence).toBeGreaterThan(20);
   });
 
-  it('takes most of the retirement pressure off a young fighter on a bad run', () => {
+  it('takes the remaining retirement pressure off a young fighter on a bad run', () => {
     /*
-     * The traced case, exactly: a 24-year-old at confidence 12 on a three-fight skid carried an
-     * urge of 0.36, which `shouldRetire` squares into a **12.9% chance of walking away per
-     * fight**. Nothing about being 24 and 0-3 should read as a finished career.
+     * Two independent fixes stack here, and it is worth saying which does what.
      *
-     * The skid itself is not a mood and does not heal here — it is still a three-fight losing
-     * run a year later, and it should still weigh something. What lifts is the confidence half:
-     * a year takes the urge from 0.360 to 0.194, which is a **3.4x** fall in the per-fight odds
-     * of walking away. A year is also not full recovery — the time constant is longer than that
-     * for a neutral personality — which is why this asserts a large fall rather than a floor.
+     * The traced case was a 24-year-old at confidence 12 on a three-fight skid carrying an urge of
+     * 0.36 — a 12.9% chance of walking away *per fight*, for being 24 and 0-3. `careerStage` now
+     * weights the skid and confidence terms by how much career is left to go back to, which alone
+     * takes that to 0.08 before anything else happens: losing is a setback at 23 and a verdict at
+     * 35.
+     *
+     * Confidence recovery is the other half and works on the input rather than the weighting. The
+     * skid does not heal here — it is still a three-fight losing run a year later and should still
+     * weigh something — but the belief does, and what is left of the urge goes with it.
      */
     const f = makeFighter({ age: 24 });
     const young: Fighter = justFought({
@@ -94,12 +306,13 @@ describe('time restores self-belief', () => {
       summary: { ...f.summary, streak: -3 },
     });
     const before = retirementUrge(young, 0);
-    expect(before).toBeGreaterThan(0.3);
+
+    // Already survivable on the weighting alone: nothing here should read as a finished career.
+    expect(before ** 2).toBeLessThan(0.02);
 
     const recovered = applyAgeing(young, 0, YEAR, rng()).fighter;
     const after = retirementUrge(recovered, YEAR);
-    expect(after).toBeLessThan(before * 0.6);
-    expect(after ** 2).toBeLessThan(before ** 2 / 3);
+    expect(after).toBeLessThan(before * 0.8);
   });
 
   it('leaves a genuinely finished veteran finished', () => {
@@ -120,16 +333,6 @@ describe('the reason a fighter is given', () => {
      */
     const shaken = withCondition({ confidence: 24 }, { age: 27 });
     expect(retirementReason(shaken, 0)).toMatch(/desire/i);
-  });
-
-  it('names the losing run when the skid outweighs everything else', () => {
-    const f = makeFighter({ age: 29 });
-    const skidding: Fighter = justFought({
-      ...f,
-      condition: { ...f.condition, confidence: confidenceBaseline(f.personality) },
-      summary: { ...f.summary, streak: -5 },
-    });
-    expect(retirementReason(skidding, 0)).toMatch(/losing run/i);
   });
 
   it('still puts the body first, because that outranks how anybody feels', () => {

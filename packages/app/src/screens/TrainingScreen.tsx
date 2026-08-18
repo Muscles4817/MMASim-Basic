@@ -15,7 +15,15 @@ import {
   forecastTraining,
   headroom,
   restAdvice,
+  DEFAULT_INTENSITY,
+  INTENSITY_META,
+  STANDARD_LOAD_PER_DAY,
+  TRAINING_INTENSITIES,
+  describeFreshness,
+  freshnessOf,
+  recoveryRate,
   weeksUntilFit,
+  type TrainingIntensity,
   type AttributeKey,
   type Coach,
   type DivisionId,
@@ -51,6 +59,26 @@ const WEEK_OPTIONS = [
 ] as const;
 
 /**
+ * How hard, which is a different question from how long.
+ *
+ * The hints name what each one is *for* rather than describing the multipliers, because the
+ * decision is situational: light is what a 38-year-old runs to hold his level and get his legs
+ * back, overreach is what a 24-year-old with room runs when he can afford to be flat afterwards.
+ */
+const INTENSITY_OPTIONS = TRAINING_INTENSITIES.map((key) => ({
+  value: key,
+  label: INTENSITY_META[key].label,
+  hint:
+    key === 'light'
+      ? 'Recover while you work'
+      : key === 'standard'
+        ? 'A normal camp'
+        : key === 'hard'
+          ? 'Build, and feel it'
+          : 'Everything, now',
+}));
+
+/**
  * Training between fights.
  *
  * The screen where a career is actually made. Two constraints are surfaced honestly rather
@@ -62,6 +90,7 @@ export function TrainingScreen() {
   const { navigate } = useRouter();
   const [focuses, setFocuses] = useState<TrainingFocus[]>(['boxing']);
   const [weeks, setWeeks] = useState<'4' | '8' | '12'>('8');
+  const [intensity, setIntensity] = useState<TrainingIntensity>(DEFAULT_INTENSITY);
   const [outcome, setOutcome] = useState<TrainingOutcome | undefined>();
 
   if (!playerFighter) {
@@ -111,6 +140,18 @@ export function TrainingScreen() {
   const overrunsFight = weeksToFight !== undefined && Number(weeks) > weeksToFight;
 
   const cost = campCostFor(gym, Number(weeks));
+
+  /*
+   * What this block will leave them at, shown before they commit.
+   *
+   * Choosing an intensity without knowing what it costs you is choosing blind, which is the whole
+   * reason doc 25 § 3.8 puts freshness on the hub in the first place.
+   */
+  const blockDays = Number(weeks) * 7;
+  const netFreshness =
+    recoveryRate(fighter, fighterAge(fighter, world.day)) * blockDays -
+    blockDays * STANDARD_LOAD_PER_DAY * INTENSITY_META[intensity].load;
+  const freshnessAfter = Math.max(0, Math.min(100, freshnessOf(fighter) + netFreshness));
   const funding = solvencyOf(fighter, cost);
   const canPay = fighter.bank >= cost;
 
@@ -121,11 +162,12 @@ export function TrainingScreen() {
         fighter,
         focuses,
         weeks: Number(weeks),
+        intensity,
         gym,
         coach,
         day: world.day,
       }),
-    [fighter, focuses, weeks, gym, coach, world.day],
+    [fighter, focuses, weeks, intensity, gym, coach, world.day],
   );
 
   /*
@@ -168,7 +210,7 @@ export function TrainingScreen() {
   };
 
   const train = () => {
-    setOutcome(runTraining(db, fighter, focuses, Number(weeks)));
+    setOutcome(runTraining(db, fighter, focuses, Number(weeks), intensity));
     commit();
   };
 
@@ -402,6 +444,32 @@ export function TrainingScreen() {
             less per week — and every week training is a week older. You return on{' '}
             <strong>{formatGameDay(world.day + Number(weeks) * 7)}</strong>.
           </p>
+        </div>
+
+        <div style={{ marginTop: 'var(--space-4)' }}>
+          <h3 className="section-title">How hard</h3>
+          <Segmented
+            label="Training intensity"
+            value={intensity}
+            onChange={(v) => {
+              setIntensity(v);
+              setOutcome(undefined);
+            }}
+            options={INTENSITY_OPTIONS}
+          />
+          <p
+            className="faint prose"
+            style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}
+            data-testid="intensity-effect"
+          >
+            {INTENSITY_META[intensity].blurb} Length builds craft; intensity builds the body — so a
+            long light block is the best technical camp there is, and a short hard one is the
+            cheapest way to move a physical.{' '}
+            {netFreshness >= 0
+              ? `You will finish this block fresher than you started, at about ${Math.round(freshnessAfter)} of 100.`
+              : `You will finish at about ${Math.round(freshnessAfter)} of 100 — ${describeFreshness(freshnessAfter).toLowerCase()}.`}
+          </p>
+
           <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
             {weeks} weeks at {gym?.name ?? 'no gym'} costs <strong>£{cost}k</strong>.{' '}
             {canPay

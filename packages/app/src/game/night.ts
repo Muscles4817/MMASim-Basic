@@ -41,6 +41,7 @@ import {
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
 import { currentPurse } from './money';
+import { settleFightInjuries } from './fightInjuries';
 
 /**
  * Where the player sits on the card, decided before the night rather than after.
@@ -191,12 +192,27 @@ export function runSupportingCard(
       isTitleFight: bout.isTitleFight,
       rng: rng.fork(`a:${bout.boutId}`),
     });
-    db.fighters.upsert(after.red as Fighter & Entity);
-    db.fighters.upsert(after.blue as Fighter & Entity);
+    // The undercard is a real fight for the people in it. Same settlement as the main event.
+    const hurtRed = settleFightInjuries({
+      fighter: after.red,
+      result,
+      corner: 'red',
+      day,
+      rng: rng.fork(`hurt:${bout.boutId}:red`),
+    }).fighter;
+    const hurtBlue = settleFightInjuries({
+      fighter: after.blue,
+      result,
+      corner: 'blue',
+      day,
+      rng: rng.fork(`hurt:${bout.boutId}:blue`),
+    }).fighter;
+    db.fighters.upsert(hurtRed as Fighter & Entity);
+    db.fighters.upsert(hurtBlue as Fighter & Entity);
 
     // The suspension the undercard used to throw away outright.
     const loserId = result.winnerId !== undefined && result.winnerId === red.id ? blue.id : red.id;
-    for (const f of [after.red, after.blue]) {
+    for (const f of [hurtRed, hurtBlue]) {
       const stored = db.fighters.findById(f.id as string) as Fighter | undefined;
       if (!stored) continue;
       db.fighters.upsert({

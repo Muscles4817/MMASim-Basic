@@ -36,7 +36,7 @@ export const MUL_HOOKS = [
   'heatGeneration',
   'developmentRate',
   /**
-   * Multiplier on confidence lost to a defeat. See docs/25 §1.4.
+   * Multiplier on confidence lost to a defeat. See docs/27 §1.4.
    *
    * The trait table has carried the vocabulary for this since it was written — `fragileEgo`
    * ("Losses cut deep"), `durableMind` ("came back exactly the same fighter"), `gunShy` — and

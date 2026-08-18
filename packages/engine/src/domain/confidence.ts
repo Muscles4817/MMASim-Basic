@@ -8,7 +8,7 @@
  * const finishBonus = won && isKoMethod(result.method) ? 5 : 0;
  * ```
  *
- * — and nothing else in the entire codebase ever wrote the field. docs/25 §1 sets out why that
+ * — and nothing else in the entire codebase ever wrote the field. docs/27 §1 sets out why that
  * was wrong in four separate ways; this module is the answer to all four.
  *
  * **It is a mood, not an injury.** Trauma and wear accumulate because they genuinely do not heal.

@@ -19,6 +19,8 @@ import { lessonFrom } from './lessons.js';
 import { overallRating } from '../ratings/attributes.js';
 import { findTraitConflicts, traitMul, type TraitId } from '../domain/traits.js';
 import type { Corner, FightResult } from '../fight/types.js';
+import { exposureFrom } from '../health/injuries.js';
+import { fightFreshnessCost, freshnessOf, withFreshness } from '../health/freshness.js';
 
 export interface AftermathInput {
   result: FightResult;
@@ -68,7 +70,7 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
     const secondsFought = (result.round - 1) * 300 + result.timeSeconds;
 
     /*
-     * What this fight told them to go and fix. See `business/lessons.ts` and docs/25 §2.4.
+     * What this fight told them to go and fix. See `business/lessons.ts` and docs/27 §2.4.
      *
      * Deliberately independent of the result: a fighter can win a decision having been put on
      * their back six times, and that is still the thing to work on.
@@ -117,7 +119,7 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
      * This was `won ? 12 : -16 * lossImpactMultiplier(...)` — a flat number that could not tell
      * a nine-second head kick from a five-round split decision, though the method, the
      * scorecards, the knockdowns, the round and the opponent were all in scope on that very
-     * line. See docs/25 §1 and `domain/confidence.ts`.
+     * line. See docs/27 §1 and `domain/confidence.ts`.
      */
     const swing = confidenceSwing({
       personality: fighter.personality,
@@ -132,6 +134,16 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
     });
     const confidence = clamp(fighter.condition.confidence + swing, 1, 100);
 
+    /*
+     * What the night took out of them, read off the same exposure the injury roll uses.
+     *
+     * One number for both is deliberate: a thirty-second submission where nothing landed costs
+     * almost no injury risk *and* almost no freshness, and a three-round war costs a great deal of
+     * each. `fatigue` next to it is the within-fight variable, reset because the fight is over —
+     * the two are different things and doc 25 § 1.7 is about how easily that was missed.
+     */
+    const spent = fightFreshnessCost(exposureFrom(result, corner));
+
     const condition = {
       ...fighter.condition,
       headTrauma: trauma,
@@ -139,6 +151,7 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
       confidence,
       fatigue: 0,
       ringRust: 0,
+      freshness: withFreshness(freshnessOf(fighter) - spent),
     };
 
     // --- Acquired traits ---------------------------------------------------------------
@@ -223,7 +236,7 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
     );
 
     /*
-     * The part of a fight a gym cannot give you. See `applyRingExperience` and docs/25 §2.3.
+     * The part of a fight a gym cannot give you. See `applyRingExperience` and docs/27 §2.3.
      *
      * Applied here, in the one function all three fight paths already go through — the player's
      * career loop, the world tick and promoter mode — because the last time a development hook

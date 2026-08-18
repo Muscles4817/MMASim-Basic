@@ -13,6 +13,20 @@
  */
 
 import { ageOn, type GameDay } from '../core/clock.js';
+import {
+  DEFAULT_INTENSITY,
+  INTENSITY_META,
+  intensityGain,
+  type TrainingIntensity,
+} from './intensity.js';
+import {
+  FRESH,
+  campFreshnessCost,
+  duringTraining,
+  freshnessOf,
+  recoveryRate,
+  withFreshness,
+} from '../health/freshness.js';
 import { clamp, remap, round } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import type { Fighter } from '../domain/fighter.js';
@@ -369,6 +383,8 @@ export function headroom(current: number, ceiling: number): number {
 }
 
 export interface TrainingInput {
+  /** How hard. Defaults to `standard`, so every existing caller behaves exactly as before. */
+  intensity?: TrainingIntensity;
   fighter: Fighter;
   /** One or two focuses. Two splits the effort rather than doubling it. */
   focuses: readonly TrainingFocus[];
@@ -534,6 +550,7 @@ function rawGain(input: {
 
 export function applyTraining(input: TrainingInput): TrainingResult {
   const { fighter, weeks, gym, coach, day, rng } = input;
+  const intensity = input.intensity ?? DEFAULT_INTENSITY;
   const focuses = input.focuses.slice(0, 2);
   const notes: string[] = [];
   const gains: Partial<Record<AttributeKey, number>> = {};
@@ -570,9 +587,18 @@ export function applyTraining(input: TrainingInput): TrainingResult {
       });
       if (raw <= 0) continue;
 
-      // A little noise so two identical camps are not identical. Never negative: a camp can
-      // be wasted, but it cannot make you worse at the thing you drilled.
-      const gain = Math.max(0, raw * rng.range(CAMP_LUCK[0], CAMP_LUCK[1]));
+      /*
+       * A little noise so two identical camps are not identical, and what the intensity did.
+       *
+       * `intensityGain` is the whole of doc 25 § 3.2 in one multiplier: it is nearly flat across
+       * the four settings for a skill and steep for a physical, because craft is bought with time
+       * and a gas tank is bought with effort. Never negative: a camp can be wasted, but it cannot
+       * make you worse at the thing you drilled.
+       */
+      const gain = Math.max(
+        0,
+        raw * rng.range(CAMP_LUCK[0], CAMP_LUCK[1]) * intensityGain(intensity, key),
+      );
       if (gain <= 0) continue;
 
       /*
@@ -654,8 +680,24 @@ export function applyTraining(input: TrainingInput): TrainingResult {
   const lastTrained = { ...fighter.lastTrained };
   for (const focus of focuses) lastTrained[focus] = day;
 
+  /*
+   * And what it took out of them. Doc 25 § 3.1.
+   *
+   * Charged here and returned in `applyAgeing`, which sounds odd until you notice that every
+   * caller in the game already runs both over the same span — a camp, a fight camp, the world's
+   * own loop. So the net over a camp is load minus recovery without anybody having to remember to
+   * do the subtraction, and time spent *not* training recovers on its own for free.
+   */
+  const spent = campFreshnessCost(weeks * 7, INTENSITY_META[intensity].load);
+  const condition = {
+    ...fighter.condition,
+    // `duringTraining`, not `withFreshness` — the recovery for these same days has not been
+    // credited yet, and clamping here would throw away the overshoot. See that function.
+    freshness: duringTraining(freshnessOf(fighter) - spent),
+  };
+
   return {
-    fighter: { ...fighter, attributes, trainingCarry: carry, lastTrained },
+    fighter: { ...fighter, attributes, trainingCarry: carry, lastTrained, condition },
     gains,
     notes,
   };
@@ -688,6 +730,14 @@ export interface TrainingForecast {
 
 export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingForecast {
   const { fighter, weeks, gym, coach, day } = input;
+  /*
+   * Including the intensity, which this did not read when intensity was added.
+   *
+   * A forecast that ignores a dial the camp obeys is a lie told with real arithmetic — the exact
+   * defect doc 24 recorded against the creation-screen preview, and one this function exists
+   * specifically not to have. The two are meant to be the same function with the luck averaged out.
+   */
+  const intensity = input.intensity ?? DEFAULT_INTENSITY;
   const focuses = input.focuses.slice(0, 2);
 
   const age = ageOn(fighter.birthDay, day);
@@ -720,9 +770,10 @@ export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingFor
       if (raw <= 0) continue;
 
       const mid = (CAMP_LUCK[0] + CAMP_LUCK[1]) / 2;
-      expected[key] = round((expected[key] ?? 0) + raw * mid, 2);
-      low[key] = round((low[key] ?? 0) + raw * CAMP_LUCK[0], 2);
-      high[key] = round((high[key] ?? 0) + raw * CAMP_LUCK[1], 2);
+      const scaled = raw * intensityGain(intensity, key);
+      expected[key] = round((expected[key] ?? 0) + scaled * mid, 2);
+      low[key] = round((low[key] ?? 0) + scaled * CAMP_LUCK[0], 2);
+      high[key] = round((high[key] ?? 0) + scaled * CAMP_LUCK[1], 2);
     }
   }
 
@@ -861,7 +912,7 @@ export const LESSON_WINDOW_DAYS = 200;
 /**
  * What being shown a hole is worth, as a multiplier on the camp that follows.
  *
- * Deliberately a *rate* rather than points, which is the whole argument of docs/25 §2.4: being
+ * Deliberately a *rate* rather than points, which is the whole argument of docs/27 §2.4: being
  * outwrestled for fifteen minutes does not make anybody better at wrestling. It tells them —
  * loudly, expensively, in public — what to fix, and the gain comes from the camp they then spend
  * on it. A fight grants direction; the gym still does the work.
@@ -1010,6 +1061,19 @@ const DECLINE_RATE: Readonly<Record<AttributeKey, number>> = {
 /** Rating points lost per year at one year past peak, before per-attribute rates. */
 const BASE_DECLINE_PER_YEAR = 1.1;
 
+/**
+ * Durability lost per year at maximum head trauma. Doc 25 § 4.
+ *
+ * Swept rather than picked. It has to be large enough that a career of wars is visibly different
+ * from a career of decisions, and small enough that doc 24's traced careers keep their peaks —
+ * this is the third downward force on a model that already has age and neglect, and the long-sim's
+ * champion bar has moved once already.
+ */
+const TRAUMA_DECLINE_PER_YEAR = 1.1;
+
+/** Convexity. The first twenty points of trauma are nearly free; the last twenty are not. */
+const TRAUMA_DECLINE_CURVE = 1.2;
+
 export interface AgeingResult {
   fighter: Fighter;
   losses: Partial<Record<AttributeKey, number>>;
@@ -1081,6 +1145,26 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
     take(key, neglect, Math.max(15, fighter.potential[key] * 0.5));
   }
 
+  /*
+   * What the damage took, on top of what the years took. Doc 25 § 4.
+   *
+   * Durability only, and deliberately not by raising its `DECLINE_RATE` — that would charge every
+   * fighter equally for damage only some of them took. Two fighters the same age, one with 39 head
+   * trauma and one with 5, previously declined identically: trauma's entire effect was eroding the
+   * chin *at fight time* through `effectiveDurability` and pushing `retirementUrge`, so it never
+   * touched the number on the card.
+   *
+   * Convex, so the first twenty points of trauma cost almost nothing and the last twenty cost a
+   * great deal. That is how the real thing is understood, and it means the fighter who won by
+   * absorbing and returning pays for it while the one who never got hit does not — doc 25 § 3.5's
+   * exposure model showing up twenty years later.
+   */
+  const trauma = fighter.condition.headTrauma / 100;
+  if (trauma > 0) {
+    const traumaDecline = TRAUMA_DECLINE_PER_YEAR * trauma ** TRAUMA_DECLINE_CURVE * years;
+    take('durability', traumaDecline, Math.max(12, fighter.potential.durability * 0.4));
+  }
+
   for (const key of ATTRIBUTE_KEYS) {
     const rate = DECLINE_RATE[key];
     if (rate <= 0) continue;
@@ -1105,6 +1189,21 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
     // ever take away.
     take(key, loss, Math.max(12, fighter.potential[key] * 0.4));
   }
+
+  /*
+   * Freshness comes back with the days. Doc 25 § 3.1.
+   *
+   * Here because this function's job already is "what elapsed time did to a fighter", and because
+   * it is the one call every path through the game makes when the clock moves. A fighter who sits
+   * out recovers; a fighter in camp recovers too, just more slowly than `applyTraining` spends.
+   *
+   * `bodyWear` and age both slow it, which is where the mileage of a career finally gets teeth:
+   * the same camp costs a 34-year-old with 60 wear far longer to come back from than it costs a
+   * 24-year-old, without a single constant saying so directly.
+   */
+  const recovered = withFreshness(
+    (fighter.condition.freshness ?? FRESH) + recoveryRate(fighter, age) * (toDay - fromDay),
+  );
 
   const notes: string[] = [];
   const totalLoss = Object.values(losses).reduce((a, v) => a + v, 0);
@@ -1159,7 +1258,7 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
    * Here because this function's job already is what elapsed time did to somebody, and because
    * it is the one place every caller goes through — the world tick, a camp, a layoff, a fight.
    * Confidence had no recovery at all before this and was therefore the only part of
-   * `condition` that behaved like a permanent injury; docs/25 §1.1.1 has the measurements, and
+   * `condition` that behaved like a permanent injury; docs/27 §1.1.1 has the measurements, and
    * `domain/confidence.ts` has the reasoning.
    *
    * `recoverConfidence` is exponential precisely so that putting it here is safe: the callers
@@ -1169,6 +1268,7 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
   const condition = {
     ...fighter.condition,
     confidence: recoverConfidence(fighter.condition.confidence, fighter.personality, years),
+    freshness: recovered,
   };
 
   return {
@@ -1186,7 +1286,7 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
  * Small, and it has to be. Measured before this existed: a fighter taking 3.8 bouts a year
  * developed *less* than one taking 1.7, because fights contributed nothing and displaced camps —
  * the model actively contradicting the reason anybody fights on the regional circuit. The fix is
- * not to make fighting lucrative, it is to stop it being free. See docs/25 §2.2.
+ * not to make fighting lucrative, it is to stop it being free. See docs/27 §2.2.
  */
 const RING_EXPERIENCE_BASE = 0.55;
 

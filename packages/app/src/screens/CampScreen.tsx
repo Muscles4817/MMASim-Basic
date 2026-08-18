@@ -23,7 +23,11 @@ import {
   ratingBand,
   recordString,
   ATTRIBUTE_META,
+  DEFAULT_INTENSITY,
+  INTENSITY_META,
+  TRAINING_INTENSITIES,
   TRAINING_META,
+  type TrainingIntensity,
   type AttributeKey,
   READ_META,
   scoutOpponent,
@@ -38,14 +42,16 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Button, Card, Chip, Empty } from '../ui';
+import { Button, Card, Chip, Empty, Segmented } from '../ui';
 import { spendLine } from '../ui/format';
 import { Alert, FighterRead, KeyStat } from '../ui/signals';
 import {
   forecastCampDevelopment,
   getBooking,
+  isBoutOff,
   runBookedFight,
   saveBookingFocus,
+  saveBookingIntensity,
   saveBookingPlan,
   saveBookingPurchases,
 } from '../game/career';
@@ -79,6 +85,9 @@ export function CampScreen() {
    * promises in its own copy that the plan is saved as you build it.
    */
   const [booking, setBooking] = useState(() => getBooking());
+  const [intensity, setIntensity] = useState<TrainingIntensity>(
+    () => getBooking()?.intensity ?? DEFAULT_INTENSITY,
+  );
   const [running, setRunning] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -101,9 +110,9 @@ export function CampScreen() {
   const development = useMemo(
     () =>
       booking && playerFighter
-        ? forecastCampDevelopment(db, playerFighter, booking)
+        ? forecastCampDevelopment(db, playerFighter, { ...booking, intensity })
         : undefined,
-    [db, playerFighter, booking],
+    [db, playerFighter, booking, intensity],
   );
 
   const report = useMemo(() => {
@@ -140,7 +149,7 @@ export function CampScreen() {
    *
    * `undefined` is a real value here and not a missing one: it means the player has not chosen,
    * and the fighter trains whatever they most need. Only once they pick something does the camp
-   * stop being the game's decision. See docs/25 §2.1.
+   * stop being the game's decision. See docs/27 §2.1.
    */
   const lesson = playerFighter ? activeLesson(playerFighter, world.day) : undefined;
   const lessonFocus = lesson ? focusForAttribute(lesson) : undefined;
@@ -251,9 +260,22 @@ export function CampScreen() {
       // and, like the camp itself, it is allowed to take the bank negative.
       if (spend > 0) payForCamp(db, playerFighter, spend);
 
-      const updated = saveBookingPurchases(saveBookingPlan(booking, plan), bought);
+      const updated = saveBookingPurchases(
+        saveBookingPlan(saveBookingIntensity(booking, intensity), plan),
+        bought,
+      );
       const outcome = runBookedFight(db, updated);
       commit();
+      /*
+       * Sometimes there is no fight. The camp happened, the work is banked and the opponent is
+       * not coming — so there is no bout to show, and sending the player to the fight screen for
+       * a fight that did not take place would be a blank page and a lie. The hub reads the inbox,
+       * which is where the news of it is.
+       */
+      if (isBoutOff(outcome)) {
+        navigate({ name: 'hub' });
+        return;
+      }
       navigate({ name: 'fight', boutId: outcome.result.boutId });
     } finally {
       setRunning(false);
@@ -326,10 +348,30 @@ export function CampScreen() {
           player alone, pure ageing. It develops properly now, and a system the player cannot see
           is a system they cannot plan around, so it says so before the fight rather than after.
         */}
+        <div style={{ marginBottom: 'var(--space-3)' }}>
+          <p className="section-title">How hard to run it</p>
+          <Segmented
+            label="Camp intensity"
+            value={intensity}
+            onChange={setIntensity}
+            options={TRAINING_INTENSITIES.map((key) => ({
+              value: key,
+              label: INTENSITY_META[key].label,
+            }))}
+          />
+          <p
+            className="faint prose"
+            style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}
+            data-testid="camp-intensity-effect"
+          >
+            {INTENSITY_META[intensity].blurb} You walk to the cage in the state this leaves you in.
+          </p>
+        </div>
+
         {/*
           What the last fight said to go and fix.
           
-          A fight grants direction rather than points (docs/25 §2.4), and direction the player
+          A fight grants direction rather than points (docs/27 §2.4), and direction the player
           cannot see is direction they cannot act on — so it is named here, on the screen where
           the decision is actually made, rather than buried in a post-fight note they scrolled
           past six weeks ago.

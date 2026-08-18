@@ -1,7 +1,7 @@
 /**
  * What a fight told a fighter about themselves.
  *
- * The argument is docs/25 §2.4, and it is a claim about what a fight actually does. Being
+ * The argument is docs/27 §2.4, and it is a claim about what a fight actually does. Being
  * outwrestled for fifteen minutes does not make anybody better at wrestling. It tells them —
  * loudly, expensively, in front of everybody — that their wrestling is the thing costing them
  * fights. The improvement comes from the camp that follows, and it comes because the fight said

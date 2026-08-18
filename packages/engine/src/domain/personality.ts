@@ -191,7 +191,7 @@ export function confidenceGainMultiplier(p: Personality): number {
  *
  * Confidence had no baseline at all: it was initialised to 60, moved only when a fight ended,
  * and stayed wherever the last result left it forever. That made it an injury rather than a
- * mood — see docs/25 §1.1.1 — and it is what killed careers at twenty-four, because three
+ * mood — see docs/27 §1.1.1 — and it is what killed careers at twenty-four, because three
  * losses put a fighter at 12 and nothing in the game could ever bring them back up.
  *
  * Centred on 60 so a neutral personality returns exactly to `initialCondition`. The spread is

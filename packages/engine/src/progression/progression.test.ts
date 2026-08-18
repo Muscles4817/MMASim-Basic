@@ -84,7 +84,7 @@ describe('learningRate', () => {
 
   it('keeps most of the craft into the late thirties and lets the body go', () => {
     /*
-     * docs/25 §3.2. Motor learning has no cliff at thirty; what declines is the physical
+     * docs/27 §3.2. Motor learning has no cliff at thirty; what declines is the physical
      * substrate, and the engine already models that separately in `DECLINE_RATE`. A single floor
      * across all fifteen attributes said a 38-year-old learns submissions exactly as poorly as
      * they build top speed, which is not true of anything.
@@ -374,7 +374,7 @@ describe('training moves attributes', () => {
     /*
      * This used to assert that a 37-year-old got under half of a 21-year-old's gain from the same
      * boxing camp, and it asserted it on `strikingOffence` — a skill. That was the single-floor
-     * learning curve stated as a requirement, and docs/25 §3 is the argument against it: the
+     * learning curve stated as a requirement, and docs/27 §3 is the argument against it: the
      * physical substrate declining with age is already modelled in full by `DECLINE_RATE` and
      * `applyAgeing`, so charging it a second time inside the learning rate left craft unable to
      * grow late for a reason that had nothing to do with craft.

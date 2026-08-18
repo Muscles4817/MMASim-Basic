@@ -35,7 +35,7 @@ const HARD_AGE = 46;
  * fixed set of thresholds — `confidence <= 20` among them — while the decision fired on the urge,
  * which is meaningfully non-zero long before any of those thresholds are crossed. A fighter who
  * quit at confidence 24 was told they had "retired on their own terms", which is the opposite of
- * what happened and the one thing the player most needs to understand. See docs/25 §1.3.
+ * what happened and the one thing the player most needs to understand. See docs/27 §1.3.
  */
 export interface RetirementDrivers {
   age: number;
@@ -56,14 +56,38 @@ export function retirementDrivers(fighter: Fighter, onDay: GameDay): RetirementD
   const ageTerm = age < DECLINE_AGE ? 0 : clamp01(remap(age, DECLINE_AGE, HARD_AGE, 0, 0.85));
   const overHard = age > HARD_AGE ? clamp01((age - HARD_AGE) / 6) : 0;
 
-  // Damage, and specifically the knowledge of it.
-  const traumaTerm = clamp01(remap(fighter.condition.headTrauma, 45, 95, 0, 0.5));
-  const wearTerm = clamp01(remap(fighter.condition.bodyWear, 50, 100, 0, 0.25));
+  /**
+   * How far into a career this is. Zero at 24, one by 36.
+   *
+   * The thing this whole function was missing. A five-fight skid with the confidence gone
+   * produced an identical urge at 23 and at 34 — measured, both landed on 23.2% per fight — so
+   * every kind of adversity had exactly one exit and a young fighter having a bad two years quit
+   * the sport. Across three twenty-year worlds, **31% of all retirements happened before 28**.
+   *
+   * That is not what a bad run means at 23. It means you get cut, you drop a level, and you fight
+   * on; the sport is full of people who were 4-6 at 24 and 19-8 at 32. Retiring at 23 happens, and
+   * it happens because somebody ran out of money or interest — not because they lost four fights.
+   */
+  const careerStage = clamp01(remap(age, 24, 36, 0, 1));
 
-  // A skid, and the confidence collapse that comes with it.
+  /*
+   * Damage, and specifically the knowledge of it — read at the levels damage actually reaches.
+   *
+   * Both onsets were set above the distribution they were reading. Measured across 525
+   * retirements: head trauma runs p50 17, p90 63, and body wear p50 8, p90 22, **max 51** — so
+   * `wearTerm` began at 50 and a career's worth of accumulated wear could not clear it once. It
+   * was dead code, and `traumaTerm` at 45 fired for barely the top decile. The sport's most
+   * characteristic ending — being told to stop — was arithmetically almost unreachable.
+   */
+  const traumaTerm = clamp01(remap(fighter.condition.headTrauma, 25, 85, 0, 0.55));
+  const wearTerm = clamp01(remap(fighter.condition.bodyWear, 20, 65, 0, 0.3));
+
+  // A skid, and the confidence collapse that comes with it — both weighted by how much career is
+  // left to go back to. Losing is a setback early and a verdict late.
   const skid = Math.min(0, fighter.summary.streak);
-  const skidTerm = clamp01(Math.abs(skid) / 5) * 0.35;
-  const confidenceTerm = clamp01(remap(fighter.condition.confidence, 40, 5, 0, 0.4));
+  const skidTerm = clamp01(Math.abs(skid) / 5) * 0.35 * (0.2 + 0.8 * careerStage);
+  const confidenceTerm =
+    clamp01(remap(fighter.condition.confidence, 40, 5, 0, 0.4)) * (0.25 + 0.75 * careerStage);
 
   // Personality decides how much of that a fighter is willing to sit with. Ambition keeps
   // them chasing; resilience keeps them from being talked out of it by a bad night.
@@ -142,7 +166,7 @@ const DRIFT_PER_QUARTER = 0.12;
  * through, then another, and one day it has been two years and nobody has called.
  *
  * That gap was hidden until the confidence model was fixed. Confidence used to be a one-way
- * ratchet with no recovery (docs/25 SS1), so the people who were not getting booked lost their
+ * ratchet with no recovery (docs/27 §1), so the people who were not getting booked lost their
  * belief and retired quickly -- the right outcome reached by the wrong mechanism. Repairing
  * confidence removed the accident and left nothing in its place: measured over ten world years,
  * retirements fell from 524 to 305 and, because `world.ts:replenish` only tops a division back up
@@ -222,9 +246,17 @@ export function retirementReason(fighter: Fighter, onDay: GameDay): string {
   const age = ageOn(fighter.birthDay, onDay);
   const drivers = retirementDrivers(fighter, onDay);
 
-  // Two absolutes first. Both are statements about the body that outrank whatever else was
-  // weighing on them, and neither is a matter of degree.
-  if (fighter.condition.headTrauma >= 70) {
+  /*
+   * Two absolutes first. Both are statements about the body that outrank whatever else was
+   * weighing on them, and neither is a matter of degree.
+   *
+   * 55 rather than 70, to agree with the urge that produced the decision. `retirementUrge` starts
+   * reading trauma at 25 and is saturated by 85, but this said "medical" only past 70 — above the
+   * 90th percentile of trauma at retirement, which is 63. So a fighter genuinely driven out by
+   * damage was told they had retired on a losing run, because the skid was the only label that
+   * fitted.
+   */
+  if (fighter.condition.headTrauma >= 55) {
     return 'Walked away on medical advice after years of accumulated damage.';
   }
   if (age >= HARD_AGE) return 'Age finally caught up.';
