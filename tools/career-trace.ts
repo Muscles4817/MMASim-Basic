@@ -716,30 +716,30 @@ say(
 );
 say();
 
-say('### 6. Nobody retires hurt, and now that matters more');
+say('### 6. Nobody retires hurt — *fixed*');
 say();
 say(
   `The most damaged fighter here finished on ${maxTrauma} head trauma after ${mostFights} professional fights. ` +
-    '`retirementUrge` does not start reading trauma until 45 and wear until 50, so the term never ' +
-    'engages and every career still ends on age or on a losing run. The sport\u2019s most ' +
-    'characteristic ending — the fighter who is told to stop — remains unreachable.',
+    '`retirementUrge` read trauma only from 45 and body wear only from 50 — and across three ' +
+    'twenty-year worlds the highest body wear ever seen at retirement was **51**, so that term was ' +
+    'dead code and the sport\u2019s most characteristic ending was arithmetically unreachable.',
 );
 say();
 say(
-  'Doc 25 phase 1 sharpened this rather than fixing it. Injuries, medical suspensions and ' +
-    'withdrawals now disrupt a career properly, and the **only** route the retirement model offers ' +
-    'for a disrupted career is the skid: lost fights, collapsed confidence, walk away. Measured on ' +
-    'twelve seeded careers before and after that change, mean career length went from 10.5 years ' +
-    'to 8.7 and mean retirement age from 32.6 to 30.8 — but the informative part is the tail. ' +
-    'Before, no career ended before 27. After, five of twelve end between 22 and 26.',
+  'Worse, an identical five-fight skid with the confidence gone produced the *same* urge at 23 as ' +
+    'at 34 — both 23.2% per fight — so nothing knew how much career was left to come back to. **31% ' +
+    'of all retirements happened before 28.** Doc 25 phase 1 sharpened that rather than causing it: ' +
+    'injuries, suspensions and cancelled fights disrupt a career properly now, and the skid was the ' +
+    'only exit any of it could lead to.',
 );
 say();
 say(
-  'That is not the injury model being too harsh: measured at **1.09 injuries per career-year**, it ' +
-    'sits at the top of the band § 1.2 was already designed around, and only 9% of fights are ' +
-    'fought carrying one. It is that `retirementUrge` converts every kind of adversity into the ' +
-    'same exit. A fighter whose year was wrecked by a knee should come back at 28 having lost ' +
-    'time, not quit at 24 having lost heart.',
+  'Both are fixed. The skid and confidence terms are weighted by how far into a career the fighter ' +
+    'is, and trauma and wear now read from where they actually accumulate. Measured across the same ' +
+    'three worlds: retirements before 28 fell from 31% to 4.8%, mean retirement age moved 32.6 to ' +
+    '36.1, medical retirements went from 5% of the total to 20%, and the oldest active fighter after ' +
+    'twenty years came *down* from 59 to 55 — because damage now ends careers that the skid never ' +
+    'reached.',
 );
 say();
 

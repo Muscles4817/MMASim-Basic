@@ -528,5 +528,64 @@ that `retirementUrge` has exactly one route for a disrupted career — lost figh
 confidence, walk away — so every kind of adversity comes out as the same exit. A fighter whose year
 was wrecked by a knee should come back at 28 having lost time, not quit at 24 having lost heart.
 
-Doc 24 finding 6 already said nobody retires hurt. Phase 1 makes that the more pressing half of the
-same defect, and it should be fixed before §4 adds a third downward force on top of it.
+Doc 24 finding 6 already said nobody retires hurt. Phase 1 made that the more pressing half of the
+same defect, so it was fixed before going further — see §10.
+
+---
+
+## 10. Retirement, fixed before phase 2
+
+Phase 1 did not create the retirement problem; it made it impossible to ignore. `retirementUrge`
+turned out to have two independent defects, both invisible until somebody counted endings across
+whole worlds.
+
+### The skid did not know how old you were
+
+An identical five-fight skid with the confidence gone produced the **same** urge at 23 as at 34 —
+both landing on 23.2% per fight. Nothing in the function knew how much career was left to come back
+to, so every kind of adversity had exactly one exit. Across three twenty-year worlds and 525
+retirements, **31% happened before 28**.
+
+That is not what a bad run means at 23. It means you get cut, drop a level and fight on; the sport
+is full of people who were 4-6 at 24 and 19-8 at 32. The skid and confidence terms are now weighted
+by a `careerStage` factor that runs 0 at 24 to 1 at 36, so a young fighter feels a fraction of what
+a veteran feels from the same losses.
+
+### Damage could not end a career
+
+`traumaTerm` began at 45 and `wearTerm` at 50. Measured across the same 525 retirements, head
+trauma runs p50 17 / p90 63, and body wear runs p50 8 / p90 22 with a **maximum of 51** — so the
+wear term was dead code that a full career could not clear once, and trauma fired for barely the top
+decile. `retirementReason` compounded it by requiring trauma ≥ 70 to say "medical", above the 90th
+percentile, so a fighter genuinely driven out by damage was told they had retired on a losing run.
+
+Trauma now reads from 25 to 85, wear from 20 to 65, and the medical label from 55.
+
+### What changed, measured
+
+| Across three twenty-year worlds  | Before |    After |
+| -------------------------------- | -----: | -------: |
+| Retirements before 28            |    31% | **4.8%** |
+| Mean retirement age              |   32.6 |     36.1 |
+| Medical retirements              |     5% |  **20%** |
+| Oldest active fighter at year 20 |     59 |   **55** |
+
+The last row is the one worth noticing. Fewer retirements would normally mean an ageing roster, and
+the mean age of the active population does drift up by 0.9 years across two decades — but the
+_oldest_ fighter comes down, because damage now retires people the skid never reached. The long-sim's
+"no active 60-year-olds" assertion was previously passing by a single year.
+
+And on twelve seeded player careers through the real game, the whole arc of phases 1 and 10:
+
+|                     | Before phase 1 | After phase 1 | After §10 |
+| ------------------- | -------------: | ------------: | --------: |
+| Mean career length  |          10.5y |          8.7y | **14.4y** |
+| Mean retirement age |           32.6 |          30.8 |  **36.4** |
+| Earliest retirement |             27 |            22 |    **29** |
+
+Careers are now materially longer than before any of this, which is the correct direction: the
+disruption is real, and the response to it is lost time rather than a lost career. Fourteen years is
+on the generous side, and the harness that produces it never takes a hard fight and never chooses to
+stop — worth revisiting once §3.2's intensity choice gives a career something else to spend.
+
+`retirement.ts` had no tests at all before this. It has fifteen now.
