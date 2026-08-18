@@ -15,6 +15,8 @@ import { careerSummary, isKoMethod } from '../domain/fighter.js';
 import { lossImpactMultiplier, starPowerGrowthMultiplier } from '../domain/personality.js';
 import { findTraitConflicts, traitMul, type TraitId } from '../domain/traits.js';
 import type { Corner, FightResult } from '../fight/types.js';
+import { exposureFrom } from '../health/injuries.js';
+import { fightFreshnessCost, freshnessOf, withFreshness } from '../health/freshness.js';
 
 export interface AftermathInput {
   result: FightResult;
@@ -88,6 +90,16 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
     const finishBonus = won && isKoMethod(result.method) ? 5 : 0;
     const confidence = clamp(fighter.condition.confidence + swing + finishBonus, 1, 100);
 
+    /*
+     * What the night took out of them, read off the same exposure the injury roll uses.
+     *
+     * One number for both is deliberate: a thirty-second submission where nothing landed costs
+     * almost no injury risk *and* almost no freshness, and a three-round war costs a great deal of
+     * each. `fatigue` next to it is the within-fight variable, reset because the fight is over —
+     * the two are different things and doc 25 § 1.7 is about how easily that was missed.
+     */
+    const spent = fightFreshnessCost(exposureFrom(result, corner));
+
     const condition = {
       ...fighter.condition,
       headTrauma: trauma,
@@ -95,6 +107,7 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
       confidence,
       fatigue: 0,
       ringRust: 0,
+      freshness: withFreshness(freshnessOf(fighter) - spent),
     };
 
     // --- Acquired traits ---------------------------------------------------------------

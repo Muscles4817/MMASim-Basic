@@ -13,6 +13,14 @@
  */
 
 import { ageOn, type GameDay } from '../core/clock.js';
+import {
+  FRESH,
+  campFreshnessCost,
+  duringTraining,
+  freshnessOf,
+  recoveryRate,
+  withFreshness,
+} from '../health/freshness.js';
 import { clamp, remap, round } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import type { Fighter } from '../domain/fighter.js';
@@ -559,8 +567,24 @@ export function applyTraining(input: TrainingInput): TrainingResult {
   const lastTrained = { ...fighter.lastTrained };
   for (const focus of focuses) lastTrained[focus] = day;
 
+  /*
+   * And what it took out of them. Doc 25 § 3.1.
+   *
+   * Charged here and returned in `applyAgeing`, which sounds odd until you notice that every
+   * caller in the game already runs both over the same span — a camp, a fight camp, the world's
+   * own loop. So the net over a camp is load minus recovery without anybody having to remember to
+   * do the subtraction, and time spent *not* training recovers on its own for free.
+   */
+  const spent = campFreshnessCost(weeks * 7);
+  const condition = {
+    ...fighter.condition,
+    // `duringTraining`, not `withFreshness` — the recovery for these same days has not been
+    // credited yet, and clamping here would throw away the overshoot. See that function.
+    freshness: duringTraining(freshnessOf(fighter) - spent),
+  };
+
   return {
-    fighter: { ...fighter, attributes, trainingCarry: carry, lastTrained },
+    fighter: { ...fighter, attributes, trainingCarry: carry, lastTrained, condition },
     gains,
     notes,
   };
@@ -965,6 +989,21 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
     take(key, loss, Math.max(12, fighter.potential[key] * 0.4));
   }
 
+  /*
+   * Freshness comes back with the days. Doc 25 § 3.1.
+   *
+   * Here because this function's job already is "what elapsed time did to a fighter", and because
+   * it is the one call every path through the game makes when the clock moves. A fighter who sits
+   * out recovers; a fighter in camp recovers too, just more slowly than `applyTraining` spends.
+   *
+   * `bodyWear` and age both slow it, which is where the mileage of a career finally gets teeth:
+   * the same camp costs a 34-year-old with 60 wear far longer to come back from than it costs a
+   * 24-year-old, without a single constant saying so directly.
+   */
+  const recovered = withFreshness(
+    (fighter.condition.freshness ?? FRESH) + recoveryRate(fighter, age) * (toDay - fromDay),
+  );
+
   const notes: string[] = [];
   const totalLoss = Object.values(losses).reduce((a, v) => a + v, 0);
   if (totalLoss > 3) notes.push(`${fighter.lastName} has visibly slowed down.`);
@@ -1012,7 +1051,16 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
     );
   }
 
-  return { fighter: { ...fighter, attributes, trainingCarry: carry }, losses, notes };
+  return {
+    fighter: {
+      ...fighter,
+      attributes,
+      trainingCarry: carry,
+      condition: { ...fighter.condition, freshness: recovered },
+    },
+    losses,
+    notes,
+  };
 }
 
 // --- Idle decay ----------------------------------------------------------------------------

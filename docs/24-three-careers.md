@@ -50,26 +50,26 @@ Physicals in roman, skills in _italics_. “Ceiling” is the fighter’s own `p
 
 ### Year by year — the body
 
-| Age |  Ovr | Power | Speed | Cardio | Durability | Strength | Record | Trauma | Wear | Trained      |
-| --: | ---: | ----: | ----: | -----: | ---------: | -------: | ------ | -----: | ---: | ------------ |
-|  23 | 51.7 |    63 |    69 |     55 |         61 |       48 | 0-1    |      1 |    0 | submissions  |
-|  24 | 53.2 |    63 |    69 |     55 |         61 |       48 | 2-1    |      1 |    1 | strategy     |
-|  25 | 55.2 |    64 |    70 |     55 |         61 |       48 | 4-1    |      2 |    2 | submissions  |
-|  26 | 56.8 |    64 |    70 |     55 |         61 |       49 | 5-2    |      5 |    2 | submissions  |
-|  27 | 58.0 |    64 |    70 |     55 |         61 |       49 | 5-3    |      8 |    6 | wrestling    |
-|  28 | 59.2 |    64 |    70 |     54 |         61 |       51 | 7-3    |     10 |    6 | submissions  |
-|  29 | 60.5 |    64 |    70 |     54 |         61 |       51 | 7-3    |     10 |    6 | wrestling    |
-|  30 | 61.3 |    64 |    70 |     56 |         62 |       52 | 9-3    |     11 |    8 | strategy     |
-|  31 | 62.2 |    64 |    70 |     57 |         62 |       53 | 10-4   |     13 |   10 | boxing       |
-|  32 | 63.0 |    64 |    70 |     58 |         62 |       53 | 12-4   |     15 |   12 | conditioning |
-|  33 | 63.5 |    65 |    70 |     59 |         62 |       54 | 13-4   |     15 |   12 | conditioning |
-|  34 | 63.9 |    65 |    70 |     61 |         63 |       54 | 14-5   |     17 |   14 | kicking      |
-|  35 | 64.1 |    65 |    69 |     60 |         62 |       54 | 15-5   |     18 |   14 | conditioning |
-|  36 | 64.3 |    65 |    69 |     61 |         62 |       54 | 16-5   |     19 |   15 | wrestling    |
-|  37 | 64.2 |    64 |    68 |     61 |         62 |       54 | 16-5   |     19 |   15 | conditioning |
-|  38 | 64.1 |    64 |    68 |     62 |         62 |       54 | 17-5   |     19 |   15 | wrestling    |
-|  39 | 64.0 |    63 |    67 |     61 |         62 |       54 | 18-5-1 |     22 |   16 | kicking      |
-|  39 | 63.9 |    63 |    67 |     61 |         61 |       53 | 19-6-1 |     23 |   17 | conditioning |
+| Age |  Ovr | Power | Speed | Cardio | Durability | Strength | Record | Trauma | Wear | Fresh | Trained      |
+| --: | ---: | ----: | ----: | -----: | ---------: | -------: | ------ | -----: | ---: | ----: | ------------ |
+|  23 | 51.7 |    63 |    69 |     55 |         61 |       48 | 0-1    |      1 |    0 |   100 | submissions  |
+|  24 | 53.2 |    63 |    69 |     55 |         61 |       48 | 2-1    |      1 |    1 |    96 | strategy     |
+|  25 | 55.2 |    64 |    70 |     55 |         61 |       48 | 4-1    |      2 |    2 |   100 | submissions  |
+|  26 | 56.8 |    64 |    70 |     55 |         61 |       49 | 5-2    |      5 |    2 |   100 | submissions  |
+|  27 | 58.0 |    64 |    70 |     55 |         61 |       49 | 5-3    |      8 |    6 |    88 | wrestling    |
+|  28 | 59.2 |    64 |    70 |     54 |         61 |       51 | 7-3    |     10 |    6 |   100 | submissions  |
+|  29 | 60.5 |    64 |    70 |     54 |         61 |       51 | 7-3    |     10 |    6 |    11 | wrestling    |
+|  30 | 61.3 |    64 |    70 |     56 |         62 |       52 | 9-3    |     11 |    8 |    80 | strategy     |
+|  31 | 62.2 |    64 |    70 |     57 |         62 |       53 | 10-4   |     13 |   10 |    97 | boxing       |
+|  32 | 63.0 |    64 |    70 |     58 |         62 |       53 | 12-4   |     15 |   12 |    91 | conditioning |
+|  33 | 63.5 |    65 |    70 |     59 |         62 |       54 | 13-4   |     15 |   12 |    63 | conditioning |
+|  34 | 63.9 |    65 |    70 |     61 |         63 |       54 | 14-5   |     17 |   14 |    88 | kicking      |
+|  35 | 64.1 |    65 |    69 |     60 |         62 |       54 | 15-5   |     18 |   14 |     0 | conditioning |
+|  36 | 64.3 |    65 |    69 |     61 |         62 |       54 | 16-5   |     19 |   15 |    46 | wrestling    |
+|  37 | 64.2 |    64 |    68 |     61 |         62 |       54 | 16-5   |     19 |   15 |     0 | conditioning |
+|  38 | 64.1 |    64 |    68 |     62 |         62 |       54 | 17-5   |     19 |   15 |     0 | wrestling    |
+|  39 | 64.0 |    63 |    67 |     61 |         62 |       54 | 18-5-1 |     22 |   16 |    34 | kicking      |
+|  39 | 63.9 |    63 |    67 |     61 |         61 |       53 | 19-6-1 |     23 |   17 |    76 | conditioning |
 
 ### Year by year — the craft
 
@@ -132,23 +132,23 @@ Physicals in roman, skills in _italics_. “Ceiling” is the fighter’s own `p
 
 ### Year by year — the body
 
-| Age |  Ovr | Power | Speed | Cardio | Durability | Strength | Record | Trauma | Wear | Trained            |
-| --: | ---: | ----: | ----: | -----: | ---------: | -------: | ------ | -----: | ---: | ------------------ |
-|  23 | 53.7 |    55 |    60 |     52 |         60 |       55 | 1-1    |      2 |    1 | wrestling + boxing |
-|  24 | 55.1 |    56 |    61 |     54 |         61 |       56 | 2-2    |      7 |    5 | wrestling + boxing |
-|  25 | 56.7 |    58 |    62 |     54 |         62 |       57 | 2-3    |      9 |    6 | wrestling + boxing |
-|  26 | 57.8 |    58 |    63 |     54 |         62 |       58 | 3-4    |     10 |    7 | wrestling + boxing |
-|  27 | 59.2 |    59 |    64 |     54 |         62 |       59 | 3-5    |     11 |    9 | wrestling + boxing |
-|  28 | 60.7 |    60 |    65 |     53 |         63 |       60 | 3-6    |     12 |   10 | wrestling + boxing |
-|  29 | 61.2 |    60 |    65 |     53 |         63 |       60 | 4-7    |     16 |   11 | wrestling + boxing |
-|  30 | 62.2 |    61 |    66 |     53 |         64 |       61 | 4-8    |     17 |   12 | wrestling + boxing |
-|  31 | 62.9 |    61 |    66 |     53 |         64 |       61 | 4-9    |     18 |   14 | wrestling + boxing |
-|  32 | 63.6 |    62 |    67 |     53 |         64 |       61 | 4-10   |     19 |   14 | wrestling + boxing |
-|  33 | 64.4 |    62 |    67 |     55 |         65 |       62 | 4-11   |     20 |   14 | wrestling + boxing |
-|  34 | 64.7 |    63 |    67 |     54 |         64 |       62 | 5-11   |     21 |   15 | wrestling + boxing |
-|  35 | 65.2 |    63 |    67 |     54 |         64 |       62 | 5-11   |     21 |   15 | wrestling + boxing |
-|  36 | 65.3 |    62 |    67 |     54 |         64 |       61 | 5-12   |     23 |   16 | wrestling + boxing |
-|  37 | 65.3 |    62 |    67 |     53 |         64 |       61 | 6-13   |     25 |   18 | wrestling + boxing |
+| Age |  Ovr | Power | Speed | Cardio | Durability | Strength | Record | Trauma | Wear | Fresh | Trained            |
+| --: | ---: | ----: | ----: | -----: | ---------: | -------: | ------ | -----: | ---: | ----: | ------------------ |
+|  23 | 53.7 |    55 |    60 |     52 |         60 |       55 | 1-1    |      2 |    1 |    93 | wrestling + boxing |
+|  24 | 55.1 |    56 |    61 |     54 |         61 |       56 | 2-2    |      7 |    5 |    92 | wrestling + boxing |
+|  25 | 56.7 |    58 |    62 |     54 |         62 |       57 | 2-3    |      9 |    6 |    39 | wrestling + boxing |
+|  26 | 57.8 |    58 |    63 |     54 |         62 |       58 | 3-4    |     10 |    7 |    91 | wrestling + boxing |
+|  27 | 59.2 |    59 |    64 |     54 |         62 |       59 | 3-5    |     11 |    9 |    27 | wrestling + boxing |
+|  28 | 60.7 |    60 |    65 |     53 |         63 |       60 | 3-6    |     12 |   10 |     0 | wrestling + boxing |
+|  29 | 61.2 |    60 |    65 |     53 |         63 |       60 | 4-7    |     16 |   11 |    82 | wrestling + boxing |
+|  30 | 62.2 |    61 |    66 |     53 |         64 |       61 | 4-8    |     17 |   12 |     7 | wrestling + boxing |
+|  31 | 62.9 |    61 |    66 |     53 |         64 |       61 | 4-9    |     18 |   14 |     0 | wrestling + boxing |
+|  32 | 63.6 |    62 |    67 |     53 |         64 |       61 | 4-10   |     19 |   14 |     0 | wrestling + boxing |
+|  33 | 64.4 |    62 |    67 |     55 |         65 |       62 | 4-11   |     20 |   14 |    30 | wrestling + boxing |
+|  34 | 64.7 |    63 |    67 |     54 |         64 |       62 | 5-11   |     21 |   15 |     0 | wrestling + boxing |
+|  35 | 65.2 |    63 |    67 |     54 |         64 |       62 | 5-11   |     21 |   15 |     0 | wrestling + boxing |
+|  36 | 65.3 |    62 |    67 |     54 |         64 |       61 | 5-12   |     23 |   16 |    68 | wrestling + boxing |
+|  37 | 65.3 |    62 |    67 |     53 |         64 |       61 | 6-13   |     25 |   18 |    64 | wrestling + boxing |
 
 ### Year by year — the craft
 
@@ -208,13 +208,13 @@ Physicals in roman, skills in _italics_. “Ceiling” is the fighter’s own `p
 
 ### Year by year — the body
 
-| Age |  Ovr | Power | Speed | Cardio | Durability | Strength | Record | Trauma | Wear | Trained              |
-| --: | ---: | ----: | ----: | -----: | ---------: | -------: | ------ | -----: | ---: | -------------------- |
-|  27 | 51.7 |    50 |    55 |     48 |         54 |       49 | 0-2    |      2 |    2 | boxing + submissions |
-|  28 | 52.4 |    50 |    55 |     48 |         54 |       49 | 1-2    |      3 |    2 | boxing + submissions |
-|  29 | 53.1 |    51 |    55 |     48 |         54 |       49 | 1-3    |      6 |    5 | boxing + submissions |
-|  30 | 53.8 |    51 |    56 |     48 |         54 |       49 | 1-4    |      6 |    5 | boxing + submissions |
-|  30 | 54.2 |    51 |    56 |     48 |         53 |       49 | 1-5    |      7 |    6 | boxing + submissions |
+| Age |  Ovr | Power | Speed | Cardio | Durability | Strength | Record | Trauma | Wear | Fresh | Trained              |
+| --: | ---: | ----: | ----: | -----: | ---------: | -------: | ------ | -----: | ---: | ----: | -------------------- |
+|  27 | 51.7 |    50 |    55 |     48 |         54 |       49 | 0-2    |      2 |    2 |    79 | boxing + submissions |
+|  28 | 52.4 |    50 |    55 |     48 |         54 |       49 | 1-2    |      3 |    2 |    29 | boxing + submissions |
+|  29 | 53.1 |    51 |    55 |     48 |         54 |       49 | 1-3    |      6 |    5 |    77 | boxing + submissions |
+|  30 | 53.8 |    51 |    56 |     48 |         54 |       49 | 1-4    |      6 |    5 |     0 | boxing + submissions |
+|  30 | 54.2 |    51 |    56 |     48 |         53 |       49 | 1-5    |      7 |    6 |    73 | boxing + submissions |
 
 ### Year by year — the craft
 

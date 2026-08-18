@@ -118,6 +118,14 @@ export interface Condition {
   stress: number;
   /** 0–1. Sharpness from recent competition; decays during long layoffs. */
   ringRust: number;
+  /**
+   * 0–100. How recovered they are right now. Falls with training and fighting, returns with time.
+   *
+   * Optional because every save written before doc 25 phase 2 lacks it, and absent must mean
+   * *fresh* rather than *empty* — read it through `freshnessOf`, never directly. See
+   * `health/freshness.ts`, which also explains why this is not the same thing as `fatigue`.
+   */
+  freshness?: number;
 }
 
 /** A fighter's estimated ceiling in one attribute, as the *engine* knows it (true values). */
@@ -313,7 +321,15 @@ export function emptyRecordSummary(): RecordSummary {
 }
 
 export function freshCondition(): Condition {
-  return { fatigue: 0, headTrauma: 0, bodyWear: 0, confidence: 60, stress: 10, ringRust: 0 };
+  return {
+    fatigue: 0,
+    headTrauma: 0,
+    bodyWear: 0,
+    confidence: 60,
+    stress: 10,
+    ringRust: 0,
+    freshness: 100,
+  };
 }
 
 const KO_METHODS: ReadonlySet<FinishMethod> = new Set(['ko', 'tko', 'doctorStoppage']);

@@ -1,7 +1,7 @@
 # 25 — Fitness, fatigue, and what damage actually costs
 
-**Status:** **phase 1 shipped** (§3.5 exposure, §3.6 KO to concussion, §3.7 the world); §§3.1-3.4
-and §4 remain proposals. Every number in §1 was measured against this codebase at the commit that
+**Status:** **phases 1 and 2 shipped** (§3.5 exposure, §3.6 KO to concussion, §3.7 the world, §3.1
+freshness, §3.8 the display); §§3.2-3.4 and §4 remain proposals. Every number in §1 was measured against this codebase at the commit that
 merged doc 24; nothing here is estimated without saying so. §9 records what phase 1 actually cost.
 
 > **The short version.** Four observations turn out to be one missing idea. A career has no
@@ -589,3 +589,75 @@ on the generous side, and the harness that produces it never takes a hard fight 
 stop — worth revisiting once §3.2's intensity choice gives a career something else to spend.
 
 `retirement.ts` had no tests at all before this. It has fifteen now.
+
+---
+
+## 11. Phase 2, as shipped
+
+`condition.freshness` exists, falls, returns, and the hub shows it. **It is still inert**: nothing
+reads it to decide anything, because §3.2's intensity dial and §3.4's fight-night hook are phase 3.
+That was the plan and it is worth restating, because the readout is now visible and a player could
+reasonably assume it is doing something.
+
+### Every §5 target came out on the nose
+
+| Measured                         | Target        |
+| -------------------------------- | ------------- |
+| 8-week camp at 25, time to clear | **5 weeks**   | ~5 weeks  |
+| Same camp at 34, with mileage    | **8 weeks**   | longer    |
+| `ageDrag(38)`                    | **0.72**      | 0.72      |
+| A three-round war                | **8.3 weeks** | ~2 months |
+| A thirty-second finish           | **0.7 weeks** | days      |
+
+The fight cost reads `exposureScore` — the same number phase 1's injury roll uses — so one measure
+of how hard a night was decides both what it broke and how long it takes to come back from. That is
+the join the whole design was for.
+
+### Where the mileage finally bites
+
+`recoveryRate` takes `naturals.recovery`, `bodyWear` and age, and the spread is the point:
+
+| Fighter     | Recovery |
+| ----------- | -------: |
+| 25, no wear | 1.30/day |
+| 30, wear 20 | 1.08/day |
+| 34, wear 60 | 0.78/day |
+| 38, wear 40 | 0.79/day |
+
+So the same eight-week camp costs a 34-year-old eight weeks to clear against a 25-year-old's five,
+without a single constant saying "old fighters decline faster". `ageDrag` is applied here rather
+than by decaying `naturals.recovery` itself, because naturals are what a fighter was born with and
+the card should keep saying so — the same distinction `headTrauma` already observes against
+`durability`.
+
+### A bug worth recording
+
+The load is charged by `applyTraining` and the recovery for the same days by `applyAgeing`, because
+every caller in the game already runs both over the same span. Clamping the intermediate at zero
+breaks that: an eight-week camp charging 118 points against 100 available bottoms out, loses the
+overshoot, and then credits recovery against a floor. Measured, that put a camp's end state at 67
+where the arithmetic says 57 — and the error grew with camp length, so at sixteen weeks a _longer_
+camp came out fresher than a shorter one. The mid-span value now carries the overshoot and
+`freshnessOf` clamps on read.
+
+### The finding: nobody can sustain camp intensity
+
+Back-to-back eight-week blocks with no rest at all, which is what the game currently offers:
+
+| Fighter     | Net per block | Freshness after each block |
+| ----------- | ------------: | -------------------------- |
+| 24, no wear |           −45 | 55 → 11 → 0 → 0 → 0        |
+| 30, wear 15 |           −55 | 45 → 0 → 0 → 0 → 0         |
+| 37, wear 40 |           −72 | 28 → 0 → 0 → 0 → 0         |
+
+**Even a 24-year-old floors out after three.** That is the model correctly demanding periodisation,
+and it is the strongest argument yet for §3.2: real fighters do train year-round, but not at _camp_
+intensity year-round, and the game currently has no way to express anything else. `runTraining`
+charges a general block at the same rate as a fight camp because there is nothing else to charge it
+at yet.
+
+In actual play it is less stark, because fights bring layoffs and medical suspensions with them.
+Doc 24's traced careers show freshness moving 100 → 88 → 11 → 80 → 97 → 63 → 0 → 46 → 76 across a
+career, which is a readable signal rather than a flat line. But the trace also shows a 37-year-old
+ground into the floor by a schedule that does not respect what he can recover from, and until phase
+3 the player has no lever to do anything about it.

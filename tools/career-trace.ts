@@ -36,6 +36,7 @@ import {
   createPlayerFighter,
   createRng,
   fighterAge,
+  freshnessOf,
   headroom,
   overallRating,
   retirementUrge,
@@ -209,6 +210,7 @@ interface Snapshot {
   headTrauma: number;
   bodyWear: number;
   bank: number;
+  freshness: number;
   focuses: string;
   urge: number;
 }
@@ -239,6 +241,7 @@ function snapshot(f: Fighter, day: number, focuses: readonly TrainingFocus[]): S
     headTrauma: Math.round(f.condition.headTrauma),
     bodyWear: Math.round(f.condition.bodyWear),
     bank: Math.round(f.bank),
+    freshness: Math.round(freshnessOf(f)),
     focuses: focuses.join(' + '),
     urge: retirementUrge(f, day),
   };
@@ -543,13 +546,15 @@ for (const c of careers) {
   say('### Year by year — the body');
   say();
   say(
-    `| Age | Ovr | ${physical.map((k) => PRETTY[k]).join(' | ')} | Record | Trauma | Wear | Trained |`,
+    `| Age | Ovr | ${physical.map((k) => PRETTY[k]).join(' | ')} | Record | Trauma | Wear | Fresh | Trained |`,
   );
-  say(`| ---: | ---: | ${physical.map(() => '---:').join(' | ')} | --- | ---: | ---: | --- |`);
+  say(
+    `| ---: | ---: | ${physical.map(() => '---:').join(' | ')} | --- | ---: | ---: | ---: | --- |`,
+  );
   for (const x of c.snapshots) {
     say(
       `| ${x.age} | ${x.overall.toFixed(1)} | ${physical.map((k) => x.attributes[k]).join(' | ')} | ` +
-        `${x.record} | ${x.headTrauma} | ${x.bodyWear} | ${x.focuses} |`,
+        `${x.record} | ${x.headTrauma} | ${x.bodyWear} | ${x.freshness} | ${x.focuses} |`,
     );
   }
   say();
