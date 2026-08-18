@@ -1,8 +1,12 @@
 # 20 — Persistence and save size
 
-**Status:** proposal, not approved. Decision points in §5 are open. Written after a player hit the
-quota in ordinary play; every number in §0 was measured rather than estimated, and the two places
-where I am estimating say so.
+**Status:** phase 2 landed; phases 3–6 open, and the decision points in §5 that they turn on remain
+open. Written after a player hit the quota in ordinary play; every number in §0 was measured rather
+than estimated, and the two places where I am estimating say so.
+
+> **Phase 2 shipped — §8 records exactly what it did and did not change.** The numbers in §0 are
+> still current: the save is the same size it always was. What changed is that the box is no longer
+> 5 MB, and that a refusal to write no longer takes the app down with it.
 
 > **The short version.** A fresh 2026 save is **2.80 MB before a single fight**, against a
 > `localStorage` budget of about 5 MB shared across every save on the origin. One in-game year
@@ -136,9 +140,9 @@ in a way that is hard to walk back. Shrinking the save is what makes a backup un
 
 | Phase | Lands | Effort | Risk |
 |---|---|---|---|
-| **0** | **A test that measures save size**, and fails today | half a day | none — pure measurement |
-| **1** | Quota errors surface properly; **export/import a save to a file** | 1–2 days | none — additive |
-| **2** | **IndexedDB adapter**, per-row writes | 2–4 days | the storage layer, with a migration |
+| **0** | **A test that measures save size** — *landed, §8* | half a day | none — pure measurement |
+| **1** | Quota errors surface properly *(landed)*; **export/import a save to a file** *(open)* | 1–2 days | none — additive |
+| **2** | **IndexedDB adapter** *(landed)*, per-row writes *(not done — §8)* | 2–4 days | the storage layer, with a migration |
 | **3** | Retention: terminated agreements, ancient nights | 1 day | small; changes what history exists |
 | **4** | Stop storing `summary` and `potential` | 1 day | schema change, small surface |
 | **5** | **Seed-diff saves** — store era + seed + what changed | 1–2 weeks | schema change with a versioning problem |
@@ -242,3 +246,81 @@ is phase 2's claim and can be asserted the day it lands.
 roster the game can rebuild from a seed — so the fix is not a bigger bucket, it is storing the player's
 career instead of the world's contents. Move to IndexedDB so nobody is losing saves this week, then
 make the save small enough that a cloud backup is a detail rather than a decision.
+
+---
+
+## 8. What phase 2 actually landed
+
+Shipped out of order against §4: phase 2 went first and phase 1's export/import did not go with it.
+That contradicts the sequencing argument above, so it is worth recording why. The failure had
+stopped being theoretical — the app was no longer starting on a phone — and the honest fix for a box
+that is too small is a bigger box, not a rescue hatch for the contents. Export/import is still right
+and is now the next additive piece.
+
+### What changed
+
+**Saves live in IndexedDB.** `db/backends.ts` holds three key-value backends — IndexedDB,
+`localStorage`, memory — behind one asynchronous, batch-oriented interface. The quota goes from a
+fixed ~5 MB shared across every save on the origin to a share of free disk. Two 2026 careers now
+coexist, which §0 records as impossible, and a ten-year save is a non-event.
+
+**The adapter stayed synchronous.** §5 D1's recommendation, taken as recommended. `db/saveStorage.ts`
+loads a save's namespace into memory once, before `GameProvider` mounts, and serves every read from
+there; nothing below `SaveGate` knows anything changed. Writes are write-behind, batched onto a
+microtask, so one `db.save()` across fifteen repositories is one transaction rather than fifteen.
+
+**A failed write no longer takes the app down.** This was the actual mechanism behind "it will not
+start", and §2's last bullet undersold it. The world is built inside a `useState` initialiser, so
+`StorageAdapter.write` throwing on a full quota threw *during a React render* — the error boundary
+caught it, the cause was persisted, and every reload reproduced it forever. Write-behind cannot throw
+at a caller that has already returned, so a failure now goes to subscribers and surfaces as the
+existing banner. The adapter's insistence that a save must fail loudly is intact; the channel
+changed, not the promise.
+
+**The last write is flushed on the way out.** §5 D1 named this as the cost of write-behind and
+required it in the same phase rather than as a follow-up. `GameProvider` flushes on `pagehide`, on a
+hidden `visibilitychange`, and on unmount — a home-screen app is backgrounded and later killed, and
+`beforeunload` never fires there.
+
+**Existing saves migrate themselves, and free the space they were holding.** On first open a save's
+namespace is copied out of `localStorage`, verified byte for byte, and only then deleted from it.
+Freeing it matters as much as the copy: the registry, the theme and the active-save pointer all live
+in `localStorage` too, and none of them could be written while 2.8 MB of roster sat on the quota. If
+the copy cannot be verified, the original is left exactly where it is and the save goes on being
+served from `localStorage`.
+
+**Eviction is now asked about.** `navigator.storage.persist()` is requested once per load. §2 noted
+that neither it nor `estimate()` was called anywhere; it is granted on signals the browser chooses,
+and an installed home-screen app is the strongest of them. A refusal costs the durability guarantee
+and nothing else, so nothing waits on the answer.
+
+### What did not change, deliberately
+
+**The save is exactly as big as it was.** 2.80 MB fresh on 2026, 16.71 MB at ten years. Every defect
+in §1 is untouched. This phase moved the data; §§1.1–1.3 are about what the data *is*, and phases 3
+to 5 still own them.
+
+**Writes are still per-collection, not per-row.** §5 D3 recommended per-row and §7 asserts it as
+phase 2's claim, and this is the one place the phase came in short. Changing one fighter still
+re-serialises all 858 of them on the main thread. That is §1.4: a hitch rather than a failure, and a
+change to the storage *layout* — which belongs with the schema work in phases 4 and 5 rather than
+bolted onto a migration already moving every byte a player owns. **D3 should be re-decided there
+rather than treated as settled.**
+
+**No compression.** §6 still holds, and holds harder now that the ceiling is not the binding
+constraint.
+
+### What is now measured
+
+`tests/integration/save-size.test.ts` is phase 0, with one deliberate departure from §7: it asserts
+today's sizes as ceilings rather than the targets. A failing test here blocks the Pages deploy, and
+shipping a red suite to make a point would have kept the game broken on the device it was broken on.
+The §7 targets are named in the file as what the assertions become. It also pins the specific fact a
+player hit — two 2026 saves do not fit in 5 MB — and says in the test that the assertion should be
+deleted rather than inverted once phase 5 makes it false.
+
+Around it: `packages/data/src/db/backends.test.ts` runs the IndexedDB backend against a real
+implementation of the spec, `saveStorage.test.ts` covers write-behind retry and the migration's
+verify-before-delete, and `tests/ui/storage.test.tsx` mounts the whole app against a full store and
+asserts it opens anyway. That last one fails against the previous code with the error boundary on
+screen, which is the shape of the bug this phase existed to remove.

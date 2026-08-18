@@ -10,18 +10,20 @@
  * it. Mirroring 800 fighters into `useState` would be both slower and a bug factory.
  */
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   createLocalStorageAdapter,
   listSaves,
   namespaceFor,
   upsertSave,
+  type BackendName,
   type EraId,
   getWorld,
   loadOrCreateGame,
   setWorld,
   type GameDb,
+  type SaveStorage,
   type WorldMeta,
 } from '@mmasim/data';
 import { displayName, recordString, type Fighter } from '@mmasim/engine';
@@ -41,6 +43,8 @@ interface GameContextValue {
   restart(): void;
   /** Set when the last save failed. The UI must surface this rather than claim success. */
   saveError?: Error;
+  /** Where saves are actually being written. Settings says so; a bug report needs it. */
+  storageBackend: BackendName;
 }
 
 const GameContext = createContext<GameContextValue | undefined>(undefined);
@@ -49,6 +53,7 @@ export function GameProvider({
   children,
   saveId,
   era,
+  storage,
 }: {
   children: ReactNode;
   /**
@@ -62,32 +67,78 @@ export function GameProvider({
   saveId?: string;
   /** Which world to build, when this slot is empty. Ignored for a save that already exists. */
   era?: EraId;
+  /**
+   * Storage for this save, already hydrated.
+   *
+   * Supplied by `SaveGate`, which is the one place that can await it. Optional because the
+   * UI tier mounts this provider directly and does not care where a throwaway world lives —
+   * without a storage it falls back to the old synchronous `localStorage` adapter, which is
+   * exactly what those tests were always exercising.
+   */
+  storage?: SaveStorage;
 }) {
   // `useState` with an initialiser, not `useRef(create…())`: the latter evaluates its
   // argument on every render and throws the result away, which means re-scanning and
   // string-copying the entire roster out of localStorage on every commit.
-  const [adapter] = useState(() =>
-    createLocalStorageAdapter(saveId ? namespaceFor(saveId) : undefined),
+  const [adapter] = useState(
+    () => storage ?? createLocalStorageAdapter(saveId ? namespaceFor(saveId) : undefined),
   );
   const [db, setDb] = useState<GameDb>(() => loadOrCreateGame(adapter, { era }));
   const [version, setVersion] = useState(0);
-  const [saveError, setSaveError] = useState<Error | undefined>();
+  const [saveError, setSaveError] = useState<Error | undefined>(() => storage?.lastError());
+
+  /**
+   * A write-behind backend cannot report a failure by throwing — by the time the transaction
+   * is refused, the render that queued it finished long ago. It reports on this channel
+   * instead, and the banner in `App` is what the player sees.
+   */
+  useEffect(() => {
+    if (!storage) return;
+    setSaveError(storage.lastError());
+    return storage.subscribe(setSaveError);
+  }, [storage]);
+
+  /**
+   * Commit anything queued before the page can go away.
+   *
+   * `pagehide` and a hidden `visibilitychange` are the only endings a phone reliably fires:
+   * a home-screen app is backgrounded and later killed, and `beforeunload` never runs. Without
+   * this, write-behind would trade the crash it fixes for a quietly lost last save.
+   */
+  useEffect(() => {
+    if (!storage) return;
+    const flush = (): void => void storage.flush();
+    const onVisibility = (): void => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('visibilitychange', onVisibility);
+      flush();
+    };
+  }, [storage]);
 
   /**
    * Persist, and surface a failure rather than pretending it worked.
    *
-   * A quota error used to be swallowed at the adapter, so the player was told their game was
-   * saved while nothing had been written. It now throws; the UI's job is to say so.
+   * Two shapes of failure, because there are two shapes of storage. The synchronous adapter
+   * throws from `write()` and is caught here. `SaveStorage` cannot — its writes land after
+   * this call returns — so it reports on the subscription above instead, and this must not
+   * touch `saveError` in that case: clearing it here would wipe a genuine quota warning every
+   * time the player did anything, which is precisely the "we told them it saved" failure the
+   * adapter's own comment exists to prevent.
    */
   const persist = useCallback(() => {
     try {
       db.save();
       syncRegistry(db, saveId);
-      setSaveError(undefined);
+      if (!storage) setSaveError(undefined);
     } catch (error) {
       setSaveError(error instanceof Error ? error : new Error(String(error)));
     }
-  }, [db, saveId]);
+  }, [db, saveId, storage]);
 
   const commit = useCallback(() => {
     persist();
@@ -110,19 +161,29 @@ export function GameProvider({
     clearTransientCareerState();
     db.reset();
     setDb(loadOrCreateGame(adapter, { era }));
-    setSaveError(undefined);
+    if (!storage) setSaveError(undefined);
     setVersion((v) => v + 1);
-  }, [db, adapter, era]);
+  }, [db, adapter, era, storage]);
 
   const value = useMemo<GameContextValue>(() => {
     const world = getWorld(db);
     const playerFighter = world.playerFighterId
       ? (db.fighters.findById(world.playerFighterId) as Fighter | undefined)
       : undefined;
-    return { db, world, version, commit, updateWorld, playerFighter, restart, saveError };
+    return {
+      db,
+      world,
+      version,
+      commit,
+      updateWorld,
+      playerFighter,
+      restart,
+      saveError,
+      storageBackend: storage?.backend ?? 'localstorage',
+    };
     // `version` is in the dependency list on purpose: it is the signal that the underlying
     // repositories have changed and these derived values must be recomputed.
-  }, [db, version, commit, updateWorld, restart, saveError]);
+  }, [db, version, commit, updateWorld, restart, saveError, storage]);
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;
 }

@@ -38,9 +38,7 @@ export function MenuScreen({
     <div className="menu">
       <header className="menu__head">
         <h1 className="menu__title">MMA Sim</h1>
-        <p className="menu__tagline">
-          One career, fifteen years, and a body that keeps the score.
-        </p>
+        <p className="menu__tagline">One career, fifteen years, and a body that keeps the score.</p>
       </header>
 
       {/*
@@ -124,7 +122,11 @@ export function MenuScreen({
                     >
                       Delete {save.name}
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setConfirmingDelete(undefined)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setConfirmingDelete(undefined)}
+                    >
                       Keep
                     </Button>
                   </span>
@@ -151,8 +153,8 @@ export function MenuScreen({
       )}
 
       <Alert tone="info" title="Where your game lives">
-        Saves are stored in this browser, on this device. Clearing your browser data will remove
-        them, and they do not follow you to another machine.
+        Saves are stored on this device, in the browser&rsquo;s own database. Clearing your browser
+        data will remove them, and they do not follow you to another machine.
       </Alert>
     </div>
   );

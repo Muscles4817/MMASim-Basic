@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { displayName, type Fighter } from '@mmasim/engine';
-import { isPersistent } from '@mmasim/data';
+import { isPersistent, type BackendName } from '@mmasim/data';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { useTheme } from '../state/theme';
@@ -8,9 +8,26 @@ import { Button, Card, Chip, Segmented } from '../ui';
 import { Alert } from '../ui/signals';
 import { formatGameDay } from '../shell/Shell';
 
+/**
+ * Where this save lives, said plainly.
+ *
+ * Worth a sentence rather than a shrug, because the three answers have genuinely different
+ * consequences for the player: one is durable and effectively unlimited, one is a 5 MB box the
+ * game outgrows inside an in-game year, and one does not survive closing the tab.
+ */
+function describeStorage(backend: BackendName): string {
+  if (backend === 'indexeddb') {
+    return 'Saved to this device, with room to grow. The same seed and day always reproduce the same world.';
+  }
+  if (backend === 'localstorage' && isPersistent()) {
+    return 'This browser has no database storage, so the save is in the small 5 MB browser store. Long careers may not fit.';
+  }
+  return 'This browser is not allowing storage, so progress will be lost when you close the tab.';
+}
+
 export function SettingsScreen() {
   const { choice, resolved, setChoice } = useTheme();
-  const { db, world, playerFighter, restart, saveError } = useGame();
+  const { db, world, playerFighter, restart, saveError, storageBackend } = useGame();
   const { navigate } = useRouter();
   const [confirmingRestart, setConfirmingRestart] = useState(false);
 
@@ -71,10 +88,11 @@ export function SettingsScreen() {
             </Alert>
           </div>
         ) : (
-          <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
-            {isPersistent()
-              ? 'Saved to this browser. The same seed and day always reproduce the same world.'
-              : 'This browser is not allowing storage, so progress will be lost when you close the tab.'}
+          <p
+            className="faint prose"
+            style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}
+          >
+            {describeStorage(storageBackend)}
           </p>
         )}
 
@@ -145,9 +163,9 @@ export function SettingsScreen() {
 
       <Card title="About">
         <p className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
-          Ratings are absolute, not weight-class relative: Power 78 is the same force at
-          flyweight and at heavyweight. Every rating in the seed roster is a critical
-          judgement, and each fighter carries a note explaining the ones you would argue with.
+          Ratings are absolute, not weight-class relative: Power 78 is the same force at flyweight
+          and at heavyweight. Every rating in the seed roster is a critical judgement, and each
+          fighter carries a note explaining the ones you would argue with.
         </p>
       </Card>
     </div>

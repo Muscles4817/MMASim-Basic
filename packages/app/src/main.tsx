@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { ErrorBoundary } from './shell/ErrorBoundary';
+import { requestPersistentStorage } from './shell/persistentStorage';
 import { SaveGate } from './state/SaveGate';
 import { RouterProvider } from './state/router';
 import { ThemeProvider } from './state/theme';
@@ -9,6 +10,11 @@ import './styles/global.css';
 
 const container = document.getElementById('root');
 if (!container) throw new Error('Missing #root element');
+
+// Before the first render, so the request is in flight while the world is being built. It
+// changes nothing about this session and everything about whether the save is still there in
+// three weeks — see shell/persistentStorage.
+requestPersistentStorage();
 
 createRoot(container).render(
   <StrictMode>

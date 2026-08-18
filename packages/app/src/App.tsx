@@ -71,7 +71,7 @@ export function App() {
               here — on the message shown while their progress is actively being lost.
             */}
             {saveError.message} Nothing since the last successful save will survive a reload.
-            Freeing some browser storage usually fixes it.
+            Deleting a save you have finished with, from the main menu, frees the space.
           </Alert>
         </div>
       )}

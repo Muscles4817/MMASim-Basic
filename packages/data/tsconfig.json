@@ -1,6 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // DOM because this package owns browser persistence: `localStorage` was always here, and
+    // the IndexedDB backend needs the same typings. Nothing above the `db/` directory touches
+    // a browser global — the engine is a separate project and stays DOM-free by construction.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": [
       "node"
     ],

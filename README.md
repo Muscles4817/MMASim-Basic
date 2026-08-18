@@ -41,8 +41,10 @@ that ships a broken game is worse than one that fails loudly, so the gate is del
 deploy takes a few minutes.
 
 It installs: open it on a phone and use *Add to Home Screen*. The service worker caches the shell,
-so it opens and plays with no connection, and saves live in `localStorage` on the device. Nothing
-is synced between devices — a save made on a phone stays on that phone.
+so it opens and plays with no connection, and saves live in the device's **IndexedDB** — which is
+storage on the phone itself, sized against free disk rather than the fixed ~5 MB `localStorage`
+gives an origin. A save made before that change moves itself across the first time it is opened.
+Nothing is synced between devices — a save made on a phone stays on that phone.
 
 The build is base-path agnostic (`VITE_BASE`), so it works served from a domain root or from a
 project subpath. To reproduce a Pages build locally:
@@ -73,9 +75,10 @@ a merely elite fighter.
 testing tiers.
 
 Two open plans: [19 — Fight engine](docs/19-fight-engine-plan.md) (phases 0 and 1 landed) and
-[20 — Persistence and save size](docs/20-persistence-and-save-size.md), which is a live problem
-rather than an improvement — a fresh 2026 save is 2.80 MB against a `localStorage` budget of
-about 5 MB shared across every save.
+[20 — Persistence and save size](docs/20-persistence-and-save-size.md), whose phase 2 has landed:
+saves are in IndexedDB, so the 5 MB ceiling that stopped the app starting on a phone is gone. The
+save itself is still 2.80 MB fresh, almost all of it a roster the game can rebuild from a seed —
+which is what phases 3 to 5 are for.
 
 ## Non-negotiables
 
