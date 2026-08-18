@@ -1485,6 +1485,106 @@ options that remain are therefore not 1 vs 2 at all:
 - **Merge it.** Option 3, unchanged, and now with a measurement behind it rather than a shrug.
 - **Accept.** Option 4, with same-family separation taken off the goal list explicitly.
 
+### 13.8 Two reviews, and what they found instead
+
+Phase 6's clinch sub-state proposal was reviewed twice — once for realism, once for system design.
+**Neither recommended building it**, and between them they found four live defects, three of which
+this programme introduced.
+
+**Verified: the submission art is told to submit less than any other plan would tell it.**
+`planFor` gives the jiu-jitsu exemplar `pointFight`, whose `approachWeight` row carries
+`submit: 0.6` — the lowest in the table, against `finish`'s 1.5. The cause is `pickApproach`'s
+cascade: wrestling-edge, then clinch-edge, then striking, with **no branch a submission specialist
+can reach**. Measured, forcing that one exemplar to `finish` and changing nothing else:
+
+```
+                 submissionMix   vs judo   vs wrestling
+as shipped               0.470     0.101          0.156
+@ finish                 0.604     0.201          0.205
+```
+
+**Both stuck pairs clear 0.20 on one axis, from one missing branch** — a larger move than §13.7
+bought, and §13.7 traded a pair away to get its own. This is phase 5's defect, still live for one
+art.
+
+**Verified: a throw never resolves on grips.** `resolveTakedown` contests `chainWrestling`
+regardless of entry, so judo must buy `wrestling` to land anything — and `wrestling` is the
+attribute that gates the distance shot. §13.7 changed which entry a fighter *picks* and never
+touched what makes it *work*, which is why the judo exemplar still shoots doubles 31% of the time.
+**The identity is being taxed into existence by the resolver.**
+
+**Verified: §13.7 broke jiu-jitsu's clinch.** Adding `submissions` at 0.18 to `clinchOffence` put
+the jiu-jitsu exemplar at 74 against a wrestler's 76 — by the engine's own numbers, jiu-jitsu is now
+*more* of a grip fighter than judo (+8 grip-over-shot against judo's +2). Historically backwards:
+the BJJ-in-MMA problem was precisely that they could not control a tie-up.
+
+**Verified: `landingPosition`'s skill gate is dead.** It fires above `groundControl > 80`; the six
+exemplars are 66–78 and the control opponent is 68. So for every fighter the instrument measures,
+three of five entries land in guard 100% of the time and 82–94% of all takedowns hit the bottom
+rung. The ladder a clinch ladder would mirror is itself running over two and a half of its five
+rungs, separating the six arts by **0.037**.
+
+**And the phase budget says the proposal was aimed at the wrong place.** Measured share of the fight
+clock: the clinch is **7–13%**, the ground is **55–66%**. *Fix the ladder that exists before
+building a second one in a smaller room.*
+
+#### The agreed sequence
+
+1. **Route submission specialists in `pickApproach`.** Ships alone — it moves `subPct`, which the
+   roster profile bounds.
+2. **The knee reads `kicking`.** A knee is a leg strike and `kicking` appears nowhere in its
+   resolution, which is why 6B cost 2.2 points of the `kicking` swing. It buys back the G4 margin
+   any further clinch work would spend, and it gives Muay Thai a clinch identity of its own.
+3. **A throw resolves on grips** when entered from the clinch, so judo can stop buying `wrestling`.
+4. **Widen `landingPosition`** and kill the dead gate.
+5. **Re-measure, then re-ask** whether any structural clinch work is still justified.
+
+### 13.9 Owner decisions and open questions
+
+**D11 — Judo and sambo both stay, and differ at the table rather than in the engine. Decided.**
+The realism review argued the bundle is two arts in one 40-point vector — Rousey and Khabib — and
+recommended dropping "Sambo" from the label. The owner's answer keeps both and puts the distinction
+where a discipline is *created*:
+
+- **Judo** spends its forty points almost entirely on the clinch and clinch takedowns.
+- **Sambo** spreads across the clinch, jiu-jitsu, and a **per-fighter split between ground-and-pound
+  and submissions**.
+
+That last clause is a new idea and worth stating plainly: it makes a discipline a *distribution*
+rather than a fixed vector, so two sambo fighters would not be the same fighter. Nothing in
+`DISCIPLINE_META` can express it today — `attributes` is one flat record — and the equal-cost rule
+is a claim about the *total*, which a per-fighter split preserves exactly. It needs a design pass of
+its own, and it should come **after** the §13.8 sequence, because that sequence changes how much of
+the gap is left for the table to close.
+
+**Q1 — Generated fighters should sometimes belong to a gym, and the gym should shape them.**
+`generateFighter` never sets `gymId`, so **every fighter who enters the world after the seed is
+unattached** and gym quality and coach specialisms only ever act on the player. A fighter who came
+up at a wrestling gym should read as a wrestler on arrival. A generation change with a career-
+distribution tail, so it belongs with the phase-4 machinery rather than with the fight engine.
+
+**Q2 — A debutant is not a worse athlete than a veteran, and generation says otherwise.**
+Measured, as a share of each fighter's own ceiling:
+
+```
+debut age 21: speed 69%  power 68%  strength 69%  |  wrestling 58%
+debut age 24: speed 77%  power 77%  strength 77%  |  wrestling 67%
+debut age 27: speed 86%  power 86%  strength 86%  |  wrestling 76%
+debut age 30: speed 94%  power 94%  strength 95%  |  wrestling 85%
+```
+
+**A 21-year-old is generated 31% slower than they will ever be.** `generateFighter` applies one
+`development` factor to everything and gives the physical group a flat +0.1, so the whole difference
+between "how athletic" and "how skilled" a debutant is comes to eleven points. Speed and
+explosiveness peak in the early twenties in every sport that measures them; wrestling and fight IQ
+take a decade.
+
+And the engine **already models the decline separately** — `PEAK_AGE` and the per-attribute decline
+rates in `development.ts` — so this double-counts: the young are slow *and* the old are slow, which
+puts peak speed somewhere near 28. The honest shape is physicals arriving near their ceiling by 22
+and technical attributes arriving at half. It moves every career distribution in the game, so it is
+its own step with its own long-sim re-baseline.
+
 ---
 
 **The one-line version:** the engine's missing primitive is a named weapon on the strike, not a
