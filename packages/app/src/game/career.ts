@@ -12,6 +12,8 @@ import {
   applyAgeing,
   applyTraining,
   forecastTraining,
+  activeLesson,
+  focusForAttribute,
   pickTrainingFocus,
   ATTRIBUTE_META,
   TRAINING_META,
@@ -332,6 +334,17 @@ export function campDevelopmentPlan(
   booking: Booking,
 ): CampDevelopment {
   const world = getWorld(db);
+  /*
+   * Failing a choice, the camp goes to whatever the last fight exposed.
+   *
+   * This is the half of docs/25 §2.4 that makes the mechanic worth having: a fight names the
+   * hole, and the very next camp is pointed at it unless the player says otherwise. Ordered
+   * ahead of `pickTrainingFocus` because a hole somebody just had their nose rubbed in is better
+   * information than a general survey of where there is room.
+   */
+  const lesson = activeLesson(fighter, world.day);
+  const lessonFocus = lesson ? focusForAttribute(lesson) : undefined;
+
   return {
     /*
      * The player's choice when they made one, and otherwise the fighter's own judgement.
@@ -343,6 +356,7 @@ export function campDevelopmentPlan(
      */
     focus:
       booking.campFocus ??
+      lessonFocus ??
       pickTrainingFocus(createRng(`${world.seed}:campdev:${booking.bout.id}`), fighter),
     weeks: campWeeksOf(booking),
     gym: fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined,

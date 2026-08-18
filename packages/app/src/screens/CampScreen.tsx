@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import {
   APPROACHES,
+  activeLesson,
+  focusForAttribute,
   TRAINING_FOCUSES,
   APPROACH_META,
   MAX_PREPPED_READS,
@@ -140,6 +142,8 @@ export function CampScreen() {
    * and the fighter trains whatever they most need. Only once they pick something does the camp
    * stop being the game's decision. See docs/25 §2.1.
    */
+  const lesson = playerFighter ? activeLesson(playerFighter, world.day) : undefined;
+  const lessonFocus = lesson ? focusForAttribute(lesson) : undefined;
   const [campFocus, setCampFocus] = useState<TrainingFocus | undefined>(booking?.campFocus);
   const [bought, setBought] = useState<PurchaseKey[]>([...(booking?.purchases ?? [])]);
   const purchases = campPurchaseEffects(bought);
@@ -322,12 +326,31 @@ export function CampScreen() {
           player alone, pure ageing. It develops properly now, and a system the player cannot see
           is a system they cannot plan around, so it says so before the fight rather than after.
         */}
+        {/*
+          What the last fight said to go and fix.
+          
+          A fight grants direction rather than points (docs/25 §2.4), and direction the player
+          cannot see is direction they cannot act on — so it is named here, on the screen where
+          the decision is actually made, rather than buried in a post-fight note they scrolled
+          past six weeks ago.
+        */}
+        {lesson && (
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <Alert tone="info" title="What last time out exposed">
+              {ATTRIBUTE_META[lesson].label} was the hole. The next camp works it harder than
+              usual{lessonFocus ? ` — that is ${TRAINING_META[lessonFocus].label}.` : '.'}
+            </Alert>
+          </div>
+        )}
+
         <div style={{ marginBottom: 'var(--space-3)' }}>
           <p className="section-title">What this camp works on</p>
           <p className="faint" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-2)' }}>
             {campFocus
               ? `${weeks} weeks on it, alongside preparing for this opponent.`
-              : 'Left to him, he trains whatever he most needs. Pick something to override that.'}
+              : lessonFocus
+                ? 'Pointed at what the last fight exposed. Pick something else to override that.'
+                : 'Left to him, he trains whatever he most needs. Pick something to override that.'}
           </p>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             {TRAINING_FOCUSES.map((key) => (

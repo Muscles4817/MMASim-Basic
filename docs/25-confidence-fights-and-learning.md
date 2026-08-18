@@ -1,8 +1,7 @@
 # 25 — Confidence, what a fight teaches, and when learning stops
 
-**Status:** §1 is a defect report and is **fixed** — see §5 for what was built and what it
-measured. §2.1 (the fight camp's focus) is **fixed**. §2.2–§2.4 (what a fight teaches) and §3 (the
-learning window) remain design proposals and are **not implemented**.
+**Status:** §1 (confidence) and §2 (what a fight teaches) are **built** — see §5 and §6 for what
+each one measured. §3 (the learning window) remains a design proposal and is **not implemented**.
 
 Three findings that came out of tracing created careers through the 2026 world. They are filed
 together because they are one story: **a career ends before it develops, and the things that
@@ -428,3 +427,103 @@ the simulator actually returns.
 term are correlated by construction. For a fighter who went 5-15 that is a truthful reason. Whether
 it should be the _modal_ one across a whole population is a separate question, and it will move on
 its own once §2 gives fights something to contribute besides damage.
+
+---
+
+## 6. What a fight teaches — built
+
+§2.1 shipped with §1 (above). §2.2, §2.3 and §2.4 shipped together, because they are one mechanic
+seen from two ends: a fight gives you the thing a gym cannot, and it tells you what to take back to
+the gym.
+
+### 6.1 Octagon time
+
+`progression/development.ts:applyRingExperience`. A fight now grants **fight IQ and composure and
+nothing else** — the two qualities `PEAK_OFFSET` already marks as peaking six years after everything
+physical, and the only two a fighter could previously acquire solely by standing in a gym. Nothing
+physical: you do not get faster in a fight, you get damaged, and the model already charges that.
+
+Three bounds, because the obvious version of this mechanic is an XP grind:
+
+- **Time in the cage.** Scaled on seconds fought, so a twelve-second blowout is worth roughly a
+  fortieth of a hard three-rounder.
+- **A hard taper.** `1 / (1 + bouts / 6)` — a debut teaches enormously, the sixth fight half as
+  much, the thirtieth about a sixth. Without this the optimal play is to fight every eight weeks
+  forever.
+- **Adversity, capped.** Knockdowns survived and submissions escaped are the most instructive thing
+  that can happen to a fighter, up to a ceiling of +60%. Uncapped, the mechanic rewards taking
+  horrific punishment.
+
+It is applied inside `applyAftermath`, which is the single function all three fight paths already go
+through — the player's career loop, the world tick and promoter mode. The last time a development
+hook lived in only one of them, the entire undercard of the sport declined permanently and nobody
+noticed for months.
+
+A test asserts the gain from one fight is smaller than the gain from one camp. That is the balance
+the whole thing turns on: fights are worth something, and the gym is still the engine.
+
+### 6.2 The lesson
+
+`business/lessons.ts`. This is §2.4's argument — being outwrestled for fifteen minutes does not make
+anybody better at wrestling, it tells them expensively and in public that their wrestling is the
+problem — so a fight grants **direction, not points**.
+
+Six candidates are scored from `FightStats`, each as a ratio to its own threshold so that six
+takedowns and four hundred absorbed strikes are comparable at all. Highest wins, and it has to clear
+1:
+
+| Lesson           | Read from                                            | A lesson at |
+| ---------------- | ---------------------------------------------------- | ----------- |
+| Takedown defence | their takedowns landed                               | 3 per fight |
+| Scrambling       | their **floor** control time, clinch excluded        | 5 minutes   |
+| Submissions      | their submission attempts, or being submitted        | 3 attempts  |
+| Striking defence | their significant strikes, knockdowns, being stopped | 75 strikes  |
+| Wrestling        | **your** takedown attempts landing under 25%         | 4 attempts  |
+| Striking offence | **your** accuracy under 28% on real volume           | 40 attempts |
+
+Everything is expressed per full fight, so a five-round war and a short one are measured on the same
+scale. Three deliberate refusals: it does not fire on every bout (a clean night teaches nothing, and
+a lesson on every result is noise — measured at **0.74 lessons per fight**); it ignores who won,
+because you can win a decision having been put on your back six times; and a fight under 150 seconds
+teaches nothing at all, because every rate goes silly on that denominator.
+
+The lesson is written onto the `FightRecordEntry`, which is already immutable-once-written, so the
+expiry is "was that fight recent" rather than a mutable countdown that can drift. It stays live for
+200 days and is worth a **1.5x learning rate** on that attribute — passed into `rawGain` as a
+parameter precisely so `applyTraining` and `forecastTraining` cannot disagree, and the forecast the
+player sees is the camp they get.
+
+The player-facing half: the camp screen names the hole, and an untouched camp now defaults to
+working it — `booking.campFocus ?? lessonFocus ?? pickTrainingFocus(...)`. §2.1's change is what made
+that possible.
+
+### 6.3 What it measured
+
+Same twelve created fighters, same 2026 world, camp length held constant at 8 weeks so that only
+fight frequency varies:
+
+| Fights/yr | Retire | Growth | Headroom | Fight IQ | Composure |
+| --------: | -----: | -----: | -------: | -------: | --------: |
+|       1.2 |   37.0 |   +9.0 |      49% |     +6.2 |      +5.3 |
+|       1.7 |   34.1 |   +8.7 |      47% |     +4.2 |      +3.4 |
+|       2.3 |   31.6 |   +8.7 |      47% |     +5.1 |      +4.4 |
+|       3.3 |   38.3 |   +6.2 |      34% |     +9.5 |      +7.7 |
+
+**Fights now build what fights should build.** The busiest schedule produces more than double the
+fight IQ and composure of the quietest — measured, not asserted.
+
+**Camps are still the engine, and the busiest fighter still develops least overall.** That is not a
+shortfall, and it should not be tuned away. A fighter taking three or four bouts a year genuinely
+does not develop technically like one taking two with full camps; that is true of the sport and the
+model is now right to say it. What was wrong before was that fights contributed _nothing at all_.
+
+It also produces an archetype the sport is full of and the model previously could not express: the
+busy regional fighter who is ring-smart, hard to rattle, and technically raw. `overallRating`
+averages fifteen attributes, so a two-attribute specialisation is structurally under-rewarded by
+that yardstick — which is a comment on the yardstick as much as on the fighter, and the same caveat
+doc 24 finding 4 raises about breadth.
+
+### 6.4 Still not done
+
+§3 — the learning window — is untouched, and it is now the largest thing left in this document. It
+is also the one that decides whether a twenty-year career is a story or a formality.

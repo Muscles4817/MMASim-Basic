@@ -414,6 +414,14 @@ function rawGain(input: {
   gym?: Gym;
   coach?: Coach;
   age: number;
+  /**
+   * `LESSON_BONUS` when this is the thing their last fight exposed, else 1.
+   *
+   * Passed in rather than derived here so that `applyTraining` and `forecastTraining` cannot
+   * drift apart: the forecast the player is shown on the camp screen has to be the camp they
+   * actually get, and the only way to guarantee that is one arithmetic path.
+   */
+  lessonBonus?: number;
 }): number {
   const { fighter, focus, key, weight, current, blocks, focusShare, gym, coach, age } = input;
 
@@ -436,6 +444,7 @@ function rawGain(input: {
     campGainMultiplier(fighter.personality) *
     traitMul(fighter.traits, 'developmentRate') *
     learningRate(age, fighter.naturals.ageCurve, key) *
+    (input.lessonBonus ?? 1) *
     room
   );
 }
@@ -448,6 +457,7 @@ export function applyTraining(input: TrainingInput): TrainingResult {
 
   const age = ageOn(fighter.birthDay, day);
   const blocks = trainingBlocks(weeks);
+  const lesson = activeLesson(fighter, day);
 
   // Splitting focus costs: two focuses get 65% each, not 100% each.
   const focusShare = focuses.length > 1 ? 0.65 : 1;
@@ -473,6 +483,7 @@ export function applyTraining(input: TrainingInput): TrainingResult {
         gym,
         coach,
         age,
+        lessonBonus: key === lesson ? LESSON_BONUS : 1,
       });
       if (raw <= 0) continue;
 
@@ -598,6 +609,7 @@ export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingFor
 
   const age = ageOn(fighter.birthDay, day);
   const blocks = trainingBlocks(weeks);
+  const lesson = activeLesson(fighter, day);
   const focusShare = focuses.length > 1 ? 0.65 : 1;
 
   const expected: Partial<Record<AttributeKey, number>> = {};
@@ -620,6 +632,7 @@ export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingFor
         gym,
         coach,
         age,
+        lessonBonus: key === lesson ? LESSON_BONUS : 1,
       });
       if (raw <= 0) continue;
 
@@ -752,6 +765,50 @@ const FOCUSES_FOR_ATTRIBUTE = (() => {
   }
   return out;
 })();
+
+/**
+ * How long a lesson from a fight stays live. Roughly the next camp or two.
+ *
+ * A fighter who has just been taken down nine times in front of a crowd works on it, and works
+ * on it harder than they would have from a coach's suggestion. Then it fades, because the next
+ * fight overwrites it and because nobody stays that motivated about one hole forever.
+ */
+export const LESSON_WINDOW_DAYS = 200;
+
+/**
+ * What being shown a hole is worth, as a multiplier on the camp that follows.
+ *
+ * Deliberately a *rate* rather than points, which is the whole argument of docs/25 §2.4: being
+ * outwrestled for fifteen minutes does not make anybody better at wrestling. It tells them —
+ * loudly, expensively, in public — what to fix, and the gain comes from the camp they then spend
+ * on it. A fight grants direction; the gym still does the work.
+ */
+export const LESSON_BONUS = 1.5;
+
+/**
+ * The attribute a fighter's most recent fight told them to work on, if it is still live.
+ *
+ * Read off the record rather than stored as mutable state on the fighter: a lesson belongs to
+ * the night that taught it, `FightRecordEntry` is already immutable-once-written, and an expiry
+ * expressed as "was that fight recent" cannot drift out of sync with anything.
+ */
+export function activeLesson(fighter: Fighter, day: GameDay): AttributeKey | undefined {
+  const last = fighter.record[fighter.record.length - 1];
+  if (!last?.lesson) return undefined;
+  return day - last.day <= LESSON_WINDOW_DAYS ? last.lesson : undefined;
+}
+
+/**
+ * The camp that best works a given attribute.
+ *
+ * Used to turn a lesson into something the player can actually be offered on the camp screen.
+ * Highest weight wins; ties break on the focus order, which is stable.
+ */
+export function focusForAttribute(key: AttributeKey): TrainingFocus | undefined {
+  const trainers = FOCUSES_FOR_ATTRIBUTE[key];
+  if (!trainers || trainers.length === 0) return undefined;
+  return trainers.reduce((best, next) => (next[1] > best[1] ? next : best))[0];
+}
 
 /**
  * Days since this attribute was last genuinely worked.
@@ -1036,6 +1093,122 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
     losses,
     notes,
   };
+}
+
+// --- Ring experience -----------------------------------------------------------------------
+
+/**
+ * What a hard fight is worth in fight IQ, before anything scales it.
+ *
+ * Small, and it has to be. Measured before this existed: a fighter taking 3.8 bouts a year
+ * developed *less* than one taking 1.7, because fights contributed nothing and displaced camps —
+ * the model actively contradicting the reason anybody fights on the regional circuit. The fix is
+ * not to make fighting lucrative, it is to stop it being free. See docs/25 §2.2.
+ */
+const RING_EXPERIENCE_BASE = 0.55;
+
+/**
+ * How fast the lesson of simply being in there wears off.
+ *
+ * A debut teaches enormously; the fortieth fight teaches almost nothing. Without a taper this
+ * steep the mechanic is an XP grind and the optimal play is to fight every eight weeks forever,
+ * which is neither realistic nor a game. At six professional bouts a fighter is already getting
+ * half of what they got on debut, and at thirty about a sixth.
+ */
+const RING_EXPERIENCE_HALF_LIFE = 6;
+
+export interface RingExperienceInput {
+  /** Seconds actually spent in the cage. A twelve-second knockout teaches nobody anything. */
+  secondsFought: number;
+  /** Professional bouts before this one. Drives the taper. */
+  priorBouts: number;
+  knockdownsSuffered: number;
+  /** Submissions this fighter had to survive. Deep water of a different kind. */
+  submissionsFaced: number;
+  day: GameDay;
+}
+
+/**
+ * The part of a fight a gym cannot give you.
+ *
+ * You do not get stronger or faster in a fight — you get damaged, and the model already says so.
+ * What a fight gives is the thing training genuinely cannot simulate: reading a live opponent who
+ * is trying to take your head off, adrenaline, cage craft, knowing what the fifth round feels
+ * like, and finding out what you do when you are hurt. Fighters call it octagon time and treat it
+ * as a separate currency from training, which is exactly what it is here.
+ *
+ * It lands on fight IQ and composure and on nothing else — the two qualities `PEAK_OFFSET`
+ * already marks as peaking six years after everything physical, and until now the only two a
+ * fighter could acquire solely by sitting in a gym.
+ *
+ * Three things bound it, because the obvious version of this mechanic breaks the game. It scales
+ * with **time in the cage**, so a first-round blowout is worth nearly nothing. It **tapers hard**
+ * with bouts already had. And it is paid for in trauma and wear by the same fight, which is what
+ * keeps the trade honest rather than making constant activity strictly correct.
+ */
+export function applyRingExperience(
+  fighter: Fighter,
+  input: RingExperienceInput,
+): { fighter: Fighter; gains: Partial<Record<AttributeKey, number>>; notes: readonly string[] } {
+  const gains: Partial<Record<AttributeKey, number>> = {};
+  const notes: string[] = [];
+  if (input.secondsFought <= 0) return { fighter, gains, notes };
+
+  const age = ageOn(fighter.birthDay, input.day);
+
+  // Fraction of a full three-round fight. A five-rounder goes past 1, which is the point.
+  const depth = input.secondsFought / 900;
+  const greenness = 1 / (1 + Math.max(0, input.priorBouts) / RING_EXPERIENCE_HALF_LIFE);
+
+  /*
+   * Adversity, capped.
+   *
+   * Being dropped and getting back up is the single most instructive thing that can happen to a
+   * fighter, and surviving a submission is the same lesson in a different position. Capped
+   * because a fight cannot be arbitrarily educational, and because an uncapped version rewards
+   * taking horrific punishment.
+   */
+  const adversity =
+    1 + Math.min(0.6, input.knockdownsSuffered * 0.2 + input.submissionsFaced * 0.1);
+
+  const attributes: Attributes = { ...fighter.attributes };
+  const carry: Partial<Record<AttributeKey, number>> = { ...fighter.trainingCarry };
+
+  for (const [key, weight] of [
+    ['fightIq', 1],
+    ['composure', 0.8],
+  ] as [AttributeKey, number][]) {
+    const current = attributes[key];
+    const gain =
+      RING_EXPERIENCE_BASE *
+      weight *
+      depth *
+      greenness *
+      adversity *
+      learningRate(age, fighter.naturals.ageCurve, key) *
+      difficulty(fighter, key, current);
+    if (gain <= 0) continue;
+
+    // Banked through the same ledger a camp uses, for the same reason: these are tenths, and
+    // `toRating(current + gain)` would round every one of them away.
+    const banked = (carry[key] ?? 0) + gain;
+    const whole = Math.floor(banked);
+    carry[key] = round(banked - whole, 4);
+    if (whole > 0) attributes[key] = toRating(current + whole);
+    gains[key] = round(gain, 2);
+  }
+
+  if ((gains.fightIq ?? 0) + (gains.composure ?? 0) < 0.02) {
+    return { fighter, gains: {}, notes };
+  }
+
+  // Worth saying only when the fight was genuinely formative — which, by construction, means a
+  // young fighter in deep water rather than a veteran clocking in.
+  if (depth >= 0.8 && greenness >= 0.5) {
+    notes.push(`Rounds like that are what ${fighter.lastName} cannot get in a gym.`);
+  }
+
+  return { fighter: { ...fighter, attributes, trainingCarry: carry }, gains, notes };
 }
 
 // --- Idle decay ----------------------------------------------------------------------------

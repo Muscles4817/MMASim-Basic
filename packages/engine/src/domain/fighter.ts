@@ -77,6 +77,19 @@ export interface FightRecordEntry {
    * somebody up a queue faster than their bare record justifies.
    */
   bonus?: 'performance' | 'fight';
+  /**
+   * The hole this fight exposed, if it exposed one clearly.
+   *
+   * A fight does not make anybody better at wrestling — being outwrestled for fifteen minutes
+   * tells them, expensively and in public, that their wrestling is the problem. The gain comes
+   * from the camp that follows, which is why this is a *direction* rather than a gain: see
+   * docs/25 §2.4, `business/lessons.ts` for how it is read off the stats, and
+   * `progression/development.ts:LESSON_BONUS` for what it is worth.
+   *
+   * Optional and frequently absent. A fight in which nothing was clearly exposed teaches
+   * nothing, and saying so is the point — a lesson on every bout would be noise.
+   */
+  lesson?: AttributeKey;
 }
 
 /** Career totals, denormalised for fast list rendering. Rebuildable from `record`. */

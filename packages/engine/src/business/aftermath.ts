@@ -14,6 +14,8 @@ import type { Fighter, FightRecordEntry, FinishMethod } from '../domain/fighter.
 import { careerSummary, isDecisionMethod, isKoMethod } from '../domain/fighter.js';
 import { starPowerGrowthMultiplier } from '../domain/personality.js';
 import { confidenceSwing } from '../domain/confidence.js';
+import { applyRingExperience } from '../progression/development.js';
+import { lessonFrom } from './lessons.js';
 import { overallRating } from '../ratings/attributes.js';
 import { findTraitConflicts, traitMul, type TraitId } from '../domain/traits.js';
 import type { Corner, FightResult } from '../fight/types.js';
@@ -56,6 +58,29 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
     const damage = result.damage[corner];
     const won = result.winnerId === fighter.id;
     const drew = result.winnerId === undefined;
+    const other: Corner = corner === 'red' ? 'blue' : 'red';
+
+    /*
+     * Seconds actually spent in there, which is what both of the new mechanics are scaled on.
+     * `round` is 1-indexed and `timeSeconds` is the offset into it, so a second-round finish at
+     * 1:30 is one full round plus ninety seconds.
+     */
+    const secondsFought = (result.round - 1) * 300 + result.timeSeconds;
+
+    /*
+     * What this fight told them to go and fix. See `business/lessons.ts` and docs/25 §2.4.
+     *
+     * Deliberately independent of the result: a fighter can win a decision having been put on
+     * their back six times, and that is still the thing to work on.
+     */
+    const lesson = lessonFrom({
+      mine: result.stats[corner],
+      theirs: result.stats[other],
+      damage,
+      method: result.method,
+      lost: !won && !drew,
+      secondsFought,
+    });
 
     const entry: FightRecordEntry = {
       boutId: result.boutId,
@@ -68,9 +93,11 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
       timeSeconds: result.timeSeconds,
       divisionId,
       wasTitleFight: input.isTitleFight ?? false,
+      lesson: lesson?.key,
     };
 
     const record = [...fighter.record, entry];
+    if (lesson) notes.push(lesson.note);
 
     // --- Condition ---------------------------------------------------------------------
     const trauma = clamp(
@@ -195,8 +222,30 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
       100,
     );
 
+    /*
+     * The part of a fight a gym cannot give you. See `applyRingExperience` and docs/25 §2.3.
+     *
+     * Applied here, in the one function all three fight paths already go through — the player's
+     * career loop, the world tick and promoter mode — because the last time a development hook
+     * lived in only one of them, the entire undercard of the sport declined permanently and
+     * nobody noticed for months.
+     *
+     * `fighter.record` rather than `record` for the prior-bout count: this fight is the one being
+     * learned from, not one of the ones that already blunted the lesson.
+     */
+    const experience = applyRingExperience(fighter, {
+      secondsFought,
+      priorBouts: fighter.record.length,
+      knockdownsSuffered: damage.knockdownsSuffered,
+      submissionsFaced: result.stats[other].submissionAttempts,
+      day,
+    });
+    notes.push(...experience.notes);
+
     const updated: Fighter = {
       ...fighter,
+      attributes: experience.fighter.attributes,
+      trainingCarry: experience.fighter.trainingCarry,
       record,
       condition,
       traits,
