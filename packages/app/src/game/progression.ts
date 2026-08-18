@@ -8,7 +8,10 @@
 import {
   applyAgeing,
   applyIdleDecay,
+  DEFAULT_INTENSITY,
+  INTENSITY_META,
   applyTraining,
+  type TrainingIntensity,
   campImpairment,
   campInjuryChance,
   careerProgress,
@@ -152,6 +155,7 @@ export function runTraining(
   fighter: Fighter,
   focuses: readonly TrainingFocus[],
   weeks: number,
+  intensity: TrainingIntensity = DEFAULT_INTENSITY,
 ): TrainingOutcome {
   const world = getWorld(db);
   const days = weeks * 7;
@@ -173,6 +177,7 @@ export function runTraining(
     fighter: paid,
     focuses,
     weeks,
+    intensity,
     gym,
     coach,
     day: world.day,
@@ -183,7 +188,7 @@ export function runTraining(
   // intuition and worth the system stating plainly.
   const existing = fighter.injuries ?? [];
   let injury: Injury | undefined;
-  if (rng.chance(campInjuryChance(fighter, weeks, world.day))) {
+  if (rng.chance(campInjuryChance(fighter, weeks, world.day, INTENSITY_META[intensity].injury))) {
     injury = rollInjury({
       fighter,
       source: 'camp',

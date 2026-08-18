@@ -20,7 +20,11 @@ import {
   ratingBand,
   recordString,
   ATTRIBUTE_META,
+  DEFAULT_INTENSITY,
+  INTENSITY_META,
+  TRAINING_INTENSITIES,
   TRAINING_META,
+  type TrainingIntensity,
   type AttributeKey,
   READ_META,
   scoutOpponent,
@@ -34,7 +38,7 @@ import {
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Button, Card, Chip, Empty } from '../ui';
+import { Button, Card, Chip, Empty, Segmented } from '../ui';
 import { spendLine } from '../ui/format';
 import { Alert, FighterRead, KeyStat } from '../ui/signals';
 import {
@@ -42,6 +46,7 @@ import {
   getBooking,
   isBoutOff,
   runBookedFight,
+  saveBookingIntensity,
   saveBookingPlan,
   saveBookingPurchases,
 } from '../game/career';
@@ -75,6 +80,9 @@ export function CampScreen() {
    * promises in its own copy that the plan is saved as you build it.
    */
   const [booking, setBooking] = useState(() => getBooking());
+  const [intensity, setIntensity] = useState<TrainingIntensity>(
+    () => getBooking()?.intensity ?? DEFAULT_INTENSITY,
+  );
   const [running, setRunning] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -97,9 +105,9 @@ export function CampScreen() {
   const development = useMemo(
     () =>
       booking && playerFighter
-        ? forecastCampDevelopment(db, playerFighter, booking)
+        ? forecastCampDevelopment(db, playerFighter, { ...booking, intensity })
         : undefined,
-    [db, playerFighter, booking],
+    [db, playerFighter, booking, intensity],
   );
 
   const report = useMemo(() => {
@@ -237,7 +245,10 @@ export function CampScreen() {
       // and, like the camp itself, it is allowed to take the bank negative.
       if (spend > 0) payForCamp(db, playerFighter, spend);
 
-      const updated = saveBookingPurchases(saveBookingPlan(booking, plan), bought);
+      const updated = saveBookingPurchases(
+        saveBookingPlan(saveBookingIntensity(booking, intensity), plan),
+        bought,
+      );
       const outcome = runBookedFight(db, updated);
       commit();
       /*
@@ -322,6 +333,26 @@ export function CampScreen() {
           player alone, pure ageing. It develops properly now, and a system the player cannot see
           is a system they cannot plan around, so it says so before the fight rather than after.
         */}
+        <div style={{ marginBottom: 'var(--space-3)' }}>
+          <p className="section-title">How hard to run it</p>
+          <Segmented
+            label="Camp intensity"
+            value={intensity}
+            onChange={setIntensity}
+            options={TRAINING_INTENSITIES.map((key) => ({
+              value: key,
+              label: INTENSITY_META[key].label,
+            }))}
+          />
+          <p
+            className="faint prose"
+            style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}
+            data-testid="camp-intensity-effect"
+          >
+            {INTENSITY_META[intensity].blurb} You walk to the cage in the state this leaves you in.
+          </p>
+        </div>
+
         {development && development.totalExpected > 0.05 && (
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <p className="section-title">This camp is building</p>

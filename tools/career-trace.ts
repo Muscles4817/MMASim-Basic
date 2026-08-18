@@ -50,6 +50,7 @@ import {
   type InboxItem,
   type Promotion,
   type TrainingFocus,
+  type TrainingIntensity,
 } from '../packages/engine/src/index.js';
 import {
   aiPlanFor,
@@ -57,6 +58,7 @@ import {
   bookFight,
   getOffers,
   runBookedFight,
+  saveBookingIntensity,
   saveBookingPlan,
   type Booking,
 } from '../packages/app/src/game/career.js';
@@ -119,6 +121,14 @@ interface Subject {
   spec: Omit<CreateFighterSpec, 'day' | 'promotionId' | 'gymId'>;
   policy: Policy;
   policyLabel: string;
+  /**
+   * How hard each block is run, which is the other half of the training decision.
+   *
+   * A function of age and freshness rather than a constant, because that is the decision the dial
+   * exists for: build while you can afford to be flat, hold when you cannot.
+   */
+  intensity: (f: Fighter, age: number) => TrainingIntensity;
+  intensityLabel: string;
   /** Rough target gap between fights, in days. Two a year is the sport's median. */
   restDays: number;
   /** Weeks per training block between camps. */
@@ -145,6 +155,9 @@ const SUBJECTS: readonly Subject[] = [
     },
     policy: rotate,
     policyLabel: 'Rotates to whatever has the most room. Broad; never specialises.',
+    // Builds hard while there is physical room to build, and backs off when there is not.
+    intensity: (f, age) => (age < 28 && freshnessOf(f) > 55 ? 'hard' : 'standard'),
+    intensityLabel: 'Hard until 28 while fresh, standard after.',
     restDays: 150,
     blockWeeks: 8,
   },
@@ -167,6 +180,9 @@ const SUBJECTS: readonly Subject[] = [
     },
     policy: commit('wrestling', 'boxing'),
     policyLabel: 'Wrestling and boxing, every camp, for the whole career.',
+    // Never manages the load at all, which is the control case.
+    intensity: () => 'standard',
+    intensityLabel: 'Standard, always. Never manages the load.',
     restDays: 150,
     blockWeeks: 8,
   },
@@ -194,6 +210,13 @@ const SUBJECTS: readonly Subject[] = [
     },
     policy: commitThenMaintain('boxing', 'submissions', 32),
     policyLabel: 'Boxing and submissions until 32, then rotates to hold on to what he has.',
+    /*
+     * The veteran's lever, finally expressible. Light blocks return freshness rather than costing
+     * it and still reset the neglect clock in full, so past 32 he holds his level and gets his
+     * legs back instead of digging a hole he cannot climb out of.
+     */
+    intensity: (f, age) => (age >= 32 ? 'light' : freshnessOf(f) > 60 ? 'hard' : 'standard'),
+    intensityLabel: 'Hard while fresh and young; light from 32, to hold rather than build.',
     restDays: 180,
     blockWeeks: 10,
   },
@@ -394,6 +417,7 @@ function runCareer(subject: Subject): Career {
        */
       const opponent = db.fighters.getById(booking.bout.blueId as string) as Fighter | undefined;
       if (opponent) booking = saveBookingPlan(booking, aiPlanFor(f, opponent));
+      booking = saveBookingIntensity(booking, subject.intensity(f, age));
       const outcome = runBookedFight(db, booking);
       for (const text of outcome.notes) note(getWorld(db).day, text);
       lastFightDay = booking.bout.day;
@@ -402,7 +426,7 @@ function runCareer(subject: Subject): Career {
 
     // No fight to take: train, which is also how the clock moves.
     const before = getWorld(db).day;
-    const outcome = runTraining(db, f, focuses, subject.blockWeeks);
+    const outcome = runTraining(db, f, focuses, subject.blockWeeks, subject.intensity(f, age));
     for (const text of outcome.notes) note(getWorld(db).day, text);
     if (getWorld(db).day <= before) advanceTo(db, before + 28);
   }

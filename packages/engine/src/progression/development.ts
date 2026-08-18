@@ -14,6 +14,12 @@
 
 import { ageOn, type GameDay } from '../core/clock.js';
 import {
+  DEFAULT_INTENSITY,
+  INTENSITY_META,
+  intensityGain,
+  type TrainingIntensity,
+} from './intensity.js';
+import {
   FRESH,
   campFreshnessCost,
   duringTraining,
@@ -293,6 +299,8 @@ export function headroom(current: number, ceiling: number): number {
 }
 
 export interface TrainingInput {
+  /** How hard. Defaults to `standard`, so every existing caller behaves exactly as before. */
+  intensity?: TrainingIntensity;
   fighter: Fighter;
   /** One or two focuses. Two splits the effort rather than doubling it. */
   focuses: readonly TrainingFocus[];
@@ -449,6 +457,7 @@ function rawGain(input: {
 
 export function applyTraining(input: TrainingInput): TrainingResult {
   const { fighter, weeks, gym, coach, day, rng } = input;
+  const intensity = input.intensity ?? DEFAULT_INTENSITY;
   const focuses = input.focuses.slice(0, 2);
   const notes: string[] = [];
   const gains: Partial<Record<AttributeKey, number>> = {};
@@ -483,9 +492,18 @@ export function applyTraining(input: TrainingInput): TrainingResult {
       });
       if (raw <= 0) continue;
 
-      // A little noise so two identical camps are not identical. Never negative: a camp can
-      // be wasted, but it cannot make you worse at the thing you drilled.
-      const gain = Math.max(0, raw * rng.range(CAMP_LUCK[0], CAMP_LUCK[1]));
+      /*
+       * A little noise so two identical camps are not identical, and what the intensity did.
+       *
+       * `intensityGain` is the whole of doc 25 § 3.2 in one multiplier: it is nearly flat across
+       * the four settings for a skill and steep for a physical, because craft is bought with time
+       * and a gas tank is bought with effort. Never negative: a camp can be wasted, but it cannot
+       * make you worse at the thing you drilled.
+       */
+      const gain = Math.max(
+        0,
+        raw * rng.range(CAMP_LUCK[0], CAMP_LUCK[1]) * intensityGain(intensity, key),
+      );
       if (gain <= 0) continue;
 
       /*
@@ -575,7 +593,7 @@ export function applyTraining(input: TrainingInput): TrainingResult {
    * own loop. So the net over a camp is load minus recovery without anybody having to remember to
    * do the subtraction, and time spent *not* training recovers on its own for free.
    */
-  const spent = campFreshnessCost(weeks * 7);
+  const spent = campFreshnessCost(weeks * 7, INTENSITY_META[intensity].load);
   const condition = {
     ...fighter.condition,
     // `duringTraining`, not `withFreshness` — the recovery for these same days has not been
@@ -617,6 +635,14 @@ export interface TrainingForecast {
 
 export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingForecast {
   const { fighter, weeks, gym, coach, day } = input;
+  /*
+   * Including the intensity, which this did not read when intensity was added.
+   *
+   * A forecast that ignores a dial the camp obeys is a lie told with real arithmetic — the exact
+   * defect doc 24 recorded against the creation-screen preview, and one this function exists
+   * specifically not to have. The two are meant to be the same function with the luck averaged out.
+   */
+  const intensity = input.intensity ?? DEFAULT_INTENSITY;
   const focuses = input.focuses.slice(0, 2);
 
   const age = ageOn(fighter.birthDay, day);
@@ -647,9 +673,10 @@ export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingFor
       if (raw <= 0) continue;
 
       const mid = (CAMP_LUCK[0] + CAMP_LUCK[1]) / 2;
-      expected[key] = round((expected[key] ?? 0) + raw * mid, 2);
-      low[key] = round((low[key] ?? 0) + raw * CAMP_LUCK[0], 2);
-      high[key] = round((high[key] ?? 0) + raw * CAMP_LUCK[1], 2);
+      const scaled = raw * intensityGain(intensity, key);
+      expected[key] = round((expected[key] ?? 0) + scaled * mid, 2);
+      low[key] = round((low[key] ?? 0) + scaled * CAMP_LUCK[0], 2);
+      high[key] = round((high[key] ?? 0) + scaled * CAMP_LUCK[1], 2);
     }
   }
 

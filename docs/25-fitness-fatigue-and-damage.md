@@ -1,7 +1,8 @@
 # 25 — Fitness, fatigue, and what damage actually costs
 
-**Status:** **phases 1 and 2 shipped** (§3.5 exposure, §3.6 KO to concussion, §3.7 the world, §3.1
-freshness, §3.8 the display); §§3.2-3.4 and §4 remain proposals. Every number in §1 was measured against this codebase at the commit that
+**Status:** **phases 1-3 shipped** (§3.1 freshness, §3.2 intensity, §3.3 the matrix, §3.4 fight
+night, §3.5 exposure, §3.6 KO to concussion, §3.7 the world, §3.8 the display); §4 remains a
+proposal. Every number in §1 was measured against this codebase at the commit that
 merged doc 24; nothing here is estimated without saying so. §9 records what phase 1 actually cost.
 
 > **The short version.** Four observations turn out to be one missing idea. A career has no
@@ -661,3 +662,88 @@ Doc 24's traced careers show freshness moving 100 → 88 → 11 → 80 → 97 �
 career, which is a readable signal rather than a flat line. But the trace also shows a 37-year-old
 ground into the floor by a schedule that does not respect what he can recover from, and until phase
 3 the player has no lever to do anything about it.
+
+---
+
+## 12. Phase 3, as shipped
+
+Intensity is a real dial on both the training screen and the camp screen, `forecastTraining` obeys
+it, `campInjuryChance` obeys it, and `simulateFight` starts a fighter at a fatigue derived from
+their freshness. The design is §3.2 as written; what follows is what measuring it changed.
+
+### §5's own test failed, and the test was wrong
+
+The stated criterion was "a greedy policy over all twelve cells uses at least six". Run as written
+it used **five**, never picked a twelve-week camp, and never picked overreach.
+
+That was the scorer, not the model. It charged _total_ injury risk against _per-week_ gain, which
+is dimensionally wrong and penalises length twice — once through the divisor and once through a
+risk that scales with weeks. Corrected, the same policy uses **7 of 12** with a largest share of
+43%, which passes.
+
+But the deeper lesson is that a greedy policy only ever measures its own objective function, so
+"six of twelve" was never strong evidence. The assertion that actually ships is **domination**: a
+cell is dominated if some other cell delivers at least as much of _both_ kinds of gain, for no more
+calendar, no more injury risk and no more freshness. A dominated cell can never be anybody's right
+answer, whatever they are optimising — and it needs no invented objective to check.
+
+**Zero of twelve cells are dominated.** Every one is on the frontier:
+
+| Cell           | Craft | Body | Camp risk | Net freshness |
+| -------------- | ----: | ---: | --------: | ------------: |
+| 4wk light      |  1.07 | 0.22 |      3.1% |           +15 |
+| 4wk standard   |  1.25 | 0.65 |      6.2% |           −23 |
+| 4wk hard       |  1.31 | 0.98 |      9.3% |           −52 |
+| 4wk overreach  |  1.13 | 1.24 |     14.3% |           −82 |
+| 8wk light      |  2.42 | 0.52 |      6.2% |           +30 |
+| 8wk standard   |  2.85 | 1.49 |     12.4% |           −46 |
+| 8wk hard       |  3.01 | 2.23 |     18.6% |          −105 |
+| 8wk overreach  |  2.57 | 2.83 |     28.6% |          −164 |
+| 12wk light     |  3.56 | 0.77 |      9.3% |           +45 |
+| 12wk standard  |  4.19 | 2.19 |     18.6% |           −69 |
+| 12wk hard      |  4.41 | 3.28 |     27.9% |          −157 |
+| 12wk overreach |  3.77 | 4.14 |     42.9% |          −246 |
+
+The two rows that carry the design are visible in it. Light is the only freshness-positive column,
+and it still resets the neglect clock in full. Overreach buys the most body of anything on the
+board and _less_ craft than hard, which is what stops the dial being a difficulty slider.
+
+**A fixture bug nearly hid all of it.** The first domination run said overreach was dominated at
+every length — because `makeFighter` defaults `potential` to `attributes`, so every physical gain
+was exactly zero and the comparison was of a fighter who could not build a physical if he wanted
+to. With no body column, overreach is strictly worse than standard by construction. The test now
+builds a fighter with real room in both halves and says why.
+
+### The veteran's lever, in a real career
+
+Doc 24's Tom Whitfield trains hard while young and switches to **light** at 32. His freshness:
+
+| Age   |  27 |    28 |  29 |  30 |    31 |  32 |  33 |  34 |  35 |  36 |
+| ----- | --: | ----: | --: | --: | ----: | --: | --: | --: | --: | --: |
+| Fresh |  80 | **0** |  76 |  75 | **0** |  71 | 100 |  88 | 100 | 100 |
+
+He bottoms out twice before the switch and never dips below 88 after it — while his overall keeps
+_climbing_, 54.9 to 55.7, because light keeps 85% of technical gain and he is past the age where the
+physicals were coming anyway. That is the thing the whole mechanic was asked for, and it now reads
+straight off the table.
+
+### Two defects found on the way in
+
+**`forecastTraining` ignored intensity.** It takes `Omit<TrainingInput, 'rng'>`, so `intensity`
+type-checked and was silently dropped — the camp screen would have promised a standard camp's gains
+and delivered an overreach camp's. That is the exact class of defect doc 24 recorded against the
+creation-screen preview, in the one function written specifically not to have it.
+
+**A near-miss import cycle.** `intensity.ts` reached for `development.ts`'s `isPhysical`, and
+`development.ts` imports `intensity.ts`. It compiled and would very probably have worked, because
+the call sits in a function body rather than at module initialisation — which is exactly the kind
+of safety that survives until somebody moves one line. It reads the canonical list from `ratings`
+instead.
+
+### Fight night
+
+`createCombatant` set `fatigue: 0` flatly, so a fighter who had just overreached for twelve weeks
+and one who had tapered walked to the cage identically. Starting fatigue is now derived from
+freshness and capped at **0.25** — a quarter of the way to gassed at nothing left in the tank. The
+cap is the guard against the whole idea: freshness must change _where you begin_, not how fast you
+tire, or it becomes a second hidden cardio attribute deciding fights from a menu.

@@ -10,11 +10,11 @@ Read alongside [22 — the attribute catalogue](./22-attribute-model-catalogue.m
 
 ## At a glance
 
-| Fighter           | Debut | Ceiling | Peak | At age | Final | Retired | Record | How it ended                                         |
-| ----------------- | ----: | ------: | ---: | -----: | ----: | ------: | ------ | ---------------------------------------------------- |
-| **Marcus Bell**   |  51.4 |    75.5 | 64.3 |     36 |  63.9 |      39 | 19-6-1 | Retired on their own terms.                          |
-| **Danil Orlov**   |  52.6 |    71.2 | 65.3 |     36 |  65.3 |      37 | 6-13   | Lost the desire for it and stepped away.             |
-| **Tom Whitfield** |  51.2 |    57.8 | 54.2 |     30 |  54.2 |      30 | 1-5    | Retired on a losing run, with nothing left to prove. |
+| Fighter           | Debut | Ceiling | Peak | At age | Final | Retired | Record  | How it ended                             |
+| ----------------- | ----: | ------: | ---: | -----: | ----: | ------: | ------- | ---------------------------------------- |
+| **Marcus Bell**   |  51.4 |    75.5 | 64.6 |     37 |  62.8 |      42 | 17-14-3 | Retired on their own terms.              |
+| **Danil Orlov**   |  52.6 |    71.2 | 66.0 |     36 |  65.7 |      40 | 11-11-3 | Retired on their own terms.              |
+| **Tom Whitfield** |  51.2 |    57.8 | 55.7 |     36 |  55.5 |      36 | 6-10    | Lost the desire for it and stepped away. |
 
 ---
 
@@ -29,70 +29,76 @@ _A national-level sprinter who has never been hit. The highest ceilings the mode
 
 | Attribute       |    Debut |  Ceiling | Career best |    Final |    Growth |    Decay |
 | --------------- | -------: | -------: | ----------: | -------: | --------: | -------: |
-| Power           |       63 |       76 |          65 |       63 |        +2 |       -2 |
-| Speed           |       69 |       79 |          70 |       67 |        +1 |       -3 |
-| Cardio          |       55 |       80 |          62 |       61 |        +7 |       -1 |
-| Durability      |       61 |       77 |          63 |       61 |        +2 |       -2 |
-| Strength        |       48 |       63 |          54 |       53 |        +6 |       -1 |
-| _Striking off._ |       45 |       77 |          62 |       61 |       +17 |       -1 |
-| _Kicking_       |       48 |       74 |          57 |       56 |        +9 |       -1 |
-| _Striking def._ |       47 |       79 |          67 |       66 |       +20 |       -1 |
-| _Wrestling_     |       47 |       78 |          64 |       63 |       +17 |       -1 |
-| _TD defence_    |       48 |       73 |          68 |       68 |       +20 |        — |
-| _Ground ctrl_   |       49 |       73 |          70 |       69 |       +21 |       -1 |
-| _Submissions_   |       46 |       74 |          69 |       69 |       +23 |        — |
-| _Scrambling_    |       47 |       84 |          62 |       58 |       +15 |       -4 |
-| _Fight IQ_      |       48 |       68 |          71 |       71 |       +23 |        — |
-| _Composure_     |       47 |       75 |          66 |       66 |       +19 |        — |
-| **Overall**     | **51.4** | **75.5** |    **64.3** | **63.9** | **+12.9** | **-0.4** |
+| Power           |       63 |       76 |          65 |       61 |        +2 |       -4 |
+| Speed           |       69 |       79 |          71 |       64 |        +2 |       -7 |
+| Cardio          |       55 |       80 |          62 |       59 |        +7 |       -3 |
+| Durability      |       61 |       77 |          63 |       60 |        +2 |       -3 |
+| Strength        |       48 |       63 |          55 |       52 |        +7 |       -3 |
+| _Striking off._ |       45 |       77 |          60 |       58 |       +15 |       -2 |
+| _Kicking_       |       48 |       74 |          55 |       55 |        +7 |        — |
+| _Striking def._ |       47 |       79 |          67 |       65 |       +20 |       -2 |
+| _Wrestling_     |       47 |       78 |          64 |       60 |       +17 |       -4 |
+| _TD defence_    |       48 |       73 |          68 |       67 |       +20 |       -1 |
+| _Ground ctrl_   |       49 |       73 |          70 |       68 |       +21 |       -2 |
+| _Submissions_   |       46 |       74 |          70 |       69 |       +24 |       -1 |
+| _Scrambling_    |       47 |       84 |          63 |       57 |       +16 |       -6 |
+| _Fight IQ_      |       48 |       68 |          73 |       73 |       +25 |        — |
+| _Composure_     |       47 |       75 |          68 |       68 |       +21 |        — |
+| **Overall**     | **51.4** | **75.5** |    **64.6** | **62.8** | **+13.2** | **-1.8** |
 
 Physicals in roman, skills in _italics_. “Ceiling” is the fighter’s own `potential`, which for a physical is a wall and for a skill is a projection — doc 23 § 2.1.
 
 ### Year by year — the body
 
-| Age |  Ovr | Power | Speed | Cardio | Durability | Strength | Record | Trauma | Wear | Fresh | Trained      |
-| --: | ---: | ----: | ----: | -----: | ---------: | -------: | ------ | -----: | ---: | ----: | ------------ |
-|  23 | 51.7 |    63 |    69 |     55 |         61 |       48 | 0-1    |      1 |    0 |   100 | submissions  |
-|  24 | 53.2 |    63 |    69 |     55 |         61 |       48 | 2-1    |      1 |    1 |    96 | strategy     |
-|  25 | 55.2 |    64 |    70 |     55 |         61 |       48 | 4-1    |      2 |    2 |   100 | submissions  |
-|  26 | 56.8 |    64 |    70 |     55 |         61 |       49 | 5-2    |      5 |    2 |   100 | submissions  |
-|  27 | 58.0 |    64 |    70 |     55 |         61 |       49 | 5-3    |      8 |    6 |    88 | wrestling    |
-|  28 | 59.2 |    64 |    70 |     54 |         61 |       51 | 7-3    |     10 |    6 |   100 | submissions  |
-|  29 | 60.5 |    64 |    70 |     54 |         61 |       51 | 7-3    |     10 |    6 |    11 | wrestling    |
-|  30 | 61.3 |    64 |    70 |     56 |         62 |       52 | 9-3    |     11 |    8 |    80 | strategy     |
-|  31 | 62.2 |    64 |    70 |     57 |         62 |       53 | 10-4   |     13 |   10 |    97 | boxing       |
-|  32 | 63.0 |    64 |    70 |     58 |         62 |       53 | 12-4   |     15 |   12 |    91 | conditioning |
-|  33 | 63.5 |    65 |    70 |     59 |         62 |       54 | 13-4   |     15 |   12 |    63 | conditioning |
-|  34 | 63.9 |    65 |    70 |     61 |         63 |       54 | 14-5   |     17 |   14 |    88 | kicking      |
-|  35 | 64.1 |    65 |    69 |     60 |         62 |       54 | 15-5   |     18 |   14 |     0 | conditioning |
-|  36 | 64.3 |    65 |    69 |     61 |         62 |       54 | 16-5   |     19 |   15 |    46 | wrestling    |
-|  37 | 64.2 |    64 |    68 |     61 |         62 |       54 | 16-5   |     19 |   15 |     0 | conditioning |
-|  38 | 64.1 |    64 |    68 |     62 |         62 |       54 | 17-5   |     19 |   15 |     0 | wrestling    |
-|  39 | 64.0 |    63 |    67 |     61 |         62 |       54 | 18-5-1 |     22 |   16 |    34 | kicking      |
-|  39 | 63.9 |    63 |    67 |     61 |         61 |       53 | 19-6-1 |     23 |   17 |    76 | conditioning |
+| Age |  Ovr | Power | Speed | Cardio | Durability | Strength | Record  | Trauma | Wear | Fresh | Trained      |
+| --: | ---: | ----: | ----: | -----: | ---------: | -------: | ------- | -----: | ---: | ----: | ------------ |
+|  23 | 51.7 |    63 |    69 |     55 |         61 |       48 | 0-1     |      0 |    0 |   100 | submissions  |
+|  24 | 53.4 |    64 |    70 |     55 |         61 |       48 | 1-1-1   |      1 |    1 |    37 | strategy     |
+|  25 | 55.2 |    64 |    70 |     55 |         61 |       48 | 2-2-1   |      3 |    2 |   100 | submissions  |
+|  26 | 57.2 |    64 |    70 |     55 |         61 |       49 | 4-2-1   |      4 |    3 |   100 | submissions  |
+|  27 | 58.3 |    64 |    70 |     55 |         61 |       49 | 4-2-1   |      4 |    3 |     0 | wrestling    |
+|  28 | 59.4 |    64 |    70 |     56 |         62 |       50 | 5-3-1   |      7 |    5 |   100 | wrestling    |
+|  29 | 60.8 |    65 |    70 |     56 |         62 |       51 | 5-5-1   |      8 |    9 |    99 | wrestling    |
+|  30 | 61.8 |    65 |    71 |     56 |         62 |       52 | 6-5-1   |      8 |    9 |    61 | submissions  |
+|  31 | 62.6 |    65 |    70 |     58 |         62 |       53 | 7-6-1   |     10 |   10 |    74 | wrestling    |
+|  32 | 63.4 |    65 |    70 |     59 |         63 |       53 | 9-6-1   |     11 |   11 |    92 | kicking      |
+|  33 | 63.7 |    65 |    70 |     59 |         63 |       54 | 9-7-1   |     11 |   12 |    37 | boxing       |
+|  34 | 64.2 |    65 |    70 |     61 |         63 |       55 | 11-7-1  |     13 |   14 |    56 | kicking      |
+|  35 | 64.3 |    65 |    69 |     60 |         62 |       54 | 12-7-2  |     14 |   15 |    83 | conditioning |
+|  36 | 64.5 |    64 |    69 |     61 |         62 |       55 | 12-8-2  |     16 |   18 |     8 | conditioning |
+|  37 | 64.6 |    64 |    69 |     62 |         62 |       55 | 13-9-2  |     18 |   22 |    78 | kicking      |
+|  38 | 64.5 |    64 |    68 |     61 |         62 |       54 | 13-10-3 |     21 |   22 |    74 | kicking      |
+|  39 | 64.4 |    63 |    67 |     60 |         62 |       54 | 14-10-3 |     21 |   22 |     0 | conditioning |
+|  40 | 64.0 |    63 |    67 |     60 |         61 |       54 | 14-12-3 |     23 |   25 |    73 | wrestling    |
+|  41 | 63.6 |    62 |    66 |     60 |         61 |       53 | 15-13-3 |     24 |   26 |    72 | conditioning |
+|  42 | 63.1 |    61 |    65 |     60 |         61 |       52 | 16-13-3 |     24 |   26 |     0 | wrestling    |
+|  42 | 62.8 |    61 |    64 |     59 |         60 |       52 | 17-14-3 |     25 |   27 |    72 | conditioning |
 
 ### Year by year — the craft
 
 | Age | Striking off. | Kicking | Striking def. | Wrestling | TD defence | Ground ctrl | Submissions | Scrambling | Fight IQ | Composure |
 | --: | ------------: | ------: | ------------: | --------: | ---------: | ----------: | ----------: | ---------: | -------: | --------: |
 |  23 |            47 |      48 |            49 |        47 |         48 |          49 |          46 |         47 |       48 |        47 |
-|  24 |            49 |      48 |            53 |        47 |         48 |          52 |          53 |         50 |       50 |        49 |
+|  24 |            49 |      48 |            53 |        47 |         48 |          52 |          53 |         50 |       51 |        49 |
 |  25 |            51 |      48 |            56 |        48 |         52 |          54 |          55 |         52 |       56 |        53 |
-|  26 |            51 |      50 |            58 |        50 |         55 |          57 |          58 |         55 |       60 |        55 |
-|  27 |            51 |      50 |            59 |        52 |         57 |          59 |          60 |         56 |       63 |        59 |
-|  28 |            53 |      52 |            61 |        56 |         60 |          61 |          62 |         58 |       63 |        59 |
-|  29 |            53 |      52 |            61 |        59 |         63 |          64 |          64 |         60 |       66 |        61 |
-|  30 |            53 |      54 |            62 |        60 |         64 |          65 |          65 |         61 |       66 |        62 |
-|  31 |            53 |      54 |            63 |        62 |         66 |          67 |          66 |         61 |       68 |        63 |
-|  32 |            56 |      53 |            64 |        64 |         68 |          68 |          67 |         62 |       68 |        63 |
-|  33 |            58 |      53 |            65 |        64 |         67 |          69 |          68 |         62 |       68 |        63 |
-|  34 |            58 |      54 |            65 |        64 |         67 |          69 |          69 |         62 |       69 |        64 |
-|  35 |            59 |      56 |            67 |        64 |         68 |          69 |          69 |         62 |       69 |        64 |
-|  36 |            62 |      55 |            67 |        64 |         68 |          70 |          68 |         61 |       69 |        64 |
-|  37 |            61 |      56 |            67 |        64 |         68 |          70 |          69 |         61 |       69 |        64 |
-|  38 |            60 |      57 |            66 |        64 |         68 |          70 |          69 |         60 |       69 |        64 |
-|  39 |            60 |      56 |            66 |        63 |         68 |          70 |          69 |         59 |       71 |        66 |
-|  39 |            61 |      56 |            66 |        63 |         68 |          69 |          69 |         58 |       71 |        66 |
+|  26 |            51 |      48 |            57 |        52 |         57 |          58 |          59 |         55 |       61 |        56 |
+|  27 |            53 |      48 |            59 |        53 |         58 |          60 |          62 |         58 |       62 |        58 |
+|  28 |            53 |      48 |            60 |        55 |         60 |          62 |          63 |         59 |       64 |        60 |
+|  29 |            53 |      51 |            61 |        58 |         63 |          64 |          65 |         60 |       66 |        62 |
+|  30 |            55 |      51 |            63 |        61 |         65 |          66 |          65 |         61 |       67 |        62 |
+|  31 |            55 |      52 |            64 |        62 |         66 |          67 |          67 |         62 |       68 |        63 |
+|  32 |            57 |      52 |            65 |        63 |         67 |          68 |          68 |         62 |       69 |        64 |
+|  33 |            57 |      55 |            65 |        63 |         67 |          69 |          69 |         62 |       69 |        64 |
+|  34 |            59 |      54 |            66 |        64 |         68 |          69 |          69 |         62 |       69 |        64 |
+|  35 |            59 |      54 |            66 |        64 |         68 |          70 |          70 |         63 |       70 |        65 |
+|  36 |            60 |      55 |            67 |        63 |         68 |          70 |          70 |         62 |       71 |        66 |
+|  37 |            60 |      55 |            66 |        63 |         68 |          70 |          70 |         62 |       71 |        67 |
+|  38 |            60 |      55 |            67 |        63 |         68 |          69 |          70 |         61 |       72 |        67 |
+|  39 |            60 |      55 |            67 |        63 |         68 |          70 |          70 |         60 |       73 |        68 |
+|  40 |            60 |      55 |            67 |        62 |         67 |          69 |          69 |         59 |       73 |        68 |
+|  41 |            59 |      55 |            66 |        62 |         67 |          69 |          69 |         58 |       73 |        68 |
+|  42 |            59 |      55 |            66 |        60 |         66 |          68 |          69 |         57 |       73 |        68 |
+|  42 |            58 |      55 |            65 |        60 |         67 |          68 |          69 |         57 |       73 |        68 |
 
 ### What the camp reports said he was letting go
 
@@ -109,66 +115,72 @@ _A national-level wrestler with ordinary genetics. Knows exactly what he is good
 
 ### Where every attribute went
 
-| Attribute       |    Debut |  Ceiling | Career best |    Final |    Growth | Decay |
-| --------------- | -------: | -------: | ----------: | -------: | --------: | ----: |
-| Power           |       55 |       76 |          63 |       62 |        +8 |    -1 |
-| Speed           |       60 |       78 |          67 |       67 |        +7 |     — |
-| Cardio          |       53 |       72 |          55 |       53 |        +2 |    -2 |
-| Durability      |       60 |       78 |          65 |       64 |        +5 |    -1 |
-| Strength        |       55 |       65 |          62 |       61 |        +7 |    -1 |
-| _Striking off._ |       45 |       71 |          77 |       77 |       +32 |     — |
-| _Kicking_       |       47 |       65 |          52 |       50 |        +5 |    -2 |
-| _Striking def._ |       45 |       72 |          74 |       74 |       +29 |     — |
-| _Wrestling_     |       66 |       75 |          85 |       85 |       +19 |     — |
-| _TD defence_    |       61 |       71 |          84 |       84 |       +23 |     — |
-| _Ground ctrl_   |       52 |       68 |          78 |       78 |       +26 |     — |
-| _Submissions_   |       46 |       64 |          52 |       52 |        +6 |     — |
-| _Scrambling_    |       47 |       78 |          63 |       62 |       +16 |    -1 |
-| _Fight IQ_      |       46 |       67 |          49 |       49 |        +3 |     — |
-| _Composure_     |       49 |       64 |          52 |       52 |        +3 |     — |
-| **Overall**     | **52.6** | **71.2** |    **65.3** | **65.3** | **+12.7** | **—** |
+| Attribute       |    Debut |  Ceiling | Career best |    Final |    Growth |    Decay |
+| --------------- | -------: | -------: | ----------: | -------: | --------: | -------: |
+| Power           |       55 |       76 |          63 |       62 |        +8 |       -1 |
+| Speed           |       60 |       78 |          68 |       66 |        +8 |       -2 |
+| Cardio          |       53 |       72 |          54 |       51 |        +1 |       -3 |
+| Durability      |       60 |       78 |          65 |       63 |        +5 |       -2 |
+| Strength        |       55 |       65 |          62 |       60 |        +7 |       -2 |
+| _Striking off._ |       45 |       71 |          79 |       79 |       +34 |        — |
+| _Kicking_       |       47 |       65 |          51 |       48 |        +4 |       -3 |
+| _Striking def._ |       45 |       72 |          75 |       74 |       +30 |       -1 |
+| _Wrestling_     |       66 |       75 |          86 |       85 |       +20 |       -1 |
+| _TD defence_    |       61 |       71 |          84 |       84 |       +23 |        — |
+| _Ground ctrl_   |       52 |       68 |          79 |       79 |       +27 |        — |
+| _Submissions_   |       46 |       64 |          56 |       56 |       +10 |        — |
+| _Scrambling_    |       47 |       78 |          64 |       63 |       +17 |       -1 |
+| _Fight IQ_      |       46 |       67 |          52 |       52 |        +6 |        — |
+| _Composure_     |       49 |       64 |          53 |       53 |        +4 |        — |
+| **Overall**     | **52.6** | **71.2** |    **66.0** | **65.7** | **+13.4** | **-0.3** |
 
 Physicals in roman, skills in _italics_. “Ceiling” is the fighter’s own `potential`, which for a physical is a wall and for a skill is a projection — doc 23 § 2.1.
 
 ### Year by year — the body
 
-| Age |  Ovr | Power | Speed | Cardio | Durability | Strength | Record | Trauma | Wear | Fresh | Trained            |
-| --: | ---: | ----: | ----: | -----: | ---------: | -------: | ------ | -----: | ---: | ----: | ------------------ |
-|  23 | 53.7 |    55 |    60 |     52 |         60 |       55 | 1-1    |      2 |    1 |    93 | wrestling + boxing |
-|  24 | 55.1 |    56 |    61 |     54 |         61 |       56 | 2-2    |      7 |    5 |    92 | wrestling + boxing |
-|  25 | 56.7 |    58 |    62 |     54 |         62 |       57 | 2-3    |      9 |    6 |    39 | wrestling + boxing |
-|  26 | 57.8 |    58 |    63 |     54 |         62 |       58 | 3-4    |     10 |    7 |    91 | wrestling + boxing |
-|  27 | 59.2 |    59 |    64 |     54 |         62 |       59 | 3-5    |     11 |    9 |    27 | wrestling + boxing |
-|  28 | 60.7 |    60 |    65 |     53 |         63 |       60 | 3-6    |     12 |   10 |     0 | wrestling + boxing |
-|  29 | 61.2 |    60 |    65 |     53 |         63 |       60 | 4-7    |     16 |   11 |    82 | wrestling + boxing |
-|  30 | 62.2 |    61 |    66 |     53 |         64 |       61 | 4-8    |     17 |   12 |     7 | wrestling + boxing |
-|  31 | 62.9 |    61 |    66 |     53 |         64 |       61 | 4-9    |     18 |   14 |     0 | wrestling + boxing |
-|  32 | 63.6 |    62 |    67 |     53 |         64 |       61 | 4-10   |     19 |   14 |     0 | wrestling + boxing |
-|  33 | 64.4 |    62 |    67 |     55 |         65 |       62 | 4-11   |     20 |   14 |    30 | wrestling + boxing |
-|  34 | 64.7 |    63 |    67 |     54 |         64 |       62 | 5-11   |     21 |   15 |     0 | wrestling + boxing |
-|  35 | 65.2 |    63 |    67 |     54 |         64 |       62 | 5-11   |     21 |   15 |     0 | wrestling + boxing |
-|  36 | 65.3 |    62 |    67 |     54 |         64 |       61 | 5-12   |     23 |   16 |    68 | wrestling + boxing |
-|  37 | 65.3 |    62 |    67 |     53 |         64 |       61 | 6-13   |     25 |   18 |    64 | wrestling + boxing |
+| Age |  Ovr | Power | Speed | Cardio | Durability | Strength | Record  | Trauma | Wear | Fresh | Trained            |
+| --: | ---: | ----: | ----: | -----: | ---------: | -------: | ------- | -----: | ---: | ----: | ------------------ |
+|  23 | 54.1 |    55 |    60 |     52 |         60 |       56 | 1-1     |      1 |    1 |    70 | wrestling + boxing |
+|  24 | 55.9 |    56 |    61 |     52 |         61 |       56 | 1-3     |      3 |    3 |    93 | wrestling + boxing |
+|  25 | 57.4 |    57 |    63 |     52 |         61 |       57 | 1-3-1   |      4 |    4 |    42 | wrestling + boxing |
+|  26 | 58.8 |    58 |    63 |     52 |         62 |       58 | 1-4-1   |      4 |    5 |     0 | wrestling + boxing |
+|  27 | 60.3 |    59 |    64 |     54 |         63 |       59 | 2-5-1   |      6 |    6 |    87 | wrestling + boxing |
+|  28 | 61.1 |    59 |    65 |     54 |         63 |       60 | 2-6-1   |      6 |    8 |    54 | wrestling + boxing |
+|  29 | 62.1 |    60 |    66 |     54 |         64 |       60 | 3-6-2   |      8 |   10 |    84 | wrestling + boxing |
+|  30 | 63.0 |    61 |    67 |     53 |         64 |       61 | 3-6-2   |      8 |   10 |     0 | wrestling + boxing |
+|  31 | 63.8 |    62 |    67 |     53 |         64 |       61 | 4-6-2   |      9 |   10 |     0 | wrestling + boxing |
+|  32 | 64.5 |    62 |    68 |     54 |         65 |       62 | 4-7-2   |     11 |   11 |    76 | wrestling + boxing |
+|  33 | 65.0 |    63 |    68 |     54 |         65 |       62 | 5-7-2   |     11 |   11 |     0 | wrestling + boxing |
+|  34 | 65.5 |    63 |    68 |     54 |         65 |       62 | 7-7-2   |     12 |   13 |    73 | wrestling + boxing |
+|  35 | 65.8 |    63 |    68 |     54 |         65 |       62 | 9-7-2   |     12 |   14 |    69 | wrestling + boxing |
+|  36 | 66.0 |    63 |    68 |     54 |         65 |       62 | 9-7-2   |     12 |   14 |     0 | wrestling + boxing |
+|  37 | 66.0 |    63 |    67 |     53 |         64 |       61 | 9-9-2   |     14 |   16 |    65 | wrestling + boxing |
+|  38 | 66.0 |    63 |    67 |     52 |         64 |       61 | 9-10-2  |     14 |   16 |     0 | wrestling + boxing |
+|  39 | 65.9 |    62 |    67 |     52 |         64 |       61 | 10-10-3 |     15 |   18 |    62 | wrestling + boxing |
+|  40 | 65.7 |    62 |    66 |     51 |         63 |       60 | 11-11-3 |     18 |   20 |    62 | wrestling + boxing |
 
 ### Year by year — the craft
 
 | Age | Striking off. | Kicking | Striking def. | Wrestling | TD defence | Ground ctrl | Submissions | Scrambling | Fight IQ | Composure |
 | --: | ------------: | ------: | ------------: | --------: | ---------: | ----------: | ----------: | ---------: | -------: | --------: |
-|  23 |            47 |      47 |            47 |        68 |         64 |          55 |          48 |         50 |       46 |        49 |
-|  24 |            50 |      47 |            49 |        70 |         65 |          58 |          51 |         51 |       46 |        49 |
-|  25 |            53 |      48 |            54 |        72 |         68 |          60 |          51 |         53 |       46 |        49 |
-|  26 |            56 |      50 |            57 |        74 |         70 |          62 |          51 |         54 |       46 |        49 |
-|  27 |            59 |      50 |            60 |        76 |         72 |          64 |          51 |         56 |       47 |        50 |
-|  28 |            62 |      50 |            62 |        78 |         75 |          67 |          51 |         57 |       49 |        52 |
-|  29 |            63 |      51 |            64 |        79 |         76 |          68 |          51 |         58 |       49 |        52 |
-|  30 |            65 |      51 |            66 |        81 |         78 |          70 |          51 |         59 |       49 |        52 |
-|  31 |            68 |      51 |            68 |        82 |         79 |          71 |          51 |         60 |       49 |        52 |
-|  32 |            70 |      51 |            70 |        83 |         80 |          73 |          51 |         60 |       49 |        52 |
-|  33 |            72 |      52 |            71 |        83 |         81 |          74 |          51 |         61 |       49 |        52 |
-|  34 |            73 |      52 |            72 |        84 |         82 |          75 |          51 |         62 |       49 |        52 |
-|  35 |            75 |      51 |            73 |        85 |         83 |          76 |          52 |         62 |       49 |        52 |
-|  36 |            76 |      51 |            73 |        85 |         84 |          77 |          52 |         63 |       49 |        52 |
-|  37 |            77 |      50 |            74 |        85 |         84 |          78 |          52 |         62 |       49 |        52 |
+|  23 |            48 |      47 |            48 |        69 |         65 |          56 |          48 |         50 |       46 |        49 |
+|  24 |            52 |      47 |            51 |        72 |         68 |          59 |          50 |         53 |       47 |        50 |
+|  25 |            55 |      47 |            55 |        75 |         71 |          62 |          50 |         54 |       47 |        50 |
+|  26 |            58 |      47 |            57 |        77 |         74 |          65 |          52 |         57 |       47 |        50 |
+|  27 |            62 |      47 |            59 |        79 |         76 |          68 |          52 |         59 |       47 |        50 |
+|  28 |            64 |      47 |            61 |        80 |         77 |          70 |          54 |         60 |       47 |        50 |
+|  29 |            67 |      48 |            64 |        81 |         78 |          71 |          54 |         61 |       47 |        50 |
+|  30 |            69 |      49 |            67 |        82 |         80 |          72 |          54 |         62 |       47 |        50 |
+|  31 |            71 |      49 |            69 |        84 |         81 |          74 |          54 |         63 |       47 |        50 |
+|  32 |            73 |      49 |            71 |        84 |         82 |          75 |          54 |         63 |       47 |        50 |
+|  33 |            74 |      50 |            72 |        85 |         83 |          76 |          54 |         64 |       47 |        50 |
+|  34 |            75 |      51 |            73 |        85 |         83 |          77 |          54 |         64 |       49 |        51 |
+|  35 |            76 |      51 |            74 |        85 |         84 |          78 |          54 |         64 |       49 |        51 |
+|  36 |            77 |      50 |            74 |        86 |         84 |          78 |          55 |         64 |       49 |        51 |
+|  37 |            78 |      50 |            74 |        85 |         84 |          79 |          56 |         64 |       51 |        52 |
+|  38 |            78 |      49 |            75 |        85 |         84 |          79 |          56 |         64 |       51 |        52 |
+|  39 |            79 |      49 |            74 |        85 |         84 |          79 |          56 |         64 |       51 |        52 |
+|  40 |            79 |      48 |            74 |        85 |         84 |          79 |          56 |         63 |       52 |        53 |
 
 ### What the camp reports said he was letting go
 
@@ -185,24 +197,24 @@ _Came to it late off a regional boxing background, with the least raw material o
 
 ### Where every attribute went
 
-| Attribute       |    Debut |  Ceiling | Career best |    Final | Growth | Decay |
-| --------------- | -------: | -------: | ----------: | -------: | -----: | ----: |
-| Power           |       50 |       56 |          51 |       51 |     +1 |     — |
-| Speed           |       55 |       60 |          56 |       56 |     +1 |     — |
-| Cardio          |       48 |       64 |          48 |       48 |      — |     — |
-| Durability      |       54 |       68 |          54 |       53 |      — |    -1 |
-| Strength        |       49 |       61 |          49 |       49 |      — |     — |
-| _Striking off._ |       60 |       64 |          68 |       68 |     +8 |     — |
-| _Kicking_       |       46 |       50 |          48 |       48 |     +2 |     — |
-| _Striking def._ |       58 |       62 |          67 |       67 |     +9 |     — |
-| _Wrestling_     |       48 |       55 |          49 |       49 |     +1 |     — |
-| _TD defence_    |       49 |       56 |          50 |       50 |     +1 |     — |
-| _Ground ctrl_   |       50 |       54 |          57 |       57 |     +7 |     — |
-| _Submissions_   |       50 |       54 |          63 |       63 |    +13 |     — |
-| _Scrambling_    |       52 |       56 |          57 |       57 |     +5 |     — |
-| _Fight IQ_      |       48 |       52 |          48 |       48 |      — |     — |
-| _Composure_     |       48 |       52 |          48 |       48 |      — |     — |
-| **Overall**     | **51.2** | **57.8** |    **54.2** | **54.2** | **+3** | **—** |
+| Attribute       |    Debut |  Ceiling | Career best |    Final |   Growth |    Decay |
+| --------------- | -------: | -------: | ----------: | -------: | -------: | -------: |
+| Power           |       50 |       56 |          51 |       48 |       +1 |       -3 |
+| Speed           |       55 |       60 |          56 |       53 |       +1 |       -3 |
+| Cardio          |       48 |       64 |          49 |       47 |       +1 |       -2 |
+| Durability      |       54 |       68 |          54 |       51 |        — |       -3 |
+| Strength        |       49 |       61 |          49 |       47 |        — |       -2 |
+| _Striking off._ |       60 |       64 |          71 |       70 |      +11 |       -1 |
+| _Kicking_       |       46 |       50 |          48 |       46 |       +2 |       -2 |
+| _Striking def._ |       58 |       62 |          68 |       66 |      +10 |       -2 |
+| _Wrestling_     |       48 |       55 |          50 |       50 |       +2 |        — |
+| _TD defence_    |       49 |       56 |          53 |       53 |       +4 |        — |
+| _Ground ctrl_   |       50 |       54 |          62 |       62 |      +12 |        — |
+| _Submissions_   |       50 |       54 |          67 |       67 |      +17 |        — |
+| _Scrambling_    |       52 |       56 |          59 |       58 |       +7 |       -1 |
+| _Fight IQ_      |       48 |       52 |          56 |       56 |       +8 |        — |
+| _Composure_     |       48 |       52 |          55 |       55 |       +7 |        — |
+| **Overall**     | **51.2** | **57.8** |    **55.7** | **55.5** | **+4.5** | **-0.2** |
 
 Physicals in roman, skills in _italics_. “Ceiling” is the fighter’s own `potential`, which for a physical is a wall and for a skill is a projection — doc 23 § 2.1.
 
@@ -210,21 +222,33 @@ Physicals in roman, skills in _italics_. “Ceiling” is the fighter’s own `p
 
 | Age |  Ovr | Power | Speed | Cardio | Durability | Strength | Record | Trauma | Wear | Fresh | Trained              |
 | --: | ---: | ----: | ----: | -----: | ---------: | -------: | ------ | -----: | ---: | ----: | -------------------- |
-|  27 | 51.7 |    50 |    55 |     48 |         54 |       49 | 0-2    |      2 |    2 |    79 | boxing + submissions |
-|  28 | 52.4 |    50 |    55 |     48 |         54 |       49 | 1-2    |      3 |    2 |    29 | boxing + submissions |
-|  29 | 53.1 |    51 |    55 |     48 |         54 |       49 | 1-3    |      6 |    5 |    77 | boxing + submissions |
-|  30 | 53.8 |    51 |    56 |     48 |         54 |       49 | 1-4    |      6 |    5 |     0 | boxing + submissions |
-|  30 | 54.2 |    51 |    56 |     48 |         53 |       49 | 1-5    |      7 |    6 |    73 | boxing + submissions |
+|  27 | 51.8 |    50 |    55 |     49 |         54 |       49 | 0-2    |      1 |    1 |    80 | boxing + submissions |
+|  28 | 52.5 |    51 |    55 |     49 |         54 |       49 | 0-3    |      2 |    2 |     0 | boxing + submissions |
+|  29 | 53.4 |    51 |    56 |     49 |         54 |       49 | 0-5    |      3 |    2 |    76 | boxing + submissions |
+|  30 | 53.9 |    51 |    56 |     49 |         54 |       49 | 1-5    |      3 |    3 |    75 | boxing + submissions |
+|  31 | 54.5 |    51 |    56 |     49 |         53 |       49 | 2-5    |      4 |    3 |     0 | boxing + submissions |
+|  32 | 54.9 |    51 |    56 |     49 |         53 |       49 | 2-7    |      5 |    4 |    71 | strategy             |
+|  33 | 55.4 |    51 |    56 |     49 |         53 |       49 | 3-7    |      5 |    5 |   100 | strategy             |
+|  34 | 55.5 |    50 |    55 |     48 |         52 |       49 | 4-8    |      6 |    6 |    88 | strategy             |
+|  35 | 55.6 |    50 |    54 |     48 |         52 |       48 | 5-8    |      7 |    6 |   100 | strategy             |
+|  36 | 55.7 |    49 |    54 |     47 |         51 |       48 | 5-9    |      8 |    7 |   100 | wrestling            |
+|  36 | 55.5 |    48 |    53 |     47 |         51 |       47 | 6-10   |      9 |    8 |   100 | wrestling            |
 
 ### Year by year — the craft
 
 | Age | Striking off. | Kicking | Striking def. | Wrestling | TD defence | Ground ctrl | Submissions | Scrambling | Fight IQ | Composure |
 | --: | ------------: | ------: | ------------: | --------: | ---------: | ----------: | ----------: | ---------: | -------: | --------: |
 |  27 |            61 |      47 |            60 |        48 |         49 |          51 |          52 |         53 |       48 |        48 |
-|  28 |            63 |      47 |            62 |        48 |         49 |          53 |          55 |         54 |       48 |        48 |
-|  29 |            65 |      47 |            64 |        48 |         49 |          54 |          59 |         55 |       48 |        48 |
-|  30 |            67 |      47 |            65 |        49 |         50 |          56 |          61 |         56 |       48 |        48 |
-|  30 |            68 |      48 |            67 |        49 |         50 |          57 |          63 |         57 |       48 |        48 |
+|  28 |            63 |      47 |            62 |        48 |         49 |          52 |          56 |         54 |       48 |        48 |
+|  29 |            65 |      47 |            64 |        47 |         49 |          55 |          59 |         56 |       49 |        49 |
+|  30 |            67 |      48 |            65 |        47 |         49 |          56 |          61 |         57 |       49 |        49 |
+|  31 |            69 |      48 |            67 |        47 |         49 |          58 |          64 |         58 |       49 |        49 |
+|  32 |            71 |      48 |            68 |        47 |         49 |          59 |          65 |         59 |       49 |        49 |
+|  33 |            71 |      47 |            68 |        48 |         50 |          59 |          65 |         59 |       52 |        51 |
+|  34 |            71 |      47 |            68 |        48 |         51 |          60 |          66 |         58 |       54 |        53 |
+|  35 |            70 |      47 |            68 |        49 |         52 |          60 |          66 |         58 |       55 |        54 |
+|  36 |            70 |      47 |            67 |        50 |         53 |          61 |          66 |         58 |       56 |        55 |
+|  36 |            70 |      46 |            66 |        50 |         53 |          62 |          67 |         58 |       56 |        55 |
 
 ### What the camp reports said he was letting go
 
@@ -244,9 +268,9 @@ A created fighter debuts around 52. Measured on the unmodified world, their firs
 
 This document raises the target to 40 and lets the game’s own `replenish` populate the division, which is why the careers above exist at all. The fix belongs in the world, not the harness.
 
-### 2. The composite peaks at 30–36, not 29–32
+### 2. The composite peaks at 36–37, not 29–32
 
-Doc 23 § 6 sets out "the composite still peaks 29–32" as a definition of done. Measured across these three: 36, 36, 30. The tables show why — skills keep climbing into the late thirties while the physical decline is small and spread over five of fifteen attributes, so a fighter still taking three camps a year outruns it. Whether that is wrong depends on whether the model is meant to say "a fighter is at their best at 30" or "a fighter who keeps training keeps improving"; right now it says the second.
+Doc 23 § 6 sets out "the composite still peaks 29–32" as a definition of done. Measured across these three: 37, 36, 36. The tables show why — skills keep climbing into the late thirties while the physical decline is small and spread over five of fifteen attributes, so a fighter still taking three camps a year outruns it. Whether that is wrong depends on whether the model is meant to say "a fighter is at their best at 30" or "a fighter who keeps training keeps improving"; right now it says the second.
 
 ### 3. Physical ceilings are close to decorative
 
@@ -255,10 +279,10 @@ Marcus Bell is a `freak`, the top talent tier, and this is what he did with his 
 | Physical   | Debut | Ceiling | Career best | Of the gap, used |
 | ---------- | ----: | ------: | ----------: | ---------------: |
 | Power      |    63 |      76 |          65 |              15% |
-| Speed      |    69 |      79 |          70 |              10% |
+| Speed      |    69 |      79 |          71 |              20% |
 | Cardio     |    55 |      80 |          62 |              28% |
 | Durability |    61 |      77 |          63 |              13% |
-| Strength   |    48 |      63 |          54 |              40% |
+| Strength   |    48 |      63 |          55 |              47% |
 
 Eighteen years of professional training bought him one point of speed against a ten-point gap. `ARRIVAL` is doing what doc 23 designed — a 22-year-old is near their physical best — but the consequence is that the difference between a freak’s ceilings and anybody else’s is mostly unreachable, so the talent tier shows up in scouting reports and barely in careers.
 
@@ -276,7 +300,7 @@ The camp note that names what a fighter is letting go was gated on a whole ratin
 
 ### 6. Nobody retires hurt — _fixed_
 
-The most damaged fighter here finished on 25 head trauma after 26 professional fights. `retirementUrge` read trauma only from 45 and body wear only from 50 — and across three twenty-year worlds the highest body wear ever seen at retirement was **51**, so that term was dead code and the sport’s most characteristic ending was arithmetically unreachable.
+The most damaged fighter here finished on 25 head trauma after 34 professional fights. `retirementUrge` read trauma only from 45 and body wear only from 50 — and across three twenty-year worlds the highest body wear ever seen at retirement was **51**, so that term was dead code and the sport’s most characteristic ending was arithmetically unreachable.
 
 Worse, an identical five-fight skid with the confidence gone produced the _same_ urge at 23 as at 34 — both 23.2% per fight — so nothing knew how much career was left to come back to. **31% of all retirements happened before 28.** Doc 25 phase 1 sharpened that rather than causing it: injuries, suspensions and cancelled fights disrupt a career properly now, and the skid was the only exit any of it could lead to.
 

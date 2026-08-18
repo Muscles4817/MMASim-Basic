@@ -173,8 +173,19 @@ const BASE_CAMP_HAZARD = 0.1;
  */
 const BASE_FIGHT_HAZARD = 0.078;
 
-/** Probability that a camp produces an injury. */
-export function campInjuryChance(fighter: Fighter, weeks: number, day: GameDay): number {
+/**
+ * Probability that a camp produces an injury.
+ *
+ * `intensity` is a plain multiplier rather than the `TrainingIntensity` union, so `health` does not
+ * have to import `progression` — callers pass `INTENSITY_META[i].injury`. Defaults to 1, which is
+ * standard, so every existing caller is unchanged.
+ */
+export function campInjuryChance(
+  fighter: Fighter,
+  weeks: number,
+  day: GameDay,
+  intensity = 1,
+): number {
   const age = ageOn(fighter.birthDay, day);
   const proneness = remap(fighter.naturals.injuryProneness, 10, 92, 0.5, 1.9);
   const ageFactor = clamp(remap(age, 22, 40, 0.8, 1.7), 0.75, 1.8);
@@ -187,6 +198,7 @@ export function campInjuryChance(fighter: Fighter, weeks: number, day: GameDay):
       ageFactor *
       wear *
       load *
+      intensity *
       traitMul(fighter.traits, 'campInjuryRisk'),
   );
 }

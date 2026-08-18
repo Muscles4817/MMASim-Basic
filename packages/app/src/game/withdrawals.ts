@@ -78,11 +78,13 @@ export const FIGHT_THROUGH_WEEKS = 8;
 export function playerCampInjury(input: {
   fighter: Fighter;
   weeks: number;
+  /** `INTENSITY_META[i].injury`, so a hard camp hurts people more often than a light one. */
+  intensity?: number;
   day: GameDay;
   rng: Rng;
 }): { injury: Injury; withdraws: boolean } | undefined {
   const { fighter, weeks, day, rng } = input;
-  if (!rng.chance(campInjuryChance(fighter, weeks, day))) return undefined;
+  if (!rng.chance(campInjuryChance(fighter, weeks, day, input.intensity ?? 1))) return undefined;
 
   const injury = rollInjury({
     fighter,

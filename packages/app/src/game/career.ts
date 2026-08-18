@@ -48,7 +48,10 @@ import {
   type Commentator,
   type Fighter,
   type Gym,
+  DEFAULT_INTENSITY,
+  INTENSITY_META,
   describeInjury,
+  type TrainingIntensity,
   weeksUntilFit,
   type FightResult,
   type PullOut,
@@ -73,6 +76,14 @@ const RESULT_KEY = 'mmasim:lastResult';
 
 /** A booked but unfought bout, plus the plan the player built for it. */
 export interface Booking {
+  /**
+   * How hard the camp is run. Set on the camp screen; defaults to standard.
+   *
+   * Lives on the booking rather than being picked for the player, because the fight camp is the
+   * majority of all the training a player ever does — an intensity dial that existed only on the
+   * training screen would be half a feature.
+   */
+  intensity?: TrainingIntensity;
   bout: Bout;
   opponentId: string;
   plan: GamePlan;
@@ -318,6 +329,7 @@ export function bookFight(
 export interface CampDevelopment {
   focus: TrainingFocus;
   weeks: number;
+  intensity: TrainingIntensity;
   gym?: Gym;
   coach?: Coach;
 }
@@ -345,6 +357,7 @@ export function campDevelopmentPlan(
       fighter,
     ),
     weeks: campWeeksOf(booking),
+    intensity: booking.intensity ?? DEFAULT_INTENSITY,
     gym: fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined,
     coach: fighter.headCoachId
       ? (db.coaches.findById(fighter.headCoachId) as Coach | undefined)
@@ -364,6 +377,9 @@ export function forecastCampDevelopment(
       fighter,
       focuses: [plan.focus],
       weeks: plan.weeks,
+      // The forecast has to obey every dial the camp obeys, or it is a lie told with real
+      // arithmetic — the defect this function was written to avoid in the first place.
+      intensity: plan.intensity,
       gym: plan.gym,
       coach: plan.coach,
       day: getWorld(db).day,
@@ -417,6 +433,13 @@ export function answerBoutOffer(
   }
 
   return undefined;
+}
+
+/** Set how hard the camp runs. Same session-storage round trip as the plan. */
+export function saveBookingIntensity(booking: Booking, intensity: TrainingIntensity): Booking {
+  const next = { ...booking, intensity };
+  writeJson(BOOKING_KEY, next);
+  return next;
 }
 
 export function saveBookingPlan(booking: Booking, plan: GamePlan): Booking {
@@ -487,6 +510,7 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
     fighter: db.fighters.getById(booking.bout.redId as string) as Fighter,
     focuses: [campPlan.focus],
     weeks: campPlan.weeks,
+    intensity: campPlan.intensity,
     gym: campPlan.gym,
     coach: campPlan.coach,
     day: world.day,
@@ -504,6 +528,7 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
   const campHurt = playerCampInjury({
     fighter: db.fighters.getById(booking.bout.redId as string) as Fighter,
     weeks: campPlan.weeks,
+    intensity: INTENSITY_META[campPlan.intensity].injury,
     day: booking.campStartDay,
     rng: createRng(`${world.seed}:campinjury:${booking.bout.id}`),
   });
