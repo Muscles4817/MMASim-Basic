@@ -20,6 +20,7 @@ import {
   type PromotionId,
 } from '@mmasim/engine';
 import { advanceWorld, type WorldExclusion } from './world';
+import { getBooking } from './career';
 import { readInbox } from './inbox';
 
 /**
@@ -51,9 +52,18 @@ export interface AdvanceResult {
 /** What the world must leave alone, worked out from the role rather than passed in. */
 function exclusionFor(db: GameDb): WorldExclusion {
   const world = getWorld(db);
-  return world.playerRole === 'promoter'
-    ? { promotionId: world.playerPromotionId as PromotionId | undefined }
-    : { fighterId: world.playerFighterId as FighterId | undefined };
+  if (world.playerRole === 'promoter') {
+    return { promotionId: world.playerPromotionId as PromotionId | undefined };
+  }
+  return {
+    fighterId: world.playerFighterId as FighterId | undefined,
+    /*
+     * Answered here because this is the only layer that can. The booking is session state owned
+     * by `career.ts`, which imports the world — so the world cannot ask, and a fighter already
+     * in camp would otherwise be chased for a fight they have taken.
+     */
+    playerHasBooking: getBooking(world.playerFighterId as string | undefined) !== undefined,
+  };
 }
 
 /**

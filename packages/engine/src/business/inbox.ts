@@ -70,6 +70,14 @@ export interface InboxItem {
   link?: { route: string; id?: string };
 
   fighterId?: FighterId;
+  /**
+   * The other fighter, when this item is a bout being offered.
+   *
+   * Named rather than folded into a generic payload because it is the one thing an action
+   * handler has to be able to act on: accepting an offer books a fight, and a fight needs an
+   * opponent. A bag of unknown keys would make that a lookup with no type behind it.
+   */
+  opponentId?: FighterId;
   promotionId?: PromotionId;
   divisionId?: DivisionId;
 

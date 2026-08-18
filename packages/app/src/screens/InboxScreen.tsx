@@ -18,9 +18,10 @@ import { Button, Card, Chip, Empty } from '../ui';
 import { Alert } from '../ui/signals';
 import { formatGameDay } from '../shell/Shell';
 import { markItemRead, readInbox, resolveItem } from '../game/inbox';
+import { answerBoutOffer } from '../game/career';
 
 export function InboxScreen() {
-  const { db, world, commit } = useGame();
+  const { db, world, commit, playerFighter } = useGame();
   const { navigate } = useRouter();
 
   const items = useMemo(
@@ -31,7 +32,24 @@ export function InboxScreen() {
   const decisions = items.filter(isBlocking);
   const rest = items.filter((i) => !isBlocking(i));
 
+  /**
+   * Answering a decision has to be able to *do* something.
+   *
+   * This used to mark the item resolved and nothing else, which was fine while every action was
+   * a variation on "understood". A bout offer is not: taking it books a camp and turning it down
+   * is recorded against the promotion's patience, so an action id now dispatches before the item
+   * is closed. See docs/21-activity-offers-and-patience.md § 3.2.
+   */
   const answer = (item: InboxItem, actionId: string) => {
+    if (item.kind === 'offer' && item.opponentId && playerFighter) {
+      const booking = answerBoutOffer(db, playerFighter, item, actionId);
+      resolveItem(db, item.id, actionId);
+      commit();
+      // Straight into camp, exactly as accepting from the hub does. Landing back on the inbox
+      // after taking a fight would leave the player to go and find the camp they just started.
+      if (booking) navigate({ name: 'camp' });
+      return;
+    }
     resolveItem(db, item.id, actionId);
     commit();
   };

@@ -64,6 +64,11 @@ import {
   newsId,
   nextContender,
   releaseRisk,
+  chaseUplift,
+  clamp01,
+  daysIdle,
+  inboxId,
+  promotionPatience,
   recordString,
   marketValue,
   purseFor,
@@ -100,7 +105,7 @@ import {
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
 import { currentPurse } from './money';
-import { scanForInbox } from './inbox';
+import { raise, scanForInbox } from './inbox';
 
 type StoredNews = NewsItem & Entity;
 
@@ -232,6 +237,18 @@ export interface WorldExclusion {
   fighterId?: FighterId;
   /** The player's promotion, in promoter mode. The world runs no cards for it. */
   promotionId?: PromotionId;
+  /**
+   * Whether the player already has a fight booked.
+   *
+   * Passed in rather than read here, and the reason is a dependency rather than a preference:
+   * the booking lives in session state owned by `career.ts`, and `career.ts` imports this
+   * module. Reaching the other way would close the cycle. `clock.ts` sits above both and is the
+   * natural place to answer the question.
+   *
+   * It matters because a fighter in camp is not idle whatever the calendar says, and a
+   * promotion chasing somebody for a fight they have already taken is nonsense.
+   */
+  playerHasBooking?: boolean;
 }
 
 export function advanceWorld(
@@ -373,7 +390,12 @@ export function advanceWorld(
   chargePromotions(db, toDay - fromDay);
 
   // And the deals of anybody the world forgot to book. See `enforceActivity`.
-  news.push(...enforceActivity(db, toDay, rng.fork('breach')));
+  news.push(...enforceActivity(db, fromDay, toDay, rng.fork('breach'), exceptId));
+
+  // The player's own side of the same question, which is a conversation rather than a rule.
+  news.push(
+    ...playerActivity(db, toDay, exceptId, exclusion.playerHasBooking ?? false, rng.fork('chase')),
+  );
 
   /*
    * Anything that now needs the player.
@@ -1618,10 +1640,29 @@ function chargePromotions(db: GameDb, days: number): void {
  * fighter walking out of the door and turning up somewhere else is a story, and the news item
  * that carries it is the same one that already exists for a release.
  */
-function enforceActivity(db: GameDb, day: number, rng: Rng): NewsItem[] {
+function enforceActivity(
+  db: GameDb,
+  fromDay: number,
+  day: number,
+  rng: Rng,
+  exceptId: FighterId | undefined,
+): NewsItem[] {
   const news: NewsItem[] = [];
 
   for (const fighter of db.fighters.findAll() as Fighter[]) {
+    /*
+     * Never the player, and this is the whole of doc 21 § 1.2.
+     *
+     * This rule asks whether the *promotion* fell short of what it owed. That is a real question
+     * about a fighter the world books, and a meaningless one about the player, who books
+     * themselves: a player with no bouts this year has not been shelved, they have been training.
+     * Running it over them anyway voided the contract of anybody who took a normal two-fight year
+     * and then a camp — and framed it in the news as the player walking out on a promotion they
+     * had not walked out on.
+     *
+     * The player's side of this lives in `promotionPatience`, which asks first.
+     */
+    if (fighter.id === exceptId) continue;
     if (fighter.retiredDay !== undefined || !fighter.promotionId || !fighter.agreementId) continue;
 
     const agreement = db.agreements.findById(fighter.agreementId as string) as
@@ -1661,7 +1702,33 @@ function enforceActivity(db: GameDb, day: number, rng: Rng): NewsItem[] {
      */
     const leverage =
       Math.min(1, fighter.starPower / 70) * Math.max(0, 1 - fighterAge(fighter, day) / 42);
-    if (!rng.fork(`breach:${fighter.id}:${day}`).chance(0.25 + leverage * 0.6)) continue;
+
+    /*
+     * An annual hazard, converted to the span actually being simulated.
+     *
+     * It was a flat per-call chance of 0.25–0.85, and `enforceActivity` runs once per
+     * `advanceWorld` — which is every fortnight while the player advances. A fighter who entered
+     * breach was therefore near-certain to be gone inside a month, and the roster shed 281 deals
+     * across three simulated years. Nothing in the sport moves that fast: an aggrieved fighter
+     * complains publicly for months first, and most of them are still there at the end of it.
+     *
+     * Expressed per year and scaled by the span, so the same underlying risk no longer depends on
+     * how the player happened to chop up their advance.
+     */
+    /*
+     * Scaled by how far short the promotion actually fell, because "in breach" is not one
+     * condition. Owed two and given one is a fighter with a grievance; owed two and given none
+     * is a fighter who has been shelved for a year, and only the second is what this rule was
+     * written about. Treating them identically is most of why the roster shed 281 deals in
+     * three years — a single missed bout was enough to void a contract.
+     */
+    const shortfall = clamp01(
+      (agreement.activityGuarantee - boutsInLastYear) / Math.max(1, agreement.activityGuarantee),
+    );
+    const perYear = (0.08 + leverage * 0.3) * shortfall;
+    const span = Math.max(1, day - fromDay);
+    const chance = 1 - (1 - perYear) ** (span / 365);
+    if (!rng.fork(`breach:${fighter.id}:${day}`).chance(chance)) continue;
 
     const promotion = db.promotions.findById(fighter.promotionId) as Promotion | undefined;
     db.agreements.upsert({ ...agreement, status: 'terminated' } as never);
@@ -1685,6 +1752,191 @@ function enforceActivity(db: GameDb, day: number, rng: Rng): NewsItem[] {
   }
 
   return news;
+}
+
+/**
+ * The promotion notices you are not fighting, and says so.
+ *
+ * Doc 21 in one function. `enforceActivity` asks whether the promotion fell short of what it
+ * owed, which is a real question about a fighter the world books and a meaningless one about the
+ * player — who books themselves, and whose quiet year is a choice rather than a shelving. Asking
+ * it of the player anyway is what cut a career short for taking one camp after an ordinary
+ * two-fight year, and it did so with no warning at all: the only notice was raised *after* the
+ * contract was already gone.
+ *
+ * So this is the half that was missing. The promotion escalates — a word at six months, a named
+ * opponent and a date at nine, the same offer with the consequence spelled out at a year — and
+ * only lets somebody go after they have turned fights down, or after two years in which they have
+ * stopped being a fighter at all.
+ *
+ * Every rung is idempotent on the stage rather than on the day, so each thing is said exactly
+ * once per deal however finely the player chops up their advance.
+ */
+function playerActivity(
+  db: GameDb,
+  day: number,
+  playerId: FighterId | undefined,
+  hasBookedFight: boolean,
+  rng: Rng,
+): NewsItem[] {
+  if (!playerId) return [];
+
+  const me = db.fighters.findById(playerId as string) as Fighter | undefined;
+  if (!me || me.retiredDay !== undefined || !me.promotionId || !me.agreementId) return [];
+
+  const agreement = db.agreements.findById(me.agreementId as string) as
+    | (PromotionalAgreement & Entity)
+    | undefined;
+  const promotion = db.promotions.findById(me.promotionId) as Promotion | undefined;
+  if (!agreement || !promotion) return [];
+
+  // A deal already run out is free agency, which the inbox reports separately. Chasing somebody
+  // for a fight on a contract that no longer obliges either party is the wrong conversation.
+  const isChampion = holdsABeltAnywhere(db, me);
+  if (agreementStatus(agreement, day, { isChampion }).expired) return [];
+
+  const lastBout = me.record.length ? Math.max(...me.record.map((r) => r.day)) : undefined;
+  const idle = daysIdle(lastBout, agreement.signedDay, day);
+
+  const patience = promotionPatience({
+    daysIdle: idle,
+    refusals: agreement.refusedBouts ?? 0,
+    starPower: me.starPower,
+    isChampion,
+    hasBookedFight,
+  });
+
+  if (patience.stage === 'content') return [];
+
+  const key = `${agreement.id}:${patience.stage}`;
+  const months = Math.floor(idle / 30);
+
+  if (patience.stage === 'nudged') {
+    raise(db, {
+      // Day zero in the id, not today: the stage is what must happen once, and keying on the
+      // day would raise it again every fortnight for as long as the condition held.
+      id: inboxId(0, `chase:${key}`),
+      day,
+      kind: 'career',
+      priority: 'notable',
+      title: `${promotion.shortName} would like you active`,
+      body: `${months} months since you last fought. Nobody is unhappy yet — they would just like to see you on a card this year.`,
+      link: { route: 'hub' },
+      fighterId: me.id,
+      promotionId: promotion.id,
+    });
+    return [];
+  }
+
+  if (patience.stage === 'pressing' || patience.stage === 'final') {
+    const opponent = chaseOpponent(db, me, promotion, day, rng);
+    if (!opponent) return [];
+
+    const uplift = 1 + chaseUplift(patience.stage);
+    const purse = Math.round(agreement.showPurse * uplift);
+    const isFinal = patience.stage === 'final';
+
+    const raised = raise(db, {
+      id: inboxId(0, `chase:${key}`),
+      day,
+      kind: 'offer',
+      // A decision, so the clock stops on it. That is the point of the whole change: the player
+      // finds out that a choice is being made *while* they can still make it.
+      priority: 'decision',
+      title: `${promotion.shortName} want you on a card`,
+      body:
+        `${displayName(opponent)}, in eight weeks. £${purse}k to show.` +
+        (isFinal
+          ? ` You have been out ${months} months. They have been clear about this one: turn it down and they start looking at the roster spot.`
+          : ` ${months} months is a long time to be away, and they would like you back.`),
+      actions: [
+        {
+          id: 'accept',
+          label: 'Take the fight',
+          detail: 'Books the bout and starts your camp.',
+        },
+        {
+          id: 'decline',
+          label: 'Turn it down',
+          detail: isFinal
+            ? 'They will remember this one.'
+            : 'Costs you nothing today. It is not free forever.',
+        },
+      ],
+      link: { route: 'hub' },
+      fighterId: me.id,
+      opponentId: opponent.id,
+      promotionId: promotion.id,
+    });
+
+    if (raised) {
+      db.agreements.upsert({ ...agreement, lastOfferedDay: day } as PromotionalAgreement & Entity);
+    }
+    return [];
+  }
+
+  // --- Cut ------------------------------------------------------------------------------------
+  db.agreements.upsert({ ...agreement, status: 'terminated' } as never);
+  db.fighters.upsert({
+    ...me,
+    promotionId: undefined,
+    agreementId: undefined,
+  } as Fighter & Entity);
+
+  raise(db, {
+    id: inboxId(0, `chase:${key}`),
+    day,
+    kind: 'contract',
+    priority: 'decision',
+    title: `${promotion.shortName} have let you go`,
+    body: `${patience.reason} You are a free agent. Somebody will still want you — but the longer you are out, the fewer of them there are.`,
+    actions: [{ id: 'acknowledge', label: 'Understood', isDismiss: true }],
+    link: { route: 'offers' },
+    fighterId: me.id,
+    promotionId: promotion.id,
+  });
+
+  return [
+    {
+      id: newsId(day, `chasecut:${me.id}`),
+      day,
+      kind: 'release',
+      weight: 'minor',
+      // Named for what it is. The old path put "walks out on" in the feed for a fighter who had
+      // done nothing of the kind, which is the single most misleading line the game produced.
+      headline: `${promotion.shortName} release ${displayName(me)}`,
+      detail: `Inactive for ${months} months. ${patience.reason}`,
+      fighterIds: [me.id],
+      divisionId: me.divisionId,
+      promotionId: promotion.id,
+      involvesPlayer: true,
+    },
+  ];
+}
+
+/**
+ * Somebody for the promotion to put in front of the player.
+ *
+ * Their own roster first, which is what a matchmaker would do, falling back to the wider pool
+ * rather than giving up: an offer that cannot name anybody is not an offer, and a thin division
+ * would otherwise silently skip the whole escalation and go straight to the release.
+ */
+function chaseOpponent(
+  db: GameDb,
+  me: Fighter,
+  promotion: Promotion,
+  day: number,
+  rng: Rng,
+): Fighter | undefined {
+  const pool = db.fighters.findAll() as Fighter[];
+  const samePromotion = offerOpponents(me, pool, promotion, day, rng.fork('same'), {
+    promotionId: promotion.id as string,
+  });
+  const anyone =
+    samePromotion.length > 0
+      ? samePromotion
+      : offerOpponents(me, pool, promotion, day, rng.fork('any'));
+  return anyone[0]?.opponent;
 }
 
 /**

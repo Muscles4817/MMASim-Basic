@@ -61,6 +61,7 @@ export * from './business/ladder.js';
 export * from './business/heat.js';
 export * from './business/money.js';
 export * from './business/contracts.js';
+export * from './business/patience.js';
 export * from './business/standing.js';
 export * from './business/managers.js';
 export * from './business/freeAgency.js';

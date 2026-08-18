@@ -18,6 +18,8 @@ import {
   planFor,
   offerOpponents,
   readinessDelay,
+  refuseBout,
+  type PromotionalAgreement,
   retirementReason,
   retirementUrge,
   shouldRetire,
@@ -49,7 +51,7 @@ import {
   type Promotion,
   type Referee,
 } from '@mmasim/engine';
-import { getWorld, setWorld, type GameDb } from '@mmasim/data';
+import { getWorld, setWorld, type Entity, type GameDb } from '@mmasim/data';
 import { accrueHeatFromFight } from './rivalries';
 import { campCostFor, currentPurse, settleFight } from './money';
 import { afterFight, recordAdviceFor, settleManagerAdvice, type ManagerAdvice } from './contracts';
@@ -249,6 +251,53 @@ export function bookFight(
   };
   writeJson(BOOKING_KEY, booking);
   return booking;
+}
+
+/**
+ * Answer a bout the promotion put in front of you.
+ *
+ * The other half of doc 21. Until now nothing in the game ever offered the player a fight — they
+ * picked opponents off the hub and the promotion was silent — so being cut for inactivity was
+ * being judged on offers that did not exist. An offer that cannot be accepted or refused is a
+ * notification, so this is what makes it a decision: taking it books the camp exactly as the hub
+ * does, and turning it down is *recorded*, which is what the promotion's patience is actually
+ * spent on.
+ *
+ * Returns the booking when one was made, so the caller knows whether to send the player to camp.
+ */
+export function answerBoutOffer(
+  db: GameDb,
+  fighter: Fighter,
+  item: { opponentId?: string },
+  actionId: string,
+): Booking | undefined {
+  const opponent = item.opponentId
+    ? (db.fighters.findById(item.opponentId) as Fighter | undefined)
+    : undefined;
+
+  if (actionId === 'accept') {
+    // Without an opponent there is nothing to book — a roster can lose somebody to retirement
+    // between the offer being made and the player answering it, and silently booking nobody
+    // would be worse than the offer quietly lapsing.
+    if (!opponent) return undefined;
+    const booking = bookFight(db, fighter, opponent);
+    db.save();
+    return booking;
+  }
+
+  if (actionId === 'decline') {
+    const agreement = fighter.agreementId
+      ? (db.agreements.findById(fighter.agreementId as string) as
+          | (PromotionalAgreement & Entity)
+          | undefined)
+      : undefined;
+    if (agreement) {
+      db.agreements.upsert(refuseBout(agreement) as PromotionalAgreement & Entity);
+      db.save();
+    }
+  }
+
+  return undefined;
 }
 
 export function saveBookingPlan(booking: Booking, plan: GamePlan): Booking {

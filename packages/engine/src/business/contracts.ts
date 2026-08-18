@@ -72,6 +72,20 @@ export interface PromotionalAgreement {
   activityGuarantee: number;
 
   /**
+   * Bouts the fighter has turned down on this deal.
+   *
+   * The counter that makes inactivity fair to judge. Doc 21 § 1.2: the old rule punished a
+   * player for not fighting without anybody having asked them to, because nothing in the game
+   * asked. This is what the promotion's patience is actually spent on — see `patience.ts`.
+   *
+   * Optional because saves made before offers existed have never recorded a refusal, and a
+   * fighter who has refused nothing is exactly what `undefined` should mean.
+   */
+  refusedBouts?: number;
+  /** When the promotion last put a bout in front of this fighter, so it does not ask weekly. */
+  lastOfferedDay?: GameDay;
+
+  /**
    * What the fighter was worth the day they signed.
    *
    * The key field in the whole document. Everything about grievance, renegotiation and
@@ -310,12 +324,25 @@ export function releaseDecision(input: {
   };
 }
 
-/** Has the promotion kept its side — the only real counter to being shelved. */
+/**
+ * Has the promotion kept its side — the only real counter to being shelved.
+ *
+ * Note what this does and does not answer. It asks whether the *promotion* fell short, which is
+ * only a meaningful question about a fighter the world books. It is not a test of whether
+ * somebody has been fighting enough, and applying it to the player as though it were is doc 21
+ * § 1.2 — the player books themselves, so a shortfall is their own choice and belongs to
+ * `promotionPatience` instead.
+ */
 export function activityBreach(
   agreement: PromotionalAgreement,
   boutsInLastYear: number,
 ): boolean {
   return boutsInLastYear < agreement.activityGuarantee;
+}
+
+/** Record a refused bout. The promotion's patience is spent here, not by the calendar. */
+export function refuseBout(agreement: PromotionalAgreement): PromotionalAgreement {
+  return { ...agreement, refusedBouts: (agreement.refusedBouts ?? 0) + 1 };
 }
 
 // --- Renegotiation ------------------------------------------------------------------------------
@@ -440,6 +467,7 @@ export function createAgreement(input: {
     exclusive: terms.exclusive,
     outsideBouts: terms.outsideBouts,
     activityGuarantee: promotion.activityGuarantee,
+    refusedBouts: 0,
     valueAtSigning: marketValue(fighter, promotion),
   };
 }

@@ -52,7 +52,11 @@ export const SEED_PROMOTIONS: readonly Promotion[] = [
     minimumPurse: 24,
     sponsorshipPolicy: 'uniform',
     revenueShareCapable: true,
-    activityGuarantee: 3,
+    // Two, not three. `MAX_BOUTS_PER_YEAR` in the world loop is 3, so a guarantee of 3 is a
+    // promise to book every fighter the maximum the sport allows, every year — which is why 41%
+    // of year-old deals sat in breach. Two is this world's measured median and the sport's.
+    // See docs/21-activity-offers-and-patience.md § 3.4.
+    activityGuarantee: 2,
     tier: 'global',
     baseCountry: 'USA',
     prestige: 95,
@@ -96,7 +100,7 @@ export const SEED_PROMOTIONS: readonly Promotion[] = [
     minimumPurse: 8,
     sponsorshipPolicy: 'uniform',
     revenueShareCapable: true,
-    activityGuarantee: 3,
+    activityGuarantee: 2,
     tier: 'major',
     baseCountry: 'USA',
     prestige: 66,
@@ -159,7 +163,7 @@ export const SEED_PROMOTIONS: readonly Promotion[] = [
     minimumPurse: 1,
     sponsorshipPolicy: 'open',
     revenueShareCapable: false,
-    activityGuarantee: 4,
+    activityGuarantee: 2,
     tier: 'developmental',
     baseCountry: 'USA',
     prestige: 22,
