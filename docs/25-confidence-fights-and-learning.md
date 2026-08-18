@@ -1,7 +1,8 @@
 # 25 — Confidence, what a fight teaches, and when learning stops
 
-**Status:** §1 is a defect report, measured and reproducible. §2–§4 are design proposals, not
-implemented. Nothing in this document has been built yet.
+**Status:** §1 is a defect report and is **fixed** — see §5 for what was built and what it
+measured. §2.1 (the fight camp's focus) is **fixed**. §2.2–§2.4 (what a fight teaches) and §3 (the
+learning window) remain design proposals and are **not implemented**.
 
 Three findings that came out of tracing created careers through the 2026 world. They are filed
 together because they are one story: **a career ends before it develops, and the things that
@@ -347,3 +348,83 @@ finding 3, that physical ceilings are close to decorative.
 
 §3 is a larger change and wants its own pass. It is also the one that decides whether a twenty-year
 career is a story or a formality.
+
+---
+
+## 5. What was built
+
+All three of §4, and nothing else. §2.2–§2.4 and §3 are untouched.
+
+### 5.1 The changes
+
+**`domain/confidence.ts`** (new) is the whole model. `confidenceSwing` takes the shape of a result —
+method, scorecard margin, round, knockdowns suffered, the rating gap to the opponent, whether a belt
+was on it — and returns a signed number. `recoverConfidence` drifts a fighter back toward their
+baseline over elapsed time. It is kept in `domain/` and fed plain numbers rather than a
+`FightResult` so it is testable without building a fight, and so `progression/` can reach the
+recovery half without depending on `business/`.
+
+The recovery is exponential rather than a step per call, and that is load-bearing rather than tidy:
+`applyAgeing` is called with a fortnight by the world tick and ten weeks by a camp, so the same
+elapsed time has to give the same fighter however it was chopped up. There is a test for exactly
+that.
+
+**`domain/personality.ts`** gains `confidenceBaseline`, `confidenceRecoveryYears`,
+`egoDeflectionMultiplier` and `confidenceGainMultiplier`. Resilience still dominates; ego now
+deflects a defeat and mildly inflates a win; ambition sits on the recovery rate rather than on the
+hit, because wanting it back is what brings you back. The baseline is centred on 60 so a neutral
+personality returns exactly to `initialCondition`.
+
+**`domain/traits.ts`** gains a `confidenceLoss` multiplicative hook, wired to the six traits already
+written to describe this behaviour: `fragileEgo` 1.45, `gunShy` 1.3, `frontrunner` 1.25, `dog` 0.75,
+`gatekeeperMentality` 0.7, `durableMind` 0.7. The last of those was the sharpest case in §1.1.4 — it
+is acquired by surviving a knockout and had no bearing on what that knockout cost. `durableMind` is
+0.7 rather than the 0.6 first written because `domain.test.ts` guards purely-positive traits against
+strong multipliers, which is the correct rule.
+
+**`progression/development.ts`** applies the drift inside `applyAgeing`, which is the one function
+every caller goes through — the world tick, a camp, a layoff, a fight.
+
+**`progression/retirement.ts`** gains `retirementDrivers`, so the _reason_ is read off the same
+arithmetic as the _decision_ rather than from a separate ladder of thresholds. §1.3's mismatch is
+gone, and body wear finally has a reason string of its own.
+
+**`career.ts` / `CampScreen.tsx`** put the fight camp's focus in the player's hands (§2.1).
+`Booking.campFocus` is optional and `undefined` is a real value meaning "I have not chosen" — the
+fighter then trains what they most need, which is what `pickTrainingFocus` was always for. Tapping
+the selected focus again hands the decision back.
+
+### 5.2 What it measured
+
+Twelve identical created fighters — a natural, national-level wrestler debuting at 22 — driven
+through the real 2026 world on the same paced schedule as §1.2. The middle column is the one-line
+age-gate diagnostic from §1.2, kept here because it is the ceiling this change was aiming at.
+
+|                     | Before | Age-gate diagnostic |  **Built** |
+| ------------------- | -----: | ------------------: | ---------: |
+| Mean retirement age |   32.8 |                37.9 |   **34.7** |
+| Dead before 30      | 5 / 12 |              0 / 12 | **3 / 12** |
+| Mean career growth  |   +7.3 |                +9.5 |   **+9.3** |
+| Headroom used       |    40% |                 52% |    **51%** |
+
+Development lands where the diagnostic said it could. Career length gets about half the way, and
+that is the honest result rather than a shortfall: the three who still stop before 30 went 1-3, 3-7
+and 1-9, and two of those are careers that should end. The blunt age gate rescued them by refusing
+to let anybody under 30 quit, which is not a model of anything.
+
+The suite is green — 1215 existing tests plus 32 new ones — including the twenty-year long-sim,
+which is what guards the world against exactly this kind of change.
+
+### 5.3 What this did not fix
+
+Two things worth recording, because they were visible in the same traces and are not confidence.
+
+**Realised win rate runs well below the offered odds.** The harness takes the offer nearest 55% and
+still produces records like 5-15 and 6-16. Some of that is the harness accepting every inbox offer
+regardless of price, but it is worth a proper look at whether `paperOdds` is optimistic against what
+the simulator actually returns.
+
+**"Lost the desire" is now the most common ending** (8 of 12), because confidence and the losing-skid
+term are correlated by construction. For a fighter who went 5-15 that is a truthful reason. Whether
+it should be the _modal_ one across a whole population is a separate question, and it will move on
+its own once §2 gives fights something to contribute besides damage.

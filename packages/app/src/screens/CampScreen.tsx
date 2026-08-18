@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   APPROACHES,
+  TRAINING_FOCUSES,
   APPROACH_META,
   MAX_PREPPED_READS,
   PURCHASES,
@@ -25,6 +26,7 @@ import {
   READ_META,
   scoutOpponent,
   type Approach,
+  type TrainingFocus,
   type Attributes,
   type Coach,
   type Fighter,
@@ -41,6 +43,7 @@ import {
   forecastCampDevelopment,
   getBooking,
   runBookedFight,
+  saveBookingFocus,
   saveBookingPlan,
   saveBookingPurchases,
 } from '../game/career';
@@ -130,6 +133,14 @@ export function CampScreen() {
    * engine with no callers and no effects, which meant money could be earned and never used
    * on anything but a gym.
    */
+  /*
+   * What the camp works on.
+   *
+   * `undefined` is a real value here and not a missing one: it means the player has not chosen,
+   * and the fighter trains whatever they most need. Only once they pick something does the camp
+   * stop being the game's decision. See docs/25 §2.1.
+   */
+  const [campFocus, setCampFocus] = useState<TrainingFocus | undefined>(booking?.campFocus);
   const [bought, setBought] = useState<PurchaseKey[]>([...(booking?.purchases ?? [])]);
   const purchases = campPurchaseEffects(bought);
   const spend = purchaseCost(bought);
@@ -311,6 +322,40 @@ export function CampScreen() {
           player alone, pure ageing. It develops properly now, and a system the player cannot see
           is a system they cannot plan around, so it says so before the fight rather than after.
         */}
+        <div style={{ marginBottom: 'var(--space-3)' }}>
+          <p className="section-title">What this camp works on</p>
+          <p className="faint" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-2)' }}>
+            {campFocus
+              ? `${weeks} weeks on it, alongside preparing for this opponent.`
+              : 'Left to him, he trains whatever he most needs. Pick something to override that.'}
+          </p>
+          <div className="row" style={{ flexWrap: 'wrap' }}>
+            {TRAINING_FOCUSES.map((key) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={campFocus === key}
+                aria-label={`Train ${TRAINING_META[key].label}`}
+                onClick={() => {
+                  // Tapping the chosen focus again hands the decision back to the fighter.
+                  const next = campFocus === key ? undefined : key;
+                  setCampFocus(next);
+                  if (booking) setBooking(saveBookingFocus(booking, next));
+                }}
+                style={{
+                  padding: 'var(--space-2) var(--space-3)',
+                  minHeight: 'var(--tap-target)',
+                  borderRadius: 'var(--radius)',
+                  border: `1px solid ${campFocus === key ? 'var(--accent)' : 'var(--border)'}`,
+                  background: campFocus === key ? 'var(--accent-soft)' : 'var(--surface)',
+                }}
+              >
+                {TRAINING_META[key].label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {development && development.totalExpected > 0.05 && (
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <p className="section-title">This camp is building</p>

@@ -19,6 +19,7 @@ export * from './ratings/derived.js';
 // Domain
 export * from './domain/fighter.js';
 export * from './domain/personality.js';
+export * from './domain/confidence.js';
 export * from './domain/traits.js';
 export * from './domain/divisions.js';
 export * from './domain/nationalities.js';

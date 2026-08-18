@@ -162,6 +162,68 @@ export function lossImpactMultiplier(p: Personality): number {
   return axisCurve(p.resilience, 1.7, 1, 0.4);
 }
 
+/**
+ * How much of a defeat the ego deflects.
+ *
+ * Resilience is the capacity to sit with a loss; ego is the refusal to accept it was one. They
+ * are different mechanisms with the same sign, which is why both belong here: the fighter who
+ * bounces back has processed it, and the fighter who blames the judges never started. High ego
+ * is not free — `gamePlanAdherence` already charges it in the cage — so this is the other half
+ * of a trade rather than a bonus.
+ */
+export function egoDeflectionMultiplier(p: Personality): number {
+  return axisCurve(p.ego, 1.15, 1, 0.72);
+}
+
+/**
+ * Multiplier on confidence *gained* from a win.
+ *
+ * Ego again, pointing the other way: the same fighter who shrugs off a defeat reads a win as
+ * confirmation of what they already knew. Deliberately a much smaller spread than the loss
+ * side, because belief is easier to damage than to build and the asymmetry is the point.
+ */
+export function confidenceGainMultiplier(p: Personality): number {
+  return axisCurve(p.ego, 0.88, 1, 1.15);
+}
+
+/**
+ * The self-belief this fighter returns to when nothing is happening to them.
+ *
+ * Confidence had no baseline at all: it was initialised to 60, moved only when a fight ended,
+ * and stayed wherever the last result left it forever. That made it an injury rather than a
+ * mood — see docs/25 §1.1.1 — and it is what killed careers at twenty-four, because three
+ * losses put a fighter at 12 and nothing in the game could ever bring them back up.
+ *
+ * Centred on 60 so a neutral personality returns exactly to `initialCondition`. The spread is
+ * modest on purpose: this is where a fighter *rests*, not how good they think they are, and a
+ * range wide enough to be interesting at the extremes is wide enough to be noise in the middle.
+ */
+export function confidenceBaseline(p: Personality): number {
+  return clamp(
+    60 +
+      axisCurve(p.resilience, -9, 0, 6) +
+      axisCurve(p.ambition, -6, 0, 5) +
+      axisCurve(p.ego, -4, 0, 5),
+    38,
+    76,
+  );
+}
+
+/**
+ * Time constant for the drift back to {@link confidenceBaseline}, in years.
+ *
+ * Fed to an exponential rather than a per-tick step so that the result does not depend on how
+ * often the caller happens to age somebody — a camp is a fifth of a year and the world tick is
+ * a fortnight, and both must produce the same fighter after the same elapsed time.
+ *
+ * Resilience dominates, which is the axis's whole documented purpose ("one bad loss derails a
+ * career" against "bounces back and rebuilds"). Ambition is the smaller term and belongs on the
+ * recovery rather than on the hit: wanting it back is what brings you back.
+ */
+export function confidenceRecoveryYears(p: Personality): number {
+  return axisCurve(p.resilience, 3.4, 1.7, 0.8) * axisCurve(p.ambition, 1.3, 1, 0.85);
+}
+
 /** Multiplier on star-power growth from a given performance. */
 export function starPowerGrowthMultiplier(p: Personality): number {
   // Charisma dominates, but aggression sells too — a violent fighter draws without a mic.

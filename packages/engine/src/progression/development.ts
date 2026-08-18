@@ -17,6 +17,7 @@ import { clamp, remap, round } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import type { Fighter } from '../domain/fighter.js';
 import { campGainMultiplier, idleDecayMultiplier } from '../domain/personality.js';
+import { recoverConfidence } from '../domain/confidence.js';
 import { coachEffectiveness, type Coach, type CoachSpecialism, type Gym } from '../domain/organisations.js';
 import { traitMul } from '../domain/traits.js';
 import {
@@ -1012,7 +1013,29 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
     );
   }
 
-  return { fighter: { ...fighter, attributes, trainingCarry: carry }, losses, notes };
+  /*
+   * Self-belief drifts back toward where this fighter rests.
+   *
+   * Here because this function's job already is what elapsed time did to somebody, and because
+   * it is the one place every caller goes through — the world tick, a camp, a layoff, a fight.
+   * Confidence had no recovery at all before this and was therefore the only part of
+   * `condition` that behaved like a permanent injury; docs/25 §1.1.1 has the measurements, and
+   * `domain/confidence.ts` has the reasoning.
+   *
+   * `recoverConfidence` is exponential precisely so that putting it here is safe: the callers
+   * age fighters in spans from a fortnight to a year and the same elapsed time has to give the
+   * same answer however it was chopped up.
+   */
+  const condition = {
+    ...fighter.condition,
+    confidence: recoverConfidence(fighter.condition.confidence, fighter.personality, years),
+  };
+
+  return {
+    fighter: { ...fighter, attributes, trainingCarry: carry, condition },
+    losses,
+    notes,
+  };
 }
 
 // --- Idle decay ----------------------------------------------------------------------------

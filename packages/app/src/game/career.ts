@@ -85,6 +85,15 @@ export interface Booking {
    * already do.
    */
   purchases?: readonly PurchaseKey[];
+  /**
+   * What this camp is actually spent on.
+   *
+   * Optional, and `undefined` means "whatever the fighter most needs" — which is what
+   * `campDevelopmentPlan` used to decide unilaterally, for every camp attached to a fight, which
+   * for an active fighter is most of the camps in their career. Every other training block in the
+   * game is the player's choice; this one was the game's. See docs/25 §2.1.
+   */
+  campFocus?: TrainingFocus;
 }
 
 /**
@@ -324,10 +333,17 @@ export function campDevelopmentPlan(
 ): CampDevelopment {
   const world = getWorld(db);
   return {
-    focus: pickTrainingFocus(
-      createRng(`${world.seed}:campdev:${booking.bout.id}`),
-      fighter,
-    ),
+    /*
+     * The player's choice when they made one, and otherwise the fighter's own judgement.
+     *
+     * The fallback is not a default so much as an answer to "I did not touch this": a fighter
+     * left to their own devices trains what they most need, which is exactly what
+     * `pickTrainingFocus` is for. Seeded on the bout, so an untouched camp is stable across
+     * re-renders and the forecast is the camp the player will actually get.
+     */
+    focus:
+      booking.campFocus ??
+      pickTrainingFocus(createRng(`${world.seed}:campdev:${booking.bout.id}`), fighter),
     weeks: campWeeksOf(booking),
     gym: fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined,
     coach: fighter.headCoachId
@@ -416,6 +432,13 @@ export function saveBookingPlan(booking: Booking, plan: GamePlan): Booking {
  * is only debited when the camp is committed, a purchase that vanished on navigation would
  * be a decision the player made twice and paid for once.
  */
+/** Choose what this camp works on. Persisted as the plan is, and for the same reason. */
+export function saveBookingFocus(booking: Booking, campFocus: TrainingFocus | undefined): Booking {
+  const next = { ...booking, campFocus };
+  writeJson(BOOKING_KEY, next);
+  return next;
+}
+
 export function saveBookingPurchases(booking: Booking, purchases: readonly PurchaseKey[]): Booking {
   const next = { ...booking, purchases };
   writeJson(BOOKING_KEY, next);

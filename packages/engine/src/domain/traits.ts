@@ -35,6 +35,16 @@ export const MUL_HOOKS = [
   'starPowerGrowth',
   'heatGeneration',
   'developmentRate',
+  /**
+   * Multiplier on confidence lost to a defeat. See docs/25 §1.4.
+   *
+   * The trait table has carried the vocabulary for this since it was written — `fragileEgo`
+   * ("Losses cut deep"), `durableMind` ("came back exactly the same fighter"), `gunShy` — and
+   * none of it reached the one line that actually decided what a loss did to somebody.
+   * `durableMind` is the sharpest case: it is *acquired by surviving a knockout* and then had no
+   * bearing on what that knockout cost.
+   */
+  'confidenceLoss',
   'purseDemand',
   /** How expensively they live between fights. See docs/17-money.md. */
   'livingCost',
@@ -194,6 +204,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     category: 'mental',
     polarity: 'doubleEdged',
     visibility: 35,
+    mul: { confidenceLoss: 1.25 },
     add: { momentumSensitivity: 0.45 },
   },
   dog: {
@@ -203,7 +214,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     category: 'mental',
     polarity: 'doubleEdged',
     visibility: 45,
-    mul: { fightInjuryRisk: 1.2, headTraumaRate: 1.25 },
+    mul: { fightInjuryRisk: 1.2, headTraumaRate: 1.25, confidenceLoss: 0.75 },
     add: { momentumSensitivity: -0.35, compositionUnderFire: 14 },
     affinity: { composure: 0.8, durability: 0.5 },
   },
@@ -249,7 +260,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     polarity: 'negative',
     visibility: 50,
     acquirable: true,
-    mul: { strikeOutput: 0.75, finishingUrge: 0.6 },
+    mul: { strikeOutput: 0.75, finishingUrge: 0.6, confidenceLoss: 1.3 },
     affinity: { composure: -0.8 },
   },
   fragileEgo: {
@@ -259,6 +270,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     category: 'mental',
     polarity: 'negative',
     visibility: 30,
+    mul: { confidenceLoss: 1.45 },
     add: { gamePlanAdherence: -0.15, momentumSensitivity: 0.2 },
   },
   partyAnimal: {
@@ -341,7 +353,9 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     category: 'mental',
     polarity: 'negative',
     visibility: 25,
-    mul: { developmentRate: 0.5 },
+    // Losing to everyone above them is not a crisis, it is the plan. Nothing about a defeat at
+    // that level tells a gatekeeper anything they had not already settled for.
+    mul: { developmentRate: 0.5, confidenceLoss: 0.7 },
   },
   volumeMachine: {
     id: 'volumeMachine',
@@ -401,6 +415,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
     category: 'mental',
     polarity: 'positive',
     visibility: 40,
+    mul: { confidenceLoss: 0.7 },
     add: { compositionUnderFire: 10 },
     affinity: { composure: 1 },
   },
