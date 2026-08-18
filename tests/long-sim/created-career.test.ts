@@ -66,6 +66,16 @@ const roomFor = (f: Fighter, key: AttributeKey): number =>
     ? headroom(f.attributes[key], f.potential[key])
     : skillResistance(f.attributes[key]);
 
+/**
+ * Whatever has the most room, which is a broad player rather than a specialised one.
+ *
+ * Deliberately kept broad even though doc 23 rewards commitment, because `overallRating` averages
+ * all fifteen attributes: a fighter who is elite at two things and neglects four scores *lower*
+ * on the yardstick this suite measures against, so a specialising policy would make the numbers
+ * worse without making the careers worse. What the neglect model actually costs a broad player is
+ * measured directly in `neglect.test.ts`; here the job is to keep the yardstick comparable to the
+ * bounds it was derived against.
+ */
 function bestFocus(f: Fighter): TrainingFocus {
   let best: TrainingFocus = 'boxing';
   let bestRoom = -1;
@@ -208,13 +218,32 @@ describe('the top of the mountain is reachable, and not guaranteed', () => {
   });
 
   it('lets the best rolls reach champion level', () => {
-    // This is the assertion that would have caught the original defect: with naturals
-    // centred at 52 the maximum *possible* created ceiling was below the champion bar, so
-    // no amount of play could ever have passed this.
+    /*
+     * This is the assertion that would have caught the original defect: with naturals centred at
+     * 52 the maximum *possible* created ceiling was below the champion bar, so no amount of play
+     * could ever have passed this.
+     *
+     * The tolerance widened from 1 to 3, and both points of it are worth recording because
+     * neither is a balance concession.
+     *
+     * **A point and a half is a fixed bug.** `applyAgeing` used `toRating(current − loss)`, so
+     * across the spans it is actually called with — a ten-week camp is 0.19 of a year — every
+     * sub-half-point loss was rounded away and decline only landed when somebody advanced a long
+     * way at once. Careers were about that much higher than the model as written ever specified,
+     * and the old bound was measured against the bug. Raising development until the old number
+     * came back would have been hiding the fix behind a constant.
+     *
+     * **The rest is neglect, and it is the intended cost.** This harness models a *broad* player
+     * who trains whatever has the most room, and `overallRating` averages all fifteen attributes
+     * — so the yardstick rewards exactly the breadth that doc 23 § 2.5 now charges maintenance
+     * for. A committed two-discipline player scores *lower* here despite being a better fighter,
+     * which is a limitation of the measure rather than of the model, and is why this bound is a
+     * floor on a distribution rather than a claim about the best possible career.
+     */
     expect(
       peaks[peaks.length - 1],
       `best of 40 careers peaked at ${peaks[peaks.length - 1]!.toFixed(1)} against a champion bar of ${CHAMPION_BAR.toFixed(1)}`,
-    ).toBeGreaterThan(CHAMPION_BAR - 1);
+    ).toBeGreaterThan(CHAMPION_BAR - 3);
   });
 
   it('does not hand the belt to everybody', () => {

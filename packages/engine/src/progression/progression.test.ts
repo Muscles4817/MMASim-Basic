@@ -427,20 +427,42 @@ describe('ageing', () => {
       naturals: { ageCurve: 'standard' },
     });
 
-  it('does nothing before peak', () => {
-    const f = veteran(25);
+  it('does nothing before a fighter is past anything', () => {
+    /*
+     * "Before peak" is no longer one date. `PEAK_OFFSET` puts speed and the chin at 25 and fight
+     * IQ at 35, so a 25-year-old is already past two of the fifteen — the age this test can make
+     * its claim at came down with them. That the claim held at 25 before was an accident of
+     * rounding rather than of the model: losses of a tenth of a point were discarded until
+     * `applyAgeing` started banking them.
+     */
+    const f = veteran(22);
     const { fighter, losses } = applyAgeing(f, 0, 365, createRng('a'));
     expect(losses).toEqual({});
     expect(fighter.attributes).toEqual(f.attributes);
   });
 
+  it('has already started on the earliest-peaking qualities by the mid-twenties', () => {
+    // The other half of the same change, asserted rather than left implied: a 26-year-old is
+    // past their speed and their chin and years short of their submissions.
+    const { losses } = applyAgeing(veteran(27), 0, 365 * 2, createRng('a2'));
+    expect(losses.speed ?? 0).toBeGreaterThan(0);
+    expect(losses.durability ?? 0).toBeGreaterThan(0);
+    expect(losses.submissions ?? 0).toBe(0);
+  });
+
   it('takes the body before the craft', () => {
+    /*
+     * Measured over six years rather than two. Losses are banked as of doc 23, so a short span
+     * now produces honest but *coarse* integers — one point against three is the right ordering
+     * expressed at a resolution too low to make a claim about proportion.
+     */
     const f = veteran(38);
-    const { losses } = applyAgeing(f, 0, 365 * 2, createRng('b'));
+    const { losses } = applyAgeing(f, 0, 365 * 6, createRng('b'));
     expect(losses.speed ?? 0).toBeGreaterThan(losses.submissions ?? 0);
-    // Fight IQ and Composure never decline — a veteran can be smarter and slower at once.
-    expect(losses.fightIq).toBeUndefined();
+    // Composure never declines, and fight IQ only barely — a veteran can be smarter and slower
+    // at once. Fight IQ took a rate of 0.1 at doc 23 because read speed is not knowledge.
     expect(losses.composure).toBeUndefined();
+    expect(losses.fightIq ?? 0).toBeLessThan((losses.speed ?? 0) / 4);
   });
 
   it('accelerates the further past peak a fighter is', () => {
@@ -469,7 +491,9 @@ describe('ageing', () => {
           naturals: { ageCurve: curve },
         }),
         0,
-        365,
+        // Six years, for the same reason as above: a single year's loss is one or two points and
+        // two curves cannot be told apart at that resolution.
+        365 * 6,
         createRng('e'),
       ).losses.speed ?? 0;
     expect(at('longPeak')).toBeLessThan(at('earlyBloomer'));

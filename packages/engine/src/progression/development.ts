@@ -21,6 +21,7 @@ import { coachEffectiveness, type Coach, type CoachSpecialism, type Gym } from '
 import { traitMul } from '../domain/traits.js';
 import {
   ATTRIBUTE_KEYS,
+  ATTRIBUTE_META,
   ATTRIBUTES_BY_GROUP,
   skillResistance,
   toRating,
@@ -548,8 +549,18 @@ export function applyTraining(input: TrainingInput): TrainingResult {
   if (!coach) notes.push('Training without a head coach costs a great deal of progress.');
   if (applied.length === 0) notes.push('No measurable change.');
 
+  /*
+   * Stamp what was worked, so neglect knows what was not.
+   *
+   * Written per focus rather than per attribute: training is chosen by focus, so a focus is the
+   * thing that actually has a date, and six numbers per fighter is a great deal cheaper than
+   * fifteen across an eight-hundred-fighter roster.
+   */
+  const lastTrained = { ...fighter.lastTrained };
+  for (const focus of focuses) lastTrained[focus] = day;
+
   return {
-    fighter: { ...fighter, attributes, trainingCarry: carry },
+    fighter: { ...fighter, attributes, trainingCarry: carry, lastTrained },
     gains,
     notes,
   };
@@ -650,6 +661,156 @@ function headroomExhausted(fighter: Fighter, focus: TrainingFocus): boolean {
   });
 }
 
+// --- Neglect ---------------------------------------------------------------------------------
+
+/**
+ * What a skill loses when nobody works on it. Doc 23 § 2.5.
+ *
+ * The plateau model had exactly one downward force — age — so a fighter who reached their level
+ * held every part of it for free, and the only cost of spreading a career thin was the gains not
+ * taken. That is not what happens: a wrestler who has not drilled submissions in three years is
+ * worse at submissions, and the reason an old fighter can still be dangerous in one specific
+ * area is that they never stopped working on it.
+ *
+ * So neglect is the second force, and it is what turns the model into a set of *choices*: a camp
+ * is now both an investment and a maintenance payment, and a fighter with four things to keep
+ * sharp and two camps a year cannot keep all four.
+ */
+
+/** Days off before anything is lost at all. A camp cycle plus a fight is not neglect. */
+export const NEGLECT_GRACE_DAYS = 240;
+
+/**
+ * How much a camp maintains everything it is *not* about.
+ *
+ * A fight camp is not a single-discipline block. Somebody preparing for a fight spars, drills
+ * takedowns, runs and studies film whatever the emphasis is — the engine models one focus per
+ * camp because a focus is what the player chooses, not because the other five stop happening.
+ *
+ * Without this, a fighter on the sport's median schedule of two camps a year is permanently and
+ * deeply neglecting four of the six things they do, which is not what a professional's year looks
+ * like. With it, staying active keeps you broadly sharp and *what you never emphasise* still
+ * slowly goes — which is the distinction worth modelling.
+ */
+const GENERAL_MAINTENANCE = 0.35;
+
+/**
+ * Rating points a fully neglected attribute loses per year, before stickiness and age.
+ *
+ * Calibrated against the twenty-year long-sim rather than picked. At 1.6 a broad career lost
+ * about four points of peak overall and could no longer reach champion level; 0.9 costs roughly
+ * a point and a half, which leaves the promise intact while the mechanic still bites.
+ *
+ * What it works out to, for scale: a fighter who camps three times a year but never emphasises
+ * something loses about a quarter of a point a year in it — four points across a sixteen-year
+ * career. A fighter who stops camping altogether is losing over two points a year in everything
+ * by the third year out, and half again as much if they are past thirty-five.
+ */
+const NEGLECT_PER_YEAR = 0.9;
+
+/**
+ * How well each attribute survives being ignored.
+ *
+ * Cardio goes fastest and it is not close — detraining is measurable in weeks, which is why it is
+ * the one *physical* on this list. The technical attributes get stickier the more they are
+ * knowledge rather than sharpness: a submission you know you still know, where timing a slip is
+ * something you had last month and do not have now.
+ *
+ * Power, speed, strength and durability are absent deliberately. They are governed by age, and
+ * charging them twice for the same physiology would make every quiet year cost double.
+ */
+const NEGLECT_STICKINESS: Readonly<Partial<Record<AttributeKey, number>>> = {
+  cardio: 1.5,
+  strikingDefence: 1.2,
+  scrambling: 1.1,
+  kicking: 1.0,
+  strikingOffence: 0.9,
+  takedownDefence: 0.9,
+  wrestling: 0.85,
+  groundControl: 0.7,
+  submissions: 0.6,
+  fightIq: 0.25,
+  composure: 0.2,
+};
+
+/**
+ * Every focus that trains an attribute, with the weight it trains it at.
+ *
+ * Built once rather than scanned per call: `applyAgeing` runs over every fighter in the world on
+ * every step, and this is a fifteen-by-six search sitting inside it.
+ */
+const FOCUSES_FOR_ATTRIBUTE = (() => {
+  const out: Partial<Record<AttributeKey, [TrainingFocus, number][]>> = {};
+  for (const focus of TRAINING_FOCUSES) {
+    for (const [key, weight] of Object.entries(TRAINING_META[focus].attributes) as [
+      AttributeKey,
+      number,
+    ][]) {
+      (out[key] ??= []).push([focus, weight]);
+    }
+  }
+  return out;
+})();
+
+/**
+ * Days since this attribute was last genuinely worked.
+ *
+ * Weighted by how hard each focus works it: a conditioning camp maintains cardio completely and
+ * durability only partly, so a fighter who only ever conditions still slowly loses their chin.
+ * A fighter with no training history at all counts as *fresh*, so opening a save written before
+ * any of this existed does not decay its entire roster on the first tick.
+ */
+export function neglectDays(fighter: Fighter, key: AttributeKey, day: GameDay): number {
+  const trainers = FOCUSES_FOR_ATTRIBUTE[key];
+  const history = fighter.lastTrained;
+  if (!trainers || !history) return 0;
+
+  let best = Infinity;
+  for (const [focus, weight] of trainers) {
+    const when = history[focus];
+    if (when === undefined) continue;
+    // A light-weight focus maintains less, so the gap it closes is scaled by how hard it works
+    // the attribute — a 0.15 touch barely counts as having trained the thing at all.
+    best = Math.min(best, (day - when) / Math.max(0.2, weight));
+  }
+
+  // And any camp at all maintains everything a little. See `GENERAL_MAINTENANCE`.
+  let mostRecentCamp = -Infinity;
+  for (const when of Object.values(history)) {
+    if (when !== undefined && when > mostRecentCamp) mostRecentCamp = when;
+  }
+  if (mostRecentCamp > -Infinity) {
+    best = Math.min(best, (day - mostRecentCamp) / GENERAL_MAINTENANCE);
+  }
+
+  return best === Infinity ? 0 : Math.max(0, best);
+}
+
+/**
+ * What neglect costs for one attribute, over a span.
+ *
+ * Accumulating rather than flat — the longer something is left the faster it goes — and scaled by
+ * age, because detraining genuinely is faster later. That age term is the whole mechanism behind
+ * maintenance being worth a veteran's camp slot when developing something new is not.
+ */
+export function neglectLoss(input: {
+  fighter: Fighter;
+  key: AttributeKey;
+  day: GameDay;
+  years: number;
+  age: number;
+}): number {
+  const { fighter, key, day, years, age } = input;
+  const stickiness = NEGLECT_STICKINESS[key];
+  if (!stickiness) return 0;
+
+  const idle = neglectDays(fighter, key, day) - NEGLECT_GRACE_DAYS;
+  if (idle <= 0) return 0;
+
+  const ageFactor = 1 + Math.max(0, age - 30) * 0.06;
+  return NEGLECT_PER_YEAR * stickiness * ageFactor * (idle / 365) * years;
+}
+
 // --- Ageing --------------------------------------------------------------------------------
 
 /**
@@ -729,6 +890,53 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
 
   const attributes: Attributes = { ...fighter.attributes };
   const losses: Partial<Record<AttributeKey, number>> = {};
+  const carry: Partial<Record<AttributeKey, number>> = { ...fighter.trainingCarry };
+
+  /*
+   * Losses are banked, exactly as gains are.
+   *
+   * Ratings are integers and both of these forces produce tenths across the spans they are
+   * actually called with — a ten-week camp is 0.19 of a year — so `toRating(current − loss)`
+   * rounded the whole thing away and a fighter aged and decayed only when somebody happened to
+   * advance a long way at once. It is the same defect `trainingCarry` was introduced to fix on
+   * the way up, and it shares the same ledger so a fighter who is gaining and losing the same
+   * attribute nets out honestly rather than twice.
+   */
+  const take = (key: AttributeKey, amount: number, floor: number): void => {
+    if (amount <= 0) return;
+    const banked = (carry[key] ?? 0) - amount;
+    const whole = Math.ceil(-banked);
+    if (whole <= 0) {
+      carry[key] = round(banked, 4);
+      return;
+    }
+    const next = toRating(Math.min(attributes[key], Math.max(floor, attributes[key] - whole)));
+    // Only bank what was actually taken: at the floor the debt stops accruing rather than
+    // building a reservoir that empties the moment the floor moves.
+    if (next !== attributes[key]) {
+      losses[key] = round((losses[key] ?? 0) + (attributes[key] - next), 2);
+      carry[key] = round(banked + whole, 4);
+      attributes[key] = next;
+    } else {
+      carry[key] = 0;
+    }
+  };
+
+  /*
+   * Neglect, charged alongside age.
+   *
+   * Here rather than in its own pass because this function's job already *is* what elapsed time
+   * did to a fighter, and because every caller that ages somebody — a camp, a fight, the world's
+   * own loop — should charge both without having to remember to.
+   *
+   * Note the ordering it relies on: `applyTraining` runs first and stamps `lastTrained`, so the
+   * focus a fighter just worked shows zero neglect and everything they skipped does not.
+   */
+  for (const key of ATTRIBUTE_KEYS) {
+    const neglect = neglectLoss({ fighter, key, day: toDay, years, age }) * rng.range(0.8, 1.2);
+    // Skills fade; they do not evaporate. Nobody forgets how to wrestle.
+    take(key, neglect, Math.max(15, fighter.potential[key] * 0.5));
+  }
 
   for (const key of ATTRIBUTE_KEYS) {
     const rate = DECLINE_RATE[key];
@@ -748,23 +956,31 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
     const loss = BASE_DECLINE_PER_YEAR * years * rate * severity * rng.range(0.7, 1.3);
     if (loss <= 0) continue;
 
-    // Decline has a floor: a former elite wrestler at 42 is diminished, not a novice. The
-    // outer `min` matters — for a fighter whose ceiling in something is already below the
+    // Decline has a floor: a former elite wrestler at 42 is diminished, not a novice. The `min`
+    // inside `take` matters — for a fighter whose ceiling in something is already below the
     // floor, a bare `max` would *raise* the attribute past its own ceiling. Ageing may only
     // ever take away.
-    const floor = Math.max(12, fighter.potential[key] * 0.4);
-    const next = toRating(Math.min(attributes[key], Math.max(floor, attributes[key] - loss)));
-    if (next !== attributes[key]) {
-      losses[key] = round(attributes[key] - next, 2);
-      attributes[key] = next;
-    }
+    take(key, loss, Math.max(12, fighter.potential[key] * 0.4));
   }
 
   const notes: string[] = [];
   const totalLoss = Object.values(losses).reduce((a, v) => a + v, 0);
   if (totalLoss > 3) notes.push(`${fighter.lastName} has visibly slowed down.`);
 
-  return { fighter: { ...fighter, attributes }, losses, notes };
+  /*
+   * Name the neglected thing, because losing it is a consequence of a choice the player made and
+   * a loss they cannot connect to a decision is just the number going down.
+   */
+  const rusted = ATTRIBUTE_KEYS.filter(
+    (key) => (losses[key] ?? 0) > 0.3 && neglectDays(fighter, key, toDay) > NEGLECT_GRACE_DAYS * 2,
+  ).sort((a, b) => (losses[b] ?? 0) - (losses[a] ?? 0));
+  if (rusted.length > 0) {
+    notes.push(
+      `Nobody has worked on ${ATTRIBUTE_META[rusted[0]!].label.toLowerCase()} in a long time, and it shows.`,
+    );
+  }
+
+  return { fighter: { ...fighter, attributes, trainingCarry: carry }, losses, notes };
 }
 
 // --- Idle decay ----------------------------------------------------------------------------

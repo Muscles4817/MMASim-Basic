@@ -166,6 +166,17 @@ export interface Fighter {
    * used to mean.
    */
   aptitudes?: Aptitudes;
+  /**
+   * The last day each kind of camp was run. Doc 23 § 2.5.
+   *
+   * Six numbers rather than fifteen: training is chosen by focus, so a focus is the thing that
+   * actually has a date. An attribute's freshness is derived from whichever focus that trains it
+   * ran most recently.
+   *
+   * Optional, and absent means *fresh* rather than *never*. A save written before neglect existed
+   * must not have its whole roster decay the moment it is opened.
+   */
+  lastTrained?: Partial<Record<string, GameDay>>;
   /** Hidden true ceilings. The player only ever sees a scouted estimate. */
   /**
    * For the five physical attributes this is a real ceiling and always was.

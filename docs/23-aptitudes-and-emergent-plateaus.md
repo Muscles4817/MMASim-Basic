@@ -132,6 +132,80 @@ each other. A heavyweight built like a powerlifter genuinely does gas, and now t
 The same physiology gets a second expression in §4: the cardio _ceiling_ takes a negative frame term,
 because a 265 lb man does not have a lightweight's engine per kilogram no matter how he trains.
 
+### 2.5 Neglect and maintenance — the second downward force
+
+Everything above is a model of _gaining_. Until this section, the only thing that ever took a
+rating away was age, which meant a fighter who reached their level held every part of it for free
+and the sole cost of spreading a career thin was the gains not taken. That is not how a skill
+behaves. Sharpness is a thing you have rather than a thing you know, and you have it because you
+worked on it recently.
+
+Neglect is the second force, and it is what turns §2.3's emergent plateau into a set of real
+choices: a camp is now an investment _and_ a maintenance payment, and a fighter with four things to
+keep sharp and two camps a year cannot keep all four.
+
+**The clock.** `applyTraining` stamps `fighter.lastTrained[key]` for every attribute the focus
+touches. `neglectDays` is the gap since then, and because a focus trains several attributes at
+different weights, the gap is divided by that weight — so conditioning (cardio 1.0, durability 0.45)
+maintains a tank completely and a chin at less than half rate. One camp does not maintain everything
+it brushes against.
+
+**The general maintenance term.** A camp is not a single-discipline block; the engine models one
+focus because a focus is what the player _chooses_, not because sparring, drilling and running stop
+happening. So any camp counts for `GENERAL_MAINTENANCE = 0.35` against every attribute, which is
+what keeps an active fighter broadly sharp and still lets _what you never emphasise_ slowly go.
+
+**The charge.**
+
+```
+idle    = neglectDays(fighter, key, day) − NEGLECT_GRACE_DAYS      grace: 240 days
+loss    = NEGLECT_PER_YEAR × stickiness × ageFactor × (idle / 365) × years
+ageFactor = 1 + max(0, age − 30) × 0.06
+```
+
+The `idle / 365` term is the "accumulates" part, and it is the whole shape: the rate is itself a
+function of how long it has been, so a year off costs a little and the fourth year off costs
+several times what the first did. The 240-day grace means a fighter on the sport's median two-camp
+year is never told they are neglecting the thing they are actively doing.
+
+`NEGLECT_PER_YEAR = 0.9` was calibrated against the twenty-year long-sim rather than picked. At 1.6
+a broad career lost about four points of peak overall and could no longer reach champion level; 0.9
+costs roughly a point and a half.
+
+**Stickiness — what fades and what sticks.**
+
+| Attribute                          | Stickiness | Why                                                   |
+| ---------------------------------- | ---------- | ----------------------------------------------------- |
+| cardio                             | 1.5        | Detraining is measurable in weeks                     |
+| strikingDefence                    | 1.2        | Timing a slip is something you had last month         |
+| scrambling                         | 1.1        | Reactive, positional, entirely sharpness              |
+| kicking                            | 1.0        | Needs the hip mobility as much as the technique       |
+| strikingOffence                    | 0.9        |                                                       |
+| takedownDefence                    | 0.9        |                                                       |
+| wrestling                          | 0.85       |                                                       |
+| groundControl                      | 0.7        | More knowledge than sharpness                         |
+| submissions                        | 0.6        | A submission you know, you still know                 |
+| fightIq                            | 0.25       | Reading a fight is learned once                       |
+| composure                          | 0.2        | Nearly permanent                                      |
+| power, speed, strength, durability | —          | Age governs them; charging twice doubles a quiet year |
+
+**Floors and safety.** A skill never falls below `max(15, potential × 0.5)` — skills fade, they do
+not evaporate, and nobody forgets how to wrestle. And a fighter with no `lastTrained` at all loses
+_nothing_: absent has to mean _fresh_ rather than _never_, or upgrading the game would take a chunk
+out of eight hundred existing careers on the first tick.
+
+**The lever this was asked for.** `ageFactor` is why a veteran's camp slot is worth spending on
+keeping what they have: detraining runs faster after thirty, so at thirty-eight a neglected skill
+costs about 1.5× what it costs at twenty-four, and maintenance training is how an older fighter
+holds their level once developing something new no longer pays.
+
+**A rounding bug this surfaced.** `applyAgeing` computed `toRating(current − loss)`, which rounds —
+and across the spans it is actually called with (a ten-week camp is 0.19 of a year) every sub-half-
+point loss was silently discarded, so age decline had effectively never been applied to a fighter
+who fought regularly. Losses now bank their fractions into `trainingCarry` the same way gains
+always have. This is a correctness fix rather than a balance change, and it lowered career peaks by
+about a point and a half on its own — see the note on the long-sim's champion bar.
+
 ---
 
 ## 3. What this fixes from doc 22 §4
@@ -314,3 +388,7 @@ fight count alongside age.
   mid-thirties; the composite still peaks 29–32.
 - The twenty-year long-sim still produces champions, still retires people at plausible ages, and its
   existing assertions hold.
+- An attribute nobody has worked on in years is measurably worse than one that has been maintained,
+  the gap widens the longer it is left, and no skill ever falls below half of what the fighter
+  could be.
+- A fighter loaded from a save written before `lastTrained` existed loses nothing on the first tick.
