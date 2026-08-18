@@ -18,6 +18,8 @@ import type { Fighter } from '../domain/fighter.js';
 import { traitMul } from '../domain/traits.js';
 import type { AttributeKey, Attributes } from '../ratings/attributes.js';
 import { toRating } from '../ratings/attributes.js';
+import type { Corner, FightResult } from '../fight/types.js';
+import { isKoMethod, type FinishMethod } from '../domain/fighter.js';
 
 export const INJURY_TYPES = [
   'hand',
@@ -162,10 +164,28 @@ export function activeInjuries(injuries: readonly Injury[], day: GameDay): Injur
  * happen, which is the opposite of most players' intuition and worth the system saying.
  */
 const BASE_CAMP_HAZARD = 0.1;
-const BASE_FIGHT_HAZARD = 0.07;
+/*
+ * Raised from 0.07 alongside the exposure model, which is a recalibration rather than a nerf.
+ * The old `1 + damage/120` term sat at 1.0-2.0 and averaged around 1.4 across real fights;
+ * `exposureScore` is normalised so an ordinary decision reads 1.0, so holding the ordinary fight
+ * where it was requires the base to absorb the difference. Measured after: 12.0% for that decision
+ * against 10.8% before the adjustment.
+ */
+const BASE_FIGHT_HAZARD = 0.078;
 
-/** Probability that a camp produces an injury. */
-export function campInjuryChance(fighter: Fighter, weeks: number, day: GameDay): number {
+/**
+ * Probability that a camp produces an injury.
+ *
+ * `intensity` is a plain multiplier rather than the `TrainingIntensity` union, so `health` does not
+ * have to import `progression` — callers pass `INTENSITY_META[i].injury`. Defaults to 1, which is
+ * standard, so every existing caller is unchanged.
+ */
+export function campInjuryChance(
+  fighter: Fighter,
+  weeks: number,
+  day: GameDay,
+  intensity = 1,
+): number {
   const age = ageOn(fighter.birthDay, day);
   const proneness = remap(fighter.naturals.injuryProneness, 10, 92, 0.5, 1.9);
   const ageFactor = clamp(remap(age, 22, 40, 0.8, 1.7), 0.75, 1.8);
@@ -178,25 +198,189 @@ export function campInjuryChance(fighter: Fighter, weeks: number, day: GameDay):
       ageFactor *
       wear *
       load *
+      intensity *
       traitMul(fighter.traits, 'campInjuryRisk'),
   );
 }
 
-/** Probability that a fight produces an injury, given how much damage was taken. */
-export function fightInjuryChance(fighter: Fighter, damageTaken: number, day: GameDay): number {
+/**
+ * What one fighter's night actually did to them.
+ *
+ * The thing this replaces took a single scalar — head plus body plus leg damage — and turned it
+ * into `1 + clamp01(damage / 120)`, a term that could at most double the hazard. Measured on a
+ * 28-year-old across every night the sim can produce, that put a thirty-second armbar where
+ * nothing landed at **11.0%** and being beaten for two rounds and stopped in the third at
+ * **21.1%**: a 1.9x spread across the entire range of what can happen in a cage, against the 2.8x
+ * that `injuryProneness` alone spans. Who you were mattered more than what happened to you.
+ *
+ * It also ignored everything the simulation already records. How long you were in there, whether
+ * you were on top, whether you were dropped, whether you were finished, and — the detail that
+ * makes the difference between a career and a short one — whether the damage was to your head or
+ * your legs.
+ *
+ * So the roll now takes the fight. Everything here comes off `FightResult`; nothing new is
+ * measured during the bout.
+ */
+export interface FightExposure {
+  headDamage: number;
+  bodyDamage: number;
+  legDamage: number;
+  knockdownsSuffered: number;
+  /** Stopped by strikes while unable to defend. Its own term, on top of the damage. */
+  wasFinishedByStrikes: boolean;
+  /** How long the fight lasted. Being in there at all costs something. */
+  minutes: number;
+  /** Of that, minutes spent in a controlling position. Time on top is time not being hurt. */
+  controlMinutes: number;
+  /** Takedowns the *opponent* attempted. Wrestling is hard on knees, shoulders and backs. */
+  scrambles: number;
+  /** Punches **this fighter** threw. You break your hand on somebody, not the other way round. */
+  punchesThrown: number;
+  /** Kicks this fighter threw, for the same reason — shins and ankles. */
+  kicksThrown: number;
+}
+
+/** Read one corner's exposure off a finished fight. */
+export function exposureFrom(result: FightResult, corner: Corner): FightExposure {
+  const damage = result.damage[corner];
+  const mine = result.stats[corner];
+  const theirs = result.stats[corner === 'red' ? 'blue' : 'red'];
+  const minutes = ((result.round - 1) * 5 * 60 + result.timeSeconds) / 60;
+
+  return {
+    headDamage: damage.headDamage,
+    bodyDamage: damage.bodyDamage,
+    legDamage: damage.legDamage,
+    knockdownsSuffered: damage.knockdownsSuffered,
+    wasFinishedByStrikes: damage.wasFinishedByStrikes,
+    minutes,
+    controlMinutes: mine.controlSeconds / 60,
+    scrambles: theirs.takedownsAttempted,
+    punchesThrown: mine.strikesByWeapon.punch,
+    kicksThrown: mine.strikesByWeapon.kick,
+  };
+}
+
+/**
+ * Weights, in hazard points per unit.
+ *
+ * Legs are dearer than the body per point because a chopped-out leg is the classic limp-off, and
+ * the head is dearer than either because of what it does to the rest of the model. Control is the
+ * only negative term and it is deliberately worth more per minute than time itself costs — a
+ * fighter who spends the round on top comes out ahead of one who spends it at distance, which is
+ * the whole grappler's bargain.
+ */
+const EXPOSURE_WEIGHTS = {
+  head: 0.01,
+  body: 0.007,
+  leg: 0.013,
+  knockdown: 0.1,
+  finished: 0.15,
+  minute: 0.012,
+  scramble: 0.02,
+  control: -0.02,
+} as const;
+
+/**
+ * There is no safe fight.
+ *
+ * A floor, because a thirty-second win still involves two people trying to hurt each other and
+ * somebody lands awkwardly. Without it the model says a fast finish is free, which is nearly right
+ * and therefore wrong in the way that matters: it would make one style risk-free rather than
+ * cheap.
+ */
+const MIN_EXPOSURE = 0.18;
+
+/** The score an ordinary three-round decision produces. Everything is read relative to it. */
+const REFERENCE_EXPOSURE = 0.75;
+
+/** How hard this night was, where an ordinary decision is 1. */
+export function exposureScore(e: FightExposure): number {
+  const raw =
+    e.headDamage * EXPOSURE_WEIGHTS.head +
+    e.bodyDamage * EXPOSURE_WEIGHTS.body +
+    e.legDamage * EXPOSURE_WEIGHTS.leg +
+    e.knockdownsSuffered * EXPOSURE_WEIGHTS.knockdown +
+    (e.wasFinishedByStrikes ? EXPOSURE_WEIGHTS.finished : 0) +
+    e.minutes * EXPOSURE_WEIGHTS.minute +
+    e.scrambles * EXPOSURE_WEIGHTS.scramble +
+    e.controlMinutes * EXPOSURE_WEIGHTS.control;
+
+  return MIN_EXPOSURE + Math.max(0, raw) / REFERENCE_EXPOSURE;
+}
+
+/**
+ * Probability that a fight produces an injury.
+ *
+ * The band this is calibrated to, on a median fighter, is doc 25 § 3.5: roughly 2-3% for an
+ * untouched thirty-second finish, 4-5% for three rounds won from top position, 12% for an ordinary
+ * decision, and close to 40% for a beating. That is a spread of well over ten times, and it is
+ * what makes *how* a fighter wins matter as much as whether they win.
+ */
+export function fightInjuryChance(
+  fighter: Fighter,
+  exposure: FightExposure,
+  day: GameDay,
+): number {
   const age = ageOn(fighter.birthDay, day);
   const proneness = remap(fighter.naturals.injuryProneness, 10, 92, 0.6, 1.7);
   const ageFactor = clamp(remap(age, 22, 40, 0.85, 1.5), 0.8, 1.6);
-  const damage = 1 + clamp01(damageTaken / 120);
 
   return clamp01(
     BASE_FIGHT_HAZARD *
       proneness *
       ageFactor *
-      damage *
+      exposureScore(exposure) *
       traitMul(fighter.traits, 'fightInjuryRisk'),
   );
 }
+
+/**
+ * How much each injury type is *this* fight's kind of injury.
+ *
+ * Without this, the type is drawn from a table of global weights, so a fighter whose legs were
+ * chopped to pieces was as likely to walk out with a broken hand as a rib, and a fighter who had
+ * never been touched could pick up a concussion. The drivers are all already recorded.
+ *
+ * Two of them read the fighter's **own** output rather than what they absorbed, which is the point
+ * of doing this at all: you break your hand punching somebody's skull, and you hurt your shin
+ * kicking their elbow. Neither was reachable before.
+ */
+function typeAffinity(type: InjuryType, e: FightExposure): number {
+  const head = e.headDamage / 60 + e.knockdownsSuffered * 0.5 + (e.wasFinishedByStrikes ? 0.6 : 0);
+  const legs = e.legDamage / 25;
+  const body = e.bodyDamage / 30;
+  const grind = e.scrambles / 4 + e.minutes / 25;
+  const punches = e.punchesThrown / 45;
+  const kicks = e.kicksThrown / 20;
+
+  switch (type) {
+    case 'concussion':
+      return head;
+    case 'cut':
+      return head * 0.8;
+    case 'rib':
+      return body;
+    case 'ankle':
+      return legs * 0.7 + kicks;
+    case 'knee':
+      return legs * 0.6 + grind * 0.8;
+    case 'shoulder':
+      return grind;
+    case 'back':
+      return grind * 0.7;
+    case 'hand':
+      return punches;
+  }
+}
+
+/**
+ * Floor under `typeAffinity`, so an unlikely injury stays unlikely rather than impossible.
+ *
+ * People do turn an ankle in a fight that never went to the legs. A zero here would make the type
+ * table a lookup rather than a distribution, which is a worse model wearing a more confident face.
+ */
+const AFFINITY_FLOOR = 0.35;
 
 export interface RollInjuryInput {
   fighter: Fighter;
@@ -205,6 +389,12 @@ export interface RollInjuryInput {
   rng: Rng;
   /** Existing injuries, so recurrence can be checked. */
   history?: readonly Injury[];
+  /** What the fight was like, when it was a fight. Shapes which injury this turns out to be. */
+  exposure?: FightExposure;
+  /** Force a type. Used by `concussionFor`, where the diagnosis is not in question. */
+  type?: InjuryType;
+  /** Force severity, 0-1, instead of drawing it. */
+  severity?: number;
 }
 
 /**
@@ -222,15 +412,20 @@ export function rollInjury(input: RollInjuryInput): Injury {
 
   // A prior injury of the same type massively raises the odds of it being that one again.
   const priorTypes = new Set(history.map((i) => i.type));
-  const type = rng.pickWeighted(INJURY_TYPES, (t) => {
-    const meta = INJURY_META[t];
-    const base = weightOf(meta);
-    return base * (priorTypes.has(t) ? 1 + meta.recurrence * 4 : 1);
-  });
+  const type =
+    input.type ??
+    rng.pickWeighted(INJURY_TYPES, (t) => {
+      const meta = INJURY_META[t];
+      const base = weightOf(meta);
+      const affinity = input.exposure
+        ? AFFINITY_FLOOR + typeAffinity(t, input.exposure)
+        : 1;
+      return base * affinity * (priorTypes.has(t) ? 1 + meta.recurrence * 4 : 1);
+    });
 
   const meta = INJURY_META[type];
   // Severity skews low: most injuries are a nuisance, a few are career-shaping.
-  const severity = clamp01(rng.next() ** 1.6 * 0.9 + 0.1);
+  const severity = input.severity ?? clamp01(rng.next() ** 1.6 * 0.9 + 0.1);
 
   const [minWeeks, maxWeeks] = meta.weeks;
   const rawWeeks = minWeeks + (maxWeeks - minWeeks) * severity;
@@ -351,4 +546,57 @@ export function campImpairment(injuries: readonly Injury[], day: GameDay): numbe
   if (active.length === 0) return 1;
   const worst = Math.max(...active.map((i) => i.severity));
   return clamp(1 - worst * 0.55, 0.3, 1);
+}
+
+/**
+ * A knockout is a concussion. It is not a dice roll.
+ *
+ * `readinessDelay` already floors a KO loss at 180 days, which matches how commissions actually
+ * suspend people — but the *injury* was a separate roll at 12-18% which then picked a type by
+ * weight, so the overwhelming majority of knockouts left nothing whatsoever on the medical record.
+ * The suspension happened and the diagnosis did not, which is the wrong way round: the suspension
+ * exists **because** of the diagnosis.
+ *
+ * Severity comes off the head damage and how they went out, so being starched cold in the first
+ * exchange and being worn down and stopped late are different injuries, as they are in life.
+ *
+ * Returns `undefined` when the fight was not that kind of fight.
+ */
+export function concussionFor(input: {
+  fighter: Fighter;
+  method: FinishMethod;
+  /** True for the fighter who was stopped, false for the winner. */
+  lost: boolean;
+  exposure: FightExposure;
+  day: GameDay;
+  rng: Rng;
+}): Injury | undefined {
+  const { fighter, method, lost, exposure, day, rng } = input;
+  if (!lost) return undefined;
+
+  /*
+   * A KO is unambiguous. A TKO or a doctor's stoppage only counts when the fighter was actually
+   * being hit — `wasFinishedByStrikes` is what separates being battered from a corner throwing in
+   * the towel over a cut or a fighter turning away from leg kicks.
+   */
+  const byHead =
+    isKoMethod(method) &&
+    (method === 'ko' || exposure.wasFinishedByStrikes);
+  if (!byHead) return undefined;
+
+  // A clean cold knockout is worse than a late accumulation stoppage, and both are worse than the
+  // floor. `ko` outranks `tko` here because the method itself carries the information.
+  const fromDamage = clamp01(exposure.headDamage / 140);
+  const base = method === 'ko' ? 0.45 : 0.28;
+  const severity = clamp01(base + fromDamage * 0.45 + rng.range(-0.06, 0.1));
+
+  return rollInjury({
+    fighter,
+    source: 'fight',
+    day,
+    rng,
+    type: 'concussion',
+    severity,
+    exposure,
+  });
 }

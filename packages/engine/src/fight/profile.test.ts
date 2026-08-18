@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ARCHETYPES } from '../testing/fixtures.js';
-import { deriveTendencies } from './profile.js';
+import { ARCHETYPES, makeFighter } from '../testing/fixtures.js';
+import { defaultGamePlan } from '../domain/gameplan.js';
+import { MAX_STARTING_FATIGUE, createCombatant, deriveTendencies, startingFatigue } from './profile.js';
+import type { Fighter } from '../domain/fighter.js';
 
 /**
  * What a scouting report says about a fighter.
@@ -78,5 +80,50 @@ describe('a scouting report reads the fighter it is looking at', () => {
     expect(wrestler.singleLeg).toBeGreaterThan(guard.singleLeg * 2);
     // Both read as grapplers: neither is a volume striker.
     expect(Math.max(guard.highVolume, wrestler.highVolume)).toBeLessThan(0.2);
+  });
+});
+
+describe('you start the fight in the state your camp left you', () => {
+  /*
+   * `createCombatant` set `fatigue: 0` flatly, so a fighter who had just overreached for twelve
+   * weeks and one who had tapered walked to the cage identically. Doc 25 § 3.4.
+   *
+   * Deliberately gentle and capped: freshness must change *where you begin*, not how fast you
+   * tire, or it becomes a second hidden cardio attribute deciding fights from a menu.
+   */
+  const at = (freshness: number): Fighter => {
+    const base = makeFighter({ age: 27 });
+    return { ...base, condition: { ...base.condition, freshness } };
+  };
+
+  it('starts a fresh fighter at nothing, exactly as before', () => {
+    expect(startingFatigue(at(100))).toBe(0);
+  });
+
+  it('starts a flat fighter already carrying some', () => {
+    expect(startingFatigue(at(20))).toBeGreaterThan(0);
+  });
+
+  it('slides with freshness rather than switching at a threshold', () => {
+    const values = [100, 75, 50, 25, 0].map(at).map(startingFatigue);
+    for (let i = 1; i < values.length; i++) expect(values[i]!).toBeGreaterThan(values[i - 1]!);
+  });
+
+  it('never starts anybody more than a quarter of the way to gassed', () => {
+    // The cap is the guard against this becoming the thing that decides fights.
+    expect(startingFatigue(at(0))).toBeLessThanOrEqual(MAX_STARTING_FATIGUE);
+    expect(MAX_STARTING_FATIGUE).toBeLessThanOrEqual(0.3);
+  });
+
+  it('treats a fighter from a save without the field as fresh', () => {
+    const base = makeFighter({ age: 27 });
+    const legacy = { ...base, condition: { ...base.condition, freshness: undefined } } as Fighter;
+    expect(startingFatigue(legacy)).toBe(0);
+  });
+
+  it('is what the combatant actually walks in with', () => {
+    const flat = createCombatant('red', at(20), defaultGamePlan());
+    const fresh = createCombatant('red', at(100), defaultGamePlan());
+    expect(flat.fatigue).toBeGreaterThan(fresh.fatigue);
   });
 });

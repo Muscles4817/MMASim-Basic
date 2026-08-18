@@ -21,6 +21,7 @@ import { hasTrait, traitAdd, traitMul } from '../domain/traits.js';
 import type { Attributes } from '../ratings/attributes.js';
 import { deriveRatings, type DerivedRatings } from '../ratings/derived.js';
 import { cutSeverity } from '../domain/divisions.js';
+import { FRESH, freshnessOf } from '../health/freshness.js';
 import type { Corner, DamageRegion, FightStats } from './types.js';
 import { emptyStats, type GroundPosition, type Position } from './types.js';
 
@@ -127,8 +128,17 @@ export function effectiveDurability(c: Combatant): number {
   const base = c.attrs.durability;
   const traits = c.fighter.traits;
 
-  // Career trauma erodes the ceiling permanently.
-  const careerErosion = (c.fighter.condition.headTrauma / 100) * 22;
+  /*
+   * Career trauma erodes the ceiling — and now some of that erosion is already permanent.
+   *
+   * Reduced from 22 because doc 25 § 4 makes trauma take durability off the stored attribute
+   * through `applyAgeing`. Leaving this where it was would charge a damaged fighter twice for the
+   * same damage: once on the card and once again on the night. What changes is the *permanence*,
+   * not the total — a fighter who has just been in a war is hurt about as much as before, and one
+   * who has been in wars for a decade is hurt considerably more, because part of it never came
+   * back.
+   */
+  const careerErosion = (c.fighter.condition.headTrauma / 100) * 14;
   // Tonight's damage erodes it further, and compounds — the tenth clean shot lands on a
   // worse chin than the first.
   const tonightErosion = (c.damage.head / 100) * 30 * traitMul(traits, 'durabilityDecay');
@@ -173,6 +183,18 @@ export function roundBiasMultiplier(c: Combatant, round: number, totalRounds: nu
   return clamp(1 + bias * progress, 0.6, 1.45);
 }
 
+/**
+ * How much of the first round a fighter has already spent before it starts.
+ *
+ * At most `MAX_STARTING_FATIGUE` — a quarter of the way to gassed at nothing left in the tank,
+ * which is enough to matter in a hard fight and nowhere near enough to beat a real engine.
+ */
+export const MAX_STARTING_FATIGUE = 0.25;
+
+export function startingFatigue(fighter: Fighter): number {
+  return clamp01((1 - freshnessOf(fighter) / FRESH) * MAX_STARTING_FATIGUE);
+}
+
 export function createCombatant(
   corner: Corner,
   fighter: Fighter,
@@ -189,7 +211,15 @@ export function createCombatant(
     plan,
     tendencies: deriveTendencies(fighter),
 
-    fatigue: 0,
+    /*
+     * You start the fight in the state your camp left you in. Doc 25 § 3.4.
+     *
+     * This was flatly `0` for everybody, so a fighter who had just overreached for twelve weeks
+     * and one who had tapered walked to the cage identically. Deliberately gentle and capped:
+     * freshness must change *where you begin*, not how fast you tire, or it becomes a second
+     * hidden cardio attribute deciding fights from a menu.
+     */
+    fatigue: startingFatigue(fighter),
     damage: { head: 0, body: 0, legs: 0 },
     hurtSeconds: 0,
     knockdownsSuffered: 0,

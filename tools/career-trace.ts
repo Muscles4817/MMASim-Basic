@@ -36,6 +36,7 @@ import {
   createPlayerFighter,
   createRng,
   fighterAge,
+  freshnessOf,
   headroom,
   overallRating,
   retirementUrge,
@@ -49,6 +50,7 @@ import {
   type InboxItem,
   type Promotion,
   type TrainingFocus,
+  type TrainingIntensity,
 } from '../packages/engine/src/index.js';
 import {
   aiPlanFor,
@@ -56,6 +58,7 @@ import {
   bookFight,
   getOffers,
   runBookedFight,
+  saveBookingIntensity,
   saveBookingPlan,
   type Booking,
 } from '../packages/app/src/game/career.js';
@@ -118,6 +121,14 @@ interface Subject {
   spec: Omit<CreateFighterSpec, 'day' | 'promotionId' | 'gymId'>;
   policy: Policy;
   policyLabel: string;
+  /**
+   * How hard each block is run, which is the other half of the training decision.
+   *
+   * A function of age and freshness rather than a constant, because that is the decision the dial
+   * exists for: build while you can afford to be flat, hold when you cannot.
+   */
+  intensity: (f: Fighter, age: number) => TrainingIntensity;
+  intensityLabel: string;
   /** Rough target gap between fights, in days. Two a year is the sport's median. */
   restDays: number;
   /** Weeks per training block between camps. */
@@ -144,6 +155,9 @@ const SUBJECTS: readonly Subject[] = [
     },
     policy: rotate,
     policyLabel: 'Rotates to whatever has the most room. Broad; never specialises.',
+    // Builds hard while there is physical room to build, and backs off when there is not.
+    intensity: (f, age) => (age < 28 && freshnessOf(f) > 55 ? 'hard' : 'standard'),
+    intensityLabel: 'Hard until 28 while fresh, standard after.',
     restDays: 150,
     blockWeeks: 8,
   },
@@ -166,6 +180,9 @@ const SUBJECTS: readonly Subject[] = [
     },
     policy: commit('wrestling', 'boxing'),
     policyLabel: 'Wrestling and boxing, every camp, for the whole career.',
+    // Never manages the load at all, which is the control case.
+    intensity: () => 'standard',
+    intensityLabel: 'Standard, always. Never manages the load.',
     restDays: 150,
     blockWeeks: 8,
   },
@@ -193,6 +210,13 @@ const SUBJECTS: readonly Subject[] = [
     },
     policy: commitThenMaintain('boxing', 'submissions', 32),
     policyLabel: 'Boxing and submissions until 32, then rotates to hold on to what he has.',
+    /*
+     * The veteran's lever, finally expressible. Light blocks return freshness rather than costing
+     * it and still reset the neglect clock in full, so past 32 he holds his level and gets his
+     * legs back instead of digging a hole he cannot climb out of.
+     */
+    intensity: (f, age) => (age >= 32 ? 'light' : freshnessOf(f) > 60 ? 'hard' : 'standard'),
+    intensityLabel: 'Hard while fresh and young; light from 32, to hold rather than build.',
     restDays: 180,
     blockWeeks: 10,
   },
@@ -209,6 +233,7 @@ interface Snapshot {
   headTrauma: number;
   bodyWear: number;
   bank: number;
+  freshness: number;
   focuses: string;
   urge: number;
 }
@@ -239,6 +264,7 @@ function snapshot(f: Fighter, day: number, focuses: readonly TrainingFocus[]): S
     headTrauma: Math.round(f.condition.headTrauma),
     bodyWear: Math.round(f.condition.bodyWear),
     bank: Math.round(f.bank),
+    freshness: Math.round(freshnessOf(f)),
     focuses: focuses.join(' + '),
     urge: retirementUrge(f, day),
   };
@@ -391,6 +417,7 @@ function runCareer(subject: Subject): Career {
        */
       const opponent = db.fighters.getById(booking.bout.blueId as string) as Fighter | undefined;
       if (opponent) booking = saveBookingPlan(booking, aiPlanFor(f, opponent));
+      booking = saveBookingIntensity(booking, subject.intensity(f, age));
       const outcome = runBookedFight(db, booking);
       for (const text of outcome.notes) note(getWorld(db).day, text);
       lastFightDay = booking.bout.day;
@@ -399,7 +426,7 @@ function runCareer(subject: Subject): Career {
 
     // No fight to take: train, which is also how the clock moves.
     const before = getWorld(db).day;
-    const outcome = runTraining(db, f, focuses, subject.blockWeeks);
+    const outcome = runTraining(db, f, focuses, subject.blockWeeks, subject.intensity(f, age));
     for (const text of outcome.notes) note(getWorld(db).day, text);
     if (getWorld(db).day <= before) advanceTo(db, before + 28);
   }
@@ -543,13 +570,15 @@ for (const c of careers) {
   say('### Year by year — the body');
   say();
   say(
-    `| Age | Ovr | ${physical.map((k) => PRETTY[k]).join(' | ')} | Record | Trauma | Wear | Trained |`,
+    `| Age | Ovr | ${physical.map((k) => PRETTY[k]).join(' | ')} | Record | Trauma | Wear | Fresh | Trained |`,
   );
-  say(`| ---: | ---: | ${physical.map(() => '---:').join(' | ')} | --- | ---: | ---: | --- |`);
+  say(
+    `| ---: | ---: | ${physical.map(() => '---:').join(' | ')} | --- | ---: | ---: | ---: | --- |`,
+  );
   for (const x of c.snapshots) {
     say(
       `| ${x.age} | ${x.overall.toFixed(1)} | ${physical.map((k) => x.attributes[k]).join(' | ')} | ` +
-        `${x.record} | ${x.headTrauma} | ${x.bodyWear} | ${x.focuses} |`,
+        `${x.record} | ${x.headTrauma} | ${x.bodyWear} | ${x.freshness} | ${x.focuses} |`,
     );
   }
   say();
@@ -716,13 +745,30 @@ say(
 );
 say();
 
-say('### 6. Nobody retires hurt');
+say('### 6. Nobody retires hurt — *fixed*');
 say();
 say(
   `The most damaged fighter here finished on ${maxTrauma} head trauma after ${mostFights} professional fights. ` +
-    '`retirementUrge` does not start reading trauma until 45 and wear until 50, so the term never ' +
-    'engages and every career ends on age or on a losing run. The sport\u2019s most characteristic ' +
-    'ending — the fighter who is told to stop — is currently unreachable.',
+    '`retirementUrge` read trauma only from 45 and body wear only from 50 — and across three ' +
+    'twenty-year worlds the highest body wear ever seen at retirement was **51**, so that term was ' +
+    'dead code and the sport\u2019s most characteristic ending was arithmetically unreachable.',
+);
+say();
+say(
+  'Worse, an identical five-fight skid with the confidence gone produced the *same* urge at 23 as ' +
+    'at 34 — both 23.2% per fight — so nothing knew how much career was left to come back to. **31% ' +
+    'of all retirements happened before 28.** Doc 25 phase 1 sharpened that rather than causing it: ' +
+    'injuries, suspensions and cancelled fights disrupt a career properly now, and the skid was the ' +
+    'only exit any of it could lead to.',
+);
+say();
+say(
+  'Both are fixed. The skid and confidence terms are weighted by how far into a career the fighter ' +
+    'is, and trauma and wear now read from where they actually accumulate. Measured across the same ' +
+    'three worlds: retirements before 28 fell from 31% to 4.8%, mean retirement age moved 32.6 to ' +
+    '36.1, medical retirements went from 5% of the total to 20%, and the oldest active fighter after ' +
+    'twenty years came *down* from 59 to 55 — because damage now ends careers that the skid never ' +
+    'reached.',
 );
 say();
 

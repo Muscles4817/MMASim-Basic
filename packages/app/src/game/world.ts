@@ -26,6 +26,8 @@ import {
   applyAftermath,
   applyAgeing,
   applyTraining,
+  campInjuryChance,
+  rollInjury,
   createRng,
   CARD_SIZE,
   agreementStatus,
@@ -106,6 +108,7 @@ import {
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
 import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
+import { settleFightInjuries } from './fightInjuries';
 
 type StoredNews = NewsItem & Entity;
 
@@ -869,18 +872,47 @@ export function runCardBout(ctx: {
     }
   }
 
+  /*
+   * The world gets hurt too.
+   *
+   * `rollInjury` was never called anywhere in this file — not here, not in `develop` — so eight
+   * hundred professional fighters went through whole careers of wars and knockouts and picked up
+   * nothing. Only the player and whoever they had just fought could be injured, which made every
+   * downstream system that reads injuries a player-only system: withdrawals, medical suspensions,
+   * the fighter who is quietly carrying a knee into a title fight.
+   *
+   * Same function the player's own bout runs through, so the rates are identical by construction
+   * rather than by two tables agreeing.
+   */
+  const hurt = {
+    red: settleFightInjuries({
+      fighter: after.red,
+      result,
+      corner: 'red',
+      day,
+      rng: rng.fork(`hurt:${red.id}`),
+    }).fighter,
+    blue: settleFightInjuries({
+      fighter: after.blue,
+      result,
+      corner: 'blue',
+      day,
+      rng: rng.fork(`hurt:${blue.id}`),
+    }).fighter,
+  };
+
   const redWon = result.winnerId === red.id;
   const developed = {
     red: settleRosterFighter(
       db,
-      develop(db, after.red, day, rng.fork(`dev:${red.id}`), lastSeen),
+      develop(db, hurt.red, day, rng.fork(`dev:${red.id}`), lastSeen),
       redWon,
       day,
       bout.position,
     ),
     blue: settleRosterFighter(
       db,
-      develop(db, after.blue, day, rng.fork(`dev:${blue.id}`), lastSeen),
+      develop(db, hurt.blue, day, rng.fork(`dev:${blue.id}`), lastSeen),
       result.winnerId === blue.id,
       day,
       bout.position,
@@ -1245,11 +1277,32 @@ function develop(
     rng,
   }).fighter;
 
+  /*
+   * Camps hurt people, and this one did not.
+   *
+   * `runTraining` has always rolled `campInjuryChance` for the player, and the comment above this
+   * function calls it "the same loop the player is in". It was not: the world's fighters trained
+   * for entire careers and could not so much as tweak a knee doing it, while camp injuries are —
+   * by the model's own reckoning and by the sport's — the most common source of injury there is.
+   */
+  const withInjury = ((): Fighter => {
+    const injuryRng = rng.fork('campInjury');
+    if (!injuryRng.chance(campInjuryChance(trained, weeks, day))) return trained;
+    const injury = rollInjury({
+      fighter: trained,
+      source: 'camp',
+      day,
+      rng: injuryRng,
+      history: trained.injuries ?? [],
+    });
+    return { ...trained, injuries: [...(trained.injuries ?? []), injury] };
+  })();
+
   // Age over real elapsed time. Ageing a fixed amount per fight double-counts it: a busy
   // fighter would lose several extra years of physical prime purely for having fought often.
   const since = lastSeen.get(fighter.id as string) ?? day;
   lastSeen.set(fighter.id as string, day);
-  return applyAgeing(trained, since, day, rng).fighter;
+  return applyAgeing(withInjury, since, day, rng).fighter;
 }
 
 function finalise(

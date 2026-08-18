@@ -38,9 +38,11 @@ export * from './fight/simulate.js';
 
 // Health
 export * from './health/injuries.js';
+export * from './health/freshness.js';
 
 // Progression
 export * from './progression/divisionMove.js';
+export * from './progression/intensity.js';
 export * from './progression/retirement.js';
 export * from './progression/generation.js';
 export * from './progression/names.js';

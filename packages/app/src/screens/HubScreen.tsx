@@ -4,6 +4,8 @@ import {
   describeAdviceRecord,
   describeFairness,
   daysSinceLastBout,
+  describeFreshness,
+  freshnessOf,
   describeReleaseRisk,
   describeRust,
   rustFor,
@@ -107,7 +109,9 @@ export function HubScreen() {
   const jobRisk =
     standing.promotion && !standing.freeAgent ? releaseRisk(fighter, standing.promotion) : 0;
   // How long since they last competed, which is now a real cost rather than a stored zero.
-  const rust = rustFor(daysSinceLastBout(fighter.record, world.day) ?? 0);
+  const daysSince = daysSinceLastBout(fighter.record, world.day);
+  const rust = rustFor(daysSince ?? 0);
+  const freshness = freshnessOf(fighter);
   const opponent = booking
     ? (db.fighters.findById(booking.opponentId) as Fighter | undefined)
     : undefined;
@@ -208,6 +212,55 @@ export function HubScreen() {
             </Chip>
           )}
         </div>
+
+        {/*
+          What the career has cost so far.
+
+          Freshness, wear and trauma were between them either invisible or conditional: trauma
+          appeared only past 45, wear appeared nowhere on this screen at all, and freshness did not
+          exist. Hiding a number until it is bad means the player learns about it too late to act
+          on it, which is the opposite of what a resource is for — so these are always on, and read
+          in plain language rather than as a bare figure out of a hundred.
+        */}
+        <div className="row" style={{ marginTop: 'var(--space-4)', flexWrap: 'wrap' }}>
+          <Fact
+            label="Freshness"
+            value={`${describeFreshness(freshness)} · ${Math.round(freshness)}`}
+            emphasis={freshness < 45 ? 'primary' : 'tertiary'}
+            tone={freshness >= 65 ? 'good' : freshness < 25 ? 'bad' : freshness < 45 ? 'warn' : undefined}
+            hint="How recovered you are. Camps and hard fights spend it; time gives it back, and more slowly the more miles you have on you."
+          />
+          <Fact
+            label="Body wear"
+            value={`${Math.round(fighter.condition.bodyWear)} / 100`}
+            emphasis="tertiary"
+            tone={fighter.condition.bodyWear > 55 ? 'bad' : fighter.condition.bodyWear > 30 ? 'warn' : undefined}
+            hint="Joints and soft tissue. Raises camp injury risk and slows how fast you come back."
+          />
+          <Fact
+            label="Head trauma"
+            value={`${Math.round(fighter.condition.headTrauma)} / 100`}
+            emphasis="tertiary"
+            tone={fighter.condition.headTrauma > 55 ? 'bad' : fighter.condition.headTrauma > 30 ? 'warn' : undefined}
+            hint="Only ever goes up. Permanently lowers what your chin can absorb, and eventually ends careers."
+          />
+          <Fact
+            label="Last fought"
+            value={daysSince === undefined ? 'Never' : daysSince < 31 ? `${daysSince}d ago` : `${Math.round(daysSince / 30)}mo ago`}
+            emphasis="tertiary"
+            tone={rust > 0.35 ? 'warn' : undefined}
+            hint="Time out of the cage costs sharpness, not strength — you see it later, you do not hit softer."
+          />
+        </div>
+
+        {freshness < 30 && (
+          <div style={{ marginTop: 'var(--space-3)' }}>
+            <Alert tone={freshness < 15 ? 'danger' : 'warn'} title="You are running on empty">
+              Nothing about your ability has changed. You have simply not recovered from what you
+              have already done, and it takes longer to come back the older and more worn you get.
+            </Alert>
+          </div>
+        )}
 
         {/* Damage is a decision input, not a stat. It gets an alert, not a chip. */}
         {fighter.condition.headTrauma > 45 && (

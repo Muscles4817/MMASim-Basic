@@ -32,15 +32,10 @@ import {
   retirementReason,
   retirementUrge,
   shouldRetire,
-  activeInjuries,
-  aggravate,
-  aggravationChance,
-  fightInjuryChance,
   injuredAttributes,
   rustFor,
   rustedAttributes,
   daysSinceLastBout,
-  rollInjury,
   setChampion,
   campPurchaseEffects,
   cutSeverity,
@@ -53,7 +48,13 @@ import {
   type Commentator,
   type Fighter,
   type Gym,
+  DEFAULT_INTENSITY,
+  INTENSITY_META,
+  describeInjury,
+  type TrainingIntensity,
+  weeksUntilFit,
   type FightResult,
+  type PullOut,
   type GamePlan,
   type Judge,
   type MatchupAppraisal,
@@ -66,12 +67,23 @@ import { campCostFor, currentPurse, settleFight } from './money';
 import { afterFight, recordAdviceFor, settleManagerAdvice, type ManagerAdvice } from './contracts';
 import { playerCardPosition, runSupportingCard } from './night';
 import { recordPlayerNews } from './world';
+import { settleFightInjuries } from './fightInjuries';
+import { FIGHT_THROUGH_WEEKS, opponentWithdrawal, playerCampInjury } from './withdrawals';
+import { raise } from './inbox';
 
 const BOOKING_KEY = 'mmasim:booking';
 const RESULT_KEY = 'mmasim:lastResult';
 
 /** A booked but unfought bout, plus the plan the player built for it. */
 export interface Booking {
+  /**
+   * How hard the camp is run. Set on the camp screen; defaults to standard.
+   *
+   * Lives on the booking rather than being picked for the player, because the fight camp is the
+   * majority of all the training a player ever does — an intensity dial that existed only on the
+   * training screen would be half a feature.
+   */
+  intensity?: TrainingIntensity;
   bout: Bout;
   opponentId: string;
   plan: GamePlan;
@@ -195,7 +207,22 @@ export function getOffers(db: GameDb, fighter: Fighter): MatchupAppraisal[] {
   const promotion = db.promotions.findById(fighter.promotionId ?? 'p_apex');
   if (!promotion) return [];
 
-  const pool = db.fighters.findAll() as Fighter[];
+  /*
+   * Not the ones who are hurt.
+   *
+   * A promotion does not offer you a fighter who is presently out, and until injuries existed for
+   * anybody but the player this could not come up. The moment the world started getting hurt it
+   * did, immediately and constantly: measured across six careers, 15 of 121 booked bouts collapsed
+   * because the opponent was already carrying something on the day the offer was made. That is not
+   * the sport's withdrawal rate, it is a matchmaker booking people who are in a cast.
+   *
+   * `FIGHT_THROUGH_WEEKS` rather than "no injuries at all", so this agrees exactly with the rule
+   * `withdrawals.ts` uses to decide who fights hurt. Somebody with a fortnight left on a cut is
+   * bookable and will take it; somebody with three months on a knee is not.
+   */
+  const pool = (db.fighters.findAll() as Fighter[]).filter(
+    (f) => weeksUntilFit(f.injuries ?? [], world.day) <= FIGHT_THROUGH_WEEKS,
+  );
   const seed = `${world.seed}:offers:${fighter.id}:${world.day}`;
 
   const samePromotion = offerOpponents(fighter, pool, promotion, world.day, createRng(seed), {
@@ -302,6 +329,7 @@ export function bookFight(
 export interface CampDevelopment {
   focus: TrainingFocus;
   weeks: number;
+  intensity: TrainingIntensity;
   gym?: Gym;
   coach?: Coach;
 }
@@ -329,6 +357,7 @@ export function campDevelopmentPlan(
       fighter,
     ),
     weeks: campWeeksOf(booking),
+    intensity: booking.intensity ?? DEFAULT_INTENSITY,
     gym: fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined,
     coach: fighter.headCoachId
       ? (db.coaches.findById(fighter.headCoachId) as Coach | undefined)
@@ -348,6 +377,9 @@ export function forecastCampDevelopment(
       fighter,
       focuses: [plan.focus],
       weeks: plan.weeks,
+      // The forecast has to obey every dial the camp obeys, or it is a lie told with real
+      // arithmetic — the defect this function was written to avoid in the first place.
+      intensity: plan.intensity,
       gym: plan.gym,
       coach: plan.coach,
       day: getWorld(db).day,
@@ -403,6 +435,13 @@ export function answerBoutOffer(
   return undefined;
 }
 
+/** Set how hard the camp runs. Same session-storage round trip as the plan. */
+export function saveBookingIntensity(booking: Booking, intensity: TrainingIntensity): Booking {
+  const next = { ...booking, intensity };
+  writeJson(BOOKING_KEY, next);
+  return next;
+}
+
 export function saveBookingPlan(booking: Booking, plan: GamePlan): Booking {
   const next = { ...booking, plan };
   writeJson(BOOKING_KEY, next);
@@ -428,12 +467,31 @@ export interface FightOutcome {
 }
 
 /**
+ * The night that did not happen.
+ *
+ * A separate shape rather than an optional field on `FightOutcome`, so the compiler forces every
+ * caller to decide what to show when there is no fight to show. There is one caller and it now
+ * navigates somewhere else entirely, which is exactly the behaviour a nullable `result` would have
+ * let us forget.
+ */
+export interface BoutOffOutcome {
+  pullOut: PullOut;
+  notes: readonly string[];
+}
+
+export type BookedFightOutcome = FightOutcome | BoutOffOutcome;
+
+/** Narrow a booked-fight outcome to the case where nobody fought. */
+export const isBoutOff = (outcome: BookedFightOutcome): outcome is BoutOffOutcome =>
+  'pullOut' in outcome;
+
+/**
  * Run the booked fight, apply the consequences, and advance the calendar.
  *
  * The opponent gets a plausible AI game plan rather than the neutral default — an opponent
  * who never prepares makes the player's own preparation meaningless.
  */
-export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
+export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome {
   const world = getWorld(db);
 
   /*
@@ -452,12 +510,78 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
     fighter: db.fighters.getById(booking.bout.redId as string) as Fighter,
     focuses: [campPlan.focus],
     weeks: campPlan.weeks,
+    intensity: campPlan.intensity,
     gym: campPlan.gym,
     coach: campPlan.coach,
     day: world.day,
     rng: createRng(`${world.seed}:campgain:${booking.bout.id}`),
   });
   db.fighters.upsert(camp.fighter as Fighter & { id: string });
+
+  /*
+   * And then, sometimes, there is no fight.
+   *
+   * Checked *after* the camp has been applied, because that is the order it happens in: you did
+   * the ten weeks, you got the work, and then the phone rang. The player keeps the development and
+   * the ageing and loses the purse, which is precisely what a cancelled fight costs a real fighter.
+   */
+  const campHurt = playerCampInjury({
+    fighter: db.fighters.getById(booking.bout.redId as string) as Fighter,
+    weeks: campPlan.weeks,
+    intensity: INTENSITY_META[campPlan.intensity].injury,
+    day: booking.campStartDay,
+    rng: createRng(`${world.seed}:campinjury:${booking.bout.id}`),
+  });
+  if (campHurt) {
+    const carrying = db.fighters.getById(booking.bout.redId as string) as Fighter;
+    db.fighters.upsert({
+      ...carrying,
+      injuries: [...(carrying.injuries ?? []), campHurt.injury],
+    } as Fighter & { id: string });
+  }
+
+  const pullOut = campHurt?.withdraws
+    ? ({
+        fighterId: booking.bout.redId,
+        boutId: booking.bout.id,
+        reason: 'injury' as const,
+        note: `You are out. ${describeInjury(campHurt.injury, booking.campStartDay)}`,
+      } satisfies PullOut)
+    : opponentWithdrawal({
+        db,
+        booking,
+        rng: createRng(`${world.seed}:pullout:${booking.bout.id}`),
+      });
+  if (pullOut) {
+    const aged = applyAgeing(
+      db.fighters.getById(booking.bout.redId as string) as Fighter,
+      booking.campStartDay,
+      booking.bout.day,
+      createRng(`${world.seed}:age:${booking.bout.id}`),
+    );
+    db.fighters.upsert(aged.fighter as Fighter & { id: string });
+    setWorld(db, { day: booking.bout.day });
+    raise(db, {
+      id: `pullout_${booking.bout.id}`,
+      day: booking.bout.day,
+      kind: 'card',
+      priority: 'notable',
+      title: 'Your fight is off',
+      body: `${pullOut.note} The camp still happened; the payday did not.`,
+      fighterId: booking.bout.redId,
+      opponentId: booking.bout.blueId,
+    });
+    db.save();
+    clearBooking();
+    return {
+      pullOut,
+      notes: [
+        pullOut.note,
+        `${campPlan.weeks} weeks of work you keep. No purse, and no fight on the record.`,
+        ...aged.notes,
+      ],
+    };
+  }
 
   const red = db.fighters.getById(booking.bout.redId as string) as Fighter;
   const blue = db.fighters.getById(booking.bout.blueId as string) as Fighter;
@@ -580,36 +704,20 @@ export function runBookedFight(db: GameDb, booking: Booking): FightOutcome {
   const injuryRng = createRng(`${world.seed}:injury:${booking.bout.id}`);
   const injuryNotes: string[] = [];
 
+  /*
+   * Moved wholesale into `fightInjuries.ts`, because this used to be a local closure and that is
+   * precisely why nobody in the world outside this function could ever get hurt. See that module.
+   */
   const settleInjuries = (fighter: Fighter, corner: 'red' | 'blue'): Fighter => {
-    const damage = result.damage[corner];
-    const taken = damage.headDamage + damage.bodyDamage + damage.legDamage;
-    let injuries = [...(fighter.injuries ?? [])];
-
-    // Anything carried in can be made worse by competing on it.
-    injuries = injuries.map((injury) => {
-      if (!activeInjuries([injury], day).length) return injury;
-      if (!injuryRng.chance(aggravationChance(injury, taken))) {
-        return { ...injury, foughtThrough: true };
-      }
-      injuryNotes.push(
-        `${fighter.lastName} came in carrying that ${injury.type} and made it considerably worse.`,
-      );
-      return aggravate(injury, day, injuryRng);
+    const outcome = settleFightInjuries({
+      fighter,
+      result,
+      corner,
+      day,
+      rng: injuryRng.fork(corner),
     });
-
-    if (injuryRng.chance(fightInjuryChance(fighter, taken, day))) {
-      const fresh = rollInjury({
-        fighter,
-        source: 'fight',
-        day,
-        rng: injuryRng.fork(fighter.id as string),
-        history: injuries,
-      });
-      injuries.push(fresh);
-      injuryNotes.push(`${fighter.lastName} leaves with a ${fresh.type} injury.`);
-    }
-
-    return { ...fighter, injuries };
+    injuryNotes.push(...outcome.notes);
+    return outcome.fighter;
   };
 
   db.fighters.upsert(settleInjuries(aftermath.red, 'red'));
