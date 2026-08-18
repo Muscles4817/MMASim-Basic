@@ -28,6 +28,8 @@ import {
   createRng,
   headroom,
   overallRating,
+  skillResistance,
+  ATTRIBUTES_BY_GROUP,
   TRAINING_FOCUSES,
   TRAINING_META,
   type AttributeKey,
@@ -50,13 +52,26 @@ const ROSTER_MEDIAN = rosterOveralls[Math.floor(rosterOveralls.length / 2)]!;
 const CHAMPION_BAR = rosterOveralls[rosterOveralls.length - 5]!;
 const ROSTER_FLOOR = rosterOveralls[0]!;
 
+/**
+ * How much room a focus still has, asked the way the engine asks it.
+ *
+ * This used `headroom` for all fifteen attributes, which since doc 23 returns **zero** for any
+ * skill whose projection the fighter has reached — so the simulated player quietly stopped
+ * training skills at all and spent the back half of every career drilling physicals that were
+ * already capped. The careers this harness measured were therefore not careers anybody would
+ * play, and the peak it reported was an artefact of the harness rather than of the model.
+ */
+const roomFor = (f: Fighter, key: AttributeKey): number =>
+  ATTRIBUTES_BY_GROUP.physical.includes(key)
+    ? headroom(f.attributes[key], f.potential[key])
+    : skillResistance(f.attributes[key]);
+
 function bestFocus(f: Fighter): TrainingFocus {
   let best: TrainingFocus = 'boxing';
   let bestRoom = -1;
   for (const focus of TRAINING_FOCUSES) {
     const keys = Object.keys(TRAINING_META[focus].attributes) as AttributeKey[];
-    const room =
-      keys.reduce((a, k) => a + headroom(f.attributes[k], f.potential[k]), 0) / keys.length;
+    const room = keys.reduce((a, k) => a + roomFor(f, k), 0) / keys.length;
     if (room > bestRoom) {
       bestRoom = room;
       best = focus;

@@ -17,7 +17,7 @@ import type {
   ManagerId,
   PromotionId,
 } from '../core/ids.js';
-import type { AttributeKey, Attributes, Naturals } from '../ratings/attributes.js';
+import type { AttributeKey, Attributes, Aptitudes, Naturals } from '../ratings/attributes.js';
 import type { Personality } from './personality.js';
 import type { TraitId } from './traits.js';
 import type { Injury } from '../health/injuries.js';
@@ -97,8 +97,13 @@ export interface RecordSummary {
 /**
  * Accumulated wear. This is what makes a career a career rather than a rating sheet.
  *
- * `headTrauma` permanently erodes the hidden `constitution` natural, which in turn pulls
- * the Durability *floor* down — the mechanical expression of "chins do not come back".
+ * `headTrauma` is read at fight time by `effectiveDurability`, where it subtracts up to 22 points
+ * from the chin a fighter actually brings into the cage — the mechanical expression of "chins do
+ * not come back".
+ *
+ * It does **not** touch the stored `durability` attribute or the hidden `constitution` natural,
+ * which is what this comment used to claim. The distinction matters to anybody reading a fighter
+ * card: the number there is what they were born with, not what is left of it.
  */
 export interface Condition {
   /** 0–1. Short-term damage from the last fight; recovers between bouts. */
@@ -153,7 +158,23 @@ export interface Fighter {
   trainingCarry?: Partial<Record<AttributeKey, number>>;
   /** Hidden. Never rendered as numbers. */
   naturals: Naturals;
+  /**
+   * How fast this fighter learns each family of things. Doc 23 § 2.2.
+   *
+   * Optional because every save written before this existed has none; `aptitudesOf` derives a
+   * sensible set from `motorLearning` for those fighters, which is exactly what the single number
+   * used to mean.
+   */
+  aptitudes?: Aptitudes;
   /** Hidden true ceilings. The player only ever sees a scouted estimate. */
+  /**
+   * For the five physical attributes this is a real ceiling and always was.
+   *
+   * For the ten skills it is now a **projection** rather than a wall — where this fighter would
+   * settle on their current trajectory, given their aptitude and what age is taking away. Nothing
+   * enforces it: `skillResistance` makes the next point harder without ever making it impossible.
+   * See doc 23 § 2.3.
+   */
   potential: PotentialCeilings;
   personality: Personality;
   traits: readonly TraitId[];

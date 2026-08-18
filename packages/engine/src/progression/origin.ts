@@ -86,7 +86,10 @@ export const TALENT_META: Readonly<Record<TalentTier, TalentMeta>> = {
     // deviation of 11 to 16, so a tier is a shove rather than a guarantee — the same
     // principle `generateNaturals` uses for `tier`, and the reason a freak can still roll a
     // bad chin and a grinder can still roll a great engine.
-    naturalsCentre: 78,
+    // Down 2 from 78. Physicals are visible on debut now rather than hidden behind a flat 46,
+    // so the same centre would have pushed a created fighter's overall past the roster it is
+    // supposed to be joining at the bottom of. Doc 23 § 4.6.
+    naturalsCentre: 76,
     allowsAthleticOrigin: true,
   },
   natural: {
@@ -95,7 +98,7 @@ export const TALENT_META: Readonly<Record<TalentTier, TalentMeta>> = {
     blurb:
       'You picked things up faster than the people next to you and you were always in the better half of the room. Good, and not obviously special.',
     cost: 'You will have to be better than the people who are simply bigger and faster than you.',
-    naturalsCentre: 73,
+    naturalsCentre: 70,
     allowsAthleticOrigin: true,
   },
   grinder: {
@@ -110,7 +113,7 @@ export const TALENT_META: Readonly<Record<TalentTier, TalentMeta>> = {
     // is a fighter who cannot become a professional at all. −5 lands the mean at 70 and the
     // best roll at 87, which is the intended shape: an ordinary career is the likely
     // outcome and a title is a genuine long shot rather than an arithmetic impossibility.
-    naturalsCentre: 68,
+    naturalsCentre: 64,
     allowsAthleticOrigin: false,
   },
 };

@@ -35,7 +35,7 @@ import {
   type Attributes,
   type Naturals,
 } from '../ratings/attributes.js';
-import { ceilingsFromNaturals } from './generation.js';
+import { arrivalFactor, ceilingsFromNaturals, generateAptitudes } from './generation.js';
 import {
   ATTAINMENT_META,
   DISCIPLINE_META,
@@ -47,6 +47,7 @@ import {
   type FighterOrigin,
   type ResolvedOrigin,
 } from './origin.js';
+import { isPhysical } from './development.js';
 
 /**
  * Where a fighter came from, flat.
@@ -301,6 +302,12 @@ export function validateCreation(spec: CreateFighterSpec): CreationIssue[] {
 const BASELINE = 46;
 
 /**
+ * How much of their own physical ceiling a debutant has reached, against a fighter of the same age
+ * already on a roster. See the physical branch of the attribute loop.
+ */
+const RAW_ATHLETE = 0.82;
+
+/**
  * Build the player's fighter.
  *
  * Starts deliberately low. A created fighter is a genuine prospect — below major-promotion
@@ -412,34 +419,62 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
   for (const key of ATTRIBUTE_KEYS) {
     const fromOrigin = origin.attributes[key] ?? 0;
     const fromAllocation = allocation[key] ?? 0;
-    // Older debutants arrive slightly further along; they have less runway to use it.
-    const experience = remap(spec.age, 18, 35, 0, 7);
 
+    if (isPhysical(key)) {
+      /*
+       * Physicals come from the body, exactly like every other fighter in the world's do.
+       *
+       * They used to start at a flat 46 and rise 0.41 points per year of *age*, which said that
+       * being 22 made you slower, weaker and less durable than the same person at 30 — the
+       * opposite of what `ARRIVAL` says two files away and the opposite of the sport. It also
+       * gave created starting physicals a standard deviation of 1.16 against the generated
+       * world's 11, so no created fighter could ever be a physical outlier: a `freak` who rolled
+       * explosiveness 85 debuted with power ~48 while a generated fighter with the identical
+       * ceiling debuted at 77.5. Doc 23 § 4.6.
+       *
+       * `RAW_ATHLETE` is the discount for never having been in a professional room. Tuned to land
+       * a default creation's overall at ~51–52 against a hand-authored roster floor of 51.1 —
+       * which is the same target the flat 46 was tuned to, reached with a body instead of a
+       * constant.
+       */
+      const arrived = potential[key] * arrivalFactor(key, spec.age) * RAW_ATHLETE;
+      attributes[key] = toRating(arrived + fromOrigin + fromAllocation + rng.range(-2, 2));
+      // A ceiling can only ever be raised to fit what the player chose, never lowered onto it.
+      potential[key] = toRating(Math.max(potential[key], attributes[key]));
+      continue;
+    }
+
+    /*
+     * Skills keep the flat base, because a debutant genuinely has not learned anything yet, and
+     * keep a reduced experience term because an older debutant genuinely has. Capped at four
+     * points rather than seven, and applied only here: mat time is what this number means, and
+     * mat time does not make anybody's chin better.
+     */
+    const experience = Math.min(4, (spec.age - 18) * 0.25);
     const value = BASELINE + fromOrigin + fromAllocation + experience + rng.range(-2, 2);
 
     /*
-     * A debutant has finished developing nowhere.
+     * The projection is raised to leave room, never lowered onto the value.
      *
-     * The invariant is that an attribute never exceeds its ceiling, and the obvious way to
-     * enforce it — clamping the starting value down to the ceiling — is subtly wrong at
-     * creation: a low ceiling roll silently ate the player's background and their allocated
-     * points, so a boxer who put everything into striking could debut with the striking of
-     * a wrestler and never learn why. It also meant some attributes started *at* their
-     * ceiling, so the very first camp could never move them.
-     *
-     * Raising the ceiling instead keeps every choice the player made visible and guarantees
-     * there is somewhere to grow. The ceiling is hidden anyway; what the player sees is that
-     * their choices took.
+     * A low roll used to silently eat the player's background and their allocated points, so a
+     * boxer who put everything into striking could debut with the striking of a wrestler and
+     * never learn why. Since doc 23 this ceiling is a *projection* rather than a wall, so the
+     * headroom is a statement about where they would settle rather than a promise about what
+     * they are allowed to reach.
      */
-    const raised = toRating(Math.max(potential[key], value + MINIMUM_DEBUT_HEADROOM));
-    potential[key] = raised;
-    attributes[key] = toRating(Math.min(raised, value));
+    potential[key] = toRating(Math.max(potential[key], value + MINIMUM_DEBUT_HEADROOM));
+    attributes[key] = toRating(value);
   }
 
-  // A created fighter must have a real hole, like everyone else on the roster.
-  const lowest = Math.min(...ATTRIBUTE_KEYS.map((k) => attributes[k]));
+  /*
+   * A created fighter must have a real hole, like everyone else on the roster — but the hole has
+   * to be something they have not learned, not something their body cannot do. Punishing a
+   * physical outlier for being one is exactly the behaviour this rewrite exists to remove.
+   */
+  const skills = ATTRIBUTE_KEYS.filter((k) => !isPhysical(k));
+  const lowest = Math.min(...skills.map((k) => attributes[k]));
   if (lowest >= 50) {
-    const weakest = ATTRIBUTE_KEYS.reduce((a, b) => (attributes[a] <= attributes[b] ? a : b));
+    const weakest = skills.reduce((a, b) => (attributes[a] <= attributes[b] ? a : b));
     attributes[weakest] = toRating(attributes[weakest] - 8);
   }
 
@@ -467,6 +502,7 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
 
     attributes,
     naturals,
+    aptitudes: generateAptitudes(rng.fork('aptitudes'), naturals.motorLearning),
     potential,
     personality: { ...uniformPersonality(50), ...spec.personality },
     traits: spec.traits ?? [],

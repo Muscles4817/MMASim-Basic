@@ -34,6 +34,7 @@ import {
   toRating,
   type AttributeKey,
   type Attributes,
+  type Aptitudes,
   type Naturals,
 } from '../ratings/attributes.js';
 import { generateName } from './names.js';
@@ -63,6 +64,25 @@ export interface GenerationOptions {
  * with an unlucky Constitution roll is a future contender with a suspect chin, which is a
  * far more interesting fighter than a uniformly-scaled one.
  */
+/**
+ * Four learning rates, drawn around `motorLearning`.
+ *
+ * The mean is the fighter's general trainability — which is exactly what the single number always
+ * meant — and the per-family deviation is what makes a direction of development a real choice
+ * rather than a matter of when you get there. SD 12 is wide enough that a fighter can be genuinely
+ * gifted at one thing and ordinary at another, which is the common case in the sport, without
+ * producing anybody who cannot learn at all.
+ */
+export function generateAptitudes(rng: Rng, motorLearning: number): Aptitudes {
+  const roll = () => toRating(rng.normalClamped(motorLearning, 12, 8, 98));
+  return {
+    striking: roll(),
+    grappling: roll(),
+    conditioning: roll(),
+    strategy: roll(),
+  };
+}
+
 export function generateNaturals(rng: Rng, tier: number, walkingWeightLbs: number): Naturals {
   const centre = remap(tier, 1, 100, 38, 78);
   const roll = (sd = 12) => toRating(rng.normalClamped(centre, sd, 12, 97));
@@ -98,11 +118,34 @@ export function ceilingsFromNaturals(naturals: Naturals, rng: Rng): Attributes {
   const cap = (physical: number, skillWeight: number): number =>
     toRating(physical * (1 - skillWeight) + skill * skillWeight + noise());
 
+  /*
+   * Frame enters power and durability. Doc 23 § 4.4.
+   *
+   * On a scale doc 02 declares *absolute across divisions*, a 135 lb bantamweight and a 265 lb
+   * heavyweight with the same explosiveness had identical punch-force ceilings. Body mass is a
+   * primary determinant of peak punch force, and head and neck mass is what resists head
+   * acceleration. `strength` already read `(explosiveness + frame)/2` and is the template.
+   */
+  const withFrame = (physical: number, frameWeight: number, skillWeight: number): number =>
+    toRating(
+      physical * (1 - frameWeight - skillWeight) +
+        naturals.frame * frameWeight +
+        skill * skillWeight +
+        noise(),
+    );
+
+  /*
+   * And it works against cardio, for the same physiology read the other way: aerobic capacity is
+   * measured per kilogram, so a heavyweight does not have a lightweight's engine however he
+   * trains. The same fact appears again as the interference effect in `development.ts`.
+   */
+  const framePenalty = Math.max(0, (naturals.frame - 60) / 40) * 8;
+
   return {
-    power: cap(naturals.explosiveness, 0.15),
+    power: withFrame(naturals.explosiveness, 0.25, 0.15),
     speed: cap(naturals.explosiveness, 0.25),
-    cardio: cap(naturals.engine, 0.15),
-    durability: cap(naturals.constitution, 0.05),
+    cardio: toRating(cap(naturals.engine, 0.15) - framePenalty),
+    durability: withFrame(naturals.constitution, 0.15, 0.05),
     strength: cap((naturals.explosiveness + naturals.frame) / 2, 0.1),
     strikingOffence: cap(naturals.explosiveness, 0.7),
     kicking: cap(naturals.explosiveness, 0.7),
@@ -213,19 +256,38 @@ export function generateTraits(rng: Rng, count = 2, attributes?: Attributes): Tr
  * they debut.** The ceilings for it were always there — `explosiveness` rolls with a standard
  * deviation of 14 up to 97 — and arriving at 69% of them is what made every 21-year-old average.
  */
-const ARRIVAL: Readonly<Partial<Record<AttributeKey, readonly [number, number]>>> = {
-  speed: [0.92, 0.99],
-  durability: [0.92, 0.99],
-  power: [0.85, 0.98],
-  strength: [0.78, 0.97],
-  cardio: [0.68, 0.96],
+/**
+ * Three points now — at 20, 26 and 34 — rather than two. Doc 23 § 4.3.
+ *
+ * A two-point band could only ever be monotonic in age, which meant every physical quality rose
+ * from 20 to 30 and only then began to fall. For speed that is four years late; for **durability
+ * it is simply backwards**, and the comment above this table has always said so while the numbers
+ * said the opposite. MMA fighters aged 36–38 are knocked out at roughly twice the rate of 22–23
+ * year olds. A chin has no peak to climb toward — it only ever has the top of its own slope.
+ */
+const ARRIVAL: Readonly<Partial<Record<AttributeKey, readonly [number, number, number]>>> = {
+  speed: [0.91, 0.99, 0.94],
+  durability: [0.97, 0.97, 0.9],
+  power: [0.85, 0.99, 0.95],
+  strength: [0.82, 0.95, 0.99],
+  cardio: [0.78, 0.94, 0.99],
 };
 
-function arrivalFactor(key: AttributeKey, age: number, development: number): number {
+/**
+ * Exported so `createPlayerFighter` uses the same curve rather than a second copy of it.
+ *
+ * `development` is optional here: a created fighter has no separate "how far along a career are
+ * they" term, so the physical curve stands on its own. That is the point — a debutant is near
+ * their physical ceiling and nowhere near their technical one, whichever door they came through.
+ */
+export function arrivalFactor(key: AttributeKey, age: number, development?: number): number {
   const band = ARRIVAL[key];
-  if (!band) return development;
+  if (!band) return development ?? 0;
+  const [young, prime, old] = band;
+  const physical = age <= 26 ? remap(age, 20, 26, young, prime) : remap(age, 26, 34, prime, old);
+  if (development === undefined) return physical;
   // The same jitter the technical attributes get, so two fighters of the same age are not clones.
-  return remap(age, 20, 30, band[0], band[1]) + (development - remap(age, 20, 30, 0.55, 0.85));
+  return physical + (development - remap(age, 20, 30, 0.55, 0.85));
 }
 
 /**
@@ -291,6 +353,9 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
 
     attributes,
     naturals,
+    // Forked, so adding four rolls does not reshuffle every draw made after it and silently
+    // move a decade of measured balance that has nothing to do with aptitudes.
+    aptitudes: generateAptitudes(rng.fork('aptitudes'), naturals.motorLearning),
     potential,
     personality: generatePersonality(rng),
     traits: generateTraits(rng, rng.int(1, 3), attributes),

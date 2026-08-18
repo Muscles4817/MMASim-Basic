@@ -16,6 +16,7 @@
 import { describe, expect, it } from 'vitest';
 import { createNewGame, getWorld, setWorld, type GameDb } from '@mmasim/data';
 import {
+  ATTRIBUTES_BY_GROUP,
   applyTraining,
   createRng,
   overallRating,
@@ -141,12 +142,27 @@ describe('a fight camp is training', () => {
 
   it('says nothing and gives nothing when everything it works is finished', () => {
     /*
-     * A fighter at their ceiling gets a camp that sharpens them for the opponent and develops
+     * A fighter with nothing left gets a camp that sharpens them for the opponent and develops
      * nothing, and the screen says so. Promising growth that cannot happen is worse than
      * promising none.
+     *
+     * "Nothing left" means two things since doc 23: a physical has reached a real ceiling, and a
+     * skill has become slow enough that a camp cannot show anything. So the fixture puts the
+     * physicals at their ceilings *and* the skills at 96 — setting attributes equal to potential
+     * is no longer sufficient, because for a skill potential is a projection rather than a wall.
      */
     const { db, me, opponent } = career();
-    const maxed: Fighter = { ...me, attributes: { ...me.potential } };
+    const maxed: Fighter = {
+      ...me,
+      attributes: Object.fromEntries(
+        Object.keys(me.attributes).map((key) => [
+          key,
+          ATTRIBUTES_BY_GROUP.physical.includes(key as never)
+            ? me.potential[key as keyof typeof me.potential]
+            : 96,
+        ]),
+      ) as Fighter['attributes'],
+    };
     db.fighters.upsert(maxed as Fighter & { id: string });
 
     const forecast = forecastCampDevelopment(
@@ -154,8 +170,13 @@ describe('a fight camp is training', () => {
       maxed,
       bookFight(db, maxed, opponent, { weeks: 8 }),
     );
+    // Relative to the same camp for the same fighter before they were finished, because a skill's
+    // gain approaches zero without ever arriving — the alternative is a wall, which is the thing
+    // doc 23 removes.
+    const developing = forecastCampDevelopment(db, me, bookFight(db, me, opponent, { weeks: 8 }));
+
     expect(forecast.atCeiling).toBe(true);
-    expect(forecast.totalExpected).toBeLessThan(0.05);
+    expect(forecast.totalExpected).toBeLessThan(developing.totalExpected * 0.1);
   });
 });
 

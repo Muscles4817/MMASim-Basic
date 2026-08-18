@@ -29,10 +29,12 @@ import { clamp01 } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import type { Fighter } from '../domain/fighter.js';
 import type { AttributeKey } from '../ratings/attributes.js';
+import { skillResistance } from '../ratings/attributes.js';
 import {
   TRAINING_FOCUSES,
   TRAINING_META,
   headroom,
+  isPhysical,
   type TrainingFocus,
 } from './development.js';
 
@@ -57,13 +59,22 @@ function affinity(fighter: Fighter, focus: TrainingFocus): number {
   return total === 0 ? 0 : sum / total;
 }
 
-/** Mean remaining room, same weighting. Zero means every camp here is wasted. */
+/**
+ * Mean remaining room, same weighting. Zero means every camp here is wasted.
+ *
+ * Physicals ask a real ceiling; skills ask how hard the next point is, because they have no
+ * ceiling to ask. Doc 23 § 2.1. Without the split a fighter's skills would read as infinitely
+ * roomy and every AI fighter in the world would train nothing else.
+ */
 function room(fighter: Fighter, focus: TrainingFocus): number {
   const entries = Object.entries(TRAINING_META[focus].attributes) as [AttributeKey, number][];
   let sum = 0;
   let total = 0;
   for (const [key, weight] of entries) {
-    sum += headroom(fighter.attributes[key], fighter.potential[key]) * weight;
+    sum +=
+      (isPhysical(key)
+        ? headroom(fighter.attributes[key], fighter.potential[key])
+        : skillResistance(fighter.attributes[key])) * weight;
     total += weight;
   }
   return total === 0 ? 0 : sum / total;

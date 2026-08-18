@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ATTRIBUTES_BY_GROUP,
   ATTRIBUTE_KEYS,
   applyAftermath,
   careerSummary,
@@ -261,9 +262,17 @@ describe(`${YEARS}-year world integrity`, () => {
       `the top of the scale drifted ${startTop} -> ${endTop}`,
     ).toBeLessThanOrEqual(startTop + 4);
 
-    // And nobody may exceed their own ceiling, however many camps they run.
+    /*
+     * Nobody may exceed a *physical* ceiling, however many camps they run.
+     *
+     * Skills are excluded deliberately since doc 23: they no longer have a ceiling, only a
+     * projection and a curve that makes each further point slower. A twenty-year specialist
+     * passing the number that says where they would have settled is the model working, not
+     * rating inflation — and the drift assertion immediately above is what actually guards
+     * against inflation, by watching the top of the whole scale rather than one fighter.
+     */
     for (const f of sim.finalFighters) {
-      for (const key of ATTRIBUTE_KEYS) {
+      for (const key of ATTRIBUTES_BY_GROUP.physical) {
         expect(f.attributes[key], `${f.lastName}.${key} passed its ceiling`).toBeLessThanOrEqual(
           f.potential[key],
         );

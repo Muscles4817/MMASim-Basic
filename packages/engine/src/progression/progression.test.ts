@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createRng } from '../core/rng.js';
 import { ageOn } from '../core/clock.js';
 import { asDivisionId } from '../core/ids.js';
-import { ATTRIBUTE_KEYS, type AttributeKey } from '../ratings/attributes.js';
+import { ATTRIBUTES_BY_GROUP, ATTRIBUTE_KEYS, type AttributeKey } from '../ratings/attributes.js';
 import { makeFighter } from '../testing/fixtures.js';
 import type { Coach, Gym } from '../domain/organisations.js';
 import { uniformPersonality } from '../domain/personality.js';
@@ -149,7 +149,7 @@ describe('training moves attributes', () => {
     }
   });
 
-  it('never exceeds the ceiling, however many camps are run', () => {
+  it('never exceeds a PHYSICAL ceiling, however many camps are run', () => {
     let fighter = prospect();
     for (let i = 0; i < 200; i++) {
       fighter = applyTraining({
@@ -162,7 +162,12 @@ describe('training moves attributes', () => {
         rng: createRng(`c${i}`),
       }).fighter;
     }
-    for (const key of ATTRIBUTE_KEYS) {
+    /*
+     * Physicals only, and that split is doc 23 § 2.1 rather than a loosened assertion. A chin and
+     * a fast-twitch profile are written down at birth and a ceiling is the right model for them.
+     * A skill has no ceiling at all any more — see the test below, which asserts the opposite.
+     */
+    for (const key of ATTRIBUTES_BY_GROUP.physical) {
       expect(fighter.attributes[key], key).toBeLessThanOrEqual(fighter.potential[key]);
     }
     // And it should get genuinely close, or the ceiling is decorative.
@@ -176,6 +181,28 @@ describe('training moves attributes', () => {
       (fighter.attributes.strikingOffence - start.attributes.strikingOffence) /
       (start.potential.strikingOffence - start.attributes.strikingOffence);
     expect(closed).toBeGreaterThan(0.8);
+  });
+
+  it('lets a skill pass its projection, given a career of nothing else', () => {
+    /*
+     * The point of doc 23. `potential` for a skill is now where a fighter would *settle*, not a
+     * wall — so two hundred camps of nothing but boxing must carry them past it. What stops
+     * everybody reaching 99 is that the next point keeps getting slower and a career is finite,
+     * not that somebody wrote a number on them before they ever trained.
+     */
+    let fighter = prospect();
+    for (let i = 0; i < 200; i++) {
+      fighter = applyTraining({
+        fighter,
+        focuses: ['boxing'],
+        weeks: 10,
+        gym,
+        coach: coach(),
+        day: i * 90,
+        rng: createRng(`past${i}`),
+      }).fighter;
+    }
+    expect(fighter.attributes.strikingOffence).toBeGreaterThan(fighter.potential.strikingOffence);
   });
 
   it('makes one camp a fraction of the journey and two years transformative', () => {
@@ -202,7 +229,9 @@ describe('training moves attributes', () => {
      *
      * See tests/long-sim/created-career.test.ts for the bound on a fighter who actually exists.
      */
-    const room = start.potential.strikingOffence - start.attributes.strikingOffence;
+    // Measured against the distance to 100 rather than to a ceiling, because a skill no longer
+    // has one. Same claim — a camp is a step, not a transformation.
+    const room = 100 - start.attributes.strikingOffence;
     const closed = (oneCamp.attributes.strikingOffence - start.attributes.strikingOffence) / room;
     expect(closed, 'one camp closed most of the gap to the ceiling').toBeLessThan(0.35);
 
@@ -344,10 +373,15 @@ describe('training moves attributes', () => {
   });
 
   it('says something useful when there is nothing left to learn', () => {
+    /*
+     * "Nothing left" is now a statement about the next few weeks rather than about the fighter:
+     * a skill at 95 is not finished, it has become slow enough that a camp cannot show anything.
+     * The fixture moved from 80 to 95 for exactly that reason.
+     */
     const maxed = makeFighter({
       age: 26,
-      attributes: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 80])) as never,
-      potential: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 80])) as never,
+      attributes: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 95])) as never,
+      potential: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 95])) as never,
     });
     const result = applyTraining({
       fighter: maxed,
