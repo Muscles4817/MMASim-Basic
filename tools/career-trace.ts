@@ -716,13 +716,30 @@ say(
 );
 say();
 
-say('### 6. Nobody retires hurt');
+say('### 6. Nobody retires hurt, and now that matters more');
 say();
 say(
   `The most damaged fighter here finished on ${maxTrauma} head trauma after ${mostFights} professional fights. ` +
     '`retirementUrge` does not start reading trauma until 45 and wear until 50, so the term never ' +
-    'engages and every career ends on age or on a losing run. The sport\u2019s most characteristic ' +
-    'ending — the fighter who is told to stop — is currently unreachable.',
+    'engages and every career still ends on age or on a losing run. The sport\u2019s most ' +
+    'characteristic ending — the fighter who is told to stop — remains unreachable.',
+);
+say();
+say(
+  'Doc 25 phase 1 sharpened this rather than fixing it. Injuries, medical suspensions and ' +
+    'withdrawals now disrupt a career properly, and the **only** route the retirement model offers ' +
+    'for a disrupted career is the skid: lost fights, collapsed confidence, walk away. Measured on ' +
+    'twelve seeded careers before and after that change, mean career length went from 10.5 years ' +
+    'to 8.7 and mean retirement age from 32.6 to 30.8 — but the informative part is the tail. ' +
+    'Before, no career ended before 27. After, five of twelve end between 22 and 26.',
+);
+say();
+say(
+  'That is not the injury model being too harsh: measured at **1.09 injuries per career-year**, it ' +
+    'sits at the top of the band § 1.2 was already designed around, and only 9% of fights are ' +
+    'fought carrying one. It is that `retirementUrge` converts every kind of adversity into the ' +
+    'same exit. A fighter whose year was wrecked by a knee should come back at 28 having lost ' +
+    'time, not quit at 24 having lost heart.',
 );
 say();
 

@@ -40,6 +40,7 @@ import { Alert, FighterRead, KeyStat } from '../ui/signals';
 import {
   forecastCampDevelopment,
   getBooking,
+  isBoutOff,
   runBookedFight,
   saveBookingPlan,
   saveBookingPurchases,
@@ -239,6 +240,16 @@ export function CampScreen() {
       const updated = saveBookingPurchases(saveBookingPlan(booking, plan), bought);
       const outcome = runBookedFight(db, updated);
       commit();
+      /*
+       * Sometimes there is no fight. The camp happened, the work is banked and the opponent is
+       * not coming — so there is no bout to show, and sending the player to the fight screen for
+       * a fight that did not take place would be a blank page and a lie. The hub reads the inbox,
+       * which is where the news of it is.
+       */
+      if (isBoutOff(outcome)) {
+        navigate({ name: 'hub' });
+        return;
+      }
       navigate({ name: 'fight', boutId: outcome.result.boutId });
     } finally {
       setRunning(false);

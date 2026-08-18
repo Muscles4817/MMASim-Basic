@@ -1,7 +1,8 @@
 # 25 — Fitness, fatigue, and what damage actually costs
 
-**Status:** proposal, nothing implemented. Every number in §1 was measured against this codebase at
-the commit that merged doc 24; nothing here is estimated without saying so.
+**Status:** **phase 1 shipped** (§3.5 exposure, §3.6 KO to concussion, §3.7 the world); §§3.1-3.4
+and §4 remain proposals. Every number in §1 was measured against this codebase at the commit that
+merged doc 24; nothing here is estimated without saying so. §9 records what phase 1 actually cost.
 
 > **The short version.** Four observations turn out to be one missing idea. A career has no
 > **freshness** — `condition.fatigue` exists but is reset to `0` after every fight and read only
@@ -458,3 +459,74 @@ the assertion.
 
 Each phase is independently shippable and revertible. Doc 24 should be regenerated after each one,
 so every step is measured against the last rather than against a memory of it.
+
+---
+
+## 9. Phase 1, as shipped
+
+§3.5, §3.6 and §3.7 are in. What follows is measured rather than intended.
+
+### The band came out where §3.5 asked for it
+
+On a median 28-year-old, against the targets in §3.5:
+
+| Measured | Target | Fight                                             |
+| -------: | -----: | ------------------------------------------------- |
+|     2.5% |  ~2-3% | Thirty-second armbar, never touched               |
+|     3.9% |  ~4-5% | Three rounds won entirely from top position       |
+|    12.0% |   ~12% | An ordinary decision                              |
+|    29.0% |   ~28% | A three-round war with both fighters hurt         |
+|    39.5% |   ~38% | Beaten up for two rounds and stopped in the third |
+
+A **16.1x spread**, against the 1.9x it replaced. `BASE_FIGHT_HAZARD` moved 0.07 to 0.078, which is
+a recalibration rather than a buff: the old damage term averaged around 1.4 across real fights and
+`exposureScore` is normalised so an ordinary decision reads 1.0, so the base has to absorb the
+difference to hold the ordinary fight where it was.
+
+### Two things the design did not anticipate
+
+**Matchmaking was booking people in casts.** The moment the world could be injured, `getOffers`
+started handing the player opponents who were already out — 15 of 121 booked bouts collapsed for
+that reason alone, which is not a withdrawal rate, it is a matchmaker who does not check. The pool
+is now filtered by the same `FIGHT_THROUGH_WEEKS` threshold the withdrawal rule uses, so the two
+cannot disagree.
+
+**Withdrawing on any active injury deleted the best mechanic in the health model.** The first
+version pulled an opponent out of anything unhealed. Fighting hurt is already modelled properly —
+`injuredAttributes` gives a fighter their real numbers rather than their card, `aggravationChance`
+can turn a knock into something far worse on the night, and nobody is told — and a strict threshold
+means no opponent ever fights hurt, so the player never gets the fight that goes strangely for
+reasons they cannot see. `FIGHT_THROUGH_WEEKS` was then swept against `pullOutRisk`'s own stated
+rate of "around one bout in eight":
+
+| Threshold | Booked bouts that collapse |
+| --------: | -------------------------- |
+|   3 weeks | 20.6%, 1 in 4.9            |
+|   5 weeks | 18.3%, 1 in 5.5            |
+|   6 weeks | 16.8%, 1 in 5.9            |
+|   8 weeks | **12.0%, 1 in 8.3**        |
+
+Eight weeks sounds generous until you remember people fight with broken hands.
+
+### What it cost, honestly
+
+Measured on twelve seeded careers through the real game, before and after:
+
+|                     | Before | After |
+| ------------------- | -----: | ----: |
+| Mean career length  |  10.5y |  8.7y |
+| Mean retirement age |   32.6 |  30.8 |
+| Earliest retirement |     27 |    22 |
+
+Careers are **17% shorter**, which is the honest price of a sport that can now hurt you. The tail is
+the part worth arguing about: five of twelve careers now end between 22 and 26, where before none
+ended under 27.
+
+That is **not** the injury model being too harsh. It runs at 1.09 injuries per career-year, the top
+of the band §1.2 was already designed around, and only 9% of fights are fought carrying one. It is
+that `retirementUrge` has exactly one route for a disrupted career — lost fights, collapsed
+confidence, walk away — so every kind of adversity comes out as the same exit. A fighter whose year
+was wrecked by a knee should come back at 28 having lost time, not quit at 24 having lost heart.
+
+Doc 24 finding 6 already said nobody retires hurt. Phase 1 makes that the more pressing half of the
+same defect, and it should be fixed before §4 adds a third downward force on top of it.
