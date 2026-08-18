@@ -37,8 +37,35 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
       // If storage itself is unavailable there is nothing to clear, and reloading is still
       // the right move.
     }
-    window.location.hash = '';
-    window.location.reload();
+
+    /*
+     * The saves themselves are in IndexedDB, and this button promises they are gone.
+     *
+     * Sweeping `localStorage` alone would leave every roster on disk while deleting the
+     * registry that lists them — the player would be told their data was cleared, land on an
+     * empty menu, and the thing that broke the app would still be there, now unreachable.
+     *
+     * Reloading regardless of the outcome, and without awaiting it: this is the escape hatch
+     * from a screen that has already failed, and it must not be able to hang.
+     */
+    let reloaded = false;
+    const reload = (): void => {
+      if (reloaded) return;
+      reloaded = true;
+      window.location.hash = '';
+      window.location.reload();
+    };
+
+    try {
+      const request = indexedDB.deleteDatabase('mmasim');
+      request.onsuccess = reload;
+      request.onerror = reload;
+      request.onblocked = reload;
+      // A delete blocked by another tab holding a connection open never fires anything at all.
+      window.setTimeout(reload, 1500);
+    } catch {
+      reload();
+    }
   };
 
   override render(): ReactNode {
@@ -70,8 +97,8 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
         <div style={{ maxWidth: 460 }}>
           <h1 style={{ fontSize: 24, marginBottom: 12 }}>Something went wrong</h1>
           <p style={{ marginBottom: 12, lineHeight: 1.5 }}>
-            The game could not start. This usually means the saved data is from an
-            incompatible version, or was damaged.
+            The game could not start. This usually means the saved data is from an incompatible
+            version, or was damaged.
           </p>
           <p
             style={{

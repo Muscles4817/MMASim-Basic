@@ -74,7 +74,7 @@ describe('landing on the menu', () => {
     // Browser storage is genuinely fragile and the player should know before investing fifteen
     // simulated years in it.
     renderApp();
-    expect(screen.getByText(/stored in this browser/i)).toBeTruthy();
+    expect(screen.getByText(/stored on this device/i)).toBeTruthy();
   });
 });
 
