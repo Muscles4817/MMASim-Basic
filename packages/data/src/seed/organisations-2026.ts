@@ -55,7 +55,11 @@ export const PROMOTIONS_2026: readonly Promotion[] = [
     // The outfitting deal replaced individual sponsors in 2015 and never came back.
     sponsorshipPolicy: 'uniform',
     revenueShareCapable: true,
-    activityGuarantee: 3,
+    // Two, not three. `MAX_BOUTS_PER_YEAR` in the world loop is 3, so a guarantee of 3 is a
+    // promise to book every fighter the maximum the sport allows, every year — which is why 41%
+    // of year-old deals sat in breach. Two is this world's measured median and the sport's.
+    // See docs/21-activity-offers-and-patience.md § 3.4.
+    activityGuarantee: 2,
     tier: 'global',
     baseCountry: 'USA',
     prestige: 97,
@@ -82,7 +86,7 @@ export const PROMOTIONS_2026: readonly Promotion[] = [
     // Fighters keep their own sponsors, which is a real recruiting argument against the UFC.
     sponsorshipPolicy: 'open',
     revenueShareCapable: true,
-    activityGuarantee: 3,
+    activityGuarantee: 2,
     tier: 'major',
     baseCountry: 'USA',
     prestige: 68,
@@ -207,7 +211,7 @@ export const PROMOTIONS_2026: readonly Promotion[] = [
     minimumPurse: 2,
     sponsorshipPolicy: 'open',
     revenueShareCapable: false,
-    activityGuarantee: 3,
+    activityGuarantee: 2,
     tier: 'regional',
     baseCountry: 'UK',
     prestige: 38,
@@ -236,7 +240,7 @@ export const PROMOTIONS_2026: readonly Promotion[] = [
     minimumPurse: 2,
     sponsorshipPolicy: 'open',
     revenueShareCapable: false,
-    activityGuarantee: 3,
+    activityGuarantee: 2,
     tier: 'regional',
     baseCountry: 'USA',
     prestige: 36,

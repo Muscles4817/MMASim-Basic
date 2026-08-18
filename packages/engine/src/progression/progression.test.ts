@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createRng } from '../core/rng.js';
 import { ageOn } from '../core/clock.js';
 import { asDivisionId } from '../core/ids.js';
-import { ATTRIBUTE_KEYS, type AttributeKey } from '../ratings/attributes.js';
+import { ATTRIBUTES_BY_GROUP, ATTRIBUTE_KEYS, type AttributeKey } from '../ratings/attributes.js';
 import { makeFighter } from '../testing/fixtures.js';
 import type { Coach, Gym } from '../domain/organisations.js';
 import { uniformPersonality } from '../domain/personality.js';
@@ -149,7 +149,7 @@ describe('training moves attributes', () => {
     }
   });
 
-  it('never exceeds the ceiling, however many camps are run', () => {
+  it('never exceeds a PHYSICAL ceiling, however many camps are run', () => {
     let fighter = prospect();
     for (let i = 0; i < 200; i++) {
       fighter = applyTraining({
@@ -162,7 +162,12 @@ describe('training moves attributes', () => {
         rng: createRng(`c${i}`),
       }).fighter;
     }
-    for (const key of ATTRIBUTE_KEYS) {
+    /*
+     * Physicals only, and that split is doc 23 § 2.1 rather than a loosened assertion. A chin and
+     * a fast-twitch profile are written down at birth and a ceiling is the right model for them.
+     * A skill has no ceiling at all any more — see the test below, which asserts the opposite.
+     */
+    for (const key of ATTRIBUTES_BY_GROUP.physical) {
       expect(fighter.attributes[key], key).toBeLessThanOrEqual(fighter.potential[key]);
     }
     // And it should get genuinely close, or the ceiling is decorative.
@@ -176,6 +181,28 @@ describe('training moves attributes', () => {
       (fighter.attributes.strikingOffence - start.attributes.strikingOffence) /
       (start.potential.strikingOffence - start.attributes.strikingOffence);
     expect(closed).toBeGreaterThan(0.8);
+  });
+
+  it('lets a skill pass its projection, given a career of nothing else', () => {
+    /*
+     * The point of doc 23. `potential` for a skill is now where a fighter would *settle*, not a
+     * wall — so two hundred camps of nothing but boxing must carry them past it. What stops
+     * everybody reaching 99 is that the next point keeps getting slower and a career is finite,
+     * not that somebody wrote a number on them before they ever trained.
+     */
+    let fighter = prospect();
+    for (let i = 0; i < 200; i++) {
+      fighter = applyTraining({
+        fighter,
+        focuses: ['boxing'],
+        weeks: 10,
+        gym,
+        coach: coach(),
+        day: i * 90,
+        rng: createRng(`past${i}`),
+      }).fighter;
+    }
+    expect(fighter.attributes.strikingOffence).toBeGreaterThan(fighter.potential.strikingOffence);
   });
 
   it('makes one camp a fraction of the journey and two years transformative', () => {
@@ -202,7 +229,9 @@ describe('training moves attributes', () => {
      *
      * See tests/long-sim/created-career.test.ts for the bound on a fighter who actually exists.
      */
-    const room = start.potential.strikingOffence - start.attributes.strikingOffence;
+    // Measured against the distance to 100 rather than to a ceiling, because a skill no longer
+    // has one. Same claim — a camp is a step, not a transformation.
+    const room = 100 - start.attributes.strikingOffence;
     const closed = (oneCamp.attributes.strikingOffence - start.attributes.strikingOffence) / room;
     expect(closed, 'one camp closed most of the gap to the ceiling').toBeLessThan(0.35);
 
@@ -344,10 +373,15 @@ describe('training moves attributes', () => {
   });
 
   it('says something useful when there is nothing left to learn', () => {
+    /*
+     * "Nothing left" is now a statement about the next few weeks rather than about the fighter:
+     * a skill at 95 is not finished, it has become slow enough that a camp cannot show anything.
+     * The fixture moved from 80 to 95 for exactly that reason.
+     */
     const maxed = makeFighter({
       age: 26,
-      attributes: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 80])) as never,
-      potential: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 80])) as never,
+      attributes: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 95])) as never,
+      potential: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 95])) as never,
     });
     const result = applyTraining({
       fighter: maxed,
@@ -393,20 +427,42 @@ describe('ageing', () => {
       naturals: { ageCurve: 'standard' },
     });
 
-  it('does nothing before peak', () => {
-    const f = veteran(25);
+  it('does nothing before a fighter is past anything', () => {
+    /*
+     * "Before peak" is no longer one date. `PEAK_OFFSET` puts speed and the chin at 25 and fight
+     * IQ at 35, so a 25-year-old is already past two of the fifteen — the age this test can make
+     * its claim at came down with them. That the claim held at 25 before was an accident of
+     * rounding rather than of the model: losses of a tenth of a point were discarded until
+     * `applyAgeing` started banking them.
+     */
+    const f = veteran(22);
     const { fighter, losses } = applyAgeing(f, 0, 365, createRng('a'));
     expect(losses).toEqual({});
     expect(fighter.attributes).toEqual(f.attributes);
   });
 
+  it('has already started on the earliest-peaking qualities by the mid-twenties', () => {
+    // The other half of the same change, asserted rather than left implied: a 26-year-old is
+    // past their speed and their chin and years short of their submissions.
+    const { losses } = applyAgeing(veteran(27), 0, 365 * 2, createRng('a2'));
+    expect(losses.speed ?? 0).toBeGreaterThan(0);
+    expect(losses.durability ?? 0).toBeGreaterThan(0);
+    expect(losses.submissions ?? 0).toBe(0);
+  });
+
   it('takes the body before the craft', () => {
+    /*
+     * Measured over six years rather than two. Losses are banked as of doc 23, so a short span
+     * now produces honest but *coarse* integers — one point against three is the right ordering
+     * expressed at a resolution too low to make a claim about proportion.
+     */
     const f = veteran(38);
-    const { losses } = applyAgeing(f, 0, 365 * 2, createRng('b'));
+    const { losses } = applyAgeing(f, 0, 365 * 6, createRng('b'));
     expect(losses.speed ?? 0).toBeGreaterThan(losses.submissions ?? 0);
-    // Fight IQ and Composure never decline — a veteran can be smarter and slower at once.
-    expect(losses.fightIq).toBeUndefined();
+    // Composure never declines, and fight IQ only barely — a veteran can be smarter and slower
+    // at once. Fight IQ took a rate of 0.1 at doc 23 because read speed is not knowledge.
     expect(losses.composure).toBeUndefined();
+    expect(losses.fightIq ?? 0).toBeLessThan((losses.speed ?? 0) / 4);
   });
 
   it('accelerates the further past peak a fighter is', () => {
@@ -435,7 +491,9 @@ describe('ageing', () => {
           naturals: { ageCurve: curve },
         }),
         0,
-        365,
+        // Six years, for the same reason as above: a single year's loss is one or two points and
+        // two curves cannot be told apart at that resolution.
+        365 * 6,
         createRng('e'),
       ).losses.speed ?? 0;
     expect(at('longPeak')).toBeLessThan(at('earlyBloomer'));

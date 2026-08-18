@@ -19,6 +19,9 @@ import {
   normaliseTargeting,
   ratingBand,
   recordString,
+  ATTRIBUTE_META,
+  TRAINING_META,
+  type AttributeKey,
   READ_META,
   scoutOpponent,
   type Approach,
@@ -35,6 +38,7 @@ import { Button, Card, Chip, Empty } from '../ui';
 import { spendLine } from '../ui/format';
 import { Alert, FighterRead, KeyStat } from '../ui/signals';
 import {
+  forecastCampDevelopment,
   getBooking,
   runBookedFight,
   saveBookingPlan,
@@ -83,6 +87,19 @@ export function CampScreen() {
   const gym = playerFighter?.gymId ? (db.gyms.findById(playerFighter.gymId) as Gym | undefined) : undefined;
 
   const weeks = booking ? Math.max(1, Math.round((booking.bout.day - booking.campStartDay) / 7)) : 8;
+
+  /*
+   * What this camp will develop, forecast from the same arithmetic that runs at the fight and
+   * seeded on the same bout — so it is the camp the player is actually going to get rather than
+   * a second, prettier draw of it.
+   */
+  const development = useMemo(
+    () =>
+      booking && playerFighter
+        ? forecastCampDevelopment(db, playerFighter, booking)
+        : undefined,
+    [db, playerFighter, booking],
+  );
 
   const report = useMemo(() => {
     if (!opponent) return undefined;
@@ -282,6 +299,42 @@ export function CampScreen() {
             <Alert tone="warn" title="This camp is compromised">
               Too little time, too poor a room, or not enough discipline. Every prepared read
               is worth less than it should be.
+            </Alert>
+          </div>
+        )}
+
+        {/*
+          What the camp is building, not just what it is preparing for.
+          
+          A fight camp used to develop nothing at all while every AI fighter got a full block of
+          training around every bout — so the majority of a career's elapsed time was, for the
+          player alone, pure ageing. It develops properly now, and a system the player cannot see
+          is a system they cannot plan around, so it says so before the fight rather than after.
+        */}
+        {development && development.totalExpected > 0.05 && (
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <p className="section-title">This camp is building</p>
+            <p className="faint" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-2)' }}>
+              {weeks} weeks of {TRAINING_META[development.focus].label.toLowerCase()}, on top of
+              preparing for this opponent.
+            </p>
+            <div className="row" style={{ flexWrap: 'wrap' }}>
+              {(Object.entries(development.expected) as [AttributeKey, number][])
+                .filter(([, gain]) => gain >= 0.05)
+                .sort((a, b) => b[1] - a[1])
+                .map(([key, gain]) => (
+                  <Chip key={key} tone="positive">
+                    {ATTRIBUTE_META[key].label} +{Math.round(gain * 10) / 10}
+                  </Chip>
+                ))}
+            </div>
+          </div>
+        )}
+        {development?.atCeiling && (
+          <div style={{ marginBottom: 'var(--space-3)' }}>
+            <Alert tone="info" title="This camp will not develop you">
+              Everything it works is already at your ceiling. The weeks still sharpen you for
+              this opponent — they will not make you a better fighter.
             </Alert>
           </div>
         )}

@@ -11,7 +11,12 @@
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../core/rng.js';
 import { asDivisionId } from '../core/ids.js';
-import { ATTRIBUTE_KEYS, overallRating, type AttributeKey } from '../ratings/attributes.js';
+import {
+  ATTRIBUTES_BY_GROUP,
+  ATTRIBUTE_KEYS,
+  overallRating,
+  type AttributeKey,
+} from '../ratings/attributes.js';
 import type { Fighter } from '../domain/fighter.js';
 import {
   ATHLETIC_ORIGINS,
@@ -70,6 +75,9 @@ function sample(origin: FighterOrigin, n = 200, age = 25) {
 /** The three attributes no non-combat athlete has ever trained. */
 const TECHNICAL: readonly AttributeKey[] = ['strikingOffence', 'wrestling', 'submissions'];
 
+/** Arithmetic mean, for the population claims below. */
+const mean = (xs: readonly number[]): number => xs.reduce((a, b) => a + b, 0) / xs.length;
+
 describe('layer 1 — talent moves ceilings and only ceilings', () => {
   it('orders the tiers by what a fighter can eventually become', () => {
     const ceiling = (talent: TalentTier) =>
@@ -83,12 +91,33 @@ describe('layer 1 — talent moves ceilings and only ceilings', () => {
     expect(ceiling('freak') - ceiling('grinder')).toBeGreaterThan(4);
   });
 
-  it('leaves what a fighter starts as almost untouched', () => {
-    // The point of the split: talent is *potential*, not skill. A grinder who wrestled at
-    // the same level as a freak is the same wrestler today and a worse one in six years.
-    const start = (talent: TalentTier) =>
-      sample({ talent, discipline: 'wrestling', attainment: 'regional' }).startOverall;
-    expect(Math.abs(start('freak') - start('grinder'))).toBeLessThan(1.5);
+  it('shows in the body on debut, and barely at all in the skills', () => {
+    /*
+     * Reversed since doc 23, and the reversal is the point.
+     *
+     * This used to assert that a freak and a grinder debut identically — talent being "potential,
+     * not skill". Half of that is right and half of it was a claim about physiology that the sport
+     * disagrees with: explosive power is 74–84% heritable, so being put together differently is
+     * exactly the thing that is visible at twenty-two. What a freak has *not* got on debut is
+     * technique, because technique is hours and nobody has done more hours than their age allows.
+     *
+     * So the tier now shows in the physicals and stays almost invisible in the skills, which is
+     * also what "you are put together differently and everybody in the room knows it" claims.
+     */
+    const physicalOf = (talent: TalentTier) => {
+      const { fighters } = sample({ talent, discipline: 'wrestling', attainment: 'regional' });
+      return mean(
+        fighters.map((f) => mean(ATTRIBUTES_BY_GROUP.physical.map((k) => f.attributes[k]))),
+      );
+    };
+    const skillOf = (talent: TalentTier) => {
+      const { fighters } = sample({ talent, discipline: 'wrestling', attainment: 'regional' });
+      const skills = ATTRIBUTE_KEYS.filter((k) => !ATTRIBUTES_BY_GROUP.physical.includes(k));
+      return mean(fighters.map((f) => mean(skills.map((k) => f.attributes[k]))));
+    };
+
+    expect(physicalOf('freak') - physicalOf('grinder')).toBeGreaterThan(4);
+    expect(Math.abs(skillOf('freak') - skillOf('grinder'))).toBeLessThan(1.5);
   });
 
   it('never lets a tier guarantee anything, because the roll is wide', () => {
@@ -538,10 +567,16 @@ describe('the deprecated flat background still works', () => {
      * A property test would pass while quietly shifting all of them, so this pins the actual
      * output for one seed: if the legacy route ever stops being bit-identical, it fails here
      * rather than in a fifteen-minute suite nobody runs on a commit.
+     *
+     * **Re-baselined at doc 23.** The first five entries are the physicals and they moved a long
+     * way on purpose: they used to be a flat 46 plus an age term and are now derived from this
+     * fighter's own body, so a 22-year-old with explosiveness 78 finally debuts with the speed
+     * (66) and chin (63) that implies rather than with 49 and 47. The ten skills are essentially
+     * unchanged, which is the other half of the claim — a debutant has a body and no technique.
      */
     const f = legacy();
     expect(ATTRIBUTE_KEYS.map((k) => f.attributes[k])).toEqual([
-      48, 49, 52, 47, 55, 49, 47, 50, 64, 63, 53, 47, 46, 50, 48,
+      53, 66, 61, 63, 56, 48, 46, 49, 63, 62, 53, 46, 46, 49, 47,
     ]);
     expect(f.naturals.explosiveness).toBe(78);
     expect(f.naturals.motorLearning).toBe(86);

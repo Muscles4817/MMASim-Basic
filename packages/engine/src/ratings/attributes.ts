@@ -251,6 +251,51 @@ export const NATURAL_KEYS = [
 
 export type NaturalKey = (typeof NATURAL_KEYS)[number];
 
+/**
+ * Families of skill, and how fast this fighter picks each of them up.
+ *
+ * Doc 23 § 2.2. The old model had one `motorLearning` number governing every kind of learning at
+ * once, and a hard per-attribute ceiling deciding where it stopped — so what a fighter trained
+ * decided *when* they arrived and never *where*, and two fighters who spent a decade training
+ * differently converged on the same place.
+ *
+ * A rate per family is what makes a direction of development a real choice. A fighter with
+ * grappling 85 and striking 40 who boxes every camp still improves — at roughly a quarter of the
+ * rate — and ends a career a good striker rather than a great one. Nothing forbids it. The cost is
+ * the career they did not have instead.
+ */
+export const APTITUDE_KEYS = ['striking', 'grappling', 'conditioning', 'strategy'] as const;
+export type AptitudeKey = (typeof APTITUDE_KEYS)[number];
+
+/** Hidden, like the naturals they are drawn around. 1–100. */
+export type Aptitudes = Record<AptitudeKey, Rating>;
+
+export const APTITUDE_META: Readonly<Record<AptitudeKey, { label: string; blurb: string }>> = {
+  striking: { label: 'Striking aptitude', blurb: 'How fast hands and kicks come.' },
+  grappling: { label: 'Grappling aptitude', blurb: 'How fast wrestling and submissions come.' },
+  conditioning: { label: 'Athletic aptitude', blurb: 'How well the body answers physical work.' },
+  strategy: { label: 'Fight brain', blurb: 'How fast reads, plans and composure come.' },
+};
+
+/**
+ * How hard the next point is, for a skill with no ceiling.
+ *
+ * Calibrated against the `headroom` curve it replaces rather than invented: through the 50–70 band
+ * where most development actually happens it sits just under the old values, so careers keep their
+ * shape. Above 80 it is far harsher, and it never reaches zero — so nothing is ever forbidden, it
+ * simply gets slower. At 90 a fighter gains at 5.7% of the rate they did at 50, which is why
+ * reaching 95 takes a career of doing nothing else and is what a genuine specialist looks like.
+ *
+ * This replaces `headroom` for skills. Physicals keep a real ceiling and keep `headroom`, because a
+ * chin and a fast-twitch profile really are written down at birth.
+ */
+export const RESISTANCE_DIVISOR = 80;
+export const RESISTANCE_EXPONENT = 1.4;
+
+export function skillResistance(current: number): number {
+  return Math.max(0, (100 - current) / RESISTANCE_DIVISOR) ** RESISTANCE_EXPONENT;
+}
+
 /** Ageing shape. Drives when a fighter peaks and how sharply they fall off. */
 export const AGE_CURVES = ['earlyBloomer', 'standard', 'longPeak', 'lateBloomer'] as const;
 export type AgeCurve = (typeof AGE_CURVES)[number];

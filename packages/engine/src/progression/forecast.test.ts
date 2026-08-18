@@ -196,9 +196,19 @@ describe('the forecast answers the question the screen asks', () => {
   });
 
   it('says plainly when there is nothing left to gain', () => {
+    /*
+     * "Nothing left" means two different things since doc 23, and this fixture has to satisfy both.
+     * `speed` and `power` are physical and genuinely finish — they reach a ceiling and stop. The
+     * two striking attributes never finish; they only become slow enough that a camp cannot show
+     * anything, which is why they sit at 96 rather than at some ceiling.
+     *
+     * And the total is no longer exactly zero, deliberately. A skill's gain approaches zero and
+     * never arrives, because the alternative is a wall — which is the thing this model exists to
+     * remove. What the screen needs to know is that a camp here is not worth the weeks.
+     */
     const finished = makeFighter({
-      attributes: { strikingOffence: 80, kicking: 80, speed: 80 },
-      potential: { strikingOffence: 80, kicking: 80, speed: 80 },
+      attributes: { strikingOffence: 96, strikingDefence: 96, speed: 96, power: 96 },
+      potential: { strikingOffence: 96, strikingDefence: 96, speed: 96, power: 96 },
     });
     const forecast = forecastTraining({
       fighter: finished,
@@ -208,8 +218,19 @@ describe('the forecast answers the question the screen asks', () => {
       coach: coach(),
       day: TEST_DAY,
     });
+    // Relative to the same camp for a developing fighter, rather than an absolute bound — the
+    // claim is "this is not worth the weeks", and that survives the gain constant being retuned.
+    const developing = forecastTraining({
+      fighter: prospect(),
+      focuses: ['boxing'],
+      weeks: 12,
+      gym: gym(),
+      coach: coach(),
+      day: TEST_DAY,
+    });
+
     expect(forecast.atCeiling).toBe(true);
-    expect(forecast.totalExpected).toBe(0);
+    expect(forecast.totalExpected).toBeLessThan(developing.totalExpected * 0.05);
   });
 
   it('never forecasts a loss — a camp can be wasted but not harmful', () => {

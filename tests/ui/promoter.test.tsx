@@ -237,10 +237,30 @@ describe('sending the card out', () => {
     await waitFor(() => expect(screen.getByText(/What happened/i)).toBeTruthy(), {
       timeout: 8000,
     });
-    // Card position finally means something: before the 2026 roster there were never enough
-    // fighters to fill more than two or three positions.
-    expect(screen.getAllByText(/^Prelim$/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/^Main event$/).length).toBeGreaterThan(0);
+    /*
+     * Card position means something, and every bout that ran says where it sat.
+     *
+     * This used to require a `Prelim` specifically, which is a stronger claim than the test's
+     * name makes and one this flow cannot guarantee: `runToCompletion` scratches any bout whose
+     * fighter pulls out and cannot be replaced, so whether a sixth bout survives the night — and
+     * a sixth is what it takes for `positionFor` to hand out a prelim slot at all — depends on a
+     * stochastic withdrawal pass over whichever eighteen fighters `autoFill` happened to choose.
+     * Measured across the whole roster, pull-out risk averages 6.6%, so a card losing three or
+     * four bouts is uncommon rather than impossible, and the assertion failed on drift rather
+     * than on anything being wrong.
+     *
+     * What the screen must actually do is label every fight that happened, top to bottom.
+     */
+    const positions = screen
+      .getAllByText(/^(Main event|Co-main|Main card|Prelim)$/)
+      .map((el) => el.textContent);
+
+    expect(positions.length, 'no fight on the card said where it sat').toBeGreaterThan(0);
+    expect(positions.filter((p) => p === 'Main event')).toHaveLength(1);
+    // Positions are handed out top-down, so the labels must appear in card order.
+    const order = ['Main event', 'Co-main', 'Main card', 'Prelim'];
+    const ranks = positions.map((p) => order.indexOf(p ?? ''));
+    expect(ranks, 'the card was not listed in order').toEqual([...ranks].sort((a, b) => a - b));
   });
 });
 
