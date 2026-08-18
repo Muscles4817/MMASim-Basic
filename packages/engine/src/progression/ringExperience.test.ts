@@ -142,7 +142,9 @@ describe('the lesson a fight left behind', () => {
     const of = (f: Fighter) =>
       forecastTraining({ fighter: f, focuses: ['wrestling'], weeks: 8, day }).expected
         .takedownDefence!;
-    expect(of(shown) / of(plain)).toBeCloseTo(LESSON_BONUS, 2);
+    // Forecast figures are rounded to two places, so compare the ratio within a percent.
+    expect(of(shown) / of(plain)).toBeGreaterThan(LESSON_BONUS * 0.99);
+    expect(of(shown) / of(plain)).toBeLessThan(LESSON_BONUS * 1.01);
   });
 
   it('bonuses only the thing that was exposed, not the whole camp', () => {

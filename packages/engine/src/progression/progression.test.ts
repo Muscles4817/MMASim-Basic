@@ -81,6 +81,36 @@ describe('learningRate', () => {
   it('lets a late bloomer keep learning longer', () => {
     expect(learningRate(33, 'lateBloomer')).toBeGreaterThan(learningRate(33, 'earlyBloomer'));
   });
+
+  it('keeps most of the craft into the late thirties and lets the body go', () => {
+    /*
+     * docs/25 §3.2. Motor learning has no cliff at thirty; what declines is the physical
+     * substrate, and the engine already models that separately in `DECLINE_RATE`. A single floor
+     * across all fifteen attributes said a 38-year-old learns submissions exactly as poorly as
+     * they build top speed, which is not true of anything.
+     *
+     * Measured, 38 against 22: a fighter keeps three-quarters of their capacity to learn tactics
+     * and about a quarter of their capacity to build speed.
+     */
+    const retention = (key: Parameters<typeof learningRate>[2]) =>
+      learningRate(38, 'standard', key) / learningRate(22, 'standard', key);
+
+    expect(retention('fightIq')).toBeGreaterThan(0.7);
+    expect(retention('composure')).toBeGreaterThan(0.7);
+    expect(retention('submissions')).toBeGreaterThan(0.6);
+    expect(retention('speed')).toBeLessThan(0.35);
+    expect(retention('power')).toBeLessThan(0.4);
+
+    // The ordering is the point, and it is what a single floor could not express at all.
+    expect(retention('fightIq')).toBeGreaterThan(retention('speed') * 2);
+  });
+
+  it('never lets any of them reach zero, however old the fighter', () => {
+    // A 38-year-old can still add a technique. They just cannot add much of a sprint.
+    for (const key of ATTRIBUTE_KEYS) {
+      expect(learningRate(60, 'earlyBloomer', key)).toBeGreaterThan(0);
+    }
+  });
 });
 
 describe('training moves attributes', () => {
@@ -340,36 +370,47 @@ describe('training moves attributes', () => {
     expect(generalist).toBeLessThan(specialist);
   });
 
-  it('gives an older fighter far less from the same camp', () => {
-    const young = applyTraining({
-      fighter: makeFighter({
-        age: 21,
-        attributes: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 45])) as never,
-        potential: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 85])) as never,
-      }),
-      focuses: ['boxing'],
-      weeks: 8,
-      gym,
-      coach: coach(),
-      day: 0,
-      rng: createRng('age'),
-    }).gains.strikingOffence!;
+  it('takes the body off an older fighter and leaves most of the craft', () => {
+    /*
+     * This used to assert that a 37-year-old got under half of a 21-year-old's gain from the same
+     * boxing camp, and it asserted it on `strikingOffence` — a skill. That was the single-floor
+     * learning curve stated as a requirement, and docs/25 §3 is the argument against it: the
+     * physical substrate declining with age is already modelled in full by `DECLINE_RATE` and
+     * `applyAgeing`, so charging it a second time inside the learning rate left craft unable to
+     * grow late for a reason that had nothing to do with craft.
+     *
+     * So the claim is now per-attribute, and it is the shape `PEAK_OFFSET` already implies: the
+     * veteran gets nearly all of the technique and a fraction of the speed out of the same weeks.
+     */
+    const camp = (age: number) =>
+      applyTraining({
+        fighter: makeFighter({
+          age,
+          attributes: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 45])) as never,
+          potential: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 85])) as never,
+        }),
+        focuses: ['boxing'],
+        weeks: 8,
+        gym,
+        coach: coach(),
+        day: 0,
+        rng: createRng('age'),
+      }).gains;
 
-    const old = applyTraining({
-      fighter: makeFighter({
-        age: 37,
-        attributes: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 45])) as never,
-        potential: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 85])) as never,
-      }),
-      focuses: ['boxing'],
-      weeks: 8,
-      gym,
-      coach: coach(),
-      day: 0,
-      rng: createRng('age'),
-    }).gains.strikingOffence!;
+    const young = camp(21);
+    const old = camp(37);
 
-    expect(old).toBeLessThan(young * 0.5);
+    // Hands: still most of it. A fighter can be learning to box at thirty-seven, and plenty have.
+    expect(old.strikingOffence!).toBeGreaterThan(young.strikingOffence! * 0.6);
+    expect(old.strikingOffence!).toBeLessThan(young.strikingOffence!);
+
+    // Speed: a fraction. Nobody rebuilds fast twitch at thirty-seven.
+    expect(old.speed!).toBeLessThan(young.speed! * 0.45);
+
+    // And the ordering between the two is the whole point of the change.
+    expect(old.strikingOffence! / young.strikingOffence!).toBeGreaterThan(
+      old.speed! / young.speed!,
+    );
   });
 
   it('says something useful when there is nothing left to learn', () => {

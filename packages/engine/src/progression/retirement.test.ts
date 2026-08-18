@@ -11,16 +11,49 @@ import { describe, expect, it } from 'vitest';
 import { createRng } from '../core/rng.js';
 import { makeFighter } from '../testing/fixtures.js';
 import { applyAgeing } from './development.js';
-import { retirementDrivers, retirementReason, retirementUrge } from './retirement.js';
+import {
+  DRIFT_GRACE_DAYS,
+  driftUrge,
+  retirementDrivers,
+  retirementReason,
+  retirementUrge,
+} from './retirement.js';
 import { confidenceBaseline } from '../domain/personality.js';
 import type { Fighter } from '../domain/fighter.js';
 
 const YEAR = 365;
 const rng = () => createRng('retirement-test');
 
+/**
+ * A bout on the record, so the fighter reads as active.
+ *
+ * `retirementReason` answers "why did this career end", and `driftUrge` outranks the weighted
+ * terms — correctly, because a fighter nobody has called in eighteen months did not stop for any
+ * of the reasons below. Every test in the reason block is about somebody who has just fought, so
+ * they need to look like it. The seeded roster ships with an empty record and is exempt for the
+ * separate reason documented on `driftUrge`.
+ */
+const justFought = (f: Fighter, day = 0): Fighter => ({
+  ...f,
+  record: [
+    {
+      boutId: 'b',
+      opponentId: 'other',
+      promotionId: 'p',
+      day,
+      outcome: 'loss',
+      method: 'decisionUnanimous',
+      round: 3,
+      timeSeconds: 300,
+      divisionId: f.divisionId,
+      wasTitleFight: false,
+    },
+  ] as unknown as Fighter['record'],
+});
+
 const withCondition = (o: Partial<Fighter['condition']>, overrides = {}): Fighter => {
   const f = makeFighter(overrides);
-  return { ...f, condition: { ...f.condition, ...o } };
+  return justFought({ ...f, condition: { ...f.condition, ...o } });
 };
 
 describe('time restores self-belief', () => {
@@ -55,11 +88,11 @@ describe('time restores self-belief', () => {
      * for a neutral personality — which is why this asserts a large fall rather than a floor.
      */
     const f = makeFighter({ age: 24 });
-    const young: Fighter = {
+    const young: Fighter = justFought({
       ...f,
       condition: { ...f.condition, confidence: 12 },
       summary: { ...f.summary, streak: -3 },
-    };
+    });
     const before = retirementUrge(young, 0);
     expect(before).toBeGreaterThan(0.3);
 
@@ -91,11 +124,11 @@ describe('the reason a fighter is given', () => {
 
   it('names the losing run when the skid outweighs everything else', () => {
     const f = makeFighter({ age: 29 });
-    const skidding: Fighter = {
+    const skidding: Fighter = justFought({
       ...f,
       condition: { ...f.condition, confidence: confidenceBaseline(f.personality) },
       summary: { ...f.summary, streak: -5 },
-    };
+    });
     expect(retirementReason(skidding, 0)).toMatch(/losing run/i);
   });
 
@@ -119,5 +152,57 @@ describe('the reason a fighter is given', () => {
   it('agrees with the urge it was derived from', () => {
     const f = withCondition({ confidence: 30, headTrauma: 50 }, { age: 35 });
     expect(retirementDrivers(f, 0).urge).toBe(retirementUrge(f, 0));
+  });
+});
+
+describe('the careers nobody announces the end of', () => {
+  const active = (o: Partial<Fighter['condition']> = {}, overrides = {}) =>
+    withCondition(o, overrides);
+
+  it('leaves a fighter who is still competing alone', () => {
+    expect(driftUrge(active({}, { age: 28 }), 200)).toBe(0);
+  });
+
+  it('starts only once they are genuinely idle, not merely between fights', () => {
+    // The world books the average fighter about once every eleven months. A year out is a
+    // trough; the mechanic must not read it as a career ending.
+    const f = active({}, { age: 28 });
+    expect(driftUrge(f, 365)).toBe(0);
+    expect(driftUrge(f, DRIFT_GRACE_DAYS + 400)).toBeGreaterThan(0);
+  });
+
+  it('treats an empty record as fresh rather than as never', () => {
+    /*
+     * Both seeded worlds ship every fighter with an empty `record` — their history is backstory,
+     * not rows — while `proDebutDay` runs back nineteen years before the save starts. Measured
+     * against the 2026 seed when this read the debut day instead: 811 of 858 fighters had a
+     * non-zero drift urge on day one of a new game.
+     */
+    const neverFought = makeFighter({ age: 30 });
+    expect(neverFought.record.length).toBe(0);
+    expect(driftUrge(neverFought, 5000)).toBe(0);
+  });
+
+  it('keeps calling the people who sell tickets', () => {
+    const idleDay = DRIFT_GRACE_DAYS + 500;
+    const nobody = { ...active({}, { age: 30 }), reputation: 20 };
+    const contender = { ...active({}, { age: 30 }), reputation: 85 };
+    expect(driftUrge(contender, idleDay)).toBeLessThan(driftUrge(nobody, idleDay));
+  });
+
+  it('lets an ambitious fighter keep answering the phone longer', () => {
+    const idleDay = DRIFT_GRACE_DAYS + 500;
+    const driven = active({}, { age: 30, personality: { ambition: 95 } });
+    const content = active({}, { age: 30, personality: { ambition: 5 } });
+    expect(driftUrge(driven, idleDay)).toBeLessThan(driftUrge(content, idleDay));
+  });
+
+  it('says so plainly, because it is not the same ending as walking away', () => {
+    expect(retirementReason(active({}, { age: 31 }), DRIFT_GRACE_DAYS + 500)).toMatch(/drifted/i);
+  });
+
+  it('never fires on somebody already retired', () => {
+    const gone = { ...active({}, { age: 31 }), retiredDay: 100 };
+    expect(driftUrge(gone, DRIFT_GRACE_DAYS + 900)).toBe(0);
   });
 });

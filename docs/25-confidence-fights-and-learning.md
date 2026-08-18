@@ -1,7 +1,8 @@
 # 25 — Confidence, what a fight teaches, and when learning stops
 
-**Status:** §1 (confidence) and §2 (what a fight teaches) are **built** — see §5 and §6 for what
-each one measured. §3 (the learning window) remains a design proposal and is **not implemented**.
+**Status:** §1 (confidence), §2 (what a fight teaches) and §3 (the learning window) are all
+**built** — see §5, §6 and §7 for what each one measured. §7 also records two defects found on the
+way that are **not** fixed, and one proposal from §3.4 that measurement rejected.
 
 Three findings that came out of tracing created careers through the 2026 world. They are filed
 together because they are one story: **a career ends before it develops, and the things that
@@ -527,3 +528,106 @@ doc 24 finding 4 raises about breadth.
 
 §3 — the learning window — is untouched, and it is now the largest thing left in this document. It
 is also the one that decides whether a twenty-year career is a story or a formality.
+
+---
+
+## 7. The learning window — built
+
+### 7.1 What changed: the floor, not the clock
+
+`learningRate` was `clamp(remap(age, 20, peak + 8, 1.45, 0.55), 0.5, 1.45)` — one floor for all
+fifteen attributes, which says a 38-year-old learns submissions exactly as poorly as they build top
+speed. `LEARNING_CURVE` replaces that single number with a per-attribute pair, and the floors follow
+`PEAK_OFFSET`'s own ranking of how much of each quality is craft and how much is body:
+
+|                                   | Floor |            | Floor |
+| --------------------------------- | ----: | ---------- | ----: |
+| Fight IQ, composure               |  0.95 | Cardio     |  0.55 |
+| Submissions                       |  0.88 | Strength   |  0.50 |
+| Ground control                    |  0.85 | Durability |  0.45 |
+| Striking offence                  |  0.82 | Power      |  0.40 |
+| Striking def., wrestling, TD def. |  0.78 | Speed      |  0.35 |
+| Kicking 0.70, scrambling 0.65     |       |            |       |
+
+Measured at 38 against 22, a fighter now keeps **75% of their capacity to learn tactics and 27% of
+their capacity to build speed**. Under the old flat floor both were 58%. That is the shape
+`PEAK_OFFSET`'s comment already described — a rising skill curve crossing a falling physical one —
+and it is what §3.3 argued the flat floor had quietly undone, by reintroducing through the back
+door the ceiling doc 23 removed.
+
+At the career level, with camp length held constant so only the curve varies:
+
+|        | Pre-30 /yr | Post-30 /yr | Front-loading | Peak age |
+| ------ | ---------: | ----------: | ------------: | -------: |
+| Before |       1.22 |        0.13 |      **9.3x** |     31.7 |
+| After  |       1.12 |        0.23 |      **4.8x** |     32.8 |
+
+Post-30 development nearly doubles and the front-loading roughly halves, which is the whole point
+of §3.2.
+
+### 7.2 What measurement rejected
+
+**§3.4's training-age term was not built, and should not be.** The proposal was to index the steep
+early phase on how long a fighter has been doing this rather than how old they are. It is a real
+distinction, and the model already draws it twice: `skillResistance` makes the next point harder as
+a function of the rating itself, so somebody genuinely new to a thing is genuinely faster at it, and
+`aptitudeRate` carries how fast _this_ fighter learns _this_ family — which is what separates
+somebody who has drilled wrestling for eight years and is simply bad at it from somebody who has
+never tried. A third clock measuring the same thing would double-count it. What was actually wrong
+was the floor.
+
+**A two-ended curve was tried and reverted.** An intermediate version also brought the _young_ end
+down for craft, on the theory that a steep young-age bonus on a skill is novice gains by another
+name. The theory is sound and the measurement rejected it: over ten world years at the app's own
+cadence it cost the sport its top end, taking fighters rated 75 or better from 18 to 8. Whatever the
+young-age term is standing in for, the elite is built out of it.
+
+### 7.3 A regression from §1, and the mechanic that should have been there
+
+Fixing confidence broke the sport's renewal, and it took a world-scale measurement to see it.
+
+`shouldRetire` is only ever consulted **after a fight**. A fighter who stops getting booked
+therefore never retired — they sat on the roster ageing forever. That gap had been invisible because
+the old confidence ratchet retired those people by accident: they lost a few, their belief collapsed
+with no way back, and they walked. Repairing confidence removed the accident and left nothing in its
+place. And because `replenish` only tops a division back up to its target, **every fighter who fails
+to retire is a debutant who never gets generated**:
+
+| Ten world years        | master | after §1 | after `driftUrge` |
+| ---------------------- | -----: | -------: | ----------------: |
+| Retirements            |    524 |  **305** |               464 |
+| New fighters generated |    501 |  **294** |               454 |
+| Best generated fighter |   80.5 | **73.6** |              82.5 |
+
+`driftUrge` is the missing mechanic: the sport's most common ending, which is not a retirement but a
+fight falling through, then another, and one day it has been two years and nobody has called. It
+reads idleness past eighteen months, scaled by age, by ambition — what keeps somebody ringing their
+manager — and by reputation, because the phone does not stop ringing for people who sell tickets.
+Champions are exempt outright, the same rule `enforceActivity` already applies.
+
+Two things it caught:
+
+- **An empty record means _fresh_, not _never_.** Both seeded worlds ship every fighter with an
+  empty `record` — their history is backstory, not rows — while `proDebutDay` runs back nineteen
+  years before the save starts. Judged from the debut day, **811 of 858 fighters** had a non-zero
+  drift urge on day one of a new game. The same rule `neglectDays` already applies to `lastTrained`.
+- **Champions must be exempt.** Without that, belts sat vacant for years while the division rebuilt
+  its contenders. Caught by `championships.test.ts`, which allows three stale vacancies a decade and
+  saw five.
+
+### 7.4 Two defects found and not fixed
+
+**`ageEveryone` trains a flat four weeks per _call_, not per elapsed week.** So the fighter you get
+out depends on how the caller chopped up the time — the same defect `recoverConfidence` was written
+to avoid. The app advances in camp-length spans, so this is four weeks per eight; the long-sim
+harness advances a _year_ per call, and every unbooked fighter in the world trains for one month of
+it while ageing a full twelve. A fix was written, measured, and reverted: scaling it is a real
+balance change that moves the whole world's development and wants its own measured pass rather than
+being smuggled in at the end of this one.
+
+**`generations.test.ts`'s development assertion has never actually run.** It filters for active
+generated fighters with four or more bouts and returns early when that set is empty — and on master
+it is empty, so `expect(best).toBeGreaterThan(68)` has never been evaluated. It only started
+asserting once these changes let newcomers survive long enough to accumulate a record, which is how
+the `ageEveryone` defect above surfaced at all. A guard that passes vacuously is worse than no guard,
+because it reads as coverage.

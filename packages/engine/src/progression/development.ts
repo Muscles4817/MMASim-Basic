@@ -238,11 +238,91 @@ const PEAK_AGE: Readonly<Record<AgeCurve, number>> = {
 };
 
 /**
- * How fast a fighter still learns, by age.
+ * The two ends of each attribute's learning curve: what it is worth at twenty, and where it
+ * bottoms out at the far end of a career.
+ *
+ * This was a single `0.55` applied to all fifteen, which said that a 38-year-old learns
+ * submissions exactly as poorly as they build top speed. Doc 25 §3 is the argument against it,
+ * and the short version is that the engine was charging age twice for the same thing: the
+ * physical substrate declining with age is already modelled, in full, by `DECLINE_RATE` and
+ * `applyAgeing`. Taking it out of the learning rate as well left craft unable to grow late for a
+ * reason that had nothing to do with craft.
+ *
+ * Worse, it quietly reintroduced the ceiling doc 23 went to some trouble to remove. That document
+ * replaced a hard skill ceiling with a *rate*, so that where a fighter ends up is the point at
+ * which their gains stop outrunning their decline. But if the rate itself collapses on a fixed
+ * schedule against a birthday, the equilibrium is set by age rather than by the fighter — which is
+ * a ceiling again, drawn in a different colour. Measured before this change: created fighters
+ * landed at 29–52% of their headroom more or less regardless of talent, schedule or record.
+ *
+ * So the floors now follow `PEAK_OFFSET`, which already ranks these fifteen by how much of each is
+ * craft and how much is body. Fight IQ and composure are close to flat for life — a fighter can
+ * still be learning to read an opponent at forty, and the sport is full of people who did. Top
+ * speed and one-punch power fall away hard, and are allowed to, because decline handles them and
+ * a late-career athlete genuinely cannot rebuild them.
+ *
+ * The intended shape of a career is the one `PEAK_OFFSET`'s own comment describes: a rising skill
+ * curve crossing a falling physical one. That only happens if the two are allowed to move at
+ * different speeds.
+ */
+const LEARNING_CURVE: Readonly<Record<AttributeKey, readonly [young: number, floor: number]>> = {
+  /*
+   * Craft: nearly flat, both ends.
+   *
+   * Tactical knowledge and temperament are the last things to go — `DECLINE_RATE` already says
+   * so, at 0.0 a year for composure and 0.1 for fight IQ — so their floors sit close to their
+   * young-age value and a fighter can still be learning to read an opponent at forty.
+   *
+   * The young end is left where it has always been, at 1.45 for all fifteen. An earlier draft
+   * brought it down for craft on the theory that a steep young-age bonus on a *skill* is novice
+   * gains by another name, and therefore double-counts `skillResistance`. The theory is sound and
+   * the measurement rejected it anyway: over ten world years at the app's own cadence it cost the
+   * sport its top end, taking fighters rated 75 or better from 18 to 8. Whatever the young-age
+   * term is standing in for, the elite is built out of it, and this document is about the tail.
+   */
+  fightIq: [1.45, 0.95],
+  composure: [1.45, 0.95],
+  submissions: [1.45, 0.88],
+  groundControl: [1.45, 0.85],
+  strikingOffence: [1.45, 0.82],
+  strikingDefence: [1.45, 0.78],
+  wrestling: [1.45, 0.78],
+  takedownDefence: [1.45, 0.78],
+  kicking: [1.45, 0.7],
+  // The most athletic of the grappling qualities, and the fastest-fading of them.
+  scrambling: [1.45, 0.65],
+
+  /*
+   * Body: steep, and left steep.
+   *
+   * A twenty-year-old really is more trainable than a thirty-eight-year-old in a way that has
+   * nothing to do with how much they already know, and nobody rebuilds fast twitch late. These
+   * keep the original curve's young end and fall further than it did.
+   */
+  cardio: [1.45, 0.55],
+  strength: [1.45, 0.5],
+  durability: [1.45, 0.45],
+  power: [1.45, 0.4],
+  speed: [1.45, 0.35],
+};
+
+/**
+ * How fast a fighter still learns, by age and by what they are learning.
  *
  * Never reaches zero: a 38-year-old can still add a technique, they just cannot add much.
  * This is separate from decline — a veteran can be improving and shrinking at once, which is
- * exactly what a late-career technical fighter looks like.
+ * exactly what a late-career technical fighter looks like, and with per-attribute floors it is
+ * now something the model can actually produce rather than merely permit.
+ *
+ * **Why there is no training-age term here.** Doc 25 §3.4 proposed indexing the steep early phase
+ * on how long a fighter has been doing this rather than on how old they are, on the grounds that a
+ * 30-year-old with eight fights is not the same learner as one with forty. That is true, and the
+ * model already says it — twice. `skillResistance` makes the next point harder as a function of
+ * the rating itself, so the fighter who is genuinely new to something is genuinely faster at it;
+ * and `aptitudeRate` carries how fast this particular fighter learns this particular family, which
+ * is what separates somebody who has drilled wrestling for eight years and is simply bad at it
+ * from somebody who has never tried. A third clock measuring the same thing would double-count it.
+ * What was actually wrong was the floor, and that is what changed.
  */
 export function learningRate(age: number, curve: AgeCurve, key?: AttributeKey): number {
   /*
@@ -255,22 +335,25 @@ export function learningRate(age: number, curve: AgeCurve, key?: AttributeKey): 
    * which of the two it is looking at.
    */
   const peak = PEAK_AGE[curve] + (key ? PEAK_OFFSET[key] : 0);
-  if (age <= 20) return 1.45;
+  // No key means "the fighter in general", which is what the callers without one want.
+  const [young, floor] = key ? LEARNING_CURVE[key] : ([1.45, 0.55] as const);
+  if (age <= 20) return young;
   /*
-   * The tail is deliberately fat now, and this is a shape change rather than a level one.
+   * The tail is deliberately fat, and this is a shape change rather than a level one.
    *
-   * The old curve ran 1.45 at twenty to a 0.25 floor by roughly thirty-five, which meant a
+   * The original curve ran 1.45 at twenty to a 0.25 floor by roughly thirty-five, which meant a
    * career had about twenty productive camps in it before learning effectively stopped and
    * decline took over. Twenty camps is not enough to carry anybody from a debutant to a
    * champion at any per-camp gain that keeps a single camp from jumping a whole rating band
-   * — so the two constraints were in direct conflict and the mode could not satisfy both.
+   * — so the two constraints were in direct conflict and the model could not satisfy both.
    *
-   * A floor of 0.55 rather than 0.25 roughly doubles the productive length of a career
-   * without making any individual camp larger, which resolves it. It is also the more
-   * truthful curve: fighters demonstrably keep adding craft into their late thirties, and
-   * the engine already models the physical decline separately.
+   * Raising the floor resolved it, and `LEARNING_CURVE` then made *both* ends a property of what
+   * is being learned rather than one pair of numbers for all fifteen. Fighters demonstrably keep
+   * adding craft into their late thirties; nobody rebuilds their top speed at thirty-eight.
    */
-  return clamp(remap(age, 20, peak + 8, 1.45, 0.55), 0.5, 1.45);
+  // Clamped at the attribute's own floor rather than a global 0.5: past `peak + 8` the remap
+  // extrapolates, and the floor is the whole point of the table above.
+  return clamp(remap(age, 20, peak + 8, young, floor), floor, young);
 }
 
 /**
