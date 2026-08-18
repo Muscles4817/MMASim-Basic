@@ -1,6 +1,8 @@
 # 26 — Division depth, the promotion pyramid, and the unsigned pool
 
-**Status:** proposal, nothing implemented. Every number in §1 was measured against this codebase at
+**Status:** proposal. **Superseded on phasing by [doc 27](./27-generating-the-world.md)**, which
+takes the generated-world route; the measurements and the tier research below stand and doc 27
+references them rather than repeating them. Every number in §1 was measured against this codebase at
 the commit that closed doc 25; the figures in §2 are cited and their staleness is stated.
 
 > **The short version.** The sport's population is set by a snapshot rather than by a shape.
