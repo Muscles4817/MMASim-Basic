@@ -58,6 +58,7 @@ import {
   type FightResult,
   type PullOut,
   type GamePlan,
+  type TacticalPlan,
   type Judge,
   type MatchupAppraisal,
   type Promotion,
@@ -220,6 +221,15 @@ export interface StoredResult {
    * the one the engine actually used, so it is the one that is true.
    */
   rounds?: number;
+  /**
+   * The plan the fighter actually went out with.
+   *
+   * Stored rather than read back off the fighter, because the booking that held it is cleared the
+   * moment the fight is run and the player is free to change their mind before the next one. The
+   * post-fight inspector compares what was asked for against what happened, and a plan read at
+   * *display* time would quietly report the wrong instruction.
+   */
+  tactics?: TacticalPlan;
 }
 
 export const getLastResult = (): FightResult | undefined =>
@@ -1027,6 +1037,7 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
     refereeId: booking.bout.refereeId,
     judgeIds: booking.bout.judgeIds,
     rounds: booking.bout.rounds,
+    tactics: booking.plan.tactics,
     notes,
     undercard: (night?.undercard ?? []).map(({ bout, result: r }) => ({
       boutId: bout.boutId,

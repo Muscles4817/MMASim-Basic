@@ -157,6 +157,14 @@ describe('who wins', () => {
  * term is missing, not mistuned. What it is *not* is a reason to make the Full engine wrong. The
  * first attempt at this bound softened the failed-entry counter until the cell fit, which is
  * fitting the reference implementation to its own approximation.
+ *
+ * **This list is meant to stay one entry long.** Doc 27 § 5.1a names the general problem it is an
+ * instance of — Reduced evaluates path-dependent terms at a within-round mean, and every mechanic
+ * on the roadmap that accumulates inside a fight (body damage, leg damage, cardio collapse,
+ * submission chains, cuts, repeated knockdowns) will diverge here in the same direction for the
+ * same reason. A second entry is the signal to build the general mechanism. A third would mean
+ * this file had quietly become a list of things the two levels disagree about, which is the
+ * opposite of what a parity suite is.
  */
 const KO_GAP_ALLOWANCE: Readonly<Record<string, number>> = { 'smotherer-v-striker': 0.13 };
 

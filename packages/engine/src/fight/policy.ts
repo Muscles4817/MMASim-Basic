@@ -537,8 +537,8 @@ export function finishOpportunity(actor: Combatant, target: Combatant): number {
  * The grappling preferences want the pocket, because that is where entries live — but as a route
  * rather than a destination, which `rangeUrgencyScale` prices.
  */
-export function desiredRangeOf(c: Combatant): Range {
-  switch (c.plan.tactics.preferredState) {
+export function rangeForState(state: PreferredState): Range {
+  switch (state) {
     case 'outside':
       return 'outside';
     case 'boxing':
@@ -551,6 +551,10 @@ export function desiredRangeOf(c: Combatant): Range {
     case 'adaptive':
       return 'boxing';
   }
+}
+
+export function desiredRangeOf(c: Combatant): Range {
+  return rangeForState(c.plan.tactics.preferredState);
 }
 
 const GRAPPLING_STATES: readonly PreferredState[] = ['clinch', 'top', 'submission'];

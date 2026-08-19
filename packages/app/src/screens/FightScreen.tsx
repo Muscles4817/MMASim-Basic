@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   RANGES,
+  rangeForState,
   callFight,
   createRng,
   deliveryScore,
@@ -24,6 +25,7 @@ import {
   type Referee,
   type RoundTally,
   type Range,
+  type TacticalPlan,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
@@ -268,6 +270,7 @@ export function FightScreen({ boutId }: { boutId?: string }) {
           night={night}
           notes={broadcast?.notes ?? []}
           undercard={broadcast?.undercard ?? []}
+          tactics={broadcast?.tactics}
         />}
 
       {finished && (
@@ -760,6 +763,7 @@ function FightSummary({
   night,
   notes,
   undercard,
+  tactics,
 }: {
   result: FightResult;
   red?: Fighter;
@@ -769,6 +773,7 @@ function FightSummary({
   night?: FightNight;
   notes: readonly string[];
   undercard: readonly { boutId: string; winnerName?: string; method: string; round: number }[];
+  tactics?: TacticalPlan;
 }) {
   const methodLabel = isKoMethod(result.method)
     ? result.method === 'ko'
@@ -943,7 +948,7 @@ function FightSummary({
             blue={result.stats.blue.knockdowns}
           />
           {/*
-            Where the standing time actually went.
+            Where the fight actually happened, against where it was meant to.
 
             The one output that says whether a game plan happened. A player whose fighter was
             told to stay outside and lost can read "Control time" and "Significant strikes" all
@@ -956,7 +961,7 @@ function FightSummary({
             corners are in the same place at the same time: the split is a property of the fight,
             not of a fighter.
           */}
-          <RangeBreakdown seconds={result.stats.red.rangeSeconds} />
+          <TacticalInspector result={result} tactics={tactics} />
           <StatComparison
             redName={redName}
             blueName={blueName}
@@ -1273,29 +1278,108 @@ const clock = (v: number): string =>
  * player's: *did the plan happen*. Rendered as one bar rather than two because the two fighters
  * are necessarily at the same range as each other.
  */
-function RangeBreakdown({ seconds }: { seconds: Record<Range, number> }) {
-  const total = RANGES.reduce((sum, r) => sum + seconds[r], 0);
+const RANGE_LABEL: Readonly<Record<Range, string>> = {
+  outside: 'Kicking range',
+  boxing: 'Boxing range',
+  pocket: 'The pocket',
+};
+
+/**
+ * Where the fight happened, and whether that is where it was supposed to happen.
+ *
+ * Two questions, and the second is the one that turns a statistic into a diagnosis. "Distance
+ * 61%" tells a player nothing: sixty-one per cent of the fight standing *where*, doing what, and
+ * was that the plan? A fighter told to stay outside who spent 18% of his standing time there did
+ * not have a plan that failed to matter — he had a plan the other man beat him to, every
+ * exchange, all night, and those are completely different nights.
+ *
+ * So the panel says three things in order:
+ *
+ *  1. **The whole fight, in one bar.** All five states, not the standing three — a clinch plan
+ *     and a pocket plan are neighbours on the same line and reading them off two separate widgets
+ *     hides that.
+ *  2. **Asked for against got.** The desired range comes from `rangeForState`, the engine's own
+ *     mapping, so the screen cannot report an instruction the simulator did not run.
+ *  3. **Attempts against arrivals.** The part `rangeSeconds` alone cannot show: a fighter who
+ *     tried eleven times and got there twice was fighting hard for a range he could not hold, and
+ *     one who tried twice was not really trying. Same time on the clock, different fighter, and
+ *     different thing to fix before the next one.
+ */
+function TacticalInspector({
+  result,
+  tactics,
+}: {
+  result: FightResult;
+  tactics?: TacticalPlan;
+}) {
+  const mine = result.stats.red;
+  const theirs = result.stats.blue;
+
+  // Clinch and ground are two-sided — one man's control is the other's time underneath — so the
+  // whole-fight bar has to add both corners or a fight spent on the bottom reads as no ground at
+  // all.
+  const clinchSeconds = mine.clinchControlSeconds + theirs.clinchControlSeconds;
+  const groundSeconds =
+    mine.controlSeconds - mine.clinchControlSeconds + (theirs.controlSeconds - theirs.clinchControlSeconds);
+  const standing = RANGES.map((r) => mine.rangeSeconds[r]);
+  const total = standing.reduce((a, b) => a + b, 0) + clinchSeconds + groundSeconds;
   if (total <= 0) return null;
-  const label: Record<Range, string> = {
-    outside: 'Kicking range',
-    boxing: 'Boxing range',
-    pocket: 'The pocket',
-  };
+
+  const rows: { key: string; label: string; seconds: number }[] = [
+    ...RANGES.map((r) => ({ key: r, label: RANGE_LABEL[r], seconds: mine.rangeSeconds[r] })),
+    { key: 'clinch', label: 'Clinch', seconds: clinchSeconds },
+    { key: 'ground', label: 'Ground', seconds: groundSeconds },
+  ];
+
+  const wanted = tactics ? rangeForState(tactics.preferredState) : undefined;
+  const standingTotal = standing.reduce((a, b) => a + b, 0);
+  const gotShare =
+    wanted && standingTotal > 0 ? mine.rangeSeconds[wanted] / standingTotal : undefined;
+
+  const attempted = mine.rangeChangesAttempted;
+  const landed = mine.rangeChangesLanded;
+
   return (
     <div className="fight-stats__row">
-      <span className="fight-stats__label">Standing range</span>
+      <span className="fight-stats__label">Where the fight happened</span>
       <div className="stack" style={{ gap: 'var(--space-1)', width: '100%' }}>
-        {RANGES.map((range) => (
-          <span key={range} className="row" style={{ justifyContent: 'space-between' }}>
+        {rows.map((row) => (
+          <span key={row.key} className="row" style={{ justifyContent: 'space-between' }}>
             <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
-              {label[range]}
+              {row.label}
             </span>
             <span className="numeric">
-              {clock(seconds[range])}{' '}
-              <span className="muted">({Math.round((seconds[range] / total) * 100)}%)</span>
+              {clock(row.seconds)}{' '}
+              <span className="muted">({Math.round((row.seconds / total) * 100)}%)</span>
             </span>
           </span>
         ))}
+
+        {wanted !== undefined && gotShare !== undefined && (
+          <span
+            className="row"
+            style={{ justifyContent: 'space-between', marginTop: 'var(--space-1)' }}
+          >
+            <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
+              You asked for {RANGE_LABEL[wanted].toLowerCase()}
+            </span>
+            <span className="numeric">
+              {Math.round(gotShare * 100)}%{' '}
+              <span className="muted">of the standing time</span>
+            </span>
+          </span>
+        )}
+
+        {attempted > 0 && (
+          <span className="row" style={{ justifyContent: 'space-between' }}>
+            <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
+              Range changes won
+            </span>
+            <span className="numeric">
+              {landed} <span className="muted">of {attempted}</span>
+            </span>
+          </span>
+        )}
       </div>
     </div>
   );

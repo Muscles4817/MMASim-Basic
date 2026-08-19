@@ -39,6 +39,14 @@ export * from './fight/fouls.js';
 export * from './fight/broadcast.js';
 export * from './fight/simulate.js';
 export * from './fight/round.js';
+/*
+ * The policy layer stays private — it is the engine's own decision-making and nothing outside the
+ * fight has any business calling it — except for this one function, which answers a question the
+ * *interface* has to ask: given the state a player picked, which range were they asking for. The
+ * post-fight inspector compares that against where the fight actually happened, and it has to be
+ * the engine's own answer or the screen will confidently report a plan that was never run.
+ */
+export { rangeForState } from './fight/policy.js';
 
 // Health
 export * from './health/injuries.js';

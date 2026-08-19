@@ -890,6 +890,8 @@ function resolveRangeBeat(ctx: ExchangeContext, actor: Combatant, target: Combat
   // Already where he wants to be, or too far gone to care where that is.
   if (!change || urgency <= 0.02) return 1;
 
+  actor.stats.rangeChangesAttempted++;
+
   const chance = rangeChangeChance({
     mover: actor,
     holder: target,
@@ -912,6 +914,7 @@ function resolveRangeBeat(ctx: ExchangeContext, actor: Combatant, target: Combat
     const next = stepRange(state.range, change);
     state.range = next;
     state.rangeSettled = 1;
+    actor.stats.rangeChangesLanded++;
     emit('range', say.rangeChangeText(rng, actor, target, change, next), actor.corner);
     return 1;
   }

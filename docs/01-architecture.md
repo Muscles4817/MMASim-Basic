@@ -113,6 +113,36 @@ real engine — and runs under `StrictMode`, so double-invoked effects and initi
 exercised too. It covers the full career loop, every screen, theme switching, save
 persistence, corrupt-save recovery and the accessibility basics.
 
+### Shape, not level
+
+A rule with its own file, `tests/statistical/shape-not-level.test.ts`, because it was learned four
+times in one change and each time it cost a day:
+
+> **A modifier that shapes matchups must not move the sport.** Test it for both — that it makes a
+> difference *between* fighters, and none *to the population* — unless moving the population is
+> the explicit, named purpose of the thing.
+
+The failure is always the same and never looks like itself. A table of multipliers is two things
+at once: a *shape*, which says which state is favoured, and a *level*, which says how much the
+whole thing is worth. Almost every table in this engine is written intending only the first, and a
+table of `{0.5, 1.0, 1.55}` has a mean of about 1.0 only by luck — under the distribution it is
+actually sampled at, that one means 0.84, so the mechanic it gates got 16% harder *everywhere*
+while the author was thinking about which end was which. It surfaces months later as a roster
+knockout rate that moved when nothing about knockouts was touched.
+
+The fix is mechanical: divide the table by its own mean under a declared reference distribution,
+and make the reference explicit so it can be checked. `shapeOnly()` in `fight/range.ts` and
+`NEUTRAL_HABIT` in `fight/profile.ts` are the two implementations; the test file reflects over the
+exports and fails anything indexed by a state that is not mean-1 and not on a named exceptions
+list.
+
+The second half of the rule needs populations rather than arithmetic, because the worst instance
+of this bug was never a table at all — it was a bias folded into the engine on behalf of a default
+that no longer existed, applied whether or not the fighter meant anything by it. The test for that
+shape is: a plan with no conviction behind it must produce numerically identical fights to no plan,
+and opposing plans must move the sport in opposite directions by comparable amounts. A modifier
+that pushes only one way is a level wearing a shape's clothes.
+
 ## Editor
 
 The editor is not a separate app. It is a route group inside `@mmasim/app` that operates on

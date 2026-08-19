@@ -126,6 +126,16 @@ function planWith(tactics: Partial<TacticalPlan>): GamePlan {
 interface Profile {
   winRate: number;
   distanceSeconds: number;
+  /** Shares of *standing* time, so they read as "where did the standing part happen". */
+  outsideShare: number;
+  boxingShare: number;
+  pocketShare: number;
+  /** Range changes this fighter went for, and the fraction that came off. */
+  rangeAttempts: number;
+  rangeSuccess: number;
+  /** Voluntary get-ups, not referee stand-ups: the difference between wanting up and being stood up. */
+  standUps: number;
+  clinchEntries: number;
   clinchSeconds: number;
   topSeconds: number;
   bottomSeconds: number;
@@ -157,6 +167,13 @@ function profile(fighter: Fighter, opponent: Fighter, plan: GamePlan, foePlan: G
     strikes: 0,
     kicks: 0,
     finishes: 0,
+    outside: 0,
+    boxing: 0,
+    pocket: 0,
+    rangeAttempts: 0,
+    rangeLanded: 0,
+    standUps: 0,
+    clinchEntries: 0,
   };
 
   for (let i = 0; i < FIGHTS; i++) {
@@ -181,12 +198,30 @@ function profile(fighter: Fighter, opponent: Fighter, plan: GamePlan, foePlan: G
     t.subs += mine.submissionAttempts;
     t.strikes += mine.significantStrikesLanded;
     t.kicks += mine.strikesByWeapon.kick;
+    t.outside += mine.rangeSeconds.outside;
+    t.boxing += mine.rangeSeconds.boxing;
+    t.pocket += mine.rangeSeconds.pocket;
+    t.rangeAttempts += mine.rangeChangesAttempted;
+    t.rangeLanded += mine.rangeChangesLanded;
+    for (const e of r.events) {
+      if (e.corner !== 'red') continue;
+      if (e.kind === 'standUp') t.standUps++;
+      else if (e.kind === 'clinch') t.clinchEntries++;
+    }
   }
 
   const n = FIGHTS;
+  const standing = Math.max(1, t.outside + t.boxing + t.pocket);
   return {
     winRate: t.wins / n,
     distanceSeconds: t.distance / n,
+    outsideShare: t.outside / standing,
+    boxingShare: t.boxing / standing,
+    pocketShare: t.pocket / standing,
+    rangeAttempts: t.rangeAttempts / n,
+    rangeSuccess: t.rangeLanded / Math.max(1, t.rangeAttempts),
+    standUps: t.standUps / n,
+    clinchEntries: t.clinchEntries / n,
     clinchSeconds: t.clinch / n,
     topSeconds: t.top / n,
     bottomSeconds: t.bottom / n,
@@ -200,7 +235,11 @@ function profile(fighter: Fighter, opponent: Fighter, plan: GamePlan, foePlan: G
 }
 
 const describeProfile = (p: Profile) =>
-  `distance=${p.distanceSeconds.toFixed(0)}s clinch=${p.clinchSeconds.toFixed(0)}s ` +
+  `out=${(p.outsideShare * 100).toFixed(0)}%/box=${(p.boxingShare * 100).toFixed(0)}%/` +
+  `pkt=${(p.pocketShare * 100).toFixed(0)}% rangeAtt=${p.rangeAttempts.toFixed(1)} ` +
+  `rangeHit=${(p.rangeSuccess * 100).toFixed(0)}% standUp=${p.standUps.toFixed(2)} ` +
+  `clinch=${p.clinchEntries.toFixed(2)} ` +
+  `distance=${p.distanceSeconds.toFixed(0)}s clinchT=${p.clinchSeconds.toFixed(0)}s ` +
   `top=${p.topSeconds.toFixed(0)}s bottom=${p.bottomSeconds.toFixed(0)}s ` +
   `tdAtt=${p.takedownsAttempted.toFixed(2)} subAtt=${p.submissionAttempts.toFixed(2)} ` +
   `sig=${p.significantStrikes.toFixed(1)} kickShare=${p.kickShare.toFixed(2)} ` +
@@ -422,5 +461,166 @@ describe('the fighter, not just the plan', () => {
     // holds the shape he was asked for; the wild one drifts back toward whatever the fight
     // turns into.
     expect(disciplined.distanceSeconds, message).toBeGreaterThan(wild.distanceSeconds);
+  });
+});
+
+/* ---------------------------------------------------------------------------------------------
+ * The end-to-end pass: six plans a player would actually pick, and the fight each one produced.
+ * ------------------------------------------------------------------------------------------- */
+
+describe('the fight a player asked for is the fight they got', () => {
+  /*
+   * **The validation pass, as opposed to the mechanism tests above.**
+   *
+   * Everything before this asserts that one dial moves one number. This block asks the question a
+   * player asks: *I picked this plan — did I get that fight?* Same two fighters, same opponent,
+   * same seeds, six plans, and each one is checked against the shape a person would describe from
+   * the cage side rather than against the internals it happens to be implemented with.
+   *
+   * The numbers in each comment are the measurement over 1,200 paired fights that set the bound.
+   * They are recorded because a bound without its measurement is a number nobody can ever safely
+   * change: whoever reads this next needs to know whether 2× is comfortable or whether it is the
+   * whole margin.
+   *
+   * `neutral` is the same fighters with no plan at all, and is the baseline every "more than" is
+   * measured against — out 25% / box 72% / pocket 3%, 3.2 range attempts, 16.2 significant
+   * strikes, 4.32 takedowns, 2.92 submissions, 1.75 clinch entries, 0.82 voluntary get-ups.
+   */
+  const neutral = forRed({});
+
+  it('gives the outside striker a fight at the end of his range', () => {
+    /*
+     * Measured: outside share 60% against the neutral 25%, pocket 2%, 22.5 significant strikes
+     * against 16.2, and 5.0 range changes attempted against 3.2 — the last one being the
+     * "disengagement attempts" half, and the reason attempts are counted separately from the ones
+     * that land. He is not passively at range; he is *working* to stay there.
+     */
+    const plan = forRed({ preferredState: 'outside', entry: 'movement' });
+    const message = `outside ${describeProfile(plan)} | neutral ${describeProfile(neutral)}`;
+
+    expect(plan.outsideShare, message).toBeGreaterThan(neutral.outsideShare * 1.8);
+    expect(plan.pocketShare, message).toBeLessThan(neutral.pocketShare);
+    expect(plan.rangeAttempts, message).toBeGreaterThan(neutral.rangeAttempts * 1.3);
+    expect(plan.significantStrikes, message).toBeGreaterThan(neutral.significantStrikes * 1.2);
+  });
+
+  it('gives the pressure boxer a fight in the phone booth, and makes him pay to get there', () => {
+    /*
+     * Measured: pocket 26% against the neutral 3%, 9.1 range changes attempted against 3.2, and
+     * 18.7 significant strikes against 16.2 — more time inside, more exchanges once there, and
+     * nearly three times the work to make it happen.
+     *
+     * The success *rate* barely moves (52% against 54%) and that is the point of the pair of
+     * counters: two evenly matched fighters win about half the exchanges whatever they are told,
+     * so what a plan buys is how often you ask, not how often you are answered.
+     */
+    const plan = forRed({ preferredState: 'pocket', entry: 'pressure' });
+    const message = `pressure ${describeProfile(plan)} | neutral ${describeProfile(neutral)}`;
+
+    expect(plan.pocketShare, message).toBeGreaterThan(neutral.pocketShare * 4);
+    expect(plan.rangeAttempts, message).toBeGreaterThan(neutral.rangeAttempts * 2);
+    expect(plan.significantStrikes, message).toBeGreaterThan(neutral.significantStrikes);
+  });
+
+  it('makes the wrestler close the distance before he shoots, rather than shooting from nowhere', () => {
+    /*
+     * The claim range was built to support, stated as a comparison between two plans rather than
+     * as an absolute: a wrestler gets into the pocket *and then* shoots, and a fighter told to
+     * stay outside neither gets there nor shoots.
+     *
+     * Measured: pocket 17% against the outside striker's 2%, and 7.25 takedowns attempted against
+     * 1.82 — four times as many. The 2.5× bound is the one proposed when this layer was specified,
+     * kept deliberately below the measurement so it survives rebalancing.
+     */
+    const wrestle = forRed({ preferredState: 'top', entry: 'proactiveWrestling' });
+    const strike = forRed({ preferredState: 'outside', entry: 'movement' });
+    const message = `wrestle ${describeProfile(wrestle)} | strike ${describeProfile(strike)}`;
+
+    expect(wrestle.takedownsAttempted, message).toBeGreaterThan(strike.takedownsAttempted * 2.5);
+    expect(wrestle.pocketShare, message).toBeGreaterThan(strike.pocketShare * 3);
+    // And he does it by closing, not by standing at boxing range hoping.
+    expect(wrestle.rangeAttempts, message).toBeGreaterThan(strike.rangeAttempts * 1.4);
+  });
+
+  it('makes the clinch grinder tie up rather than settle for standing near somebody', () => {
+    /*
+     * The distinction that only exists once standing has more than one place in it: a clinch plan
+     * has to produce *entries into the clinch*, not merely a fighter who hovers at boxing range
+     * looking like he might.
+     *
+     * Measured against the boxing plan, which is the honest control here because both plans put a
+     * fighter in the middle of the standing line: 4.30 clinch entries against 1.14, and 189
+     * seconds of tie-up against 69.
+     */
+    const grind = forRed({ preferredState: 'clinch', entry: 'clinchEntries' });
+    const box = forRed({ preferredState: 'boxing', entry: 'lead' });
+    const message = `grind ${describeProfile(grind)} | box ${describeProfile(box)}`;
+
+    expect(grind.clinchEntries, message).toBeGreaterThan(box.clinchEntries * 2.5);
+    expect(grind.clinchSeconds, message).toBeGreaterThan(box.clinchSeconds * 2);
+    expect(grind.pocketShare, message).toBeGreaterThan(box.pocketShare * 3);
+  });
+
+  it('makes the submission hunter hunt, and makes him content to be underneath', () => {
+    /*
+     * Both halves, because either alone is a different fighter. Measured: 9.10 submission attempts
+     * against the neutral 2.92, and 0.62 voluntary get-ups against 0.82 — he attacks three times
+     * as much *and* stops trying to leave, which is what "lower stand-up urgency" means when it is
+     * a behaviour rather than a slider.
+     */
+    const hunt = forRed({
+      preferredState: 'submission',
+      entry: 'reactiveShot',
+      topIntent: 'submit',
+      bottomIntent: 'attack',
+    });
+    const message = `hunt ${describeProfile(hunt)} | neutral ${describeProfile(neutral)}`;
+
+    expect(hunt.submissionAttempts, message).toBeGreaterThan(neutral.submissionAttempts * 2.5);
+    expect(hunt.standUps, message).toBeLessThan(neutral.standUps);
+    expect(hunt.bottomSeconds, message).toBeGreaterThan(neutral.bottomSeconds);
+  });
+
+  it('makes the striker who gets taken down try to get up, which is the complaint this all started with', () => {
+    /*
+     * **The original report, reproduced as an assertion.** *"I made a striker who's weak at
+     * grappling yet for some reason in loads of fights I barely throw strikes and instead end up
+     * with lots of control time."*
+     *
+     * The 84-striking / 38-wrestling fighter against the wrestler built to take him down, so he
+     * *is* underneath for most of the fight in every one of these runs — the plan cannot change
+     * that, and should not. What it changes is what he does about it.
+     *
+     * Measured over 1,200 paired fights, told to stand up against told to attack from his back:
+     * **1.18 voluntary get-ups against 0.50, and 0.62 submission attempts against 2.92.**
+     *
+     * The row that matters most is the third one, because the complaint was not about picking the
+     * wrong plan — it was about picking none. Unplanned, the same striker gets up 0.84 times and
+     * attempts 2.14 submissions: he drifts toward hunting chokes with 32 submissions, which is
+     * precisely what was being described. And he wins 35.8% of the time. Told to stay outside and
+     * get up when he cannot, he wins **51.1%** — fifteen points, to the fighter who reported this,
+     * for being allowed to say what fight he wanted.
+     */
+    const wrestlerPlan = planWith({ preferredState: 'top', entry: 'proactiveWrestling' });
+    const asked = (tactics: Partial<TacticalPlan>) =>
+      profile(striker, wrestler, planWith(tactics), wrestlerPlan);
+
+    const getUp = asked({ preferredState: 'outside', entry: 'movement', bottomIntent: 'standUp' });
+    const stay = asked({ preferredState: 'outside', entry: 'movement', bottomIntent: 'attack' });
+    const unplanned = profile(striker, wrestler, defaultGamePlan(), wrestlerPlan);
+    const message =
+      `getUp ${describeProfile(getUp)} | stay ${describeProfile(stay)} | ` +
+      `unplanned ${describeProfile(unplanned)}`;
+
+    // He tries to get up more than twice as often as the man told to work from his back...
+    expect(getUp.standUps, message).toBeGreaterThan(stay.standUps * 2);
+    // ...and stops hunting submissions he has no business hunting.
+    expect(stay.submissionAttempts, message).toBeGreaterThan(getUp.submissionAttempts * 3);
+    // And both of those are improvements on having said nothing, which is the actual complaint:
+    // the unplanned striker drifts toward the grappling he is worst at.
+    expect(getUp.standUps, message).toBeGreaterThan(unplanned.standUps * 1.25);
+    expect(unplanned.submissionAttempts, message).toBeGreaterThan(getUp.submissionAttempts * 2);
+    // And it is worth winning the fight over, not merely worth looking different.
+    expect(getUp.winRate, message).toBeGreaterThan(unplanned.winRate * 1.2);
   });
 });

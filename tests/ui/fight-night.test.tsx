@@ -218,6 +218,35 @@ describe('after it', () => {
     expect(document.body.textContent ?? '').toMatch(/Round 1/i);
   });
 
+  it('says where the fight happened, and whether that is where it was asked to happen', async () => {
+    /*
+     * The panel that turns a statistic into a diagnosis.
+     *
+     * "Distance 61%" is not an answer to the only question a player has after a plan did not
+     * work — sixty-one per cent standing *where*, and was that the plan? The inspector has to
+     * name all five places a fight can be, say which one was asked for, and show the range
+     * contest as attempts against arrivals, because a fighter who tried eleven times and got
+     * there twice is a completely different problem from one who never tried.
+     */
+    const user = userEvent.setup();
+    await toFightNight(user);
+    await watchIt(user);
+
+    const panel = (await screen.findByText(/Where the fight happened/i)).closest('div');
+    const text = panel?.textContent ?? '';
+
+    // All five states, not the three standing ones — a clinch plan and a pocket plan are
+    // neighbours and reading them off separate widgets hides that.
+    for (const place of [/Kicking range/i, /Boxing range/i, /The pocket/i, /Clinch/i, /Ground/i]) {
+      expect(text, `missing ${place} from: ${text}`).toMatch(place);
+    }
+
+    // Asked for against got, and the contest that decided it.
+    expect(text).toMatch(/You asked for/i);
+    expect(text).toMatch(/of the standing time/i);
+    expect(text).toMatch(/Range changes won/i);
+  });
+
   it('says how the building took it', async () => {
     const user = userEvent.setup();
     await toFightNight(user);

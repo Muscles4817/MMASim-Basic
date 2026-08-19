@@ -219,6 +219,17 @@ export interface FightStats {
    * diagnosed by reading several hundred play-by-play events, which is not diagnosis.
    */
   rangeSeconds: Record<Range, number>;
+  /**
+   * Attempts to change the range, and the ones that came off.
+   *
+   * Two counters rather than one because the difference between them *is* range control, and it
+   * is the difference a single number cannot show. A fighter who tried eleven times and got there
+   * twice and a fighter who tried three times and got there twice have the same `rangeSeconds` and
+   * are not remotely the same fighter — the first one is being beaten to the punch every time he
+   * steps in, and that is the diagnosis a player needs when a game plan did not happen.
+   */
+  rangeChangesAttempted: number;
+  rangeChangesLanded: number;
   /** Cumulative damage dealt, in the same units as the opponent's damage meters. */
   damageDealt: number;
 }
@@ -342,6 +353,8 @@ export function emptyStats(): FightStats {
     clinchControlSeconds: 0,
     distanceSeconds: 0,
     rangeSeconds: { outside: 0, boxing: 0, pocket: 0 },
+    rangeChangesAttempted: 0,
+    rangeChangesLanded: 0,
     damageDealt: 0,
   };
 }
