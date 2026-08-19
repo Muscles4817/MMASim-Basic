@@ -10,6 +10,11 @@
  * `stepUpAcceptance()` had no caller outside its own unit test, `shortNoticeWillingness` was a
  * trait hook with two traits pointing at it and no reader, and `TollReason: 'refusedBout'` was a
  * type-level fiction because nothing could refuse a bout.
+ *
+ * Scoped to the **model** since the planning rework. Sending a card out, rolling withdrawals and
+ * finding replacements are now properties of an `EventPlan` and are exercised end to end in
+ * `planning.test.ts`; what remains here is the arithmetic underneath them, which is worth
+ * testing in isolation because it is what the screens read before they ask anybody anything.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -23,16 +28,7 @@ import {
   type Promotion,
   type PromotionalAgreement,
 } from '@mmasim/engine';
-import {
-  autoFill,
-  emptyDraft,
-  replacementsFor,
-  rollPullOuts,
-  scheduleCard,
-  sendOffers,
-  tollForRefusal,
-} from '../../packages/app/src/game/promoting';
-import { sign } from '../../packages/app/src/game/contracts';
+import { sign, toll } from '../../packages/app/src/game/contracts';
 
 /**
  * `sign` returns a result rather than a fighter, because it now refuses when the fighter is
@@ -49,7 +45,6 @@ const leader = (db: ReturnType<typeof game>) =>
   (db.promotions.findAll() as unknown as Promotion[])
     .slice()
     .sort((a, b) => b.prestige - a.prestige)[0]!;
-const DAY = 2192 + 30;
 
 /** Two fighters from the same division, so a bout between them is legal. */
 function pair(db: ReturnType<typeof game>, promotion: Promotion) {
@@ -190,58 +185,6 @@ describe('a manager who has both of them', () => {
   });
 });
 
-describe('sending a card out to the fighters', () => {
-  it('gets an answer for every bout on it', () => {
-    const db = game();
-    const promotion = leader(db);
-    const draft = autoFill({ db, promotion, draft: emptyDraft(), day: DAY });
-    const offers = sendOffers({ db, promotion, draft, day: DAY });
-    expect(offers).toHaveLength(9);
-  });
-
-  it('does not always say yes', () => {
-    /*
-     * The property the whole phase exists for. Across a run of cards on short notice — which is
-     * the hardest thing to sell — somebody has to refuse, or the builder is still a form.
-     */
-    const db = game();
-    const promotion = leader(db);
-    let refusals = 0;
-    for (let i = 0; i < 6; i++) {
-      const day = DAY + i * 40;
-      const draft = autoFill({ db, promotion, draft: emptyDraft(), day });
-      refusals += sendOffers({ db, promotion, draft, day, notice: 'short' }).filter(
-        (o) => !o.accepted,
-      ).length;
-    }
-    expect(refusals).toBeGreaterThan(0);
-  });
-
-  it('names who refused and why, rather than just failing', () => {
-    const db = game();
-    const promotion = leader(db);
-    const draft = autoFill({ db, promotion, draft: emptyDraft(), day: DAY });
-    const refused = sendOffers({ db, promotion, draft, day: DAY, notice: 'short' }).filter(
-      (o) => !o.accepted,
-    );
-    for (const offer of refused) {
-      expect(offer.refusedBy).toBeTruthy();
-      expect(offer.reason).toBeTruthy();
-    }
-  });
-
-  it('cannot be rerolled until everybody says yes', () => {
-    // Seeded on the bout rather than the call. A promoter who could refresh the answer would be
-    // back to a card that always fills.
-    const db = game();
-    const promotion = leader(db);
-    const draft = autoFill({ db, promotion, draft: emptyDraft(), day: DAY });
-    const first = sendOffers({ db, promotion, draft, day: DAY, notice: 'short' });
-    const second = sendOffers({ db, promotion, draft, day: DAY, notice: 'short' });
-    expect(second.map((o) => o.accepted)).toEqual(first.map((o) => o.accepted));
-  });
-});
-
 describe('what saying no costs', () => {
   it('stops the contract clock', () => {
     /*
@@ -270,7 +213,7 @@ describe('what saying no costs', () => {
     }));
     const before = db.agreements.findById(signed.agreementId as string) as PromotionalAgreement;
 
-    tollForRefusal(db, signed.id as string, 30);
+    toll(db, signed, 30);
 
     const after = db.agreements.findById(signed.agreementId as string) as PromotionalAgreement;
     expect(after.tolledDays).toBe(before.tolledDays + 30);
@@ -307,72 +250,6 @@ describe('fights falling apart', () => {
     expect(pullOutRisk(fragile)).toBeGreaterThan(pullOutRisk(reliable));
   });
 
-  it('breaks a booked card sometimes, which nothing could do before', () => {
-    /*
-     * Injuries prevented a fighter being *booked* and never broke a booking that already
-     * existed — so no main event in the history of the game had ever fallen out.
-     */
-    const db = game();
-    const promotion = leader(db);
-    let broken = 0;
-    for (let i = 0; i < 8; i++) {
-      const day = DAY + i * 40;
-      const draft = autoFill({ db, promotion, draft: emptyDraft(), day });
-      const night = scheduleCard({ db, promotion, draft, day, broadcast: 'ppv' });
-      broken += rollPullOuts({ db, night, seed: `s${i}` }).length;
-    }
-    expect(broken).toBeGreaterThan(0);
-  });
-
-  it('takes at most one fighter out of any one bout', () => {
-    // The fight is already off; a second withdrawal from the same bout is noise.
-    const db = game();
-    const promotion = leader(db);
-    const draft = autoFill({ db, promotion, draft: emptyDraft(), day: DAY });
-    const night = scheduleCard({ db, promotion, draft, day: DAY, broadcast: 'ppv' });
-    const outs = rollPullOuts({ db, night, seed: 'once' });
-    expect(new Set(outs.map((o) => o.boutId)).size).toBe(outs.length);
-  });
-});
-
-describe('saving the card', () => {
-  it('offers replacements from the same division who might actually say yes', () => {
-    const db = game();
-    const promotion = leader(db);
-    const { a, b } = pair(db, promotion);
-
-    const options = replacementsFor({
-      db,
-      promotion,
-      opponent: b,
-      day: DAY,
-      exclude: [a.id as string, b.id as string],
-    });
-
-    expect(options.length).toBeGreaterThan(0);
-    for (const option of options) {
-      expect(option.fighter.divisionId).toBe(b.divisionId);
-      expect(option.fighter.id).not.toBe(b.id);
-    }
-  });
-
-  it('ranks them by who will take it rather than by who is best', () => {
-    // The correct priority in a genuine emergency, and the first thing in the game to read
-    // `shortNoticeWillingness`.
-    const db = game();
-    const promotion = leader(db);
-    const { a, b } = pair(db, promotion);
-    const options = replacementsFor({
-      db,
-      promotion,
-      opponent: b,
-      day: DAY,
-      exclude: [a.id as string, b.id as string],
-      limit: 6,
-    });
-    const chances = options.map((o) => o.chance);
-    expect([...chances].sort((x, y) => y - x)).toEqual(chances);
-  });
 });
 
 /** Shift a whole attribute block, for building a clearly better or worse opponent. */

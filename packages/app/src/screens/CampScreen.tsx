@@ -43,7 +43,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
-import { spendLine } from '../ui/format';
+import { money, spendLine } from '../ui/format';
 import { Alert, FighterRead, KeyStat } from '../ui/signals';
 import {
   forecastCampDevelopment,
@@ -351,7 +351,7 @@ export function CampScreen() {
           )}
           {purse && (
             <Chip tone="info" title="Show money is paid win or lose; the win bonus is not">
-              £{purse.show}k to show · £{purse.win}k to win
+              {money(purse.show)} to show · {money(purse.win)} to win
             </Chip>
           )}
           <Chip tone="neutral">{booking.bout.rounds} rounds</Chip>
@@ -750,7 +750,7 @@ export function CampScreen() {
                     <span style={{ flex: 1 }}>
                       <span className="row" style={{ justifyContent: 'space-between' }}>
                         <strong>{item.label}</strong>
-                        <span className="numeric muted">£{item.cost}k</span>
+                        <span className="numeric muted">{money(item.cost)}</span>
                       </span>
                       <span className="faint" style={{ fontSize: 'var(--text-sm)' }}>
                         {item.effect}
@@ -768,7 +768,7 @@ export function CampScreen() {
             */}
             {spend > playerFighter.bank ? (
               <Alert tone="warn" title="More than you have">
-                £{spend}k against a bank of £{Math.round(playerFighter.bank * 10) / 10}k. You can
+                {money(spend)} against a bank of {money(playerFighter.bank)}. You can
                 run it anyway and go into the red — nothing stops you — but you will start
                 taking fights you would otherwise refuse.
               </Alert>
@@ -779,7 +779,7 @@ export function CampScreen() {
                 style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}
               >
                 {spend === 0
-                  ? `Nothing bought. You have £${Math.round(playerFighter.bank * 10) / 10}k.`
+                  ? `Nothing bought. You have ${money(playerFighter.bank)}.`
                   : spendLine({ cost: spend, balance: playerFighter.bank })}
               </p>
             )}

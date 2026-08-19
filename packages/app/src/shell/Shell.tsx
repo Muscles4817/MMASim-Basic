@@ -79,9 +79,11 @@ const PROMOTER_NAV: readonly NavItem[] = [
     route: { name: 'promotion' },
     label: 'Promotion',
     icon: '🎪',
-    matches: ['promotion', 'card', 'hub', 'start'],
+    matches: ['promotion', 'card', 'hub', 'start', 'champions'],
   },
-  { route: { name: 'calendar' }, label: 'Calendar', icon: '📅' },
+  // Cards live under the calendar, because a card *is* a date with fights on it and the whole
+  // point of the rework is that a promoter plans months ahead rather than generating one now.
+  { route: { name: 'calendar' }, label: 'Calendar', icon: '📅', matches: ['calendar', 'plan'] },
   { route: { name: 'inbox' }, label: 'Inbox', icon: '📥' },
   // A promoter's "roster" is their own stable with contracts attached, not the world's fighter
   // list — which is reachable through it.
@@ -99,12 +101,21 @@ export function Shell({
   subtitle,
   actions,
   showBack,
+  wide,
   children,
 }: {
   title: string;
   subtitle?: ReactNode;
   actions?: ReactNode;
   showBack?: boolean;
+  /**
+   * Let the content use the full desktop width.
+   *
+   * Off by default, and that default is the right one: a column of prose stretched to 1600px is
+   * harder to read, not easier. It is on for the screens that genuinely have parallel context to
+   * show side by side — the dashboard, the card builder, a fighter's console — and nowhere else.
+   */
+  wide?: boolean;
   children: ReactNode;
 }) {
   const { route, navigate, back } = useRouter();
@@ -256,7 +267,12 @@ export function Shell({
         </header>
 
         {/* tabIndex -1 makes this focusable programmatically without adding a tab stop. */}
-        <main className="shell__main" id="main" ref={mainRef} tabIndex={-1}>
+        <main
+          className={`shell__main${wide ? ' shell__main--wide' : ''}`}
+          id="main"
+          ref={mainRef}
+          tabIndex={-1}
+        >
           {children}
         </main>
       </div>

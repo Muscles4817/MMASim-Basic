@@ -1,7 +1,13 @@
 # 13 — Promoter Mode
 
-> Status: design, revised after review. Nothing in this document is built yet.
+> Status: design, revised after review. Most of it is built.
 > Revisions follow [15 — Design Review Synthesis](./15-design-review-synthesis.md).
+>
+> **The interaction design lives in [29 — Promoter Mode UX](./29-promoter-mode-ux.md)**, which
+> supersedes the screen table below. The short version: a card is a *plan* that exists as a date
+> months before anybody is booked on it, matchmaking is a sequence of decisions the player makes
+> rather than a card the matchmaker hands them, and autofill is a scoped convenience rather than
+> the game.
 
 ## The fantasy
 
@@ -29,10 +35,10 @@ laughing stock and loses the audience.
 ## The loop
 
 ```
-  ┌─ Build a card ──────────────────────────────────────────┐
-  │  pick a date, a venue, a broadcast model                │
-  │  offer bouts → managers accept or refuse                │
-  │  set the bonus pool and where the marketing goes        │
+  ┌─ Plan a card ───────────────────────────────────────────┐
+  │  pick a date months out, a market, a size               │
+  │  fill slots as fights become makeable — holes are fine  │
+  │  offer bouts → fighters accept, refuse or name a price  │
   └──────────────────────┬──────────────────────────────────┘
                          ▼
   ┌─ Sell it ───────────────────────────────────────────────┐
@@ -108,14 +114,17 @@ and is a genuinely hostile act you can also commit.
 
 ## What the player actually does, screen by screen
 
+Superseded by doc 29, which describes what shipped. For reference, as built:
+
 | Screen | The decision |
 | ------ | ------------ |
-| **Calendar** | When to run, where, and on what broadcast model |
-| **Card builder** | Which fights, in which order, and how big the bonus pool is |
-| **Roster** | Who to sign, cut, push, protect |
-| **Contracts** | Who is expiring, what their manager wants, and what it will cost |
-| **Finances** | Where the money went, whether the last card worked, and the state of the rights deal |
-| **News** | What rivals did, who got hurt, who left |
+| **Dashboard** | What needs you first, out of everything the simulation knows |
+| **Calendar** | When to run, where, and how big a night — months ahead |
+| **A card** | Every fight on it, one slot at a time, and who you offer it to |
+| **Roster & contracts** | Who to sign, cut, push, protect — and who is about to walk |
+| **Championships** | Who holds each belt, who has earned the shot, and who is not defending |
+| **Fighter** | What this person is worth, wants, costs, and who they should fight |
+| **Inbox** | Offers answered, prices named, cards without a main event |
 
 ## Difficulty and starting position
 

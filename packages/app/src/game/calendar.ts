@@ -20,21 +20,20 @@
 import {
   agreementStatus,
   displayName,
+  planHealth,
+  planProgress,
   type Fighter,
   type FightNight,
+  type PlanHealth,
   type Promotion,
   type PromotionalAgreement,
 } from '@mmasim/engine';
 import { getWorld, type GameDb, type WorldMeta } from '@mmasim/data';
 import { getBooking } from './career';
+import { plansFor } from './plans';
 
 export type CalendarKind =
-  | 'card'
-  | 'fight'
-  | 'camp'
-  | 'contract'
-  | 'medical'
-  | 'inactivity';
+  'plan' | 'card' | 'fight' | 'camp' | 'contract' | 'medical' | 'inactivity';
 
 export interface CalendarEntry {
   day: number;
@@ -53,6 +52,16 @@ export interface CalendarEntry {
   link?: { route: string; id?: string };
   fighterId?: string;
   promotionId?: string;
+  /**
+   * How complete a planned card is.
+   *
+   * The calendar's whole job in promoter mode is answering "what does my next six months look
+   * like" at a glance, and a row that says only "there is a card in April" answers none of it.
+   * Present on `plan` entries and nothing else.
+   */
+  health?: PlanHealth;
+  /** Filled slots out of total, for a planned card. */
+  booked?: { filled: number; slots: number };
 }
 
 export interface CalendarRange {
@@ -75,6 +84,37 @@ export function buildCalendar(db: GameDb, range: CalendarRange): CalendarEntry[]
 
   const yourPromotion = world.playerPromotionId;
   const yourFighter = world.playerFighterId;
+
+  /*
+   * --- Cards the player is planning -----------------------------------------------------------
+   *
+   * These are the only entries on the calendar the player *wrote*. Everything else is the
+   * simulation reporting itself, which is why a plan is the only kind of row that can be opened
+   * and edited rather than merely looked at.
+   */
+  for (const plan of plansFor(db, yourPromotion)) {
+    if (!inRange(plan.day)) continue;
+    const progress = planProgress(plan);
+    entries.push({
+      day: plan.day,
+      kind: 'plan',
+      title: plan.name,
+      /*
+       * Signed, not merely filled.
+       *
+       * A slot holding a bout somebody turned down is not a booked fight, and counting it as one
+       * produced rows that said "9/9 booked" beside a chip reading "Needs a main event".
+       */
+      detail: `${plan.city} · ${progress.agreed}/${progress.slots} signed${
+        progress.hasMainEvent ? ' · main event set' : ''
+      }${progress.titleFights > 0 ? ` · ${progress.titleFights} title fight${progress.titleFights === 1 ? '' : 's'}` : ''}`,
+      ownership: 'yours',
+      link: { route: 'plan', id: plan.id },
+      promotionId: plan.promotionId as string,
+      health: planHealth(plan),
+      booked: { filled: progress.agreed, slots: progress.slots },
+    });
+  }
 
   // --- Scheduled cards ------------------------------------------------------------------------
   for (const night of db.events.findAll() as FightNight[]) {

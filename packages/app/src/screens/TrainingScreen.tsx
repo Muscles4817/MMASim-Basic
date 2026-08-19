@@ -487,7 +487,7 @@ export function TrainingScreen() {
           </p>
 
           <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
-            {weeks} weeks at {gym?.name ?? 'no gym'} costs <strong>£{cost}k</strong>.{' '}
+            {weeks} weeks at {gym?.name ?? 'no gym'} costs <strong>{money(cost)}</strong>.{' '}
             {canPay
               ? spendLine({ cost, balance: fighter.bank })
               : `${spendLine({ cost, balance: fighter.bank })} You can run it anyway — nothing stops you — but you will start taking fights you would otherwise refuse.`}

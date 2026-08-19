@@ -57,7 +57,21 @@ export function InboxScreen() {
   const open = (item: InboxItem) => {
     markItemRead(db, item.id);
     commit();
-    if (item.link) navigate({ name: item.link.route } as never);
+    /*
+     * The id travels with the link.
+     *
+     * It never used to, because every link the inbox could produce pointed at a singleton screen
+     * — the roster, the hub, the offers list. A promoter has several cards open at once and a
+     * fighter's page needs a subject, so "take me there" without the id lands on the wrong thing
+     * or on nothing.
+     */
+    if (item.link) {
+      navigate(
+        item.link.id
+          ? ({ name: item.link.route, id: item.link.id } as never)
+          : ({ name: item.link.route } as never),
+      );
+    }
   };
 
   if (items.length === 0) {

@@ -2,9 +2,9 @@
  * Fights fall apart, and until now they only fell apart for promoters.
  *
  * `pullOutRisk` has existed since the bout-agreement layer was written — a properly built model
- * scaling a 5.5% base by body wear, discipline and cut risk — and `promoting.ts` was its only
- * caller. So in promoter mode a card lost a fighter roughly one bout in eight, exactly as the
- * sport does, and in fighter mode **every booked fight happened, always**. The single most
+ * scaling a 5.5% base by body wear, discipline and cut risk — and the promoter's card planner was
+ * its only caller. So in promoter mode a card lost a fighter roughly one bout in eight, exactly as
+ * the sport does, and in fighter mode **every booked fight happened, always**. The single most
  * recurring disappointment in the sport was unreachable by the person playing it.
  *
  * The other half of the fix is that opponents can now actually be injured (see

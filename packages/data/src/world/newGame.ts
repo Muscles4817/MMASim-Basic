@@ -79,6 +79,7 @@ export function createNewGame(options: NewGameOptions = {}): GameDb {
 
   setWorld(db, {
     day: seed.day,
+    startedDay: seed.day,
     divisionTargets,
     seed: options.seed ?? `mmasim-${era}`,
     era,
@@ -135,8 +136,7 @@ function repairContractMismatch(db: GameDb): void {
     if (!fighter.agreementId) continue;
 
     const agreement = db.agreements.findById(fighter.agreementId) as
-      | (Entity & { promotionId?: string })
-      | undefined;
+      (Entity & { promotionId?: string }) | undefined;
     if (!agreement?.promotionId) continue;
     if (agreement.promotionId === fighter.promotionId) continue;
 
@@ -160,4 +160,3 @@ function backfillCommentators(db: GameDb): void {
   db.commentators.upsertMany(buildSeedWorld().commentators as unknown as (Commentator & Entity)[]);
   db.save();
 }
-

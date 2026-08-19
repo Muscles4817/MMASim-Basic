@@ -180,7 +180,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   loneWolf: {
     id: 'loneWolf',
     label: 'Lone Wolf',
-    blurb: 'Fights their own fight. The plan is a suggestion.',
+    blurb: 'Inclined to fight their own fight. The corner’s plan is one input among several.',
     category: 'fight',
     polarity: 'doubleEdged',
     visibility: 60,
@@ -200,7 +200,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   frontrunner: {
     id: 'frontrunner',
     label: 'Frontrunner',
-    blurb: 'Electric in front. Folds the moment it turns.',
+    blurb: 'Grows into a fight they are winning, and tends to shrink in one they are not.',
     category: 'mental',
     polarity: 'doubleEdged',
     visibility: 35,
@@ -210,7 +210,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   dog: {
     id: 'dog',
     label: 'Dog',
-    blurb: 'Better hurt than fresh. Will not stop coming.',
+    blurb: 'Seems to find something when the fight turns against them. Hard to discourage.',
     category: 'mental',
     polarity: 'doubleEdged',
     visibility: 45,
@@ -230,7 +230,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   ironChin: {
     id: 'ironChin',
     label: 'Iron Chin',
-    blurb: 'Takes shots that end other people and asks for more. Nobody saves them from it.',
+    blurb: 'Absorbs shots that end other people — and tends to stay in fights they should be out of.',
     category: 'health',
     // Double-edged, not positive: the fighters who can absorb the most are precisely the
     // ones who stay in fights they should have been pulled out of. The chin buys them
@@ -244,7 +244,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   glassCannon: {
     id: 'glassCannon',
     label: 'Glass Cannon',
-    blurb: 'Ends fights early — one way or the other.',
+    blurb: 'Fights rarely go long. Which way they end is the open question.',
     category: 'health',
     polarity: 'doubleEdged',
     visibility: 65,
@@ -255,7 +255,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   gunShy: {
     id: 'gunShy',
     label: 'Gun-Shy',
-    blurb: 'Has been badly hurt and has not forgotten it.',
+    blurb: 'Has been badly hurt, and it shows in how readily they commit now.',
     category: 'mental',
     polarity: 'negative',
     visibility: 50,
@@ -266,7 +266,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   fragileEgo: {
     id: 'fragileEgo',
     label: 'Fragile Ego',
-    blurb: 'Losses cut deep. Corrections cut deeper.',
+    blurb: 'Takes defeat hard, and takes correction harder.',
     category: 'mental',
     polarity: 'negative',
     visibility: 30,
@@ -296,7 +296,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   mercenary: {
     id: 'mercenary',
     label: 'Mercenary',
-    blurb: 'Goes wherever the cheque is biggest and holds out until it is.',
+    blurb: 'Weighs the money above most other things, and tends to hold out for it.',
     category: 'business',
     polarity: 'negative',
     visibility: 55,
@@ -306,7 +306,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   lateStarter: {
     id: 'lateStarter',
     label: 'Late Starter',
-    blurb: 'Gives away the first round and takes the last two.',
+    blurb: 'Slow to start, and generally strongest in the back half of a fight.',
     category: 'fight',
     polarity: 'doubleEdged',
     visibility: 45,
@@ -316,7 +316,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   fastStarter: {
     id: 'fastStarter',
     label: 'Fast Starter',
-    blurb: 'Comes out to end it. Has less to give if it goes long.',
+    blurb: 'Comes out to end it early, and has less to give if it does not.',
     category: 'fight',
     polarity: 'doubleEdged',
     visibility: 50,
@@ -327,7 +327,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   chinny: {
     id: 'chinny',
     label: 'Chinny',
-    blurb: 'The lights go out early now. Everyone in the division knows it.',
+    blurb: 'Being stopped has become a pattern, and the division has noticed.',
     category: 'health',
     polarity: 'negative',
     visibility: 75,
@@ -339,7 +339,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   cardioMachine: {
     id: 'cardioMachine',
     label: 'Cardio Machine',
-    blurb: 'Round five looks like round one. It is genuinely demoralising.',
+    blurb: 'Round five tends to look a lot like round one.',
     category: 'camp',
     polarity: 'positive',
     visibility: 70,
@@ -349,7 +349,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   gatekeeperMentality: {
     id: 'gatekeeperMentality',
     label: 'Gatekeeper Mentality',
-    blurb: 'Beats everyone below them and loses to everyone above. Never changes.',
+    blurb: 'Has found their level and settled at it. Rarely pushes past the people above them.',
     category: 'mental',
     polarity: 'negative',
     visibility: 25,
@@ -380,7 +380,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   chainWrestler: {
     id: 'chainWrestler',
     label: 'Chain Wrestler',
-    blurb: 'Shoots, gets stuffed, shoots again. The twelfth one goes in as hard as the first.',
+    blurb: 'Keeps shooting. Being stuffed does not seem to change the plan.',
     category: 'fight',
     polarity: 'doubleEdged',
     // The most visible thing a fighter can do: everybody in the building knows what is coming.
@@ -391,7 +391,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   sprawlAndBrawl: {
     id: 'sprawlAndBrawl',
     label: 'Sprawl and Brawl',
-    blurb: 'Wants no part of the floor and fights like it. Will trade all night to stay up.',
+    blurb: 'Wants no part of the floor, and will trade all night rather than go there.',
     category: 'fight',
     polarity: 'doubleEdged',
     visibility: 70,
@@ -401,7 +401,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   finisher: {
     id: 'finisher',
     label: 'Finisher',
-    blurb: 'Smells blood and closes. Does not let hurt opponents recover.',
+    blurb: 'Closes on a hurt opponent rather than letting them recover.',
     category: 'fight',
     polarity: 'positive',
     visibility: 80,
@@ -411,7 +411,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   durableMind: {
     id: 'durableMind',
     label: 'Durable Mind',
-    blurb: 'Has been knocked out and came back exactly the same fighter.',
+    blurb: 'Has been knocked out and come back looking much the same fighter.',
     category: 'mental',
     polarity: 'positive',
     visibility: 40,
@@ -422,7 +422,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   injuryProne: {
     id: 'injuryProne',
     label: 'Injury Prone',
-    blurb: 'Something always goes. Camps get cut short, fights get pulled.',
+    blurb: 'Something usually goes. Camps get cut short and fights get pulled.',
     category: 'health',
     polarity: 'negative',
     visibility: 65,
@@ -450,7 +450,7 @@ export const TRAITS: Readonly<Record<TraitId, TraitDef>> = {
   protectedProspect: {
     id: 'protectedProspect',
     label: 'Protected Prospect',
-    blurb: 'Matched carefully. The record is real; the level has not been.',
+    blurb: 'Matched carefully so far. The record is real; the level behind it may not be.',
     category: 'business',
     polarity: 'doubleEdged',
     visibility: 35,

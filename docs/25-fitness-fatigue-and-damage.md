@@ -134,7 +134,8 @@ are, to this function, nearly the same person having nearly the same night.
   picks a type by weight, so most KO losses leave nothing on the medical record.
 - **AI fighters are never injured.** `world.ts` never calls `rollInjury`, in camp or in fights.
 - **Nobody withdraws in fighter mode.** `pullOutRisk` is well-built — 5.5% base scaled by wear,
-  discipline and cut risk — and is called only from `promoting.ts`.
+  discipline and cut risk — and is called from the promoter's card planner and from
+  `withdrawals.ts`.
 - **The player cannot see any of it.** `HubScreen` shows confidence, and head trauma only once it
   passes 45. `FighterScreen` adds body wear. There is no form or fitness reading anywhere.
 

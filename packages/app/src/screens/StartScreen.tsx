@@ -12,6 +12,7 @@ import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Flag, ListItem, Segmented } from '../ui';
 import { Alert, OverallRating } from '../ui/signals';
 import { activeDivisionPeers, clearTransientCareerState } from '../game/career';
+import { money } from '../ui/format';
 
 type Filter = 'contenders' | 'prospects' | 'all';
 
@@ -152,7 +153,7 @@ export function StartScreen() {
             >
               <span className="bout__names">{promotion.name}</span>
               <span className="list__secondary" style={{ display: 'block' }}>
-                {promotion.baseCountry} · £{Math.round(promotion.budget).toLocaleString()}k to
+                {promotion.baseCountry} · {money(promotion.budget)} to
                 spend · {promotion.notes}
               </span>
             </button>

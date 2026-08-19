@@ -21,6 +21,7 @@ export * from './domain/fighter.js';
 export * from './domain/personality.js';
 export * from './domain/confidence.js';
 export * from './domain/traits.js';
+export * from './domain/disposition.js';
 export * from './domain/divisions.js';
 export * from './domain/nationalities.js';
 export * from './domain/gameplan.js';
@@ -70,11 +71,14 @@ export * from './business/standing.js';
 export * from './business/managers.js';
 export * from './business/freeAgency.js';
 export * from './business/events.js';
+export * from './business/eventPlans.js';
 export * from './business/boutAgreements.js';
 export * from './business/promotionCosts.js';
 export * from './business/inbox.js';
 export * from './business/championships.js';
 export * from './business/matchmakingStyle.js';
+export * from './business/matchmakingIntent.js';
+export * from './business/promoterRead.js';
 export * from './business/news.js';
 
 // Testing helpers (shared across the out-of-package test suites)
