@@ -293,13 +293,7 @@ export function bookFight(
   opponent: Fighter,
   options: BookingOptions = {},
 ): Booking {
-  const weeks = options.weeks ?? (options.isTitleFight ? 10 : 8);
   const isTitleFight = options.isTitleFight ?? false;
-  const world = getWorld(db);
-  const rng = createRng(`${world.seed}:booking:${fighter.id}:${world.day}`);
-  const referees = db.referees.findAll() as Referee[];
-  const judges = db.judges.findAll() as Judge[];
-  const commentators = db.commentators.findAll() as Commentator[];
 
   /*
    * Where on the card this lands, decided here rather than three times over.
@@ -309,8 +303,26 @@ export function bookFight(
    * assembled (for the running order) — from star power that moves in between, on a fight
    * booked eight to ten weeks earlier. Agreeing it once, at the moment the fight is agreed, is
    * both more honest and the only way the answers cannot drift apart.
+   *
+   * It has to come first, because the two things below are read off it.
    */
   const position = playerCardPosition(fighter, opponent, isTitleFight);
+
+  /*
+   * Ten weeks to headline, eight for everything else.
+   *
+   * Keyed on the slot rather than on the belt. It read `isTitleFight ? 10 : 8`, which was right
+   * for as long as a title fight was the only five-round bout a player could take — and once
+   * main events became five rounds for them too, it left the longest fight in the sport being
+   * prepared for in a normal camp. Ten weeks is what the extra two rounds are worth: it is the
+   * difference between a gas tank you brought and one you hoped for.
+   */
+  const weeks = options.weeks ?? (position === 'mainEvent' ? 10 : 8);
+  const world = getWorld(db);
+  const rng = createRng(`${world.seed}:booking:${fighter.id}:${world.day}`);
+  const referees = db.referees.findAll() as Referee[];
+  const judges = db.judges.findAll() as Judge[];
+  const commentators = db.commentators.findAll() as Commentator[];
 
   const bout: Bout = {
     id: `bout_${fighter.id}_${world.day}`,

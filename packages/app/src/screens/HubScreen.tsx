@@ -25,6 +25,7 @@ import {
   type MatchupAppraisal,
   type Gym,
   type Rivalry,
+  type CardPosition,
   TRAUMA_CONCERN,
   TRAUMA_MEDICAL,
   WEAR_CONCERN,
@@ -45,6 +46,7 @@ import {
 } from '../ui/signals';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
 import { getLadderStatus, type LadderStatus } from '../game/progression';
+import { playerCardPosition } from '../game/night';
 import { getRivalry, previousMeetings } from '../game/rivalries';
 import { advanceWorld, readNews } from '../game/world';
 import { NewsFeed } from '../ui/NewsFeed';
@@ -500,10 +502,23 @@ export function HubScreen() {
                   history={previousMeetings(fighter, offer.opponent.id)}
                   rivalry={getRivalry(db, fighter.id, offer.opponent.id, world.day)}
                   day={world.day}
-                  purse={currentPurse(db, fighter)}
+                  /*
+                    Quoted at the slot this fight would actually be booked into, from the same
+                    function `bookFight` uses. It was quoting the default rung, so a main event
+                    was advertised at a main-card purse and then paid 2.5x it — and the number
+                    on this screen is the one a player weighs the fight against.
+                  */
+                  position={playerCardPosition(fighter, offer.opponent, false)}
+                  purse={currentPurse(
+                    db,
+                    fighter,
+                    playerCardPosition(fighter, offer.opponent, false),
+                  )}
                   advice={adviceOn(db, fighter, offer.opponent.id as string, {
                     merit: boutMerit(offer),
-                    purse: currentPurse(db, fighter)?.total ?? 0,
+                    purse:
+                      currentPurse(db, fighter, playerCardPosition(fighter, offer.opponent, false))
+                        ?.total ?? 0,
                   })}
                   managerName={standing.manager?.name}
                 />
@@ -814,6 +829,7 @@ function OfferRow({
   purse,
   advice,
   managerName,
+  position,
 }: {
   offer: MatchupAppraisal;
   expanded: boolean;
@@ -825,9 +841,16 @@ function OfferRow({
   purse?: { show: number; win: number; total: number };
   advice: { recommended: boolean; line: string };
   managerName?: string;
+  /** Where this bout would land on the card, which decides rounds, camp length and purse. */
+  position: CardPosition;
 }) {
   const { opponent, step, winChance } = offer;
   const heat = currentHeat(rivalry, day);
+  // Headlining is the second axis of a career beside the record, and it was never mentioned
+  // until after the fight. It is also the single biggest thing separating one offer from
+  // another here: five rounds instead of three, and ten weeks of camp instead of eight.
+  const headlining = position === 'mainEvent';
+  const campWeeks = headlining ? 10 : 8;
 
   // Framed as difficulty rather than as a win percentage. A precise number would be false
   // precision — the paper odds cannot see style, preparation or the power curve, which are
@@ -887,6 +910,7 @@ function OfferRow({
           ) : (
             heat >= 40 && <Chip tone="warning">{ICON.streak} Heat</Chip>
           )}
+          {headlining && <Chip tone="accent">Main event</Chip>}
           <Chip tone={difficulty.tone}>{difficulty.label}</Chip>
         </span>
       </button>
@@ -959,12 +983,19 @@ function OfferRow({
             </p>
           )}
 
+          {/*
+            The length of the camp, from the slot rather than from a constant in the copy. It
+            said "eight weeks time" unconditionally, which was already wrong for a title fight
+            and became wrong for every main event the moment those went to five rounds and a
+            ten-week camp. This is the sentence a player reads before committing two months.
+          */}
           <p
             className="muted prose"
             style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}
           >
-            Accepting books the fight for eight weeks time. You can withdraw before fight night, but
-            you will lose the camp.
+            {headlining && <strong>You would headline. Five rounds, and a ten-week camp. </strong>}
+            Accepting books the fight for {campWeeks === 10 ? 'ten' : 'eight'} weeks time. You can
+            withdraw before fight night, but you will lose the camp.
           </p>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             <Button variant="primary" onClick={onAccept}>

@@ -171,6 +171,32 @@ describe('before the bell', () => {
   });
 });
 
+describe('the offer that would headline', () => {
+  it('says so, and says what the camp costs, before the player commits', async () => {
+    const user = userEvent.setup();
+    goTo('#/start');
+    renderApp();
+    const rows = await screen.findAllByRole('button', { name: /Star power/i });
+    await user.click(rows[0]!);
+
+    goTo('#/hub');
+    const offers = await screen.findAllByRole('button', {
+      name: /Even fight|Step up|Favourable/i,
+    });
+    await user.click(offers[0]!);
+
+    /*
+     * The copy said "eight weeks time" unconditionally. It was already wrong for a title fight,
+     * and became wrong for every main event once those went to five rounds and a ten-week camp
+     * — on the sentence a player reads before committing two months of a career.
+     */
+    const text = document.body.textContent ?? '';
+    const headlining = /You would headline/i.test(text);
+    expect(text).toMatch(headlining ? /ten weeks time/i : /eight weeks time/i);
+    if (headlining) expect(text).toMatch(/Five rounds, and a ten-week camp/i);
+  });
+});
+
 describe('after it', () => {
   it('shows damage, the one judging input the statistics panel omitted', async () => {
     const user = userEvent.setup();

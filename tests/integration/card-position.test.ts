@@ -45,6 +45,20 @@ describe('the card position a fight is booked at', () => {
     expect(booking.bout.rounds).toBe(5);
   });
 
+  it('gives a main event a ten-week camp, not a normal one', () => {
+    /*
+     * Keyed on the slot rather than on the belt. While a title fight was the only five-round
+     * bout a player could take, `isTitleFight ? 10 : 8` was the same rule; the moment main
+     * events became five rounds for the player too, it left the longest fight in the sport
+     * being prepared for in an ordinary camp.
+     */
+    const { db, me, opponent } = career('camp-main-event');
+    const booking = bookFight(db, me, opponent);
+
+    expect(booking.bout.position).toBe('mainEvent');
+    expect(Math.round((booking.bout.day - booking.campStartDay) / 7)).toBe(10);
+  });
+
   it('is agreed at booking rather than derived again later', () => {
     const { db, me, opponent } = career('position-agreed');
     const booking = bookFight(db, me, opponent);
@@ -88,6 +102,7 @@ describe('the card position a fight is booked at', () => {
     const booking = bookFight(db, me, opponent);
     expect(booking.bout.position).not.toBe('mainEvent');
     expect(booking.bout.rounds).toBe(3);
+    expect(Math.round((booking.bout.day - booking.campStartDay) / 7)).toBe(8);
   });
 
   it('makes a title fight five rounds however small the names on it', () => {
