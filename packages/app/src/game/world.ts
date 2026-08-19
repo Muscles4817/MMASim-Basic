@@ -122,6 +122,7 @@ import { getWorld, type Entity, type GameDb } from '@mmasim/data';
 import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
 import { settleFightInjuries } from './fightInjuries';
+import { money } from '../ui/format';
 
 type StoredNews = NewsItem & Entity;
 
@@ -2542,7 +2543,7 @@ function playerActivity(
       priority: 'decision',
       title: `${promotion.shortName} want you on a card`,
       body:
-        `${displayName(opponent)}, in eight weeks. £${purse}k to show.` +
+        `${displayName(opponent)}, in eight weeks. ${money(purse)} to show.` +
         (isFinal
           ? ` You have been out ${months} months. They have been clear about this one: turn it down and they start looking at the roster spot.`
           : ` ${months} months is a long time to be away, and they would like you back.`),

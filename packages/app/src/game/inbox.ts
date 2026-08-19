@@ -19,12 +19,16 @@ import {
   isBlocking,
   resolve,
   markRead,
+  type CornerAnswer,
+  type EventPlan,
   type Fighter,
   type InboxItem,
+  type PlannedBout,
   type Promotion,
   type PromotionalAgreement,
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
+import { money } from '../ui/format';
 
 type Stored = InboxItem & Entity;
 
@@ -289,4 +293,93 @@ export function scanForInbox(db: GameDb, day: number): number {
   }
 
   return raised;
+}
+
+
+// --- Offers, answered ---------------------------------------------------------------------------
+
+/**
+ * Record what a corner said about a fight, so the answer survives the screen it arrived on.
+ *
+ * The inbox was the mode's thinnest system: two contract notices for a promoter and nothing
+ * else, in a mode whose whole loop is now *offer, wait, hear back, decide*. An answer that only
+ * exists as a chip on the card builder is an answer the player loses the moment they navigate,
+ * and a counter-offer they never read is a fight that quietly does not happen.
+ *
+ * Deliberately keyed on the plan, the slot and the day, so re-sending an offer after changing
+ * the terms writes a new item rather than silently overwriting the previous refusal.
+ */
+export function recordOfferOutcome(input: {
+  db: GameDb;
+  plan: EventPlan;
+  slotId: string;
+  bout: PlannedBout;
+  accepted: boolean;
+  answers: readonly CornerAnswer[];
+}): void {
+  const { db, plan, slotId, bout, accepted, answers } = input;
+  const day = getWorld(db).day;
+
+  const nameOf = (id: string): string => {
+    const fighter = db.fighters.findById(id) as Fighter | undefined;
+    return fighter ? displayName(fighter) : 'Somebody';
+  };
+
+  const red = nameOf(bout.redId as string);
+  const blue = nameOf(bout.blueId as string);
+
+  if (accepted) {
+    raise(db, {
+      id: inboxId(day, `offer:${plan.id}:${slotId}:accepted`),
+      day,
+      kind: 'offer',
+      priority: 'routine',
+      title: `${red} vs ${blue} is signed`,
+      body: `Both corners have agreed${
+        bout.titleKind ? ' — and it is for the belt' : ''
+      }. It goes on ${plan.name}.`,
+      link: { route: 'plan', id: plan.id },
+      fighterId: bout.redId,
+      opponentId: bout.blueId,
+      promotionId: plan.promotionId,
+    });
+    return;
+  }
+
+  const counter = answers.find((a) => a.verdict === 'countered');
+  const refusal = answers.find((a) => a.verdict === 'declined');
+
+  if (counter) {
+    raise(db, {
+      id: inboxId(day, `offer:${plan.id}:${slotId}:counter`),
+      day,
+      kind: 'offer',
+      // A counter is a decision with a price on it, and letting the clock run past one is how a
+      // makeable fight becomes a hole in the card.
+      priority: 'decision',
+      title: `${nameOf(counter.fighterId as string)} wants ${money(counter.askingPurse ?? 0)}`,
+      body: `${counter.note} The fight is ${red} vs ${blue} on ${plan.name}.`,
+      actions: [
+        { id: 'acknowledge', label: 'Understood', detail: 'Settle it on the card.', isDismiss: true },
+      ],
+      link: { route: 'plan', id: plan.id },
+      fighterId: counter.fighterId,
+      promotionId: plan.promotionId,
+    });
+    return;
+  }
+
+  if (refusal) {
+    raise(db, {
+      id: inboxId(day, `offer:${plan.id}:${slotId}:refused`),
+      day,
+      kind: 'offer',
+      priority: 'notable',
+      title: `${nameOf(refusal.fighterId as string)} turned the fight down`,
+      body: `${refusal.note} ${red} vs ${blue} is off unless you change something.`,
+      link: { route: 'plan', id: plan.id },
+      fighterId: refusal.fighterId,
+      promotionId: plan.promotionId,
+    });
+  }
 }

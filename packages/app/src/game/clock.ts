@@ -22,6 +22,7 @@ import {
 import { advanceWorld, type WorldExclusion } from './world';
 import { getBooking } from './career';
 import { readInbox, scanForInbox } from './inbox';
+import { scanPromoterInbox } from './plans';
 
 /*
  * There is no step any more, and that is the change.
@@ -106,7 +107,13 @@ export function advanceTo(db: GameDb, targetDay: number): AdvanceResult {
   const advance = advanceWorld(db, day, targetDay, exclusion, (onDay) => {
     // Raise anything the player needs to answer *on the day it becomes true*, then stop only if
     // it is something they have not already seen.
+    //
+    // Two scanners rather than one, because the promoter's half reads planned cards and the
+    // inbox module must not import the planner — plans already write offer outcomes into the
+    // inbox, and a cycle between the two would be a module-evaluation order bug waiting to
+    // happen. This is the one place that legitimately knows about both.
     scanForInbox(db, onDay);
+    scanPromoterInbox(db, onDay);
     return blocking(readInbox(db)).some((i) => !alreadyWaiting.has(i.id));
   });
 

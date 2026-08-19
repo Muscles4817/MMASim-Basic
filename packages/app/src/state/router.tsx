@@ -50,7 +50,17 @@ export type Route =
   // the player is only ever in one mode at a time.
   | { name: 'promotion' }
   | { name: 'card' }
+  /**
+   * One planned card, which is where matchmaking happens.
+   *
+   * Carries an id because a promoter has several cards open at once — an April flagship and a
+   * June club show are both being filled through the spring, and a single "the card" route
+   * could only ever mean the next one.
+   */
+  | { name: 'plan'; id: string }
   | { name: 'promoterRoster' }
+  /** Belts, contenders and the divisions behind them. */
+  | { name: 'champions' }
   // The clock and the staging ground. Shared by every mode — the one screen that owns time, and
   // the one place anything needing an answer waits.
   | { name: 'calendar' }
@@ -90,6 +100,10 @@ function parse(hash: string): Route {
       return { name: 'promotion' };
     case 'card':
       return { name: 'card' };
+    case 'plan':
+      return param ? { name: 'plan', id: param } : { name: 'calendar' };
+    case 'champions':
+      return { name: 'champions' };
     case 'stable':
       return { name: 'promoterRoster' };
     case 'calendar':
@@ -118,6 +132,8 @@ export function toHash(route: Route): string {
       return `#/fighter/${route.id}`;
     case 'fight':
       return `#/fight/${route.boutId}`;
+    case 'plan':
+      return `#/plan/${route.id}`;
     case 'editorFighter':
       return `#/editor/${route.id}`;
     case 'editorList':

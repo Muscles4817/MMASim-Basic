@@ -423,22 +423,37 @@ describe('the interface says what matters', () => {
   });
 
   it('surfaces accumulated damage as a warning rather than a number in a row', async () => {
-    // Arlovski carries the highest head trauma in the game; it must be impossible to miss.
+    // Arlovski carries the highest head trauma in the game; it must be impossible to miss, and
+    // it now leads the condition block rather than sitting below thirty ratings.
     window.location.hash = '#/fighter/f_arlovski';
     renderApp();
-    expect(await screen.findByText(/chin has gone|Damage is accumulating/i)).toBeTruthy();
+    expect((await screen.findAllByText(/chin has gone|Wearing|Heavy mileage/i)).length)
+      .toBeGreaterThan(0);
+    expect(screen.getByText(/Head trauma/i)).toBeTruthy();
     expectNoCrash();
   });
 
   it('marks a rating’s band on the bar, not only its number', async () => {
+    /*
+     * The ratings live behind the Skills tab now — the promoter-facing page leads with what to
+     * do about a fighter rather than with forty numbers — and they are rendered compressed. The
+     * requirement is unchanged: a 99 must be visibly a different *class* of rating from an
+     * average one, in more channels than colour.
+     */
+    const user = userEvent.setup();
     window.location.hash = '#/fighter/f_ngannou';
     renderApp();
-    await screen.findByText(/Wins with/i);
-    // Power 99 must be visibly a different class of rating from an average one.
-    const elite = document.querySelectorAll('.rating--elite');
-    const weak = document.querySelectorAll('.rating--weak');
+    await user.click(await screen.findByRole('tab', { name: /^Skills$/i }));
+
+    const elite = document.querySelectorAll('.mini-rating--elite');
+    const weak = document.querySelectorAll('.mini-rating--weak');
     expect(elite.length, 'no rating marked elite on a fighter with a 99').toBeGreaterThan(0);
     expect(weak.length, 'no rating marked weak on a fighter with a 26').toBeGreaterThan(0);
+
+    // And the band word beside the number, so the signal is not carried by colour alone.
+    const bands = [...document.querySelectorAll('.mini-rating__band')].map((el) => el.textContent);
+    expect(bands.length).toBeGreaterThan(0);
+    expect(bands.every((b) => (b ?? '').length > 0), 'a compact row with no band word').toBe(true);
   });
 
   it('shows a title fight and a champion with more than a word', async () => {

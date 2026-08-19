@@ -72,6 +72,7 @@ import { recordPlayerNews } from './world';
 import { settleFightInjuries } from './fightInjuries';
 import { FIGHT_THROUGH_WEEKS, opponentWithdrawal, playerCampInjury } from './withdrawals';
 import { raise } from './inbox';
+import { money } from '../ui/format';
 
 const BOOKING_KEY = 'mmasim:booking';
 const RESULT_KEY = 'mmasim:lastResult';
@@ -760,7 +761,7 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
       } as Fighter & { id: string });
     }
     weighInNotes.push(
-      `You missed weight. £${forfeit}k of your show purse goes to ${blue.lastName}, the fight is at catchweight, and everybody now knows you cannot make the division.`,
+      `You missed weight. ${money(forfeit)} of your show purse goes to ${blue.lastName}, the fight is at catchweight, and everybody now knows you cannot make the division.`,
     );
   }
 

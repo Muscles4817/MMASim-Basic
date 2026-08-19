@@ -74,6 +74,10 @@ a merely elite fighter.
 [01 — Architecture](docs/01-architecture.md) covers package boundaries, determinism and the
 testing tiers.
 
+[29 — Promoter Mode UX](docs/29-promoter-mode-ux.md) covers the promoter rework: cards are
+planned months ahead with holes in them, matchmaking is a sequence of the player's own decisions,
+and the dashboard surfaces situations rather than describing entities.
+
 Two open plans: [19 — Fight engine](docs/19-fight-engine-plan.md) (phases 0 and 1 landed) and
 [20 — Persistence and save size](docs/20-persistence-and-save-size.md), whose phase 2 has landed:
 saves are in IndexedDB, so the 5 MB ceiling that stopped the app starting on a phone is gone. The

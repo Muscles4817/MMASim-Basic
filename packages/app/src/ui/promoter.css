@@ -1,0 +1,651 @@
+/*
+ * The promoter's console.
+ *
+ * Same visual language as everything else — dark surfaces, one restrained red accent, cards,
+ * compact type — used at a different density. A promoter screen is a management console rather
+ * than a phone card: on a desktop it should show a decision and the context for that decision
+ * side by side, which is what the whole file is for.
+ *
+ * Mobile stays a single column, in source order, so nothing here needs a media query to *undo*.
+ * Every rule below is additive at a breakpoint.
+ */
+
+/* --- Two-column console --------------------------------------------------------------------
+   Main work on the left, standing context on the right. The side column comes second in the
+   DOM so a phone and a screen reader get the important half first, and `order` never moves it —
+   the grid places it, which keeps the reading order and the visual order identical. */
+
+.console {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.console__main,
+.console__side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+@media (min-width: 62rem) {
+  .console {
+    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+    gap: var(--space-5);
+  }
+
+  /* The side column follows the page rather than scrolling with it: standing context that
+     scrolls away is context you have to go back for. */
+  .console__side {
+    position: sticky;
+    top: calc(var(--header-height) + var(--space-4));
+  }
+}
+
+/* --- Attention feed -------------------------------------------------------------------------
+   The mode's most important list. Every row answers "why am I being shown this" in its own
+   second line, and carries a tone stripe so severity survives greyscale and a quick scan. */
+
+.attention {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.attention__item {
+  display: flex;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  min-height: var(--tap-target);
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.attention__item:hover {
+  background: var(--surface-sunken);
+}
+
+.attention__item[data-tone='danger'] {
+  border-left-color: var(--negative);
+}
+.attention__item[data-tone='warn'] {
+  border-left-color: var(--warning);
+}
+.attention__item[data-tone='info'] {
+  border-left-color: var(--info);
+}
+.attention__item[data-tone='good'] {
+  border-left-color: var(--positive);
+}
+
+.attention__icon {
+  flex: 0 0 auto;
+  line-height: 1.4;
+}
+
+.attention__title {
+  display: block;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.attention__detail {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.attention__cue {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.02em;
+}
+
+/* --- Event pipeline --------------------------------------------------------------------------
+   A card at a glance: name, date, market, and how far from being a card it actually is. */
+
+.pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.pipeline__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
+.pipeline__item:hover {
+  border-color: var(--border-strong);
+}
+
+.pipeline__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.pipeline__name {
+  font-weight: 700;
+}
+
+.pipeline__when {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pipeline__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* How full the card is, as a bar rather than a fraction. Nine of twelve is a shape, not a sum. */
+.pipeline__bar {
+  position: relative;
+  height: 5px;
+  margin-top: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.pipeline__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+}
+
+.pipeline__fill[data-state='ready'] {
+  background: var(--positive);
+}
+.pipeline__fill[data-state='atRisk'] {
+  background: var(--warning);
+}
+
+/* --- Slot board ------------------------------------------------------------------------------
+   The card being built. One row per slot, empty rows included and *visibly* empty — the whole
+   point of planning is that a hole is a legitimate state rather than a failure. */
+
+.slots {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.slot {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  min-height: 3.5rem;
+}
+
+.slot:hover {
+  border-color: var(--border-strong);
+}
+
+.slot--empty {
+  border-style: dashed;
+  background: transparent;
+}
+
+.slot--agreed {
+  border-color: color-mix(in srgb, var(--positive) 45%, var(--border));
+}
+
+.slot--declined {
+  border-color: var(--negative);
+  background: var(--negative-soft);
+}
+
+.slot--offered {
+  border-color: var(--info);
+}
+
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .slot--agreed {
+    border-color: var(--positive);
+  }
+}
+
+.slot__position {
+  flex: 0 0 5.5rem;
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding-top: 2px;
+}
+
+.slot__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.slot__names {
+  display: block;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.slot__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.slot__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 30rem) {
+  .slot {
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .slot__position {
+    flex: 0 0 auto;
+    padding-top: 0;
+  }
+}
+
+/* --- Matchmaking picker -----------------------------------------------------------------------
+   Grouped rather than sorted: the player chooses a *kind* of fight before they choose a person,
+   which is how matchmaking actually works and what stops this being an alphabetical roster. */
+
+.picker__group {
+  margin-top: var(--space-4);
+}
+
+.picker__group:first-child {
+  margin-top: 0;
+}
+
+.picker__group-title {
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-bottom: var(--space-2);
+}
+
+.candidate {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  margin-bottom: var(--space-2);
+}
+
+.candidate:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-sunken);
+}
+
+.candidate[data-blocked='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.candidate__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.candidate__name {
+  font-weight: 700;
+}
+
+.candidate__rank {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.candidate__line {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.candidate__why {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--text);
+  margin-top: var(--space-2);
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--accent);
+}
+
+.candidate__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+/* --- Money grid -------------------------------------------------------------------------------
+   Figures in a column the eye can run down, which is the only way a set of related amounts is
+   readable. Tabular numerals so the digits line up between rows. */
+
+.ledger {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ledger__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.ledger__label {
+  color: var(--text-muted);
+}
+
+.ledger__value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ledger__value[data-tone='bad'] {
+  color: var(--negative);
+}
+.ledger__value[data-tone='good'] {
+  color: var(--positive);
+}
+
+.ledger__rule {
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-1) 0;
+}
+
+/* --- Sub-navigation ---------------------------------------------------------------------------
+   Promoter mode has more systems than five tabs can hold, and burying rankings inside the roster
+   was how the old build coped. A horizontal scroller of places keeps the tab bar at five and
+   still puts championships, contracts and the world one tap away. */
+
+.subnav {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: var(--space-1);
+  margin-bottom: calc(var(--space-1) * -1);
+}
+
+.subnav::-webkit-scrollbar {
+  display: none;
+}
+
+.subnav__item {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.subnav__item:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.subnav__item[aria-current='page'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* --- Tabbed panels ----------------------------------------------------------------------------
+   Progressive disclosure for the fighter page, which is otherwise an unusable scroll once it
+   carries contract, condition, scouting, history and forty ratings. Same control on desktop —
+   the grouping is conceptual, not a mobile concession. */
+
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tabs__tab {
+  flex: 0 0 auto;
+  min-height: var(--tap-target);
+  padding: 0 var(--space-3);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tabs__tab:hover {
+  color: var(--text);
+}
+
+.tabs__tab[aria-selected='true'] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 800;
+}
+
+/* --- Compact rating row ------------------------------------------------------------------------
+   The dense form of `RatingRow`. The full one prints an explanatory sentence under every stat,
+   which is right the first time somebody meets it and is 600px of repeated prose by the fifth
+   fighter. Definitions move behind the label's title and the group's own help toggle. */
+
+.mini-rating {
+  display: grid;
+  /* The label takes the slack; the number, the bar and the band are fixed, so a column of rows
+     lines up as a column rather than drifting apart as the viewport grows. */
+  grid-template-columns: minmax(5rem, 1fr) 2.2rem 5rem 2.8rem;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px 0;
+}
+
+/*
+   Two columns of ratings on a desktop.
+
+   A fifteen-row list stretched across 1440px is the "wider is not better" failure: the label
+   ends up a hand's width from its own bar. Two narrower columns put twice as much on screen and
+   keep each row readable, which is what the width is actually for.
+*/
+.mini-ratings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 var(--space-5);
+}
+
+@media (min-width: 62rem) {
+  .mini-ratings {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.mini-rating__label {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-rating__value {
+  font-size: var(--text-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.mini-rating__track {
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.mini-rating__fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+}
+
+/* Same three channels the full row uses: colour, the band word, and a bar whose weight says
+   "this one is different" before anybody reads a number. */
+.mini-rating--elite .mini-rating__track {
+  height: 9px;
+}
+
+.mini-rating--elite .mini-rating__value {
+  font-weight: 800;
+}
+
+.mini-rating--weak .mini-rating__track {
+  height: 4px;
+  opacity: 0.85;
+}
+
+.mini-rating__band {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Ability band -------------------------------------------------------------------------------
+   Deliberately not a number. Six wide classes, drawn as segments, so the player can see the
+   level without being handed a score to compare arithmetically. */
+
+.ability {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ability__label {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.ability__segments {
+  display: flex;
+  gap: 3px;
+}
+
+.ability__segment {
+  flex: 1;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--surface-sunken);
+}
+
+.ability__segment[data-on='true'] {
+  background: var(--accent);
+}
+
+.ability__note {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* --- Wide console pages -------------------------------------------------------------------------
+   The dashboard and the card builder earn the full width; a fighter's prose does not, and
+   stretching a paragraph to 1600px is worse than leaving the space empty. */
+
+@media (min-width: 62rem) {
+  .shell__main--wide {
+    max-width: 82rem;
+  }
+}
+
+/* --- Division grid -----------------------------------------------------------------------------
+   Eight divisions of champion-plus-queue is a very long single column, and comparing two of them
+   is the entire point of the screen. Two across on a desktop; one on a phone, where they are read
+   in order rather than compared. */
+
+.division-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@media (min-width: 62rem) {
+  .division-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

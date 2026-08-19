@@ -85,6 +85,7 @@ export function createNewGame(options: NewGameOptions = {}): GameDb {
 
   setWorld(db, {
     day: seed.day,
+    startedDay: seed.day,
     divisionTargets,
     rosterTargets,
     seed: options.seed ?? `mmasim-${era}`,

@@ -42,6 +42,7 @@ import {
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
 import { currentPurse } from './money';
 import { settleFightInjuries } from './fightInjuries';
+import { money } from '../ui/format';
 
 /**
  * Where the player sits on the card, decided before the night rather than after.
@@ -243,12 +244,12 @@ export function runSupportingCard(
   if (awards.fightOfTheNight === playerBoutId) {
     playerBonus += awards.perAward;
     notes.push(
-      `Fight of the Night. £${awards.perAward}k, and the kind of fight people remember losing.`,
+      `Fight of the Night. ${money(awards.perAward)}, and the kind of fight people remember losing.`,
     );
   }
   if (awards.performanceOfTheNight.includes(player.id)) {
     playerBonus += awards.perAward;
-    notes.push(`Performance of the Night. £${awards.perAward}k for the finish.`);
+    notes.push(`Performance of the Night. ${money(awards.perAward)} for the finish.`);
   }
 
   if (playerBonus > 0) {

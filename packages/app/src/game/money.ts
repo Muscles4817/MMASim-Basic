@@ -34,6 +34,7 @@ import {
   type Solvency,
 } from '@mmasim/engine';
 import type { GameDb } from '@mmasim/data';
+import { money } from '../ui/format';
 
 /** The promotion a fighter is signed to, or undefined if they are a free agent. */
 export function promotionOf(db: GameDb, fighter: Fighter): Promotion | undefined {
@@ -209,12 +210,12 @@ export function settleFight(
   const notes: string[] = [];
   notes.push(
     options.won
-      ? `£${gross}k gross — £${purse.show}k to show, £${purse.win}k to win${sponsorship > 0 ? `, £${sponsorship}k from sponsors` : ''}.`
-      : `£${gross}k gross — the win bonus was £${purse.win}k and you did not get it.`,
+      ? `${money(gross)} gross — ${money(purse.show)} to show, ${money(purse.win)} to win${sponsorship > 0 ? `, ${money(sponsorship)} from sponsors` : ''}.`
+      : `${money(gross)} gross — the win bonus was ${money(purse.win)} and you did not get it.`,
   );
   if (breakdown.net < 0) {
     notes.push(
-      `You are £${Math.abs(breakdown.net)}k down on the fight once the camp, the corner and the taxman are paid. That is the sport, and it is why the bottom of a roster is poor.`,
+      `You are ${money(Math.abs(breakdown.net))} down on the fight once the camp, the corner and the taxman are paid. That is the sport, and it is why the bottom of a roster is poor.`,
     );
   }
 

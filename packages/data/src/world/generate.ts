@@ -338,6 +338,16 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
 
   setWorld(db, {
     day,
+    /*
+     * Where the player's involvement begins.
+     *
+     * A generated world does not stop here — `generateWorld` runs eight years of pre-history on
+     * top and winds the clock back — so this is a floor rather than the final answer, and that
+     * function corrects it. It is set here anyway so a world built without pre-history still has
+     * an anchor: without one, "days since this fighter was last booked" falls back to today and
+     * a fighter nobody has touched in a year reads as freshly signed.
+     */
+    startedDay: day,
     divisionTargets,
     rosterTargets,
     seed,

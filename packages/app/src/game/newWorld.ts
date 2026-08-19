@@ -95,7 +95,14 @@ export async function generateWorld(options: GenerateWorldOptions = {}): Promise
    * to the start date — is the same thing said backwards, and it costs a generator that has to
    * reason about who would have existed in 2018. This does not.
    */
-  setWorld(db, { day: start });
+  /*
+   * `startedDay` moves with the clock, because it is the day the *player* arrives rather than the
+   * day the generator ran. Pre-history has just written eight years of records, and the promoter
+   * screens measure "how long have I left this person unbooked" from here — anchoring it to the
+   * generation day instead would tell a new player they had already shelved the entire roster for
+   * eight years.
+   */
+  setWorld(db, { day: start, startedDay: start });
 
   report({ phase: 'settling', done: 1, label: 'Ready' });
   db.save();

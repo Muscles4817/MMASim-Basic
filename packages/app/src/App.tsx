@@ -24,9 +24,12 @@ import {
 import { SettingsScreen } from './screens/SettingsScreen';
 import { PromotionHubScreen } from './screens/PromotionHubScreen';
 import { CardBuilderScreen } from './screens/CardBuilderScreen';
+import { PlanScreen } from './screens/PlanScreen';
+import { ChampionsScreen } from './screens/ChampionsScreen';
 import { PromoterRosterScreen } from './screens/PromoterRosterScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { InboxScreen } from './screens/InboxScreen';
+import { planById } from './game/plans';
 
 export function App() {
   const { route, replace } = useRouter();
@@ -36,6 +39,10 @@ export function App() {
     const fighter = db.fighters.findById(id) as Fighter | undefined;
     return fighter ? displayName(fighter) : undefined;
   };
+
+  // The card's own name in the header, not the word "Card". A promoter has several open at
+  // once and a generic title makes them indistinguishable in a back stack.
+  const planTitle = (id: string): string | undefined => planById(db, id)?.name;
 
   // A first-time visitor landing on the career hub with no fighter would see an empty
   // screen; send them to the one decision that has to be made first.
@@ -115,7 +122,9 @@ export function App() {
         return (
           // The h1 names the subject, not the category. "Fighter" told a screen-reader user
           // and anyone navigating by heading precisely nothing about whose page this is.
-          <Shell title={fighterName(route.id) ?? 'Fighter'} showBack>
+          // Wide: the fighter page runs analysis and promoter context in parallel, which is
+          // exactly what desktop width is for.
+          <Shell title={fighterName(route.id) ?? 'Fighter'} showBack wide>
             <FighterScreen key={route.id} id={route.id} />
           </Shell>
         );
@@ -140,14 +149,30 @@ export function App() {
       // --- Promoter mode ---------------------------------------------------------------
       case 'promotion':
         return (
-          <Shell title="Promotion">
+          // Wide: the dashboard's whole argument is that a promoter's decisions are
+          // comparative, and a 56rem column forces every comparison to happen across a scroll.
+          <Shell title="Promotion" wide>
             <PromotionHubScreen />
           </Shell>
         );
       case 'card':
         return (
-          <Shell title="Build a card" showBack>
+          <Shell title="Cards" showBack>
             <CardBuilderScreen />
+          </Shell>
+        );
+      case 'plan':
+        return (
+          <Shell title={planTitle(route.id) ?? 'Card'} showBack wide>
+            {/* Keyed so moving between two cards remounts rather than carrying the previous
+                card's open matchmaking panel into the new one. */}
+            <PlanScreen key={route.id} id={route.id} />
+          </Shell>
+        );
+      case 'champions':
+        return (
+          <Shell title="Championships" wide>
+            <ChampionsScreen />
           </Shell>
         );
       case 'promoterRoster':

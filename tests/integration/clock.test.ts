@@ -25,7 +25,8 @@ import {
 import { advanceTo } from '../../packages/app/src/game/clock';
 import { buildCalendar, nextStop } from '../../packages/app/src/game/calendar';
 import { raise, readInbox, resolveItem } from '../../packages/app/src/game/inbox';
-import { autoFill, emptyDraft, scheduleCard } from '../../packages/app/src/game/promoting';
+import { runPlan } from '../../packages/app/src/game/plans';
+import { agreed, filledPlan } from '../helpers/plans';
 import { sign } from '../../packages/app/src/game/contracts';
 
 const game = () => createNewGame({ adapter: undefined, era: '2026' });
@@ -113,8 +114,7 @@ describe('the clock moves in every mode', () => {
 
     for (let i = 0; i < 3; i++) {
       const day = getWorld(db).day + 21;
-      const draft = autoFill({ db, promotion, draft: emptyDraft(), day });
-      scheduleCard({ db, promotion, draft, day, broadcast: 'streamed' });
+      runPlan({ db, plan: agreed(db, filledPlan({ db, promotion, day, today: getWorld(db).day })) });
       advanceTo(db, day + 1);
     }
 
@@ -203,18 +203,50 @@ describe('the interrupt', () => {
   });
 });
 
+/**
+ * A scheduled night for somebody who is not the player.
+ *
+ * Hand-built, because **the world does not yet announce its cards** — `buildNight` creates and
+ * runs a night in the same tick with `status: 'complete'`, so there is never an upcoming rival
+ * card to find. That is a real gap rather than a bug in the calendar's classification, and the
+ * honest test is of the thing that exists: given a scheduled card that is not yours, the
+ * calendar says whose it is.
+ */
+function scheduleForRival(db: ReturnType<typeof game>, rival: Promotion, day: number): FightNight {
+  const night: FightNight = {
+    id: `evt_rival_${day}` as never,
+    promotionId: rival.id,
+    day: day as never,
+    name: `${rival.shortName} ${day}`,
+    venue: { name: 'A hall', city: 'Somewhere', country: 'USA', capacity: 4000 },
+    broadcast: 'streamed',
+    status: 'scheduled',
+    bouts: [],
+    bonusPool: 0,
+  };
+  db.events.upsert(night as never);
+  return night;
+}
+
 describe('the calendar', () => {
-  it('shows a promoter their own scheduled card as theirs', () => {
+  it('shows a promoter their own planned card as theirs, with how full it is', () => {
+    /*
+     * A promoter's own upcoming card is a **plan** rather than a scheduled night, which is the
+     * whole planning rework: it exists as a date with holes in it for months. The row has to
+     * carry its state, because the six-month view's job is answering "what does my year look
+     * like" without opening anything.
+     */
     const db = game();
     const promotion = asPromoter(db);
     const day = getWorld(db).day + 21;
-    const draft = autoFill({ db, promotion, draft: emptyDraft(), day });
-    scheduleCard({ db, promotion, draft, day, broadcast: 'streamed' });
+    filledPlan({ db, promotion, day, today: getWorld(db).day });
 
     const entries = buildCalendar(db, { from: START, to: START + 90 });
-    const mine = entries.filter((e) => e.ownership === 'yours' && e.kind === 'card');
+    const mine = entries.filter((e) => e.ownership === 'yours' && e.kind === 'plan');
     expect(mine).toHaveLength(1);
     expect(mine[0]!.day).toBe(day);
+    expect(mine[0]!.booked?.slots).toBeGreaterThan(0);
+    expect(mine[0]!.health).toBeDefined();
   });
 
   it('marks somebody else’s card as the world’s rather than yours', () => {
@@ -235,8 +267,7 @@ describe('the calendar', () => {
     const rival = (db.promotions.findAll() as unknown as Promotion[]).find((p) => p.id !== mine.id)!;
 
     const day = getWorld(db).day + 21;
-    const draft = autoFill({ db, promotion: rival, draft: emptyDraft(), day });
-    scheduleCard({ db, promotion: rival, draft, day, broadcast: 'streamed' });
+    scheduleForRival(db, rival, day);
 
     const entries = buildCalendar(db, { from: START, to: START + 90 });
     const theirs = entries.filter((e) => e.kind === 'card' && e.ownership === 'world');
@@ -251,10 +282,10 @@ describe('the calendar', () => {
      * possible place for a stale copy.
      */
     const db = game();
-    const promotion = asPromoter(db);
+    const mine = asPromoter(db);
+    const rival = (db.promotions.findAll() as unknown as Promotion[]).find((p) => p.id !== mine.id)!;
     const day = getWorld(db).day + 21;
-    const draft = autoFill({ db, promotion, draft: emptyDraft(), day });
-    const night = scheduleCard({ db, promotion, draft, day, broadcast: 'streamed' });
+    const night = scheduleForRival(db, rival, day);
 
     expect(buildCalendar(db, { from: START, to: START + 90 }).some((e) => e.kind === 'card')).toBe(
       true,
@@ -270,8 +301,7 @@ describe('the calendar', () => {
     const db = game();
     const promotion = asPromoter(db);
     const day = getWorld(db).day + 40;
-    const draft = autoFill({ db, promotion, draft: emptyDraft(), day });
-    scheduleCard({ db, promotion, draft, day, broadcast: 'streamed' });
+    filledPlan({ db, promotion, day, today: getWorld(db).day });
 
     expect(nextStop(db, getWorld(db).day)).toBe(day);
   });

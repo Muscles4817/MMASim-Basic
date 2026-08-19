@@ -12,6 +12,7 @@ import type {
   Gym,
   Commentator,
   Championship,
+  EventPlan,
   FightNight,
   InboxItem,
   Judge,
@@ -44,6 +45,7 @@ export const COLLECTIONS = [
   'managers',
   'agreements',
   'events',
+  'plans',
   'championships',
   'inbox',
   'world',
@@ -58,6 +60,18 @@ export interface WorldMeta extends Entity {
   day: number;
   /** Root RNG seed. Together with `day` this reproduces the world exactly. */
   seed: string;
+  /**
+   * The day this world began.
+   *
+   * Needed because a seeded fighter's `record` is empty on day one — their real career lives in
+   * `priorRecord`, which has no dates — so "days since their last fight" is genuinely unknown at
+   * the start. Without an anchor the honest answer gets computed as "since their pro debut", and
+   * a fresh save opens with every champion in the sport flagged as nine years inactive.
+   *
+   * Absent on saves made before this existed, where the caller should treat an empty record as
+   * *unknown* rather than as a very long layoff.
+   */
+  startedDay?: number;
   /**
    * Which starting world this save was created from.
    *
@@ -126,6 +140,16 @@ export interface GameDb {
   agreements: Repository<PromotionalAgreement & Entity>;
   events: Repository<FightNight & Entity>;
   /**
+   * Cards the player is still building.
+   *
+   * The one collection holding something the player *wrote* rather than something the simulation
+   * produced. A `FightNight` is a finished thing — every bout real, ordered and about to happen —
+   * so there was nowhere to keep a card that exists in April and has three names on it in
+   * January, which is what planning a promotion actually looks like. A plan becomes a night
+   * exactly once, on the night.
+   */
+  plans: Repository<EventPlan & Entity>;
+  /**
    * Belts, and every reign that has ever held one.
    *
    * `Promotion.champions` stays as the fast lookup — "who holds this" is asked on every
@@ -165,6 +189,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
   const managers = make<Manager & Entity>('managers');
   const agreements = make<PromotionalAgreement & Entity>('agreements');
   const events = make<FightNight & Entity>('events');
+  const plans = make<EventPlan & Entity>('plans');
   const championships = make<Championship & Entity>('championships');
   const inbox = make<InboxItem & Entity>('inbox');
   const world = make<WorldMeta>('world');
@@ -182,6 +207,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
     managers,
     agreements,
     events,
+    plans,
     championships,
     inbox,
     world,
@@ -200,6 +226,7 @@ export function createGameDb(adapter: StorageAdapter, fresh = false): GameDb {
     managers,
     agreements,
     events,
+    plans,
     championships,
     inbox,
     world,

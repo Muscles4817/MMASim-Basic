@@ -390,7 +390,7 @@ describe('the world behaves like a sport, not a burst', () => {
      * is a regression in exclusivity.
      *
      * The bound is therefore a smoke test against the original 91% failure rather than a precise
-     * claim, and the precise claim is asserted where it can be: `promoting.test.ts` checks that
+     * claim, and the precise claim is asserted where it can be: `planning.test.ts` checks that
      * every bout a promotion is *offered* involves only its own fighters, at the moment of
      * offering, which is the only point at which the question has a definite answer.
      */
