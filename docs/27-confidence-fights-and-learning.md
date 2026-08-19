@@ -728,3 +728,121 @@ prestige and budget. `freeAgency.ts` resolves deals that expire; nothing goes lo
 
 Until both exist, the leading promotion is a retirement home for whoever it happened to sign a
 decade ago, and the ladder the whole career mode is built around does not actually connect.
+
+---
+
+## 10. Peak age — the target, recorded
+
+Measured after §8: the average generated fighter is **still improving at 36** and does not turn over
+until about 38. That is too late, and it is the same complaint doc 24 finding 2 raised. This records
+what "right" looks like so the next pass has a target rather than a taste.
+
+**Overall peak for men is roughly 30–32.** MMA peaks later than sports built on raw athleticism,
+because a fighter needs years to accumulate striking, grappling, defensive instinct, tactical
+judgement and composure, and physical decline around 30 is not severe — so there is a window where
+experience and athleticism overlap.
+
+| Age   | Stage                                                   |
+| ----- | ------------------------------------------------------- |
+| 18–22 | Athletic development, usually technically inexperienced |
+| 23–26 | Rapid improvement, approaching elite physical ability   |
+| 27–29 | Entering prime                                          |
+| 30–32 | **Overall peak**                                        |
+| 33–34 | Still prime for many elite fighters                     |
+| 35–36 | Decline increasingly common                             |
+| 37–39 | Significant decline for most                            |
+| 40+   | Well past prime, heavyweight excepted                   |
+
+**Division matters, and the model does not know it.** Flyweight and bantamweight peak earlier
+because speed and reactions dominate — around 27–30. Featherweight and lightweight 28–31,
+welterweight 29–32, middleweight 30–33, light heavyweight 31–34, heavyweight easily 32–36 and
+beyond. `PEAK_AGE` is currently a function of `ageCurve` alone and has no idea what somebody weighs.
+
+**Physical peak and fighting peak are different things**, and this the model already gets right in
+principle: `PEAK_OFFSET` puts speed four years early and fight IQ six years late, so a fighter can
+have their best explosiveness at 26 and be a substantially better fighter at 31. The structure is
+sound; §3's floors made the second half too generous and pushed the composite out past 36.
+
+**Decline should not be a smooth age curve — mileage should dominate it.** A 34-year-old who came to
+the sport at 25 and has taken little damage is competitively younger than a 30-year-old who turned
+professional at 18 with 35 fights, several knockouts, repeated injuries and years of hard weight
+cuts. The model has all of those facts — `record.length`, `headTrauma`, `bodyWear`, the injury
+history — and `applyAgeing` reads none of them. Decline is a pure function of birthdays.
+
+So the fix is **not** a `peakAge` number to tune. It is:
+
+1. shift `PEAK_AGE` by division, so a flyweight and a heavyweight do not share a prime;
+2. make decline read mileage and damage alongside age, so two fighters the same age decline
+   differently; and
+3. re-check that the composite then turns over at 30–32 on its own, as an emergent result of the
+   per-attribute curves crossing rather than because a constant says so.
+
+---
+
+## 11. The world ticks days now
+
+The sport did not have a clock. It had a **chunk simulator**: "give me a fortnight and I will invent
+three cards inside it, charge everybody once, and age everybody once." Nothing was scheduled on a
+date, so nothing could happen _on_ a date.
+
+That one decision produced every symptom in this document's §7.4 and §8, and one the player feels
+directly:
+
+- `advanceWorld` **did nothing at all** for a span under fourteen days — it aged people and
+  returned. So `CHECK_STEP_DAYS` in the clock had to be fourteen too, with a comment concluding
+  that "a fortnight is therefore the floor on interrupt precision".
+- Which meant **"a day" on the calendar moved the date and changed nothing**, and an offer that
+  arrived on the 3rd was not seen until the 14th.
+- And everything else had to be per-chunk, which is why training was worth the same whether a call
+  spanned a fortnight or a year (§8), and why `enforceActivity` and friends ran once per call
+  regardless of how much time that call covered.
+
+### 11.1 What changed
+
+**Cards happen on dates.** The daily loop asks "is there a show today?" at the rate the step model
+produced — `MAX_CARDS_PER_STEP` shows every `STEP_DAYS`, so about eighty nights a year across the
+sport, exactly as before.
+
+**The expensive pass is paid only on show days.** Filtering the whole roster for who is available is
+O(roster), and paying it on the four days in five with no card is what a daily tick is always
+accused of costing. It runs when a card runs.
+
+**Everything that is genuinely per-span stays per-span.** Ageing, promotion costs, activity and
+contract enforcement all still happen once for the whole advance — they walk all 850 fighters, and
+doing that daily would be 3.1 million passes a decade. They now run over `reached`, the day the loop
+actually got to.
+
+**The clock asks the world to stop.** `advanceWorld` takes an `onDayEnd` predicate and reports
+`reached`. `clock.ts` passes one that raises the inbox for that day and stops if something new is
+waiting — so the world does not decide what is worth interrupting for, which is right, because
+"should the player be stopped" is a question about the player.
+
+### 11.2 What it measured
+
+**The world is now the same world however it is advanced.** Two simulated years, caller stepping one
+day at a time against fifty-six: median rating 47.7 against 47.4, fighters rated 70+ 61 against 60.
+Before this, the same comparison differed by 60%.
+
+**It is fast enough.** Every button on the calendar screen is about a tenth of a second:
+
+| Advance     |  Time |
+| ----------- | ----: |
+| A day       |  86ms |
+| A week      | 135ms |
+| A fortnight | 107ms |
+| A month     | 124ms |
+
+**The calendar stops on real days.** Traced across eight advances of "a year": stops at +19 and +30
+days, rather than only ever at multiples of fourteen.
+
+**The inbox is not spammed** by scanning daily. Nine items across three years — raising is
+idempotent on a stable id, which the inbox was already built for.
+
+### 11.3 Still per-call
+
+`enforceActivity`, `playerActivity`, `chargePromotions` and `vacateAbandonedBelts` are correct over a
+span and are called once per advance, which is fine. But they are _not_ date-gated, so a caller that
+advances a year in one call runs them once where thirteen monthly calls run them thirteen times.
+`chargePromotions` is already proportional to elapsed days and so is exact; the others are
+judgement-per-call and would be better as monthly sweeps keyed on the date, the way `replenish`
+already is.

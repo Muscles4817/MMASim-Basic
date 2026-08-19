@@ -92,11 +92,39 @@ describe('the world moves', () => {
 });
 
 describe('the world stays within its budget', () => {
-  it('does nothing expensive for a short block', () => {
+  it('runs a short block without doing a fortnight of work', () => {
+    /*
+     * This used to assert that ten days produced **zero** fights, because `advanceWorld`
+     * short-circuited any span under its own fourteen-day step and only aged people. That was the
+     * assumption the whole clock was built on, and it was why "a day" on the calendar moved the
+     * date and changed nothing, and why an offer that arrived on the 3rd was not seen until the
+     * 14th. The world ticks days now.
+     *
+     * What still has to be true is the thing the test was really guarding: a short block is
+     * *cheap* and *proportional*. Ten days is ten days of sport, not a fortnight's worth.
+     */
     const db = game();
     const me = fighters(db)[0]!;
-    const out = advanceWorld(db, 0, 10, me.id);
-    expect(out.fights).toBe(0);
+    const short = advanceWorld(db, 0, 10, me.id);
+    expect(short.reached).toBe(10);
+
+    const fresh = game();
+    const other = fighters(fresh)[0]!;
+    const fortnight = advanceWorld(fresh, 0, 14, other.id);
+
+    // Fewer days, fewer cards. Never more.
+    expect(short.fights).toBeLessThanOrEqual(fortnight.fights);
+  });
+
+  it('stops on the exact day it is asked to, so the calendar can interrupt', () => {
+    // `reached` is what lets `advanceTo` return the day something happened rather than the end
+    // of a block the player never chose.
+    const db = game();
+    const me = fighters(db)[0]!;
+    let seen = 0;
+    const out = advanceWorld(db, 0, 100, me.id, () => ++seen >= 30);
+    expect(seen).toBe(30);
+    expect(out.reached).toBe(30);
   });
 
   it('caps the work in one call rather than freezing the tab', () => {

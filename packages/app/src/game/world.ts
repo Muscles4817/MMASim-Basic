@@ -221,6 +221,13 @@ export interface WorldAdvance {
   news: NewsItem[];
   /** True when the budget bound and some fights were skipped. */
   truncated: boolean;
+  /**
+   * The day the loop actually reached.
+   *
+   * Equal to `toDay` unless `onDayEnd` asked it to stop, which is how the calendar interrupts on
+   * the exact day something happened rather than at the end of a fortnight.
+   */
+  reached: number;
 }
 
 /**
@@ -261,6 +268,14 @@ export function advanceWorld(
   fromDay: number,
   toDay: number,
   except: FighterId | WorldExclusion,
+  /**
+   * Called at the end of each simulated day. Return true to stop there.
+   *
+   * The world does not decide what is worth interrupting for — `clock.ts` does, because "should
+   * the player be stopped" is a question about the player. This is only the hook that makes a
+   * day-precise answer possible at all.
+   */
+  onDayEnd?: (day: number) => boolean,
 ): WorldAdvance {
   // Accepts a bare id so fighter mode's dozens of call sites and tests stay as they are; the
   // object form is what promoter mode passes.
@@ -270,13 +285,6 @@ export function advanceWorld(
   const news: NewsItem[] = [];
   let fights = 0;
   let truncated = false;
-
-  // Nothing meaningful happens in under a fortnight, and the common case — a four-week camp
-  // — should not pay for a loop that cannot produce a card.
-  if (toDay - fromDay < STEP_DAYS) {
-    ageEveryone(db, fromDay, toDay, exceptId);
-    return { fights: 0, news, truncated: false };
-  }
 
   /*
    * Scaled to the span, capped by the absolute backstop. See `FIGHTS_PER_STEP_BUDGET`.
@@ -289,9 +297,13 @@ export function advanceWorld(
   const readyOn = new Map<string, number>();
   const lastSeen = new Map<string, number>();
 
-  for (let day = fromDay; day < toDay; day += STEP_DAYS) {
+  let reached = fromDay;
+
+  for (let day = fromDay; day < toDay; day += 1) {
+    reached = day + 1;
+
     // Quarterly intake, matching how a promotion actually signs people.
-    if (Math.floor(day / 91) !== Math.floor((day - STEP_DAYS) / 91)) {
+    if (Math.floor(day / 91) !== Math.floor((day - 1) / 91)) {
       // A belt held by somebody who is never getting in a cage again kills its division,
       // because retirees are filtered out of every card. Swept rather than only handled at
       // the moment of retirement, because a fighter can reach that state by more than one
@@ -305,6 +317,29 @@ export function advanceWorld(
     }
 
     /*
+     * Is there a show today?
+     *
+     * The world used to simulate a *chunk* of time — "give me a fortnight and I will invent three
+     * cards inside it" — and that one decision was the source of a whole family of defects, because
+     * everything else then had to be per-chunk too. It also meant the calendar could not stop on a
+     * day, which is why the player was moved through the sport a fortnight at a time.
+     *
+     * A card now happens *on a date*. The rate is the same one the step model produced —
+     * `MAX_CARDS_PER_STEP` shows every `STEP_DAYS` — so the sport runs to the same schedule it
+     * always did, roughly eighty nights a year across every promotion.
+     */
+    const dayRng = rng.fork(`day:${day}`);
+    if (!dayRng.chance(MAX_CARDS_PER_STEP / STEP_DAYS)) {
+      if (onDayEnd?.(day)) break;
+      continue;
+    }
+
+    if (fights >= fightBudget) {
+      truncated = true;
+      break;
+    }
+
+    /*
      * Availability, with a real activity ceiling.
      *
      * `readinessDelay` is a *medical* gate — how long until a fighter is cleared. It is not
@@ -312,6 +347,10 @@ export function advanceWorld(
      * for a decade: measured, ten years produced records of 63-0 and a 47-year-old champion.
      * Elite fighters average one and a half to two and a half bouts a year, and the ceiling
      * is availability of *opponents and dates*, not of medical clearance.
+     *
+     * Computed only on days that actually have a show. It is a pass over the whole roster, and
+     * paying for it on the four days in five that have no card would make a daily tick cost what
+     * a daily tick is always accused of costing.
      */
     const available = (db.fighters.findAll() as Fighter[]).filter((f) => {
       if (f.id === exceptId || f.retiredDay !== undefined) return false;
@@ -322,66 +361,33 @@ export function advanceWorld(
       return inLastYear < MAX_BOUTS_PER_YEAR;
     });
 
-    /*
-     * Every card in a step used to be stamped with the step's own `day`, and that one fact was
-     * three defects.
-     *
-     * `eventId` is `evt_${promotionId}_${day}`, and the promotion is drawn per card, so two of
-     * the three cards in a fortnight landing on the same promotion produced the *same event id* —
-     * and `db.events.upsert` silently overwrote the first night after it had already been
-     * simulated and written to everybody's record. Measured over a simulated year of the 2020
-     * world: 65 same-day record pairs across 139 fighters, 52 of them the identical bout written
-     * twice, against a schedule in which no fighter appeared twice on any day. The schedule was
-     * clean because the evidence had been overwritten; the records were not.
-     *
-     * Three shows on one date was also simply wrong about the sport. Cards inside a step now land
-     * on different dates, spread across whatever part of the step is actually being simulated so
-     * a short call cannot date a card past the day it was asked to stop at.
-     */
-    const span = Math.min(STEP_DAYS, toDay - day);
-    const cardsThisStep = Math.max(1, Math.min(CARDS_PER_STEP, MAX_CARDS_PER_STEP, span));
-
-    for (let card = 0; card < cardsThisStep; card++) {
-      if (available.length < 2) break;
-      if (fights >= fightBudget) {
-        truncated = true;
-        break;
-      }
-
-      const cardDay = day + Math.floor((card * span) / cardsThisStep);
-
-      /*
-       * A night, not a loose bout.
-       *
-       * The world used to simulate individual fights with no container, which meant card
-       * position did not exist, the bonus pool had nowhere to sit, and revenue points — which
-       * attach to an *event* — could never pay out. Bouts are collected, ordered by draw
-       * weight with a title fight always headlining, and then run as one card.
-       */
+    if (available.length >= 2) {
       const bookable = promotions.filter((p) => p.id !== exclusion.promotionId);
-      if (bookable.length === 0) break;
-      const promotion = pickPromotion(bookable, rng.fork(`who:${day}:${card}`));
-      const built = buildNight({
-        db,
-        day: cardDay,
-        rng: rng.fork(`night:${day}:${card}`),
-        promotion,
-        available,
-        readyOn,
-        lastSeen,
-        exceptId,
-      });
-      if (!built) continue;
-      fights += built.fights;
-      news.push(...built.news);
+      if (bookable.length > 0) {
+        const promotion = pickPromotion(bookable, dayRng.fork('who'));
+        const built = buildNight({
+          db,
+          day,
+          rng: dayRng.fork('night'),
+          promotion,
+          available,
+          readyOn,
+          lastSeen,
+          exceptId,
+        });
+        if (built) {
+          fights += built.fights;
+          news.push(...built.news);
+        }
+      }
     }
 
-    if (truncated) break;
+    if (onDayEnd?.(day)) break;
   }
 
   // Everyone who never got booked still gets older. Without this, a fighter who sat out the
   // whole period would be returned to the player at exactly the age they were.
-  ageEveryone(db, fromDay, toDay, exceptId, lastSeen);
+  ageEveryone(db, fromDay, reached, exceptId, lastSeen);
 
   /*
    * The bill for existing.
@@ -395,14 +401,14 @@ export function advanceWorld(
    * Charged to every promotion including the player's: this is a rule of the sport rather than
    * a difficulty applied to whoever is playing.
    */
-  chargePromotions(db, toDay - fromDay);
+  chargePromotions(db, reached - fromDay);
 
   // And the deals of anybody the world forgot to book. See `enforceActivity`.
-  news.push(...enforceActivity(db, fromDay, toDay, rng.fork('breach'), exceptId));
+  news.push(...enforceActivity(db, fromDay, reached, rng.fork('breach'), exceptId));
 
   // The player's own side of the same question, which is a conversation rather than a rule.
   news.push(
-    ...playerActivity(db, toDay, exceptId, exclusion.playerHasBooking ?? false, rng.fork('chase')),
+    ...playerActivity(db, reached, exceptId, exclusion.playerHasBooking ?? false, rng.fork('chase')),
   );
 
   /*
@@ -422,14 +428,14 @@ export function advanceWorld(
    * have already left is a belt nobody can defend and a division that cannot stage a title
    * fight. Running it at the end is both cheap and the only placement that cannot be stale.
    */
-  news.push(...vacateAbandonedBelts(db, toDay));
+  news.push(...vacateAbandonedBelts(db, reached));
 
-  scanForInbox(db, toDay);
+  scanForInbox(db, reached);
 
   const stored = appendNews(db, news);
   db.save();
 
-  return { fights, news: stored, truncated };
+  return { fights, news: stored, truncated, reached };
 }
 
 /**
