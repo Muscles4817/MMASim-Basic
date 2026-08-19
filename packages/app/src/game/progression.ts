@@ -38,6 +38,7 @@ import {
   type RankedFighter,
   type TitleShotVerdict,
   type TrainingFocus,
+  isPhysical,
 } from '@mmasim/engine';
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
 import { advanceWorld } from './world';
@@ -225,7 +226,15 @@ export function runTraining(
   for (const key of Object.keys(trained.gains) as AttributeKey[]) {
     before[key] = fighter.attributes[key];
     after[key] = withInjury.attributes[key];
-    headroom[key] = Math.max(0, fighter.potential[key] - withInjury.attributes[key]);
+    /*
+     * Physicals only. A skill has no ceiling to be near — `potential[key]` is a projection the
+     * gain arithmetic never reads — and reporting it as one told a fighter with fight IQ 92 and a
+     * stated ceiling of 27 that they were "at your ceiling" for the thing they were still
+     * improving fastest at. Left undefined for skills, which the report renders as nothing.
+     */
+    if (isPhysical(key)) {
+      headroom[key] = Math.max(0, fighter.potential[key] - withInjury.attributes[key]);
+    }
   }
 
   // Healing is a benefit of time passing and the report never mentioned it, so a fighter came
@@ -236,11 +245,7 @@ export function runTraining(
 
   return {
     gains: trained.gains,
-    notes: [
-      ...(injury ? [describeInjury(injury, toDay)] : []),
-      ...trained.notes,
-      ...aged.notes,
-    ],
+    notes: [...(injury ? [describeInjury(injury, toDay)] : []), ...trained.notes, ...aged.notes],
     days,
     injury,
     before,
@@ -320,9 +325,7 @@ function advanceRoster(db: GameDb, fromDay: number, toDay: number, exceptId: Fig
  * who loses simply stops being one.
  */
 export function awardTitle(db: GameDb, winner: Fighter, promotion: Promotion): void {
-  db.promotions.upsert(
-    setChampion(promotion, winner.divisionId, winner.id) as never,
-  );
+  db.promotions.upsert(setChampion(promotion, winner.divisionId, winner.id) as never);
   db.save();
 }
 

@@ -25,11 +25,23 @@ import {
   type MatchupAppraisal,
   type Gym,
   type Rivalry,
+  TRAUMA_CONCERN,
+  TRAUMA_MEDICAL,
+  WEAR_CONCERN,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Flag } from '../ui';
-import { Alert, Fact, FighterRead, ICON, Icon, KeyStat, OverallRating, StreakBadge } from '../ui/signals';
+import {
+  Alert,
+  Fact,
+  FighterRead,
+  ICON,
+  Icon,
+  KeyStat,
+  OverallRating,
+  StreakBadge,
+} from '../ui/signals';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
 import { getLadderStatus, type LadderStatus } from '../game/progression';
 import { getRivalry, previousMeetings } from '../game/rivalries';
@@ -169,7 +181,9 @@ export function HubScreen() {
           <KeyStat
             value={recordString(fighter.summary)}
             label="Professional record"
-            tone={fighter.summary.streak > 0 ? 'good' : fighter.summary.streak < 0 ? 'bad' : 'neutral'}
+            tone={
+              fighter.summary.streak > 0 ? 'good' : fighter.summary.streak < 0 ? 'bad' : 'neutral'
+            }
             detail={<StreakBadge streak={fighter.summary.streak} />}
           />
         </div>
@@ -180,7 +194,10 @@ export function HubScreen() {
         </div>
 
         <div style={{ marginTop: 'var(--space-3)' }}>
-          <Fact label="Overall" value={<OverallRating rating={overallRating(fighter.attributes)} />} />
+          <Fact
+            label="Overall"
+            value={<OverallRating rating={overallRating(fighter.attributes)} />}
+          />
           <Fact
             label="Star power"
             value={Math.round(fighter.starPower)}
@@ -198,7 +215,13 @@ export function HubScreen() {
             label="Confidence"
             value={Math.round(fighter.condition.confidence)}
             emphasis="tertiary"
-            tone={fighter.condition.confidence >= 65 ? 'good' : fighter.condition.confidence <= 35 ? 'bad' : undefined}
+            tone={
+              fighter.condition.confidence >= 65
+                ? 'good'
+                : fighter.condition.confidence <= 35
+                  ? 'bad'
+                  : undefined
+            }
           />
         </div>
 
@@ -227,26 +250,52 @@ export function HubScreen() {
             label="Freshness"
             value={`${describeFreshness(freshness)} · ${Math.round(freshness)}`}
             emphasis={freshness < 45 ? 'primary' : 'tertiary'}
-            tone={freshness >= 65 ? 'good' : freshness < 25 ? 'bad' : freshness < 45 ? 'warn' : undefined}
+            tone={
+              freshness >= 65
+                ? 'good'
+                : freshness < 25
+                  ? 'bad'
+                  : freshness < 45
+                    ? 'warn'
+                    : undefined
+            }
             hint="How recovered you are. Camps and hard fights spend it; time gives it back, and more slowly the more miles you have on you."
           />
           <Fact
             label="Body wear"
             value={`${Math.round(fighter.condition.bodyWear)} / 100`}
             emphasis="tertiary"
-            tone={fighter.condition.bodyWear > 55 ? 'bad' : fighter.condition.bodyWear > 30 ? 'warn' : undefined}
+            tone={
+              fighter.condition.bodyWear >= 55
+                ? 'bad'
+                : fighter.condition.bodyWear >= WEAR_CONCERN
+                  ? 'warn'
+                  : undefined
+            }
             hint="Joints and soft tissue. Raises camp injury risk and slows how fast you come back."
           />
           <Fact
             label="Head trauma"
             value={`${Math.round(fighter.condition.headTrauma)} / 100`}
             emphasis="tertiary"
-            tone={fighter.condition.headTrauma > 55 ? 'bad' : fighter.condition.headTrauma > 30 ? 'warn' : undefined}
+            tone={
+              fighter.condition.headTrauma >= TRAUMA_MEDICAL
+                ? 'bad'
+                : fighter.condition.headTrauma >= TRAUMA_CONCERN
+                  ? 'warn'
+                  : undefined
+            }
             hint="Only ever goes up. Permanently lowers what your chin can absorb, and eventually ends careers."
           />
           <Fact
             label="Last fought"
-            value={daysSince === undefined ? 'Never' : daysSince < 31 ? `${daysSince}d ago` : `${Math.round(daysSince / 30)}mo ago`}
+            value={
+              daysSince === undefined
+                ? 'Never'
+                : daysSince < 31
+                  ? `${daysSince}d ago`
+                  : `${Math.round(daysSince / 30)}mo ago`
+            }
             emphasis="tertiary"
             tone={rust > 0.35 ? 'warn' : undefined}
             hint="Time out of the cage costs sharpness, not strength — you see it later, you do not hit softer."
@@ -263,18 +312,18 @@ export function HubScreen() {
         )}
 
         {/* Damage is a decision input, not a stat. It gets an alert, not a chip. */}
-        {fighter.condition.headTrauma > 45 && (
+        {fighter.condition.headTrauma >= TRAUMA_CONCERN && (
           <div style={{ marginTop: 'var(--space-3)' }}>
             <Alert
-              tone={fighter.condition.headTrauma > 65 ? 'danger' : 'warn'}
+              tone={fighter.condition.headTrauma >= TRAUMA_MEDICAL ? 'danger' : 'warn'}
               title={
-                fighter.condition.headTrauma > 65
+                fighter.condition.headTrauma >= TRAUMA_MEDICAL
                   ? 'Your chin is going'
                   : 'Damage is accumulating'
               }
             >
-              Head trauma {Math.round(fighter.condition.headTrauma)} of 100. It only ever goes
-              up, and it permanently lowers what your chin can absorb.
+              Head trauma {Math.round(fighter.condition.headTrauma)} of 100. It only ever goes up,
+              and it permanently lowers what your chin can absorb.
             </Alert>
           </div>
         )}
@@ -345,9 +394,12 @@ export function HubScreen() {
 
       {!booking && (
         <Card title="Between fights">
-          <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
-            Camps are where a career is actually made. Every week you train is a week older,
-            and every area has a ceiling you cannot train past.
+          <p
+            className="muted prose"
+            style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}
+          >
+            Camps are where a career is actually made. Every week you train is a week older, and
+            every area has a ceiling you cannot train past.
           </p>
           <Button variant="primary" block onClick={() => navigate({ name: 'training' })}>
             Go to training
@@ -356,8 +408,13 @@ export function HubScreen() {
       )}
 
       {booking && opponent ? (
-        <Card title={booking.bout.isTitleFight ? 'Next fight — for the title' : 'Next fight'} raised>
-          <p style={{ fontSize: 'var(--text-xl)', fontWeight: 700, marginBottom: 'var(--space-1)' }}>
+        <Card
+          title={booking.bout.isTitleFight ? 'Next fight — for the title' : 'Next fight'}
+          raised
+        >
+          <p
+            style={{ fontSize: 'var(--text-xl)', fontWeight: 700, marginBottom: 'var(--space-1)' }}
+          >
             {booking.bout.isTitleFight && <span aria-hidden="true">🏆 </span>}
             vs {displayName(opponent)}
             {booking.bout.isTitleFight && <span className="visually-hidden"> for the title</span>}
@@ -401,8 +458,8 @@ export function HubScreen() {
             <div className="empty">
               <p className="empty__title">No opponents available right now</p>
               <p style={{ marginBottom: 'var(--space-4)' }}>
-                Everyone available in {division.name} has been fought recently. Sit out a few
-                weeks and the picture will change.
+                Everyone available in {division.name} has been fought recently. Sit out a few weeks
+                and the picture will change.
               </p>
               <div className="row" style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
                 <Button variant="primary" size="sm" onClick={() => waitWeeks(8)}>
@@ -516,20 +573,29 @@ export function HubScreen() {
             */}
             {repaper && !signedRepaper && (
               <Alert tone="good" title="They want to tear this up">
-                <span className="prose" style={{ display: 'block', marginBottom: 'var(--space-2)' }}>
+                <span
+                  className="prose"
+                  style={{ display: 'block', marginBottom: 'var(--space-2)' }}
+                >
                   {repaper.reason}
                 </span>
-                <span className="prose" style={{ display: 'block', marginBottom: 'var(--space-2)' }}>
+                <span
+                  className="prose"
+                  style={{ display: 'block', marginBottom: 'var(--space-2)' }}
+                >
                   <strong>
                     £{repaper.terms.showPurse}k to show, £{repaper.terms.winBonus}k to win
                   </strong>{' '}
                   — up from £{repaper.current.showPurse}k and £{repaper.current.winBonus}k, a{' '}
                   {Math.round(repaper.uplift * 100)}% rise starting with your next fight.
                 </span>
-                <span className="prose" style={{ display: 'block', marginBottom: 'var(--space-3)' }}>
+                <span
+                  className="prose"
+                  style={{ display: 'block', marginBottom: 'var(--space-3)' }}
+                >
                   In exchange the deal restarts at{' '}
-                  <strong>{repaper.terms.fightsOwed} fights</strong> owed, where you currently
-                  owe {repaper.current.fightsRemaining}
+                  <strong>{repaper.terms.fightsOwed} fights</strong> owed, where you currently owe{' '}
+                  {repaper.current.fightsRemaining}
                   {repaper.terms.championshipExtension !== 'none' &&
                     ', and the championship extension is reattached'}
                   . Saying no costs you nothing today, but the offer may not come back at this
@@ -627,8 +693,8 @@ export function HubScreen() {
             </>
           ) : (
             <>
-              You have no manager. You keep every penny and you are negotiating against people
-              who do this for a living.
+              You have no manager. You keep every penny and you are negotiating against people who
+              do this for a living.
             </>
           )}
         </p>
@@ -791,7 +857,10 @@ function OfferRow({
             </span>
           )}
         </span>
-        <span className="row" style={{ gap: 'var(--space-1)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <span
+          className="row"
+          style={{ gap: 'var(--space-1)', flexWrap: 'wrap', justifyContent: 'flex-end' }}
+        >
           {/*
             A grudge is the single most important thing about an offer, so it gets a glyph
             and outranks the difficulty chip rather than sitting beside it at equal weight.
@@ -822,7 +891,10 @@ function OfferRow({
           </div>
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <Fact label="Record" value={recordString(opponent.summary)} emphasis="primary" />
-            <Fact label="Overall" value={<OverallRating rating={overallRating(opponent.attributes)} />} />
+            <Fact
+              label="Overall"
+              value={<OverallRating rating={overallRating(opponent.attributes)} />}
+            />
             <Fact
               label="Star power"
               value={Math.round(opponent.starPower)}
@@ -877,8 +949,8 @@ function OfferRow({
             className="muted prose"
             style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}
           >
-            Accepting books the fight for eight weeks time. You can withdraw before fight
-            night, but you will lose the camp.
+            Accepting books the fight for eight weeks time. You can withdraw before fight night, but
+            you will lose the camp.
           </p>
           <div className="row" style={{ flexWrap: 'wrap' }}>
             <Button variant="primary" onClick={onAccept}>
@@ -924,8 +996,7 @@ function LadderCard({
   onGoToOffers(): void;
   onAskRelease(): void;
 }) {
-  const { promotion, position, isChampion, titleShot, offers, progress, ranked, champion } =
-    ladder;
+  const { promotion, position, isChampion, titleShot, offers, progress, ranked, champion } = ladder;
 
   const standing = isChampion
     ? 'Champion'
@@ -1017,9 +1088,11 @@ function LadderCard({
             })}
           </ol>
           {position !== undefined && position > 10 && (
-            <p className="muted" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
-              You are #{position} of {ranked.length}. The top ten is what the promotion talks
-              about.
+            <p
+              className="muted"
+              style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}
+            >
+              You are #{position} of {ranked.length}. The top ten is what the promotion talks about.
             </p>
           )}
         </div>

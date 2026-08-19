@@ -13,7 +13,7 @@ import {
   describeInjury,
   fighterAge,
   forecastTraining,
-  headroom,
+  attributeRoom,
   restAdvice,
   DEFAULT_INTENSITY,
   INTENSITY_META,
@@ -240,12 +240,15 @@ export function TrainingScreen() {
               {formatGameDay(world.day)}
             </span>
           </span>
-          <span className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {weeksToFight !== undefined && (
-            <Chip tone={weeksToFight <= 4 ? 'warning' : 'info'}>
-              Fight in {weeksToFight === 0 ? 'days' : `${weeksToFight}w`}
-            </Chip>
-          )}
+          <span
+            className="row"
+            style={{ gap: 'var(--space-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}
+          >
+            {weeksToFight !== undefined && (
+              <Chip tone={weeksToFight <= 4 ? 'warning' : 'info'}>
+                Fight in {weeksToFight === 0 ? 'days' : `${weeksToFight}w`}
+              </Chip>
+            )}
             {/* The bank, which decides what kind of camp you can run, which decides what
                 kind of fighter you become. */}
             {/*
@@ -257,7 +260,9 @@ export function TrainingScreen() {
               quality chip does this correctly with a word.
             */}
             <Chip
-              tone={funding === 'comfortable' ? 'neutral' : funding === 'tight' ? 'warning' : 'negative'}
+              tone={
+                funding === 'comfortable' ? 'neutral' : funding === 'tight' ? 'warning' : 'negative'
+              }
             >
               {money(fighter.bank)} ·{' '}
               {funding === 'comfortable' ? 'comfortable' : funding === 'tight' ? 'tight' : 'broke'}
@@ -279,8 +284,8 @@ export function TrainingScreen() {
               <strong>
                 {coach.firstName} {coach.lastName}
               </strong>{' '}
-              at {gym?.name}. Specialises in {coach.specialisms.join(', ')} — camps outside
-              that get markedly less out of you.
+              at {gym?.name}. Specialises in {coach.specialisms.join(', ')} — camps outside that get
+              markedly less out of you.
             </>
           ) : (
             /*
@@ -300,8 +305,8 @@ export function TrainingScreen() {
             */
             <>
               You have no head coach, and training alone costs most of your progress. You do not
-              hire one directly &mdash; <strong>a gym&rsquo;s head coach becomes yours when you
-              join</strong>.{' '}
+              hire one directly &mdash;{' '}
+              <strong>a gym&rsquo;s head coach becomes yours when you join</strong>.{' '}
               {nearestCoachedGym ? (
                 <>
                   The nearest room with one is <strong>{nearestCoachedGym.gym.name}</strong>
@@ -330,8 +335,8 @@ export function TrainingScreen() {
       {overrunsFight && (
         <Alert tone="danger" title="That is longer than you have">
           You fight in {weeksToFight} week{weeksToFight === 1 ? '' : 's'}. A {weeks}-week block
-          would run past fight night. Shorten the camp, or go to fight week and prepare for
-          the opponent you already have.
+          would run past fight night. Shorten the camp, or go to fight week and prepare for the
+          opponent you already have.
         </Alert>
       )}
 
@@ -349,15 +354,18 @@ export function TrainingScreen() {
             never said how long to wait, so "should I rest?" had no answerable form and the
             player was left guessing at a number the game already knew.
           */}
-          {carrying.map((injury) => describeInjury(injury, world.day)).join(' ')} Training
-          through it costs you roughly {Math.round((1 - impairment) * 100)}% of the camp.
+          {carrying.map((injury) => describeInjury(injury, world.day)).join(' ')} Training through
+          it costs you roughly {Math.round((1 - impairment) * 100)}% of the camp.
         </Alert>
       )}
 
       <Card title="What to work on">
-        <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
-          Pick one focus, or two at a reduced rate. Areas already at your ceiling will not move
-          — the bar on the right is how much room you have left.
+        <p
+          className="muted prose"
+          style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}
+        >
+          Pick one focus, or two at a reduced rate. Areas already at your ceiling will not move —
+          the bar on the right is how much room you have left.
         </p>
 
         <div className="stack" style={{ gap: 'var(--space-2)' }}>
@@ -366,9 +374,14 @@ export function TrainingScreen() {
             const selected = focuses.includes(key);
             const atFocusLimit = focuses.length >= 2;
             const keys = Object.keys(meta.attributes) as AttributeKey[];
-            const room =
-              keys.reduce((a, k) => a + headroom(fighter.attributes[k], fighter.potential[k]), 0) /
-              keys.length;
+            /*
+             * The room the *model* sees, not a ceiling invented for the screen.
+             *
+             * This called `headroom` — the physical wall — on skill attributes too, so the advice
+             * the player was ranking camps by disagreed with the arithmetic that would run. The
+             * AI's own planner has always used the split version; the player got the other one.
+             */
+            const room = keys.reduce((a, k) => a + attributeRoom(fighter, k), 0) / keys.length;
             const inSpecialism = coach?.specialisms.includes(meta.specialism) ?? false;
 
             return (
@@ -438,10 +451,13 @@ export function TrainingScreen() {
             }}
             options={WEEK_OPTIONS}
           />
-          <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
-            A camp costs its first fortnight getting back to where you left off, so eight
-            weeks is the most you will ever get per week spent. Twelve gives more in total and
-            less per week — and every week training is a week older. You return on{' '}
+          <p
+            className="faint prose"
+            style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}
+          >
+            A camp costs its first fortnight getting back to where you left off, so eight weeks is
+            the most you will ever get per week spent. Twelve gives more in total and less per week
+            — and every week training is a week older. You return on{' '}
             <strong>{formatGameDay(world.day + Number(weeks) * 7)}</strong>.
           </p>
         </div>
@@ -501,9 +517,9 @@ export function TrainingScreen() {
         >
           {forecast.atCeiling ? (
             <Alert tone="warn" title="Nothing left to gain here">
-              Every attribute this focus trains is already at your ceiling. The weeks will
-              pass and nothing will move — pick something else, or accept that this part of
-              your game is finished.
+              Every attribute this focus trains is already at your ceiling. The weeks will pass and
+              nothing will move — pick something else, or accept that this part of your game is
+              finished.
             </Alert>
           ) : (
             <>
@@ -536,9 +552,7 @@ export function TrainingScreen() {
                       <span className="numeric muted">
                         +{(forecast.low[key] ?? 0).toFixed(1)} to +
                         {(forecast.high[key] ?? 0).toFixed(1)}
-                        <span className="visually-hidden">
-                          , expected {value.toFixed(1)}
-                        </span>
+                        <span className="visually-hidden">, expected {value.toFixed(1)}</span>
                       </span>
                     </li>
                   ))}
@@ -590,10 +604,13 @@ export function TrainingScreen() {
 
       <DivisionPicker />
 
-      <GymPicker currentGymId={fighter.gymId} onJoin={(g) => {
-        joinGym(db, fighter, g);
-        commit();
-      }} />
+      <GymPicker
+        currentGymId={fighter.gymId}
+        onJoin={(g) => {
+          joinGym(db, fighter, g);
+          commit();
+        }}
+      />
     </div>
   );
 }
@@ -604,13 +621,7 @@ export function TrainingScreen() {
  * Gated on reputation: the best rooms in the sport do not take unknowns, which is what makes
  * outgrowing your starting gym a milestone rather than a menu option.
  */
-function GymPicker({
-  currentGymId,
-  onJoin,
-}: {
-  currentGymId?: string;
-  onJoin(gym: Gym): void;
-}) {
+function GymPicker({ currentGymId, onJoin }: { currentGymId?: string; onJoin(gym: Gym): void }) {
   const { db, playerFighter } = useGame();
   if (!playerFighter) return null;
 
@@ -618,9 +629,12 @@ function GymPicker({
 
   return (
     <Card title="Gyms">
-      <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
-        A better room means better coaching and better sparring. The best of them will not
-        take you until you have done something.
+      <p
+        className="muted prose"
+        style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}
+      >
+        A better room means better coaching and better sparring. The best of them will not take you
+        until you have done something.
       </p>
       <div className="stack" style={{ gap: 'var(--space-2)' }}>
         {gyms.map((gym) => {
@@ -665,14 +679,14 @@ function GymPicker({
                   metadata — if it mentioned them at all. Two of the seven gyms have none, and a
                   player choosing between them has no way to know which.
                 */}
-                <span
-                  className="list__secondary"
-                  style={{ display: 'block', marginTop: 2 }}
-                >
+                <span className="list__secondary" style={{ display: 'block', marginTop: 2 }}>
                   {coach ? (
                     <>
-                      Head coach: <strong>{coach.firstName} {coach.lastName}</strong> —{' '}
-                      {coach.specialisms.join(', ')}
+                      Head coach:{' '}
+                      <strong>
+                        {coach.firstName} {coach.lastName}
+                      </strong>{' '}
+                      — {coach.specialisms.join(', ')}
                     </>
                   ) : (
                     <em>No head coach. Your camps here would be self-directed.</em>
@@ -686,7 +700,10 @@ function GymPicker({
               ) : (
                 <span className="row" style={{ gap: 'var(--space-2)' }}>
                   {!canAfford && (
-                    <Chip tone="warning" title="You can still join. You just cannot pay for a camp there yet.">
+                    <Chip
+                      tone="warning"
+                      title="You can still join. You just cannot pay for a camp there yet."
+                    >
                       Beyond your means
                     </Chip>
                   )}
@@ -722,10 +739,13 @@ function DivisionPicker() {
 
   return (
     <Card title="Weight class">
-      <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
+      <p
+        className="muted prose"
+        style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}
+      >
         You currently fight at {getDivision(fighter.divisionId).name}, walking around at{' '}
-        {fighter.walkingWeightLbs}lb. Your ratings do not change when you move — the people
-        across from you do.
+        {fighter.walkingWeightLbs}lb. Your ratings do not change when you move — the people across
+        from you do.
       </p>
 
       {!open ? (
@@ -759,7 +779,10 @@ function DivisionPicker() {
                   onClick={() => setPending(selected ? undefined : division.id)}
                   style={{ display: 'block', width: '100%', textAlign: 'left' }}
                 >
-                  <span className="row" style={{ justifyContent: 'space-between', gap: 'var(--space-2)' }}>
+                  <span
+                    className="row"
+                    style={{ justifyContent: 'space-between', gap: 'var(--space-2)' }}
+                  >
                     <span style={{ fontWeight: 700 }}>
                       {division.name}{' '}
                       <span className="faint" style={{ fontWeight: 400 }}>
@@ -826,9 +849,12 @@ function DivisionPicker() {
           </Button>
         </div>
       )}
-      <p className="faint prose" style={{ fontSize: 'var(--text-xs)', marginTop: 'var(--space-2)' }}>
-        {formatGameDay(world.day)}. Your body takes months to catch up with the move — you gain or lose
-        real weight over several camps, and that is a trade rather than an upgrade.
+      <p
+        className="faint prose"
+        style={{ fontSize: 'var(--text-xs)', marginTop: 'var(--space-2)' }}
+      >
+        {formatGameDay(world.day)}. Your body takes months to catch up with the move — you gain or
+        lose real weight over several camps, and that is a trade rather than an upgrade.
       </p>
     </Card>
   );

@@ -8,12 +8,16 @@ import {
   displayName,
   fighterAge,
   getDivision,
+  isPhysical,
   overallRating,
   activeInjuries,
   describeHeat,
   describeInjury,
   recordString,
   type Fighter,
+  TRAUMA_CONCERN,
+  TRAUMA_MEDICAL,
+  WEAR_CONCERN,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
@@ -76,14 +80,16 @@ export function FighterScreen({ id }: { id: string }) {
       <Card raised>
         <h2 style={{ fontSize: 'var(--text-2xl)', lineHeight: 1.15 }}>{displayName(fighter)}</h2>
         <p className="muted">
-          {division.name} · {fighterAge(fighter, world.day)} · <Flag nationality={fighter.nationality} /> ·{' '}
-          {fighter.stance}
+          {division.name} · {fighterAge(fighter, world.day)} ·{' '}
+          <Flag nationality={fighter.nationality} /> · {fighter.stance}
         </p>
         <div style={{ marginTop: 'var(--space-4)' }}>
           <KeyStat
             value={recordString(fighter.summary)}
             label="Professional record"
-            tone={fighter.summary.streak > 0 ? 'good' : fighter.summary.streak < 0 ? 'bad' : 'neutral'}
+            tone={
+              fighter.summary.streak > 0 ? 'good' : fighter.summary.streak < 0 ? 'bad' : 'neutral'
+            }
           />
         </div>
 
@@ -92,7 +98,10 @@ export function FighterScreen({ id }: { id: string }) {
         </div>
 
         <div style={{ marginTop: 'var(--space-3)' }}>
-          <Fact label="Overall" value={<OverallRating rating={overallRating(fighter.attributes)} />} />
+          <Fact
+            label="Overall"
+            value={<OverallRating rating={overallRating(fighter.attributes)} />}
+          />
           <Fact
             label="Star power"
             value={Math.round(fighter.starPower)}
@@ -120,7 +129,9 @@ export function FighterScreen({ id }: { id: string }) {
           )}
           {promotion && <Chip tone="info">{promotion.shortName}</Chip>}
           {gym && <Chip>{gym.name}</Chip>}
-          <Chip>{Math.round(fighter.heightInches)}″ · {Math.round(fighter.reachInches)}″ reach</Chip>
+          <Chip>
+            {Math.round(fighter.heightInches)}″ · {Math.round(fighter.reachInches)}″ reach
+          </Chip>
         </div>
       </Card>
 
@@ -143,9 +154,9 @@ export function FighterScreen({ id }: { id: string }) {
             className="muted prose"
             style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}
           >
-            Heat is per-pair: how badly the audience wants to see <em>these two</em>, which is
-            a different thing from how big either of them is. It pays, and it changes how the
-            fight gets fought.
+            Heat is per-pair: how badly the audience wants to see <em>these two</em>, which is a
+            different thing from how big either of them is. It pays, and it changes how the fight
+            gets fought.
           </p>
           <div className="stack" style={{ gap: 'var(--space-2)' }}>
             {rivalries.map(({ rivalry, heat, otherId }) => {
@@ -208,7 +219,11 @@ export function FighterScreen({ id }: { id: string }) {
               return (
                 <li key={id} className={`trait trait--${trait.polarity}`}>
                   <span className="trait__mark" aria-hidden="true">
-                    {trait.polarity === 'positive' ? '+' : trait.polarity === 'negative' ? '−' : '='}
+                    {trait.polarity === 'positive'
+                      ? '+'
+                      : trait.polarity === 'negative'
+                        ? '−'
+                        : '='}
                   </span>
                   <span>
                     <strong className="trait__label">{trait.label}</strong>
@@ -235,9 +250,18 @@ export function FighterScreen({ id }: { id: string }) {
               key={key}
               label={ATTRIBUTE_META[key].label}
               value={fighter.attributes[key]}
-              // Only the player's own ceilings are known. Everyone else's are scouted, and
-              // a scouting estimate does not belong on a permanent profile page.
-              ceiling={isPlayer ? fighter.potential[key] : undefined}
+              /*
+               * Only the player's own ceilings are known — everyone else's are scouted, and a
+               * scouting estimate does not belong on a permanent profile page — and only
+               * *physicals* have a ceiling at all.
+               *
+               * A skill's `potential` is a projection, not a wall: `difficulty` never reads it,
+               * and skills grow on `skillResistance`, which only ever gets smaller. Showing it as
+               * a tick was not a rounding error but a wrong number. Measured over twenty world
+               * years, 1,928 skill values sat above the ceiling this row was drawing, the worst a
+               * fight IQ of 92 against a displayed ceiling of 27. See docs/27 §13.
+               */
+              ceiling={isPlayer && isPhysical(key) ? fighter.potential[key] : undefined}
               hint={ATTRIBUTE_META[key].blurb}
             />
           ))}
@@ -246,8 +270,8 @@ export function FighterScreen({ id }: { id: string }) {
 
       <Card title="Derived">
         <p className="faint" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
-          Computed from the ratings above, never stored — which is why they can never
-          contradict them.
+          Computed from the ratings above, never stored — which is why they can never contradict
+          them.
         </p>
         {Object.values(DERIVED_META).map((meta) => (
           <RatingRow
@@ -260,12 +284,12 @@ export function FighterScreen({ id }: { id: string }) {
       </Card>
 
       <Card title="Condition">
-        {fighter.condition.headTrauma > 45 && (
+        {fighter.condition.headTrauma >= TRAUMA_CONCERN && (
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <Alert
-              tone={fighter.condition.headTrauma > 65 ? 'danger' : 'warn'}
+              tone={fighter.condition.headTrauma >= TRAUMA_MEDICAL ? 'danger' : 'warn'}
               title={
-                fighter.condition.headTrauma > 65
+                fighter.condition.headTrauma >= TRAUMA_MEDICAL
                   ? 'The chin has gone'
                   : 'Damage is accumulating'
               }
@@ -278,13 +302,29 @@ export function FighterScreen({ id }: { id: string }) {
           label="Head trauma"
           value={`${Math.round(fighter.condition.headTrauma)} / 100`}
           icon="trauma"
-          emphasis={fighter.condition.headTrauma > 45 ? 'primary' : 'secondary'}
-          tone={fighter.condition.headTrauma > 65 ? 'bad' : fighter.condition.headTrauma > 45 ? 'warn' : undefined}
+          emphasis={fighter.condition.headTrauma >= TRAUMA_CONCERN ? 'primary' : 'secondary'}
+          tone={
+            fighter.condition.headTrauma >= TRAUMA_MEDICAL
+              ? 'bad'
+              : fighter.condition.headTrauma >= TRAUMA_CONCERN
+                ? 'warn'
+                : undefined
+          }
         />
         <Fact
           label="Body wear"
           value={`${Math.round(fighter.condition.bodyWear)} / 100`}
           emphasis="tertiary"
+          // Same bands as the hub, and the same ones `retirementDrivers` reads. This screen used
+          // to show wear as a bare number while the hub coloured it, so the two disagreed about
+          // whether the same fighter was worn out.
+          tone={
+            fighter.condition.bodyWear >= 55
+              ? 'bad'
+              : fighter.condition.bodyWear >= WEAR_CONCERN
+                ? 'warn'
+                : undefined
+          }
         />
         <Fact
           label="Confidence"

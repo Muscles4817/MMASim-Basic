@@ -942,3 +942,80 @@ out past 36 in the first place.
 Vacancies also became rare enough to make a test flaky: champions now tend to lose the belt in the
 cage before they are old enough to abandon it, so `championships.test.ts` drives a vacancy
 deliberately rather than hoping a decade produces one.
+
+---
+
+## 13. The screens and the model disagreed
+
+Prompted by one question — does the game still tell the player they have a ceiling in a skill? It
+does not any more, and looking for the answer turned up a pattern rather than an incident.
+
+### 13.1 The ceiling that was not there
+
+Doc 23 replaced the hard skill ceiling with a rate. `difficulty` has honoured that from the
+beginning:
+
+```ts
+isPhysical(key)
+  ? headroom(current, fighter.potential[key]) // a real wall
+  : skillResistance(current); // only ever gets harder
+```
+
+For a skill, `potential[key]` is **never read**. It is a projection. But three screens reached past
+that and treated it as a wall for all fifteen attributes.
+
+Measured over twenty world years, across 858 active fighters:
+
+|           | Values above their stated ceiling |
+| --------- | --------------------------------: |
+| Skills    |                         **1,928** |
+| Physicals |                                 1 |
+
+The worst was a fighter with **fight IQ 92 against a displayed ceiling of 27**. Sixty-five points
+over. This was not a soft guide the player could discount; it was noise presented as fact.
+
+Three sites, and the third is the one that mattered:
+
+1. **`FighterScreen`** drew a ceiling tick on every attribute, labelled to screen readers as
+   "scouted ceiling N".
+2. **The camp report** computed `potential[key] − current` for every trained attribute and said "at
+   your ceiling" at zero — so the fighter with fight IQ 92 was told they were finished with the
+   thing they were improving fastest at.
+3. **`TrainingScreen`** ranked which camp to take by calling the _physical_ `headroom()` on skills.
+   That is advice, and it disagreed with the arithmetic that would actually run. **The AI's own
+   planner had the correct split all along** — `trainingPlan.room` has always branched on
+   `isPhysical` — so the world's fighters were being advised honestly and the player was not.
+
+Fixed by giving all of them one shared answer: `attributeRoom(fighter, key)`, exported from the
+engine, which is `difficulty` under a public name. `attributeIsSpent` goes with it, and
+`headroomExhausted` now uses it rather than restating the branch.
+
+### 13.2 Three sets of numbers for one fact
+
+The audit that followed found the same shape again in the damage displays:
+
+|                 | Warns at | Serious at |
+| --------------- | -------: | ---------: |
+| `FighterScreen` |       45 |         65 |
+| `HubScreen`     |       30 |         55 |
+| The engine      |   **25** |     **55** |
+
+A player reading both screens got two different accounts of the same fighter, and neither matched
+what the model does. `TRAUMA_CONCERN`, `TRAUMA_MEDICAL` and `WEAR_CONCERN` are now exported from
+`retirement.ts` — the module that decides what damage means — and both screens read them. Body wear
+was shown as a bare number on the profile and a coloured one on the hub; it is now the same on both.
+
+### 13.3 Left alone, and why
+
+**`effectiveDurability` is invisible.** Career trauma erodes the chin at fight time by
+`(headTrauma / 100) × 14`, so a fighter with 65 trauma walks out with about nine points less
+durability than their profile shows. That is a real thing the player cannot see. It is arguably
+_meant_ to be hidden — the chin going is something you discover — but it is a candidate for the
+fight preview rather than the profile.
+
+**Mileage has no UI at all.** §12 made a fighter's body older than their birthday, and nothing shows
+it. The player cannot tell a worn 30-year-old from a fresh one, which is precisely the distinction
+the mechanic exists to draw.
+
+**The editor still shows a ceiling for every attribute**, and that is correct: it is a data editor
+and `potential` is a real stored field. The label is the only thing that overstates it.

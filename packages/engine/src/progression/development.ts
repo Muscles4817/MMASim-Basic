@@ -32,7 +32,12 @@ import type { Rng } from '../core/rng.js';
 import type { Fighter } from '../domain/fighter.js';
 import { campGainMultiplier, idleDecayMultiplier } from '../domain/personality.js';
 import { recoverConfidence } from '../domain/confidence.js';
-import { coachEffectiveness, type Coach, type CoachSpecialism, type Gym } from '../domain/organisations.js';
+import {
+  coachEffectiveness,
+  type Coach,
+  type CoachSpecialism,
+  type Gym,
+} from '../domain/organisations.js';
 import { traitMul } from '../domain/traits.js';
 import {
   ATTRIBUTE_KEYS,
@@ -502,10 +507,33 @@ export const isPhysical = (key: AttributeKey): boolean => PHYSICAL_KEYS.has(key)
  * ends up is where their gains stop outrunning their decline rather than a number rolled before
  * they ever trained.
  */
-function difficulty(fighter: Fighter, key: AttributeKey, current: number): number {
+/**
+ * How much room this fighter has left in one attribute, on the model's own terms.
+ *
+ * Public because the *screens* were answering this question themselves and getting it wrong.
+ * `difficulty` has always split physicals from skills correctly, and so have
+ * `headroomExhausted` and the AI's own `trainingPlan.room` — but `FighterScreen`, `TrainingScreen`
+ * and the camp report each reached past all three for `potential[key]` and treated it as a wall
+ * for everything. Measured over twenty world years, **1,928 skill values sat above their stated
+ * ceiling** against one physical, the worst of them a fight IQ of 92 against a displayed ceiling
+ * of 27. See docs/27 §13.
+ *
+ * For a physical this is remaining headroom against a real wall, and reaches zero. For a skill it
+ * is resistance, which only ever gets smaller — there is no wall to be near.
+ */
+export function attributeRoom(fighter: Fighter, key: AttributeKey): number {
+  return difficulty(fighter, key, fighter.attributes[key]);
+}
+
+/** True when this attribute is genuinely finished — at the wall, or past the point a camp pays. */
+export function attributeIsSpent(fighter: Fighter, key: AttributeKey): boolean {
   return isPhysical(key)
-    ? headroom(current, fighter.potential[key])
-    : skillResistance(current);
+    ? attributeRoom(fighter, key) <= 0
+    : attributeRoom(fighter, key) <= SKILL_STALL;
+}
+
+function difficulty(fighter: Fighter, key: AttributeKey, current: number): number {
+  return isPhysical(key) ? headroom(current, fighter.potential[key]) : skillResistance(current);
 }
 
 /**
@@ -526,7 +554,11 @@ const carriedStrength = (frame: number): number => 45 + (frame - 45) * 0.55;
  */
 export const STRENGTH_CARDIO_INTERFERENCE = 0.6;
 
-export function strengthCardioCost(fighter: Fighter, strengthGain: number, strength: number): number {
+export function strengthCardioCost(
+  fighter: Fighter,
+  strengthGain: number,
+  strength: number,
+): number {
   if (strengthGain <= 0) return 0;
   const excess = clamp((strength - carriedStrength(fighter.naturals.frame)) / 25, 0, 1);
   return strengthGain * STRENGTH_CARDIO_INTERFERENCE * excess;
@@ -838,12 +870,9 @@ export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingFor
 const SKILL_STALL = 0.03;
 
 function headroomExhausted(fighter: Fighter, focus: TrainingFocus): boolean {
-  return Object.keys(TRAINING_META[focus].attributes).every((raw) => {
-    const key = raw as AttributeKey;
-    return isPhysical(key)
-      ? headroom(fighter.attributes[key], fighter.potential[key]) <= 0
-      : skillResistance(fighter.attributes[key]) <= SKILL_STALL;
-  });
+  return Object.keys(TRAINING_META[focus].attributes).every((raw) =>
+    attributeIsSpent(fighter, raw as AttributeKey),
+  );
 }
 
 // --- Neglect ---------------------------------------------------------------------------------
@@ -1167,7 +1196,12 @@ export interface AgeingResult {
  * Called by the world tick, not per fight, so a fighter who sits out for two years ages the
  * same as one who fought four times.
  */
-export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, rng: Rng): AgeingResult {
+export function applyAgeing(
+  fighter: Fighter,
+  fromDay: GameDay,
+  toDay: GameDay,
+  rng: Rng,
+): AgeingResult {
   const years = (toDay - fromDay) / 365;
   if (years <= 0) return { fighter, losses: {}, notes: [] };
 
