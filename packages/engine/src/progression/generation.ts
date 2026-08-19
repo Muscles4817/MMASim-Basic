@@ -16,7 +16,7 @@ import { clamp, remap } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import { asFighterId } from '../core/ids.js';
 import type { DivisionId, PromotionId } from '../core/ids.js';
-import { getDivision, type Sex } from '../domain/divisions.js';
+import { type Sex } from '../domain/divisions.js';
 import type { Fighter } from '../domain/fighter.js';
 import { emptyRecordSummary, freshCondition } from '../domain/fighter.js';
 import type { Personality } from '../domain/personality.js';
@@ -38,6 +38,7 @@ import {
   type Naturals,
 } from '../ratings/attributes.js';
 import { generateName } from './names.js';
+import { sampleBodyForDivision, walkingWeightLbs as walkingWeightOf } from './body.js';
 
 export interface GenerationOptions {
   id: string;
@@ -342,10 +343,24 @@ export function arrivalFactor(key: AttributeKey, age: number, development?: numb
 export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
   const tier = options.tier ?? toRating(rng.normalClamped(45, 18, 5, 95));
   const age = options.age ?? rng.int(21, 26);
-  const division = getDivision(options.divisionId);
 
-  // Walk around above the limit, by an amount that itself varies — some fighters cut hard.
-  const walkingWeightLbs = Math.round(division.limitLbs * rng.range(1.04, 1.15));
+  /*
+   * The body first, and the division second. Doc 31 § 12 step 2.
+   *
+   * This was `division.limitLbs * rng.range(1.04, 1.15)`, which made walking weight a function of
+   * the division — and since `frame` is derived from walking weight and `frame` feeds the Power,
+   * Strength and Durability ceilings, the division was quietly deciding the physique. Every
+   * lightweight came out with frame 55 ± 3 and there was no such thing as a big lightweight.
+   *
+   * `sampleBodyForDivision` rolls a whole person from the forward model in `body.ts` and keeps the
+   * ones who would have chosen this division, so the population of a division is the slice of the
+   * general population that belongs in it rather than a distribution wearing its name.
+   *
+   * Forked because it draws a variable number of times — rejection sampling — and an unforked
+   * stream would make every later draw depend on how many bodies happened to be rejected.
+   */
+  const body = sampleBodyForDivision(rng.fork('body'), options.sex, options.divisionId);
+  const walkingWeightLbs = Math.round(walkingWeightOf(body));
 
   const naturals = generateNaturals(rng, tier, walkingWeightLbs);
   const potential = ceilingsFromNaturals(naturals, rng);
@@ -384,8 +399,8 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     sex: options.sex,
     birthDay: birthDayForAge(age, options.day, rng.int(1, 12), rng.int(1, 28)),
     walkingWeightLbs,
-    heightInches: Math.round(remap(division.limitLbs, 115, 265, 63, 76) + rng.range(-2, 2)),
-    reachInches: Math.round(remap(division.limitLbs, 115, 265, 63, 79) + rng.range(-2, 3)),
+    heightInches: body.heightInches,
+    reachInches: body.reachInches,
     stance: rng.pickWeighted(['orthodox', 'southpaw', 'switch'] as const, (s) =>
       s === 'orthodox' ? 7 : s === 'southpaw' ? 2.5 : 0.5,
     ),

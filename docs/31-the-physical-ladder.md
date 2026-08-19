@@ -1042,11 +1042,14 @@ and the correct response is to let them fail loudly with the measured value in t
 edit the constant they defend. The ladder cannot be judged against a half-built body model, and an
 engine tuned against one has to be tuned again.
 
-1. **Ladder** — this document. Agreement on §3.6, the pivots, and §13.
-2. **Body geometry.** `progression/body.ts`: height distributions per sex, ape index, frame, lean
-   mass, body composition, and `walkingWeight` derived from all of them. Replaces the remaps and the
-   `limit × 1.04–1.15` walking weight. The §10.3–10.5 diagnostics and the generated ladder tables
-   land with it, so every step after this one is measured rather than asserted.
+1. **Ladder** — this document. Agreement on §3.6, the pivots, and §14.
+2. **Body geometry — landed.** `progression/body.ts`: height per sex, ape index, skeletal frame,
+   muscle, body composition, water-cut tolerance, and `walkingWeight` derived from all of them.
+   Replaces both remaps and the `limit × 1.04–1.15` walking weight in both generators.
+   `ratings/physicalScale.ts` holds §3.6's parameters, consumed so far only by the generated tables.
+   `tests/statistical/ladder-tables.test.ts` and `generation-profile.test.ts` are the §10.3–10.5
+   instruments. Measured against the roster's real anthropometry, every division's mean height is
+   now within about an inch, against three to four inches out before. §14 records what it found.
 3. **Split the talent axes.** `tier` becomes an athletic axis and a skill-learning axis, weakly
    correlated (ρ ≈ 0.3). `replenish` and `depth.ts` select on the skill axis, because a promotion
    signs fighters, not genotypes.
@@ -1078,29 +1081,79 @@ steps 4 and 6; that re-baselining is deliberate.
 
 ---
 
-## 13. Open questions
+## 13. What step 2 found
 
-**13.1 The sex pivot on Speed and Durability.** §2.3 pivots all five physicals. Power, Strength and
+Three things the instrument surfaced on its first run that were not in the plan. None is acted on
+here — steps 3, 4 and 6 own them — and all three are recorded where whoever does those steps will
+meet them.
+
+**13.1 Power and Strength are nearly the same number.** ρ = 0.85 across the generated population, and
+Power against Speed is 0.89. The cause is visible in `ceilingsFromNaturals`:
+
+```
+power    = explosiveness × 0.60 + frame × 0.25 + skill × 0.15
+strength = explosiveness × 0.45 + frame × 0.45 + skill × 0.10
+```
+
+Two near-identical linear combinations of the same two naturals, so "explosive but not especially
+strong" and "very strong but not explosive" — two of the most ordinary fighters in the sport — are
+both close to impossible to generate. This is exactly the master-scalar failure step 3 exists to
+prevent, arriving one layer lower than expected. `generation-profile.test.ts` bounds it where the
+code is and carries the target: **tighten to 0.7 at step 6**, once the talent axes are split and each
+attribute reads its own mass basis.
+
+**13.2 `chosenDivision` had no answer for a body the ladder cannot hold.** A woman whose weigh-in
+floor is 150 lb is not a lighter-than-usual featherweight — the women's ladder stops at 145 and she
+is somebody the sport has no division for. The first draft returned the heaviest division as a
+fallback and generated a women's featherweight walking 186 lb whose own `weightFit` said
+`notViable`. It now returns `undefined` and callers handle it; about 2% of rolled bodies are dropped.
+
+**13.3 Two existing tests were passing on luck, and one economy assertion had no signal.**
+
+`matchmaking-style.test.ts` asserted that a tournament promotion's queue equals the merit order
+exactly, but `tournament` is `rankAdherence 92, entertainmentBias 12, domesticBias 10` — eight per
+cent of the weight sits elsewhere by design, so adjacent contenders separated by a small merit gap
+can swap. It now asserts what 92 promises: the head of the queue is the number-one contender and
+nobody is displaced by more than one place, plus a new test that a showman promotion displaces more.
+
+`promotion-costs.test.ts` compared mean regional ten-year budget growth against half the leader's.
+Measured across eight seeds on an **unmodified** checkout, that rule passed on five of eight, and the
+leader's own growth ranged from +7% to +67% — a bound whose denominator swings tenfold on the seed
+is measuring the draw. It now uses the leader's share of the sport's total budget, which held between
+47.7% and 64.8% unmodified and 38.6% and 54.9% with the body model.
+
+That last comparison surfaced a real effect worth re-measuring at step 7: the body model moved mean
+regional growth from **+2% to +24%** across those eight seeds. Regionals finished a decade negative
+on four of eight seeds before and one of eight after. The likely path is `naturals.frame`, still
+`walkingWeight / 300` and therefore moved for every fighter in the world when walking weight stopped
+being a function of the division — heavyweight frames fell furthest. Step 4 deletes `frame`, so
+tuning the economy against it now would be tuning against a number that is about to disappear.
+
+---
+
+## 14. Open questions
+
+**14.1 The sex pivot on Speed and Durability.** §2.3 pivots all five physicals. Power, Strength and
 Cardio clear the one-sigma bar on evidence; Speed and Durability do not, and get a pivot for
 coherence. The alternative — three sex-anchored attributes beside two that are not — seems worse, but
 it is a judgement.
 
-**13.2 `D_strength` and the 28-point spread.** Provisionally signed off and held (§8.4). The derived
+**14.2 `D_strength` and the 28-point spread.** Provisionally signed off and held (§8.4). The derived
 figure against the hand-authored roster's 11; §3.2 argues the roster is wrong and §8.4 forbids using
 it to adjudicate. §9.1's S1–S5 are the test, and S1 — matched-technique
 cross-mass grappling — is the one that decides it. Heavyweight submission rate alone (S5) is
 corroborating evidence and nothing more; four parameters push on it.
 
-**13.3 The mean-physical tilt.** §4.4: heavyweights end up 6.1 points of mean physical above
+**14.3 The mean-physical tilt.** §4.4: heavyweights end up 6.1 points of mean physical above
 flyweights. The recommendation is to accept it and fix `overallRating` (§7.1) rather than bend the
 exponents. Confirm that is the preferred trade.
 
-**13.4 Cardio's equation shape.** Cardio's mass term (13 points) is small next to its individual
+**14.4 Cardio's equation shape.** Cardio's mass term (13 points) is small next to its individual
 variance, and it may be better modelled as capacity (mass-scaled) × conditioning (not mass-scaled)
 rather than as a single additive term like the other four. Deferred to step 6, but flagged now
 because it is the one attribute whose form may not match the others.
 
-**13.5 The pivot population.** Rating 50 is the median of the whole licensed professional population,
+**14.5 The pivot population.** Rating 50 is the median of the whole licensed professional population,
 which the game world contains but which is hard to observe in reality. The alternative — anchoring 50
 to the median UFC fighter — is directly observable but would put most of the game's own world below
 50 on everything. §4.2's lift exists to bridge the two; if the lift turns out to be doing too much

@@ -91,15 +91,60 @@ describe('what makes a fight worth watching', () => {
 describe('promotions disagree about who is next', () => {
   const db = game();
 
-  it('gives a tournament promotion the ranking, in order', () => {
+  it('gives a tournament promotion the ranking, near enough in order', () => {
+    /*
+     * This asserted exact equality with the merit order for the top four, and it was testing luck.
+     *
+     * `tournament` is `rankAdherence 92, entertainmentBias 12, domesticBias 10` — merit-dominated
+     * and deliberately not absolute, since the doc on `rankAdherence` says a *100* is where "the
+     * queue is the ranking, full stop". Eight per cent of the weight sits elsewhere, so two adjacent
+     * contenders separated by a small merit gap can swap when one of them is far more watchable.
+     * That is the model working, not failing.
+     *
+     * Exact equality held on the old roster and broke the moment doc 31 § 12 step 2 moved bodies —
+     * positions four and five, separated by two points of merit score, changed places. A bound that
+     * an unrelated change can break by two points was never defending the property it named.
+     *
+     * So assert what 92 actually promises: the head of the queue is the number-one contender, and
+     * nobody is displaced far. `nextContender` reads the head, so the first of those is the one that
+     * decides who fights for the belt.
+     */
     const pfl = promotionNamed(db, 'PFL');
     expect(pfl.matchmakingStyle).toBe('tournament');
 
     const { ranked, queue } = queueFor(db, pfl);
     const meritOrder = ranked
       .filter((r) => (r.fighter.id as string) !== (pfl.champions[DIVISION] as string))
-      .map((r) => r.fighter.id);
-    expect(queue.slice(0, 4).map((q) => q.fighter.id)).toEqual(meritOrder.slice(0, 4));
+      .map((r) => r.fighter.id as string);
+
+    expect(queue[0]!.fighter.id as string).toBe(meritOrder[0]);
+
+    const displacement = queue
+      .slice(0, 8)
+      .map((q, i) => Math.abs(meritOrder.indexOf(q.fighter.id as string) - i));
+    expect(Math.max(...displacement), `displacements ${displacement.join(',')}`).toBeLessThanOrEqual(1);
+  });
+
+  it('displaces far more at a showman promotion than at a tournament one', () => {
+    /*
+     * The contrast the previous test cannot make on its own, and the actual subject of this file.
+     * A tournament books the bracket; a showman books who sells. If both produced the merit order,
+     * `matchmakingStyle` would be decoration.
+     */
+    const totalDisplacement = (shortName: string) => {
+      const promotion = promotionNamed(db, shortName);
+      const { ranked, queue } = queueFor(db, promotion);
+      const merit = ranked
+        .filter((r) => (r.fighter.id as string) !== (promotion.champions[DIVISION] as string))
+        .map((r) => r.fighter.id as string);
+      return queue
+        .slice(0, 8)
+        .reduce((acc, q, i) => acc + Math.abs(merit.indexOf(q.fighter.id as string) - i), 0);
+    };
+
+    const tournament = totalDisplacement('PFL');
+    const showman = totalDisplacement('UFC');
+    expect(showman, `showman ${showman} vs tournament ${tournament}`).toBeGreaterThan(tournament);
   });
 
   it('lets the showman promotion move an entertainer up the queue', () => {

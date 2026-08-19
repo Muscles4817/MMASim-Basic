@@ -15,6 +15,7 @@ export * from './core/clock.js';
 export * from './ratings/attributes.js';
 export * from './ratings/curve.js';
 export * from './ratings/derived.js';
+export * from './ratings/physicalScale.js';
 
 // Domain
 export * from './domain/fighter.js';
@@ -47,6 +48,7 @@ export * from './health/freshness.js';
 export * from './progression/divisionMove.js';
 export * from './progression/intensity.js';
 export * from './progression/retirement.js';
+export * from './progression/body.js';
 export * from './progression/generation.js';
 export * from './progression/names.js';
 export * from './progression/ringRust.js';

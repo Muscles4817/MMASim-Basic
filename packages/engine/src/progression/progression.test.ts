@@ -657,11 +657,32 @@ describe('creating a fighter', () => {
     expect(boosted.attributes.cardio).toBeGreaterThan(plain.attributes.cardio);
   });
 
-  it('makes a powerful build heavier and a rangy one longer', () => {
+  it('no longer lets build decide the body, which the body model now owns', () => {
+    /*
+     * This asserted the opposite until doc 31 § 12 step 2, and the old claim was the problem.
+     *
+     * `build` used to set walking weight, height and reach directly — `limit × (1.07 ± 0.035)` and a
+     * pair of remaps — which is a second body model that agreed with nothing, and it lived in the one
+     * place a player could reach it. Bodies now come from `sampleBodyForDivision`, the same forward
+     * model the world's intake draws from, so the creator and the generator cannot produce different
+     * species.
+     *
+     * `build` still leans the naturals, which is the part of it that was ever a claim about the
+     * person rather than about the tape. Doc 31 § 12 step 10 removes it outright in favour of height,
+     * reach and frame the player chooses directly — at which point this test is deleted rather than
+     * inverted again.
+     */
     const powerful = createPlayerFighter(spec({ build: 'powerful' }), createRng('b'));
     const rangy = createPlayerFighter(spec({ build: 'rangy' }), createRng('b'));
-    expect(powerful.walkingWeightLbs).toBeGreaterThan(rangy.walkingWeightLbs);
-    expect(rangy.reachInches).toBeGreaterThan(powerful.reachInches);
+
+    expect(powerful.walkingWeightLbs).toBe(rangy.walkingWeightLbs);
+    expect(powerful.heightInches).toBe(rangy.heightInches);
+    expect(powerful.reachInches).toBe(rangy.reachInches);
+
+    // What build still does, and the reason it survives to step 10: it says something about the
+    // engine and the chin rather than about the tape measure.
+    expect(powerful.naturals.constitution).toBeGreaterThan(rangy.naturals.constitution);
+    expect(rangy.naturals.engine).toBeGreaterThan(powerful.naturals.engine);
   });
 
   describe('validation', () => {
