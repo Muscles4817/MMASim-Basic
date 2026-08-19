@@ -419,18 +419,16 @@ export interface TrainingInput {
  * the same fighter in the same game. Worse, the player chose it: a four-week training block
  * developed the entire rest of the world three times faster than a twelve-week one.
  *
- * The value is calibrated on the *world it produces*, not on the formula it replaces, and the
- * difference between those two matters. Reproducing the old nominal rate — 0.595 blocks every 56
- * days, so 3.88 a year — needs 0.0746 per week, and that measurably shrinks the sport: fighters
- * rated 70 or better fall from 45 to 38 over a decade. The reason is that the old flat block was
- * also *double-counted*, handed to a fighter who had just fought on top of the camp they had
- * already been paid for, however little of the span was left. So 0.1 per week is what actually
- * reproduces the world — 44 fighters at 70+ against 45, two at 80+ against two, a best of 86.7
- * against 86.2 — while every cadence now agrees instead of disagreeing by an order of magnitude.
+ * A dial, not a derived value, and worth being honest about. It was first set by matching the old
+ * behaviour at the app's 56-day cadence, which was wrong twice: that measurement was a single seed
+ * (across three, the old world produced 38 fighters rated 70+ at that cadence rather than 45), and
+ * there was no single old world to match anyway — quality was a function of the clock, so "before"
+ * was five different worlds at once.
  *
- * For scale: an eight-week fight camp is 1.36 blocks, so a week of ordinary work is worth a little
- * under 60% of a week of camp, and a year of it is about four camps' worth on top of whatever
- * camps actually happen.
+ * So 0.1 is a judgement that lands the now-consistent sport between the old extremes: 46 fighters
+ * rated 70+ after a decade, against 61 / 38 / 21 depending on how the caller used to step. For
+ * scale, a week of ordinary work is worth a little under 60% of a week of fight camp. This is the
+ * number to move if the sport should be deeper or shallower overall.
  */
 export const AMBIENT_BLOCKS_PER_WEEK = 0.1;
 

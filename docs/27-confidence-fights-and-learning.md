@@ -664,34 +664,36 @@ to two produces _exactly zero_, because `trainingBlocks(2)` is 0.
 `elapsedWeeks × AMBIENT_BLOCKS_PER_WEEK` — **linear**, so blocks add and the same elapsed time gives
 the same fighter however it arrives. Camps are untouched and still priced by `trainingBlocks`.
 
-### 8.1 Calibrating on the world, not on the formula
+### 8.1 Choosing the rate, and a correction
 
-The rate is set by what it _produces_, and the distinction is load-bearing. Reproducing the old
-nominal rate — 3.88 blocks a year — takes 0.0746 per week and measurably shrinks the sport, from 45
-fighters rated 70+ to 38 over a decade. The reason is that the old flat block was **also
-double-counted**: a fighter who had just fought got a full ambient block on top of the camp they had
-already been paid for, however little of the span was left.
+Once training is proportional to elapsed time, the per-week rate has to be chosen. It was first set
+by matching the old behaviour at 56-day steps on a single seed, and **that was wrong twice over**.
 
-So 0.1 per week is what actually reproduces the world. For scale, a week of ordinary work is worth a
-little under 60% of a week of fight camp.
+**It was fitted to noise.** Across three seeds rather than one, 56-day steps produced 38 fighters
+rated 70+ before the change, not the 45 a single seed had shown. So the rate that looked like it
+preserved the world in fact raised development at that cadence by about a quarter.
 
-| Ten world years, at 56-day steps | Before | After |
-| -------------------------------- | -----: | ----: |
-| Rated 70+                        |     45 |    44 |
-| Rated 80+                        |      2 |     2 |
-| Best fighter                     |   86.2 |  86.7 |
+**And there was no single world to preserve.** Before the change the sport's quality was a function
+of the clock, so "the old world" was five different worlds. Calibrating against one of them was
+calibrating against nothing.
 
-And across cadences, which is the point:
+`AMBIENT_BLOCKS_PER_WEEK` is therefore a **dial**, set at 0.1 — a week of ordinary work worth a
+little under 60% of a week of fight camp — which lands the now-consistent world between the old
+extremes. It is a judgement, not a derived value, and it is the number to move if the sport should
+be deeper or shallower overall.
 
-| Caller span | Before: median / 70+ | After: median / 70+ |
-| ----------- | -------------------: | ------------------: |
-| 28 days     |            52.9 / 63 |           50.6 / 51 |
-| 56 days     |            50.3 / 45 |           50.3 / 44 |
-| 84 days     |            48.4 / 37 |           50.2 / 44 |
-| 182 days    |            47.5 / 27 |           50.0 / 42 |
-| 365 days    |            46.0 / 20 |           49.1 / 35 |
+### 8.2 What it measured
 
-Median spread falls from 6.9 points to 1.5, and the 70+ count from a 3.2× spread to 1.5×.
+Fighters rated 70+ after ten world years, three seeds per cell, mean in bold:
+
+| Clock step | Before              | After               |
+| ---------- | ------------------- | ------------------- |
+| 28 days    | 66, 59, 57 → **61** | 47, 47, 43 → **46** |
+| 56 days    | 35, 39, 40 → **38** | 46, 41, 53 → **47** |
+| 365 days   | 24, 23, 17 → **21** | 32, 33, 35 → **33** |
+
+The two cadences the app actually uses now agree — 46 against 47, inside seed noise, where they
+previously differed by 60%. Across the whole range the spread falls from **2.9x to 1.4x**.
 
 **The residual is not training.** `enforceActivity`, `playerActivity`, `scanForInbox` and
 `vacateAbandonedBelts` all still run once per _call_ rather than per elapsed step, so a
