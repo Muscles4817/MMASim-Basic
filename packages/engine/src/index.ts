@@ -73,6 +73,7 @@ export * from './business/freeAgency.js';
 export * from './business/events.js';
 export * from './business/boutAgreements.js';
 export * from './business/promotionCosts.js';
+export * from './business/schedule.js';
 export * from './business/inbox.js';
 export * from './business/championships.js';
 export * from './business/matchmakingStyle.js';

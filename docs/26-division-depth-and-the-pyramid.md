@@ -290,6 +290,96 @@ Both are testable: the rates and distributions are what must match, not the mech
 
 ---
 
+## 4.6 Built: schedules, and the pyramid that would not stay up
+
+Doc 27 § 10 needed the sport to get bigger, and § 4.3's "promotions book, they do not only roster"
+turned out to be blocked by something nobody had looked at.
+
+### The schedule was a global quota
+
+`advanceWorld` ran **three cards a fortnight across the entire sport** and decided whose night it
+was with a prestige-weighted draw. So:
+
+- **A promotion's calendar depended on its competitors.** Founding a regional show took dates off
+  the promotion at the top of the sport, because the draw is relative.
+- **The sport could not get bigger.** Handed the same seventy-eight cards a year, a 74-promotion
+  pyramid gives each promotion two. Measured, that world produced **0.86 bouts per fighter per
+  year** against a real sport's two to three — a generated world that looks right and is inert.
+- **The schedule had no relationship to the roster.** A promotion with two hundred fighters and one
+  with twenty drew from the same lottery.
+
+`cardsPerYear` replaces it: a promotion runs as many cards as its roster can fill, capped by what a
+promotion of its size actually stages and braked by whether it can pay. Nothing about it reads the
+rest of the world. Measured on the shipped 2026 era, the leader runs a card every seventeen days and
+a regional every six weeks, and the sport now scales — the 74-promotion world went from 32,761
+fights over fifteen years to **61,628**, and from 0.86 bouts per fighter to 1.62.
+
+### Then the pyramid fell over
+
+Giving promotions schedules they have to _fill_ made a pre-existing bug visible immediately. One
+simulated year of the 2026 world:
+
+|       | start | after 1 year |
+| ----- | ----: | -----------: |
+| UFC   |   204 |           56 |
+| PFL   |   124 |           63 |
+| ONE   |   124 |          128 |
+| RIZIN |    72 |          121 |
+| KSW   |    72 |           93 |
+| LFA   |    64 |          126 |
+
+**The sport inverted inside a year** and stayed inverted. It had been invisible because nothing
+downstream read roster size — under the lottery the leader kept running the most shows in the sport
+off a roster a third the size of a regional's.
+
+Three independent causes, each correct in isolation:
+
+1. **No seeded fighter had a contract.** 788 of them carry a `promotionId` and nothing behind it,
+   and free agency reads the agreement to decide who is free — so on the first quarterly tick every
+   fighter not holding a belt was a free agent at once. Fixed with an _implicit_ term rather than
+   788 stored agreements, which would have added 750 KB to a save doc 20 § 7 already wants an order
+   of magnitude smaller.
+2. **The reputation gate excluded the top promotions' own rosters.** A fighter reached a promotion
+   of prestige `42 + reputation × 0.9`, and reputation does not discriminate between the tiers of
+   this sport at all: the median is 25 to 27 everywhere except the leader's 40. **Only 50 of the
+   leader's 204 fighters could have re-signed with their own promotion.** Every expiring contract at
+   the top was a one-way ticket down.
+3. **Nothing moved anybody up.** `replenish` puts every debutant on the regional circuit, correctly,
+   and there was no counter-flow. A fighter who goes 5-0 on the regional circuit gets a call from
+   the biggest promotion that will have them, and that arc — the one the game is _about_ — was not
+   in the model.
+
+### The gate that ate itself
+
+The first replacement gated on the mean overall rating of the promotion's own roster, which reads
+well and **erodes itself**: a promotion signing at its own mean minus twelve lowers its mean, so
+next quarter it signs twelve below _that_. Over ten years the leader's standard fell from 60.2 to
+51.9 while the smallest promotion in the world rose to 57.1 — the ladder did not flatten, it
+**inverted**.
+
+The standard is anchored to the population instead. Rank the promotions by prestige, walk down them
+spending their roster targets, and each claims the slice of the sport's fighters at its own depth:
+the leader's 204 of 788 is the top 26%, so it signs from the 74th percentile up. That cannot drift,
+and it needs no constant that would have to be re-tuned for a generated world — which § 4 makes a
+requirement rather than a nicety.
+
+`tests/integration/the-pyramid-holds.test.ts` runs ten years and asserts the shape survives.
+
+### What this cost, and what it did not buy
+
+The schedule level is calibrated against the **economy**, not against the sport. A first cut used
+realistic activity — 1.9 to 2.4 bouts per fighter per year — and ran the sport 60% busier than the
+cost model could carry: the fourth-smallest promotion went insolvent inside ten simulated years, and
+two of them inside twelve. Cutting a struggling promotion's schedule makes it _worse_, because
+`periodCosts` bills for staff, premises and a contracted roster whether or not anybody fights.
+
+So the shipped level holds the sport at about seventy cards a year — what it ran before — and
+`TIER_BOUTS_PER_FIGHTER` is the single knob for a busier sport. Turning it up needs the economics of
+a card at the bottom of the sport looked at first. That is the next piece of work here, and it is a
+finding about the cost model rather than about the schedule.
+
+---
+
 ## 5. Numbers to pick
 
 | Constant                   | First guess  | Calibrated against                                         |

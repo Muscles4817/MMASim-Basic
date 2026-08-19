@@ -451,13 +451,20 @@ measures the fifteen years. `tools/prehistory-cost.ts`, three world sizes, both 
 
 | World                         | Fights | 15 years, full | 15 years, with C |
 | ----------------------------- | -----: | -------------: | ---------------: |
-| 858 fighters, 8 promotions    |  7,684 |          13.6s |             8.4s |
-| 2,778 fighters, 38 promotions | 27,636 |          62.1s |            41.7s |
-| 5,082 fighters, 74 promotions | 32,761 |          99.6s |            66.9s |
+| 858 fighters, 8 promotions    | 12,030 |          15.6s |             9.2s |
+| 2,778 fighters, 38 promotions | 37,047 |          62.7s |            44.5s |
+| 5,082 fighters, 74 promotions | 61,628 |         137.0s |           102.5s |
+
+**Re-measured after doc 26 § 4.6.** The first run of this table used the world's old card schedule —
+three cards a fortnight across the entire sport, however many promotions existed — so the
+74-promotion world ran the same number of fights as the 8-promotion one and produced 0.86 bouts per
+fighter per year. Those numbers measured a world that was not doing the work. With promotions on
+their own calendars the 5,082-fighter world runs 61,628 fights over fifteen years, 1.62 per fighter
+per year, and costs 137 seconds.
 
 § 7's world-creation budget is **10 seconds**, and these are desktop numbers — a mid-range phone is
-three to five times slower. So the realistic-size world is 20–30× over budget, and **C's 9× fight
-speedup buys 33% of a tick.**
+three to five times slower. So the realistic-size world is 40–70× over budget, and **C's 9× fight
+speedup buys 25% of a tick.**
 
 ### 10.1 Why the 9× only bought 33%
 

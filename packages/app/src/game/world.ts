@@ -30,6 +30,7 @@ import {
   rollInjury,
   createRng,
   CARD_SIZE,
+  TERM_DAYS,
   agreementStatus,
   awardBonuses,
   activityBreach,
@@ -67,6 +68,7 @@ import {
   nextContender,
   releaseRisk,
   chaseUplift,
+  clamp,
   clamp01,
   daysIdle,
   inboxId,
@@ -81,6 +83,10 @@ import {
   setChampion,
   hasDriftedOut,
   shouldRetire,
+  MAX_CARDS_PER_YEAR,
+  overallRating,
+  daysBetweenCards,
+  hashSeed,
   simulateFight,
   streakNews,
   trimFeed,
@@ -122,14 +128,8 @@ type StoredNews = NewsItem & Entity;
  */
 const STEP_DAYS = 14;
 
-/**
- * Cards run per fortnight across every promotion.
- *
- * The one number that decides whether the world feels busy or empty. At six, a division of
- * roughly a dozen sees each fighter out around three times a year, which is what a real
- * schedule looks like.
- */
-const CARDS_PER_STEP = 6;
+/** How often the quarterly business — intake, retirements, free agency — runs. */
+const QUARTER_DAYS = 91;
 
 /**
  * Ceiling on fights simulated in a single call.
@@ -139,40 +139,25 @@ const CARDS_PER_STEP = 6;
  * most one card. Stopping halfway through an event would leave a card with unresolved bouts
  * on it, which is worse than nine extra simulations.
  *
- * The player is waiting for a screen. A twelve-week camp is six steps and ~36 fights, which
- * is comfortable; a player who somehow advances five years at once gets a world that moved
- * plausibly rather than a frozen tab. When the budget binds, time still passes and people
- * still age — it is the fights that thin out, which is the right thing to lose.
+ * The player is waiting for a screen. When the budget binds, time still passes and people still
+ * age — it is the fights that thin out, which is the right thing to lose.
+ *
+ * **Per promotion**, because the sport's size is now a property of the world rather than a
+ * constant. This was a flat 220, written when the whole sport ran three cards a fortnight; doc 26
+ * § 2's pyramid is seventy-odd promotions and a flat ceiling would have truncated a generated
+ * world's every call while leaving the shipped world untouched — the worst kind of limit, because
+ * it only bites where nobody is looking.
  */
-const MAX_FIGHTS_PER_CALL = 220;
+export const MAX_FIGHTS_PER_CALL_PER_PROMOTION = 28;
 
 /**
- * Fights the loop will simulate per fortnight of elapsed time.
+ * How much of a promotion's own schedule a single call will honour before truncating.
  *
- * The flat cap above was written when a card was one or two bouts, and the 2026 roster made it
- * bind immediately: a full nine-bout card times three cards a fortnight is 27 fights, so a
- * one-year call wants ~700 and got 220 — which truncated the world to six cards a year for the
- * leader against a real schedule of twenty-odd, and quietly starved every division of activity.
- *
- * Proportional to the span requested rather than flat, because the two callers want different
- * things: a twelve-week camp is six steps and should cost about what it always did, while a
- * long simulation should be allowed to actually run. `MAX_FIGHTS_PER_CALL` survives as the
- * backstop against somebody advancing twenty years in one go.
+ * `cardsPerYear` says what the sport runs; this says how much of it one `advanceWorld` call is
+ * willing to simulate. Comfortably above 1 so a normal advance never truncates — the backstop is
+ * against somebody advancing twenty years in one go, not against the schedule.
  */
-const FIGHTS_PER_STEP_BUDGET = 30;
-
-/**
- * Cards run per fortnight, across every promotion.
- *
- * The budget above is a total, and a total is the wrong shape: measured over a simulated
- * year it bound in March and produced **every fight in the world in the first quarter**,
- * followed by nine months of nothing but ageing. A player who booked a fight in June could
- * not be on a card and the rankings froze for three quarters.
- *
- * So the real limiter is per-fortnight, and the total is only a backstop against somebody
- * advancing twenty years in one call.
- */
-const MAX_CARDS_PER_STEP = 3;
+const SCHEDULE_HEADROOM = 1.35;
 
 /**
  * Days between title fights for the same belt.
@@ -207,6 +192,40 @@ const MAX_BOUTS_PER_YEAR = 3;
  * and for a division the seed did not populate at all.
  */
 const DIVISION_FLOOR = (sex: 'male' | 'female'): number => (sex === 'female' ? 6 : 9);
+
+/**
+ * How far below a promotion's own standard it will still sign somebody.
+ *
+ * Promotions sign prospects, and a prospect is by definition worse today than the roster they are
+ * joining. Twelve rating points is what makes the ladder climbable while keeping it a ladder:
+ * measured against the shipped 2026 world it lets four fifths of each promotion's existing roster
+ * re-sign where they are, and stops a regional journeyman walking into the leader.
+ */
+const SIGNING_SLACK = 12;
+
+/**
+ * Whether a seeded fighter's unwritten deal comes up in this quarter.
+ *
+ * Once per `TERM_DAYS` per fighter, with the phase taken from their id so the sport's contracts do
+ * not all expire on the same day. Compared against the previous quarterly tick because that is how
+ * often free agency runs — a window rather than an instant, so nobody is skipped.
+ */
+function implicitTermExpires(fighter: Fighter, day: number): boolean {
+  const offset = hashSeed(fighter.id as string) % TERM_DAYS;
+  const cycle = (at: number) => Math.floor((at - offset) / TERM_DAYS);
+  return cycle(day) > cycle(day - QUARTER_DAYS);
+}
+
+/**
+ * How many fighters this promotion is trying to hold. See `WorldMeta.rosterTargets`.
+ *
+ * Zero for a promotion the seed never populated — one founded mid-save, or added by the editor —
+ * which correctly makes it a destination of last resort rather than a magnet.
+ */
+const rosterTargetFor = (
+  world: { rosterTargets?: Record<string, number> },
+  promotionId: string,
+): number => world.rosterTargets?.[promotionId] ?? 0;
 
 const divisionTargetFor = (
   world: { divisionTargets?: Record<string, number> },
@@ -262,19 +281,6 @@ export interface WorldExclusion {
    * opinion about where the player is.
    */
   resolve?: BoutResolver;
-  /**
-   * Cards run per fortnight across the whole sport. Defaults to `MAX_CARDS_PER_STEP`.
-   *
-   * A constant is the right shape for the world the game ships with and the wrong shape for a
-   * generated one. Three cards a fortnight is a schedule for eight promotions; hand the same
-   * number to a thirty-eight-promotion pyramid and each of them runs two cards a *year*, so the
-   * sport gets bigger without anybody fighting more — which for doc 27 § 4's pre-history is fatal,
-   * because a record nobody earned is the thing pre-history exists to avoid.
-   *
-   * Passed in rather than derived from the promotion count, because how busy the sport is is a
-   * property of the world being generated and this module has no opinion about it.
-   */
-  cardsPerStep?: number;
 }
 
 export function advanceWorld(
@@ -299,22 +305,47 @@ export function advanceWorld(
     return { fights: 0, news, truncated: false };
   }
 
-  /*
-   * Scaled to the span, capped by the absolute backstop. See `FIGHTS_PER_STEP_BUDGET`.
-   */
-  const steps = Math.max(1, Math.ceil((toDay - fromDay) / STEP_DAYS));
-  const perStepBudget =
-    FIGHTS_PER_STEP_BUDGET * ((exclusion.cardsPerStep ?? MAX_CARDS_PER_STEP) / MAX_CARDS_PER_STEP);
-  const fightBudget = Math.min(MAX_FIGHTS_PER_CALL * 12 * (perStepBudget / FIGHTS_PER_STEP_BUDGET), steps * perStepBudget);
-
   const rng = createRng(`${world.seed}:world:${fromDay}`);
   const promotions = db.promotions.findAll() as unknown as Promotion[];
+
+  /*
+   * The backstop, sized from the schedule rather than from a constant.
+   *
+   * What the sport would run over this span if nothing got in the way, plus headroom. A normal
+   * advance never reaches it; a twenty-year one does, and thins out rather than hanging.
+   */
+  const years = (toDay - fromDay) / 365;
+  const fightBudget = Math.max(
+    CARD_SIZE,
+    Math.min(
+      MAX_FIGHTS_PER_CALL_PER_PROMOTION * promotions.length * 12,
+      years * promotions.length * MAX_CARDS_PER_YEAR * CARD_SIZE * SCHEDULE_HEADROOM,
+    ),
+  );
   const readyOn = new Map<string, number>();
   const lastSeen = new Map<string, number>();
 
   for (let day = fromDay; day < toDay; day += STEP_DAYS) {
+    /*
+     * How many active fighters each promotion has, in one pass.
+     *
+     * Read by two things that would otherwise each walk the roster per promotion: `cardsPerYear`,
+     * which decides whether this promotion runs a card this fortnight, and free agency, which
+     * decides who signs a fighter whose deal is up. At five thousand fighters and seventy-odd
+     * promotions the per-promotion form is O(fighters x promotions) on every step.
+     *
+     * Taken before the quarterly intake rather than after, so it is at most one fortnight stale —
+     * which is closer than a promotion's own front office would be.
+     */
+    const rosterSizes = new Map<string, number>();
+    for (const row of db.fighters.findAll() as Fighter[]) {
+      if (row.retiredDay !== undefined || !row.promotionId) continue;
+      const id = row.promotionId as string;
+      rosterSizes.set(id, (rosterSizes.get(id) ?? 0) + 1);
+    }
+
     // Quarterly intake, matching how a promotion actually signs people.
-    if (Math.floor(day / 91) !== Math.floor((day - STEP_DAYS) / 91)) {
+    if (Math.floor(day / QUARTER_DAYS) !== Math.floor((day - STEP_DAYS) / QUARTER_DAYS)) {
       // A belt held by somebody who is never getting in a cage again kills its division,
       // because retirees are filtered out of every card. Swept rather than only handled at
       // the moment of retirement, because a fighter can reach that state by more than one
@@ -322,9 +353,9 @@ export function advanceWorld(
       // Before the intake, so a division that lost somebody this quarter refills in the same
       // quarter rather than a season later.
       news.push(...retireTheDrifted(db, day, rng.fork(`drift:${day}`), exceptId));
-      news.push(...replenish(db, day, rng, promotions));
+      news.push(...replenish(db, day, rng, promotions, rosterSizes));
       // Deals run out across the roster too, so the market has other people in it.
-      news.push(...resolveFreeAgency(db, day, rng, promotions, exceptId));
+      news.push(...resolveFreeAgency(db, day, rng, promotions, exceptId, rosterSizes));
     }
 
     /*
@@ -346,62 +377,58 @@ export function advanceWorld(
     });
 
     /*
-     * Every card in a step used to be stamped with the step's own `day`, and that one fact was
-     * three defects.
+     * Whose night it is, from each promotion's own calendar.
      *
-     * `eventId` is `evt_${promotionId}_${day}`, and the promotion is drawn per card, so two of
-     * the three cards in a fortnight landing on the same promotion produced the *same event id* —
-     * and `db.events.upsert` silently overwrote the first night after it had already been
-     * simulated and written to everybody's record. Measured over a simulated year of the 2020
-     * world: 65 same-day record pairs across 139 fighters, 52 of them the identical bout written
-     * twice, against a schedule in which no fighter appeared twice on any day. The schedule was
-     * clean because the evidence had been overwritten; the records were not.
+     * This was three cards a fortnight for the whole sport, with a prestige-weighted draw deciding
+     * who got them — a global quota rather than a schedule. See `cardsPerYear` for what was wrong
+     * with that; the short version is that founding a promotion in Poland took dates away from the
+     * one at the top of the sport, and the sport could not get bigger than seventy-eight cards a
+     * year however many promotions existed.
      *
-     * Three shows on one date was also simply wrong about the sport. Cards inside a step now land
-     * on different dates, spread across whatever part of the step is actually being simulated so
-     * a short call cannot date a card past the day it was asked to stop at.
+     * Each promotion now runs on a fixed interval with a stable phase derived from its id, which
+     * makes the calendar a property of the promotion and independent of how the player advances
+     * the clock: the same day produces the same cards whether it was reached in one step or forty.
+     *
+     * Cards inside a step therefore land on different dates by construction. That matters beyond
+     * realism — `eventId` is `evt_${promotionId}_${day}`, so two cards from one promotion on one
+     * day are the *same event id*, and `db.events.upsert` silently overwrote the first after it had
+     * already been simulated and written to everybody's record.
      */
     const span = Math.min(STEP_DAYS, toDay - day);
-    const cardCeiling = exclusion.cardsPerStep ?? MAX_CARDS_PER_STEP;
-    const cardsThisStep = Math.max(
-      1,
-      Math.min(Math.max(CARDS_PER_STEP, cardCeiling), cardCeiling, span),
-    );
 
-    for (let card = 0; card < cardsThisStep; card++) {
+    for (const promotion of promotions) {
+      if (promotion.id === exclusion.promotionId) continue;
       if (available.length < 2) break;
-      if (fights >= fightBudget) {
-        truncated = true;
-        break;
+
+      const interval = daysBetweenCards(promotion, rosterSizes.get(promotion.id as string) ?? 0);
+      if (!Number.isFinite(interval) || interval <= 0) continue;
+
+      // A stable offset per promotion, so the sport's shows are spread through the calendar
+      // rather than every promotion running on the same fortnight boundary.
+      const phase = hashSeed(promotion.id as string) % Math.ceil(interval);
+      let cardDay = Math.ceil((day - phase) / interval) * interval + phase;
+
+      for (; cardDay < day + span; cardDay += interval) {
+        if (fights >= fightBudget) {
+          truncated = true;
+          break;
+        }
+        const built = buildNight({
+          db,
+          day: Math.floor(cardDay),
+          rng: rng.fork(`night:${promotion.id}:${Math.floor(cardDay)}`),
+          promotion,
+          available,
+          readyOn,
+          lastSeen,
+          exceptId,
+          resolve: exclusion.resolve,
+        });
+        if (!built) continue;
+        fights += built.fights;
+        news.push(...built.news);
       }
-
-      const cardDay = day + Math.floor((card * span) / cardsThisStep);
-
-      /*
-       * A night, not a loose bout.
-       *
-       * The world used to simulate individual fights with no container, which meant card
-       * position did not exist, the bonus pool had nowhere to sit, and revenue points — which
-       * attach to an *event* — could never pay out. Bouts are collected, ordered by draw
-       * weight with a title fight always headlining, and then run as one card.
-       */
-      const bookable = promotions.filter((p) => p.id !== exclusion.promotionId);
-      if (bookable.length === 0) break;
-      const promotion = pickPromotion(bookable, rng.fork(`who:${day}:${card}`));
-      const built = buildNight({
-        db,
-        day: cardDay,
-        rng: rng.fork(`night:${day}:${card}`),
-        promotion,
-        available,
-        readyOn,
-        lastSeen,
-        exceptId,
-        resolve: exclusion.resolve,
-      });
-      if (!built) continue;
-      fights += built.fights;
-      news.push(...built.news);
+      if (truncated) break;
     }
 
     if (truncated) break;
@@ -607,8 +634,7 @@ function buildNight(ctx: {
     const title =
       champion !== undefined
         ? (db.championships.findById(championshipId(promotion.id, subject.divisionId)) as
-            | Championship
-            | undefined)
+            Championship | undefined)
         : undefined;
     // From the last time the belt was *contested*, not from when the reign began — see
     // `Reign.lastContestedDay`.
@@ -628,7 +654,11 @@ function buildNight(ctx: {
      * for two or three places and then books whoever people want to watch.
      */
     let isTitleFight = false;
-    if (champion !== undefined && beltIsFree && (champion === subject.id || champion === opponent.id)) {
+    if (
+      champion !== undefined &&
+      beltIsFree &&
+      (champion === subject.id || champion === opponent.id)
+    ) {
       const challengerId = champion === subject.id ? opponent.id : subject.id;
       const wanted = nextContender({
         ranked: rankDivision(
@@ -801,7 +831,9 @@ function buildNight(ctx: {
     results: results.map((r) => r.result),
     recentDelivery: current.recentDelivery,
   });
-  db.promotions.upsert(rememberDelivery(settled.promotion, settled.delivered) as Promotion & Entity);
+  db.promotions.upsert(
+    rememberDelivery(settled.promotion, settled.delivered) as Promotion & Entity,
+  );
 
   return { fights, news };
 }
@@ -892,9 +924,8 @@ export function runCardBout(ctx: {
    */
   let titleChangedHands = false;
   if (isTitleFight) {
-    const title = db.championships.findById(
-      championshipId(promotion.id, red.divisionId),
-    ) as Championship | undefined;
+    const title = db.championships.findById(championshipId(promotion.id, red.divisionId)) as
+      Championship | undefined;
 
     if (result.winnerId && champion !== (result.winnerId as string)) {
       db.promotions.upsert(setChampion(promotion, red.divisionId, result.winnerId) as never);
@@ -968,7 +999,12 @@ export function runCardBout(ctx: {
   };
 
   const news: NewsItem[] = [];
-  const winner = result.winnerId === red.id ? developed.red : result.winnerId === blue.id ? developed.blue : undefined;
+  const winner =
+    result.winnerId === red.id
+      ? developed.red
+      : result.winnerId === blue.id
+        ? developed.blue
+        : undefined;
   const loser = winner ? (winner.id === red.id ? developed.blue : developed.red) : undefined;
 
   const item = fightNews({
@@ -1074,8 +1110,7 @@ function settleRosterFighter(
 
   const agreement = fighter.agreementId
     ? (db.agreements.findById(fighter.agreementId as string) as
-        | (PromotionalAgreement & Entity)
-        | undefined)
+        (PromotionalAgreement & Entity) | undefined)
     : undefined;
 
   // The signed terms, not what they are worth today — the whole point of a contract.
@@ -1133,8 +1168,7 @@ function releaseIfCut(
 
   const agreement = fighter.agreementId
     ? (db.agreements.findById(fighter.agreementId as string) as
-        | (PromotionalAgreement & Entity)
-        | undefined)
+        (PromotionalAgreement & Entity) | undefined)
     : undefined;
   if (agreement) db.agreements.upsert({ ...agreement, status: 'terminated' } as never);
 
@@ -1171,9 +1205,50 @@ function resolveFreeAgency(
   rng: Rng,
   promotions: readonly Promotion[],
   exceptId: FighterId | undefined,
+  rosterSizes: ReadonlyMap<string, number>,
 ): NewsItem[] {
+  const world = getWorld(db);
   const news: NewsItem[] = [];
   const fighters = db.fighters.findAll() as Fighter[];
+
+  /*
+   * The standard each promotion signs at, as a rating.
+   *
+   * **Anchored to the sport, not to the promotion's own roster**, and that distinction is the
+   * whole of it. The first version of this gate used the mean overall of the promotion's current
+   * roster, which reads well and erodes itself: a promotion signing at its own mean minus twelve
+   * points lowers its mean, so the next quarter it signs twelve points below *that*. Measured over
+   * ten years the leader's standard fell from 60.2 to 51.9 while the smallest promotion in the
+   * world rose to 56.2 — the ladder did not merely flatten, it **inverted**.
+   *
+   * So the floor comes from the population instead. Rank the promotions by prestige, walk down
+   * them spending their `rosterTargets`, and each one claims the slice of the sport's fighters
+   * that sits at its own depth: the leader's 204 of 788 signed fighters is the top 26%, so it
+   * signs from the 74th percentile and up. That cannot drift, because it is defined against
+   * everybody rather than against the people already there — and it needs no constant that would
+   * have to be re-tuned for a generated world, which doc 27 § 6 makes a requirement rather than a
+   * nicety.
+   */
+  const overalls = fighters
+    .filter((f) => f.retiredDay === undefined)
+    .map((f) => overallRating(f.attributes))
+    .sort((a, b) => a - b);
+  const quantile = (q: number): number =>
+    overalls.length === 0
+      ? 0
+      : overalls[clamp(Math.floor(q * overalls.length), 0, overalls.length - 1)]!;
+
+  const totalTarget = promotions.reduce(
+    (sum, p) => sum + rosterTargetFor(world, p.id as string),
+    0,
+  );
+  const standardOf = new Map<string, number>();
+  let spent = 0;
+  for (const p of [...promotions].sort((a, b) => b.prestige - a.prestige)) {
+    spent += rosterTargetFor(world, p.id as string);
+    const floor = totalTarget <= 0 ? 0 : clamp01(1 - spent / totalTarget);
+    standardOf.set(p.id as string, quantile(floor));
+  }
 
   for (const fighter of fighters) {
     /*
@@ -1192,8 +1267,7 @@ function resolveFreeAgency(
 
     const agreement = fighter.agreementId
       ? (db.agreements.findById(fighter.agreementId as string) as
-          | (PromotionalAgreement & Entity)
-          | undefined)
+          (PromotionalAgreement & Entity) | undefined)
       : undefined;
 
     const promotion = fighter.promotionId
@@ -1218,8 +1292,37 @@ function resolveFreeAgency(
       if (!agreementStatus(agreement, day, { isChampion: false }).expired) continue;
     }
 
+    /*
+     * Signed to a promotion with nothing written down: the seeded rosters.
+     *
+     * **No seeded fighter has an agreement** — 788 of them in the 2026 era carry a `promotionId`
+     * and no contract behind it — and the check above reads the agreement to decide whether
+     * somebody is free. So on the first quarterly tick of a new game, *every fighter in the sport
+     * who was not holding a belt was a free agent at once*, and the world redistributed the entire
+     * roster in a single pass. Measured over one simulated year of the 2026 era, before this:
+     *
+     *   UFC   204 -> 56      RIZIN  72 -> 121
+     *   PFL   124 -> 63      KSW    72 ->  93
+     *   ONE   124 -> 128     LFA    64 -> 126
+     *
+     * The sport inverted inside a year and stayed inverted. It had gone unnoticed because nothing
+     * downstream read roster size: cards were handed out by a prestige-weighted lottery, so the
+     * leader kept running the most shows in the sport off a roster a third the size of a
+     * regional's. Giving promotions schedules they have to fill is what made it visible.
+     *
+     * The deal is **implicit rather than written**, which is the difference between fixing this
+     * and blowing the save budget: materialising 788 agreements at world creation added 750 KB to
+     * a save doc 20 § 7 already wants an order of magnitude *smaller*. A fighter with a promotion
+     * and no paperwork is treated as being on the standard term, expiring on a day derived from
+     * their own id — so expiries stagger across three years instead of arriving in one lump, and
+     * the world converges on the ordinary written-contract model as each of them comes up and
+     * signs something real.
+     */
+    if (!agreement && promotion && !implicitTermExpires(fighter, day)) continue;
+
     // Cut, or out of contract. Where do they land?
     const fRng = rng.fork(`fa:${fighter.id}:${day}`);
+    const overall = overallRating(fighter.attributes);
     const candidates = promotions.filter((p) => p.divisions.includes(fighter.divisionId));
     if (candidates.length === 0) continue;
 
@@ -1233,25 +1336,81 @@ function resolveFreeAgency(
      *
      * The filter above asks only whether a promotion could pay this fighter, and a fighter with
      * no record is cheap — so the biggest promotion in the sport could always "afford" a
-     * debutant, and a uniform pick then put them on its roster. Measured: four of thirty winless
-     * fighters sat on the leader's roster after ten years, having never fought anywhere.
+     * debutant, and a uniform pick then put them on its roster.
      *
-     * Reputation is the gate, because it is what the rest of the business layer already uses to
-     * mean "people who matter rate you". A debutant reaches the regional circuit; somebody who
-     * has beaten real opposition reaches the top. The floor keeps the bottom of the sport open
-     * to everybody, which is what the bottom of the sport is for.
+     * **A promotion signs at the standard of its place in the sport** — see `standardOf` above for
+     * how that is anchored. The gate this replaces was `prestige <= 42 + reputation * 0.9`, an
+     * absolute reputation threshold, and reputation does not discriminate between the tiers of this
+     * sport at all: measured across the shipped 2026 world, the median is 25 to 27 on every
+     * promotion in the game except the leader's 40. So the rule could not tell a regional
+     * journeyman from a contender, and where it did bite it bit the wrong way — **only 50 of the
+     * leader's 204 fighters could have re-signed with their own promotion**, 38 of 124 at one major
+     * and 68 of 124 at the other. Every expiring contract at the top of the sport was a one-way
+     * ticket down, and over five simulated years the leader went from 204 fighters to 57.
      */
-    /*
-     * Calibrated so the ladder is climbable rather than sealed. A debutant on reputation 5 reaches
-     * the regional circuit and nothing above it; a solid regional fighter on 40 reaches the
-     * majors; an established one on 61 reaches the biggest promotion in the sport. The first
-     * version used 0.65 here, which required reputation 85 for the leader — so nearly nobody ever
-     * qualified, big-promotion rosters thinned, and their cards lost most of a bout each.
-     */
-    const earned = affordable.filter((p) => p.prestige <= 42 + fighter.reputation * 0.9);
+    const earned = affordable.filter(
+      (p) => overall >= (standardOf.get(p.id as string) ?? 0) - SIGNING_SLACK,
+    );
 
-    const pool = earned.length > 0 ? earned : affordable.length > 0 ? affordable : candidates;
-    const next = promotion && fRng.chance(0.55) && pool.includes(promotion) ? promotion : fRng.pick(pool);
+    /*
+     * Where you already are is always an option.
+     *
+     * The reputation gate is about *climbing* — what a fighter can reach that they are not already
+     * on. Applying it to the incumbent makes it a gate on keeping your job, and that is a one-way
+     * valve: a fighter on the leader's roster whose reputation sits below 61 could never re-sign
+     * there, so every contract that came up moved them down the ladder and nothing ever moved them
+     * back. Combined with the seed shipping no contracts at all — see `signSeededRosters` — it
+     * emptied the biggest promotion in the sport into the regional circuit inside a year.
+     *
+     * Being on a roster is itself the evidence that you belong on it. Whether the promotion *wants*
+     * you back is a different question, and it is the one `enforceActivity` and the purse
+     * negotiation answer.
+     */
+    const pool = [
+      ...new Set([
+        ...(earned.length > 0 ? earned : affordable.length > 0 ? affordable : candidates),
+        ...(promotion ? [promotion] : []),
+      ]),
+    ];
+
+    /*
+     * Which of them actually signs him.
+     *
+     * Was `promotion && chance(0.55) ? promotion : fRng.pick(pool)` — stay put, or a uniform draw
+     * over everyone who would have you. Two things were missing from that, and between them they
+     * are why the sport could not hold its shape.
+     *
+     * **Nothing weighted by need.** A uniform draw ignores that a promotion eight fighters short
+     * of a full roster is in the market and one that is over its target is not. `replenish` puts
+     * every debutant at the bottom of the pyramid — correctly — so without a pull the other way
+     * the bottom grew and the top shrank: over five years the leader went from 204 fighters to 57
+     * while the two smallest promotions passed 190.
+     *
+     * **Nothing moved anybody up.** A fighter who goes 5-0 on the regional circuit gets a call
+     * from the biggest promotion that will have them, and that is the entire narrative arc the
+     * game is about. Without it, quality diffuses instead of stratifying: measured over ten years,
+     * the leader's roster fell to a mean overall of 50.6 while the *smallest* promotion in the
+     * world rose to 57.1 — the ladder inverted, which is worse than it collapsing.
+     *
+     * So: take the step up when it is offered, otherwise mostly stay where you are, and when
+     * neither applies go where there is room.
+     */
+    const room = (p: Promotion) => {
+      const target = rosterTargetFor(world, p.id as string);
+      const have = rosterSizes.get(p.id as string) ?? 0;
+      // Floored rather than zeroed: a promotion at its target still signs somebody it wants.
+      return Math.max(0.08, clamp01((target - have) / Math.max(1, target)));
+    };
+    const whereThereIsRoom = () =>
+      fRng.pickWeighted(pool, (p) => room(p) * Math.max(1, p.prestige) ** 0.6);
+
+    const stepUp = promotion ? pool.filter((p) => p.prestige > promotion.prestige + 4) : [];
+    const next =
+      stepUp.length > 0 && fRng.chance(0.7)
+        ? fRng.pickWeighted(stepUp, (p) => room(p) * Math.max(1, p.prestige) ** 1.4)
+        : promotion && pool.includes(promotion) && fRng.chance(0.7)
+          ? promotion
+          : whereThereIsRoom();
 
     const terms = defaultTerms(fighter, next);
     const signed = createAgreement({
@@ -1263,7 +1422,8 @@ function resolveFreeAgency(
         signingBonus: 0,
         revenuePoints: 0,
         fightsOwed: fRng.int(3, 5),
-        championshipExtension: next.tier === 'global' || next.tier === 'major' ? 'standard' : 'none',
+        championshipExtension:
+          next.tier === 'global' || next.tier === 'major' ? 'standard' : 'none',
         matchingRights: fRng.chance(0.5),
         exclusive: next.tier !== 'regional' && next.tier !== 'developmental',
         outsideBouts: next.tier === 'regional' || next.tier === 'developmental' ? 2 : 0,
@@ -1437,9 +1597,8 @@ function vacateAbandonedBelts(db: GameDb, day: number): NewsItem[] {
 
       updated = setChampion(updated, divisionId as never, undefined);
 
-      const title = db.championships.findById(
-        championshipId(promotion.id, divisionId as never),
-      ) as Championship | undefined;
+      const title = db.championships.findById(championshipId(promotion.id, divisionId as never)) as
+        Championship | undefined;
       if (title) {
         db.championships.upsert(vacate({ title, day, reason }) as Championship & Entity);
       }
@@ -1467,7 +1626,10 @@ function vacateAbandonedBelts(db: GameDb, day: number): NewsItem[] {
 
 /** A division id as it reads in a headline. */
 const divisionLabel = (divisionId: string): string =>
-  divisionId.replace(/^mens-/, '').replace(/^womens-/, "women's ").replace(/-/g, ' ');
+  divisionId
+    .replace(/^mens-/, '')
+    .replace(/^womens-/, "women's ")
+    .replace(/-/g, ' ');
 
 /**
  * Which promotion a debutant signs with.
@@ -1475,10 +1637,32 @@ const divisionLabel = (divisionId: string): string =>
  * Inverse to prestige, steeply. A fighter turning professional is not a UFC signing, and the
  * regional circuit existing as a genuine feeder depends on that being true in the model rather
  * than only in the fiction.
+ *
+ * Bounded by how full each promotion already is, and **`undefined` when none of them has room**,
+ * because the steep prestige weighting on its own has no idea when to stop. The intake holds the
+ * *sport's* headcount and poured all of it into the bottom of the pyramid, so the regional circuit
+ * grew past the size it was designed at while the leader shrank: measured over five simulated
+ * years, the two smallest promotions went from 64 fighters to 96 and 100.
+ *
+ * Nobody signed is the honest answer rather than a failure case, and the arithmetic says so. The
+ * per-promotion targets sum to 788 against a sport of 858, and the difference is the seed's
+ * seventy free agents — so a world in which every roster is full is a world whose next debutant is
+ * unattached, which is what the overwhelming majority of professional fighters are.
  */
-function pickStartingPromotion(promotions: readonly Promotion[], rng: Rng): Promotion {
-  const weights = promotions.map((p) => Math.max(1, 100 - p.prestige) ** 2);
+function pickStartingPromotion(
+  promotions: readonly Promotion[],
+  rng: Rng,
+  world: { rosterTargets?: Record<string, number> },
+  rosterSizes: ReadonlyMap<string, number>,
+): Promotion | undefined {
+  const weights = promotions.map((p) => {
+    const target = rosterTargetFor(world, p.id as string);
+    const have = rosterSizes.get(p.id as string) ?? 0;
+    const room = target <= 0 ? 0 : clamp01((target - have) / target);
+    return Math.max(1, 100 - p.prestige) ** 2 * room;
+  });
   const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return undefined;
 
   let roll = rng.range(0, total);
   for (const [index, weight] of weights.entries()) {
@@ -1554,14 +1738,13 @@ function replenish(
   day: number,
   rng: Rng,
   promotions: readonly Promotion[],
+  rosterSizes: ReadonlyMap<string, number>,
 ): NewsItem[] {
   const news: NewsItem[] = [];
   const all = db.fighters.findAll() as Fighter[];
 
   for (const division of DIVISIONS) {
-    const active = all.filter(
-      (f) => f.divisionId === division.id && f.retiredDay === undefined,
-    );
+    const active = all.filter((f) => f.divisionId === division.id && f.retiredDay === undefined);
     const target = divisionTargetFor(getWorld(db), division.id as string, division.sex);
 
     for (let i = active.length; i < target; i++) {
@@ -1576,7 +1759,12 @@ function replenish(
        * Weighted hard toward the bottom instead. Almost everybody starts small, a few start at a
        * major, and the leader signs essentially nobody straight out of the amateurs.
        */
-      const promotion = pickStartingPromotion(promotions, rng.fork(`start:${day}:${division.id}:${i}`));
+      const promotion = pickStartingPromotion(
+        promotions,
+        rng.fork(`start:${day}:${division.id}:${i}`),
+        getWorld(db),
+        rosterSizes,
+      );
       /*
        * Most people who turn professional are never going to be anything. A few are.
        *
@@ -1599,7 +1787,7 @@ function replenish(
         divisionId: division.id,
         sex: division.sex,
         day,
-        promotionId: promotion.id,
+        promotionId: promotion?.id,
         tier: isProspect ? Math.round(genRng.normalClamped(78, 9, 62, 97)) : undefined,
       });
       /*
@@ -1630,8 +1818,8 @@ function replenish(
           fighterId: placed.id,
           name: displayName(born),
           divisionId: division.id,
-          promotionId: promotion.id,
-          promotionName: promotion.shortName,
+          promotionId: promotion?.id,
+          promotionName: promotion?.shortName,
         }),
       );
     }
@@ -1759,23 +1947,6 @@ function rememberDelivery(promotion: Promotion, delivered: number): Promotion {
 }
 
 /**
- * Whose night this is.
- *
- * Was `rng.pick(promotions)`, i.e. uniform — so the smallest promotion in the game ran as many
- * cards a year as the global one. Two things went wrong with that. A developmental promotion
- * putting on twenty-odd shows a year is not a thing that happens, and it drained the bottom of
- * the sport: measured, the two smallest promotions were insolvent inside eight simulated
- * years, on a schedule they could never have afforded.
- *
- * Weighted by prestige, which gives roughly the cadence doc 12 asks for — around two cards a
- * month for a global promotion down to one every six weeks for a regional one — without
- * hard-coding a calendar that would then have to be kept in step with the tiers.
- */
-function pickPromotion(promotions: readonly Promotion[], rng: Rng): Promotion {
-  return rng.pickWeighted(promotions, (p) => Math.max(1, p.prestige) ** 1.6);
-}
-
-/**
  * Charge every promotion for the time that has passed.
  *
  * See `periodCosts` for why this is overheads rather than a payroll: MMA fighters are paid per
@@ -1834,8 +2005,7 @@ function enforceActivity(
     if (fighter.retiredDay !== undefined || !fighter.promotionId || !fighter.agreementId) continue;
 
     const agreement = db.agreements.findById(fighter.agreementId as string) as
-      | PromotionalAgreement
-      | undefined;
+      PromotionalAgreement | undefined;
     if (!agreement) continue;
 
     /*
@@ -1953,8 +2123,7 @@ function playerActivity(
   if (!me || me.retiredDay !== undefined || !me.promotionId || !me.agreementId) return [];
 
   const agreement = db.agreements.findById(me.agreementId as string) as
-    | (PromotionalAgreement & Entity)
-    | undefined;
+    (PromotionalAgreement & Entity) | undefined;
   const promotion = db.promotions.findById(me.promotionId) as Promotion | undefined;
   if (!agreement || !promotion) return [];
 

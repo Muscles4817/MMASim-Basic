@@ -9,8 +9,12 @@
 
 import { describe, expect, it } from 'vitest';
 import { createNewGame } from '@mmasim/data';
-import { rankDivision, type Fighter, type Promotion } from '@mmasim/engine';
-import { advanceWorld, readNews } from '../../packages/app/src/game/world';
+import { CARD_SIZE, rankDivision, type Fighter, type Promotion } from '@mmasim/engine';
+import {
+  MAX_FIGHTS_PER_CALL_PER_PROMOTION,
+  advanceWorld,
+  readNews,
+} from '../../packages/app/src/game/world';
 
 const game = (seed = 'living') => createNewGame({ adapter: undefined, seed });
 const fighters = (db: ReturnType<typeof game>) => db.fighters.findAll() as Fighter[];
@@ -112,17 +116,22 @@ describe('the world stays within its budget', () => {
     const out = advanceWorld(db, 0, 365 * 20, me.id);
     expect(out.truncated).toBe(true);
     /*
-     * The budget is now proportional to the span rather than flat, because a flat 220 was
-     * written when a card was one or two bouts and the 2026 roster made it bind immediately —
-     * a one-year call wants around 700 fights and got 220, which starved the world to six
-     * cards a year for the leader. `MAX_FIGHTS_PER_CALL * 12` survives as the absolute
-     * backstop this test exists to prove, and twenty years is far past it.
+     * The budget is proportional to the span *and* to the size of the sport, because both of
+     * those decide how much work a call is asking for. It was a flat 220, written when a card
+     * was one or two bouts; the 2026 roster made it bind immediately, and doc 26 § 2's
+     * seventy-promotion pyramid would have made it bind on every call — the worst kind of
+     * limit, because it only bites where nobody is looking.
      *
-     * Still a soft ceiling: the budget is checked before each night and a card is atomic, so
-     * a call can overshoot by at most one card. Stopping mid-event would leave unresolved
-     * bouts on a card, which is worse than nine extra simulations.
+     * Stated against the constant rather than a copy of it, so the two cannot drift apart.
+     *
+     * Still a soft ceiling: the budget is checked before each night and a card is atomic, so a
+     * call can overshoot by at most one card per promotion. Stopping mid-event would leave
+     * unresolved bouts on a card, which is worse than a few extra simulations.
      */
-    expect(out.fights).toBeLessThanOrEqual(220 * 12 + 9);
+    const promotionCount = (db.promotions.findAll() as unknown as { id: string }[]).length;
+    expect(out.fights).toBeLessThanOrEqual(
+      MAX_FIGHTS_PER_CALL_PER_PROMOTION * promotionCount * 12 + CARD_SIZE * promotionCount,
+    );
     // And it must actually bind, or "truncated" is meaningless.
     expect(out.fights).toBeLessThan(365 * 20 * 0.5);
   });
