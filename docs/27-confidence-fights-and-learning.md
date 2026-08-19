@@ -838,11 +838,31 @@ days, rather than only ever at multiples of fourteen.
 **The inbox is not spammed** by scanning daily. Nine items across three years — raising is
 idempotent on a stable id, which the inbox was already built for.
 
-### 11.3 Still per-call
+### 11.3 The rest of the per-call work — and what it turned out to be
 
-`enforceActivity`, `playerActivity`, `chargePromotions` and `vacateAbandonedBelts` are correct over a
-span and are called once per advance, which is fine. But they are _not_ date-gated, so a caller that
-advances a year in one call runs them once where thirteen monthly calls run them thirteen times.
-`chargePromotions` is already proportional to elapsed days and so is exact; the others are
-judgement-per-call and would be better as monthly sweeps keyed on the date, the way `replenish`
-already is.
+Written first as "four functions still run once per call and should be monthly sweeps". Reading them
+properly, three of the four needed nothing, and the fourth needed something different from a sweep.
+
+**`enforceActivity` was already right.** It converts an annual hazard to the span being simulated —
+`chance = 1 - (1 - perYear) ** (span / 365)` — which composes exactly: thirteen monthly calls and one
+yearly call give the same probability of a fighter walking. There is a comment above it recording
+that this was itself a fix, for the same class of bug, made when a call was always a fortnight.
+
+**`playerActivity` was already right.** It reads a _state_ — how long the player has been idle, what
+stage the promotion's patience has reached — and raises an inbox item keyed on day zero rather than
+today, deliberately, "the stage is what must happen once". Calling it every day raises it once.
+
+**`chargePromotions` was already right**, being proportional to elapsed days.
+
+**`vacateAbandonedBelts` was the real one, and not for the reason given.** The problem was not that it
+ran once per call, but that it ran at the _end_. A champion who retired in March kept the belt until
+the following March, and a division cannot stage a title fight while its belt sits on somebody who is
+filtered out of every card — which is the exact failure the function exists to prevent, one
+timescale up. It now runs at the end of each simulated day. Eight promotions by twelve divisions,
+with every already-vacant slot costing nothing, so the calendar is unaffected: a day 79ms, a week
+129ms, a fortnight 100ms, a month 162ms.
+
+`CARDS_PER_STEP` went with it. It sat beside `MAX_CARDS_PER_STEP` and was always the larger of the
+two, so it never decided anything — the cap did.
+
+Nothing in the world loop is now priced per call rather than per day.

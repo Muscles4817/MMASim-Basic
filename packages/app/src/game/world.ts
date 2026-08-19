@@ -123,15 +123,6 @@ type StoredNews = NewsItem & Entity;
 const STEP_DAYS = 14;
 
 /**
- * Cards run per fortnight across every promotion.
- *
- * The one number that decides whether the world feels busy or empty. At six, a division of
- * roughly a dozen sees each fighter out around three times a year, which is what a real
- * schedule looks like.
- */
-const CARDS_PER_STEP = 6;
-
-/**
  * Ceiling on fights simulated in a single call.
  *
  * A soft ceiling rather than a hard one, because a card is atomic: the budget is checked
@@ -327,60 +318,78 @@ export function advanceWorld(
      * A card now happens *on a date*. The rate is the same one the step model produced —
      * `MAX_CARDS_PER_STEP` shows every `STEP_DAYS` — so the sport runs to the same schedule it
      * always did, roughly eighty nights a year across every promotion.
+     *
+     * This is the one number that decides whether the world feels busy or empty: at this rate a
+     * division of roughly a dozen sees each fighter out about three times a year, which is what a
+     * real schedule looks like. A separate `CARDS_PER_STEP = 6` used to sit beside the cap and was
+     * always the larger of the two, so it never actually decided anything; the cap did.
      */
     const dayRng = rng.fork(`day:${day}`);
-    if (!dayRng.chance(MAX_CARDS_PER_STEP / STEP_DAYS)) {
-      if (onDayEnd?.(day)) break;
-      continue;
-    }
+    const showToday = dayRng.chance(MAX_CARDS_PER_STEP / STEP_DAYS);
 
-    if (fights >= fightBudget) {
+    if (showToday && fights >= fightBudget) {
       truncated = true;
       break;
     }
 
-    /*
-     * Availability, with a real activity ceiling.
-     *
-     * `readinessDelay` is a *medical* gate — how long until a fighter is cleared. It is not
-     * a schedule, and on its own it let the top of the roster fight five or six times a year
-     * for a decade: measured, ten years produced records of 63-0 and a 47-year-old champion.
-     * Elite fighters average one and a half to two and a half bouts a year, and the ceiling
-     * is availability of *opponents and dates*, not of medical clearance.
-     *
-     * Computed only on days that actually have a show. It is a pass over the whole roster, and
-     * paying for it on the four days in five that have no card would make a daily tick cost what
-     * a daily tick is always accused of costing.
-     */
-    const available = (db.fighters.findAll() as Fighter[]).filter((f) => {
-      if (f.id === exceptId || f.retiredDay !== undefined) return false;
-      // Both the in-call map and the persisted day, because a suspension handed out by the
-      // player's own card in a previous session is every bit as binding as one from this loop.
-      if (Math.max(readyOn.get(f.id as string) ?? 0, f.readyOnDay ?? 0) > day) return false;
-      const inLastYear = f.record.filter((r) => day - r.day < 365).length;
-      return inLastYear < MAX_BOUTS_PER_YEAR;
-    });
+    if (showToday) {
+      /*
+       * Availability, with a real activity ceiling.
+       *
+       * `readinessDelay` is a *medical* gate — how long until a fighter is cleared. It is not
+       * a schedule, and on its own it let the top of the roster fight five or six times a year
+       * for a decade: measured, ten years produced records of 63-0 and a 47-year-old champion.
+       * Elite fighters average one and a half to two and a half bouts a year, and the ceiling
+       * is availability of *opponents and dates*, not of medical clearance.
+       *
+       * Computed only on days that actually have a show. It is a pass over the whole roster, and
+       * paying for it on the four days in five that have no card would make a daily tick cost what
+       * a daily tick is always accused of costing.
+       */
+      const available = (db.fighters.findAll() as Fighter[]).filter((f) => {
+        if (f.id === exceptId || f.retiredDay !== undefined) return false;
+        // Both the in-call map and the persisted day, because a suspension handed out by the
+        // player's own card in a previous session is every bit as binding as one from this loop.
+        if (Math.max(readyOn.get(f.id as string) ?? 0, f.readyOnDay ?? 0) > day) return false;
+        const inLastYear = f.record.filter((r) => day - r.day < 365).length;
+        return inLastYear < MAX_BOUTS_PER_YEAR;
+      });
 
-    if (available.length >= 2) {
-      const bookable = promotions.filter((p) => p.id !== exclusion.promotionId);
-      if (bookable.length > 0) {
-        const promotion = pickPromotion(bookable, dayRng.fork('who'));
-        const built = buildNight({
-          db,
-          day,
-          rng: dayRng.fork('night'),
-          promotion,
-          available,
-          readyOn,
-          lastSeen,
-          exceptId,
-        });
-        if (built) {
-          fights += built.fights;
-          news.push(...built.news);
+      if (available.length >= 2) {
+        const bookable = promotions.filter((p) => p.id !== exclusion.promotionId);
+        if (bookable.length > 0) {
+          const promotion = pickPromotion(bookable, dayRng.fork('who'));
+          const built = buildNight({
+            db,
+            day,
+            rng: dayRng.fork('night'),
+            promotion,
+            available,
+            readyOn,
+            lastSeen,
+            exceptId,
+          });
+          if (built) {
+            fights += built.fights;
+            news.push(...built.news);
+          }
         }
       }
     }
+
+    /*
+     * Reconcile the belts on the day, not at the end of the advance.
+     *
+     * This ran once per call, which was right when a call was a fortnight and wrong the moment the
+     * clock could be asked for a year. A champion who retires in March would keep the belt until
+     * the following March, and a division cannot stage a title fight while its belt is on somebody
+     * filtered out of every card — which is the exact failure this function exists to prevent, just
+     * at a different timescale.
+     *
+     * Cheap enough to do daily: eight promotions by twelve divisions, and every slot that is
+     * already vacant costs nothing.
+     */
+    news.push(...vacateAbandonedBelts(db, day));
 
     if (onDayEnd?.(day)) break;
   }
@@ -408,7 +417,13 @@ export function advanceWorld(
 
   // The player's own side of the same question, which is a conversation rather than a rule.
   news.push(
-    ...playerActivity(db, reached, exceptId, exclusion.playerHasBooking ?? false, rng.fork('chase')),
+    ...playerActivity(
+      db,
+      reached,
+      exceptId,
+      exclusion.playerHasBooking ?? false,
+      rng.fork('chase'),
+    ),
   );
 
   /*
@@ -418,17 +433,6 @@ export function advanceWorld(
    * time is passing* — and because `advanceTo` stops the clock on an unresolved decision, which
    * it can only do if the decision exists by the time the step finishes.
    */
-  /*
-   * Reconcile the belts last, so the world always leaves itself consistent.
-   *
-   * This was a quarterly sweep near the top of the step, which left the champion map stale in
-   * two ways at once: for up to three months at a time, and — worse — for the *rest of every
-   * step*, because free agency runs afterwards and can move a champion out of the promotion
-   * whose belt they are still recorded as holding. A fighter listed as champion somewhere they
-   * have already left is a belt nobody can defend and a division that cannot stage a title
-   * fight. Running it at the end is both cheap and the only placement that cannot be stale.
-   */
-  news.push(...vacateAbandonedBelts(db, reached));
 
   scanForInbox(db, reached);
 
@@ -583,8 +587,7 @@ function buildNight(ctx: {
     const title =
       champion !== undefined
         ? (db.championships.findById(championshipId(promotion.id, subject.divisionId)) as
-            | Championship
-            | undefined)
+            Championship | undefined)
         : undefined;
     // From the last time the belt was *contested*, not from when the reign began — see
     // `Reign.lastContestedDay`.
@@ -604,7 +607,11 @@ function buildNight(ctx: {
      * for two or three places and then books whoever people want to watch.
      */
     let isTitleFight = false;
-    if (champion !== undefined && beltIsFree && (champion === subject.id || champion === opponent.id)) {
+    if (
+      champion !== undefined &&
+      beltIsFree &&
+      (champion === subject.id || champion === opponent.id)
+    ) {
       const challengerId = champion === subject.id ? opponent.id : subject.id;
       const wanted = nextContender({
         ranked: rankDivision(
@@ -776,7 +783,9 @@ function buildNight(ctx: {
     results: results.map((r) => r.result),
     recentDelivery: current.recentDelivery,
   });
-  db.promotions.upsert(rememberDelivery(settled.promotion, settled.delivered) as Promotion & Entity);
+  db.promotions.upsert(
+    rememberDelivery(settled.promotion, settled.delivered) as Promotion & Entity,
+  );
 
   return { fights, news };
 }
@@ -855,9 +864,8 @@ export function runCardBout(ctx: {
    */
   let titleChangedHands = false;
   if (isTitleFight) {
-    const title = db.championships.findById(
-      championshipId(promotion.id, red.divisionId),
-    ) as Championship | undefined;
+    const title = db.championships.findById(championshipId(promotion.id, red.divisionId)) as
+      Championship | undefined;
 
     if (result.winnerId && champion !== (result.winnerId as string)) {
       db.promotions.upsert(setChampion(promotion, red.divisionId, result.winnerId) as never);
@@ -931,7 +939,12 @@ export function runCardBout(ctx: {
   };
 
   const news: NewsItem[] = [];
-  const winner = result.winnerId === red.id ? developed.red : result.winnerId === blue.id ? developed.blue : undefined;
+  const winner =
+    result.winnerId === red.id
+      ? developed.red
+      : result.winnerId === blue.id
+        ? developed.blue
+        : undefined;
   const loser = winner ? (winner.id === red.id ? developed.blue : developed.red) : undefined;
 
   const item = fightNews({
@@ -1037,8 +1050,7 @@ function settleRosterFighter(
 
   const agreement = fighter.agreementId
     ? (db.agreements.findById(fighter.agreementId as string) as
-        | (PromotionalAgreement & Entity)
-        | undefined)
+        (PromotionalAgreement & Entity) | undefined)
     : undefined;
 
   // The signed terms, not what they are worth today — the whole point of a contract.
@@ -1096,8 +1108,7 @@ function releaseIfCut(
 
   const agreement = fighter.agreementId
     ? (db.agreements.findById(fighter.agreementId as string) as
-        | (PromotionalAgreement & Entity)
-        | undefined)
+        (PromotionalAgreement & Entity) | undefined)
     : undefined;
   if (agreement) db.agreements.upsert({ ...agreement, status: 'terminated' } as never);
 
@@ -1155,8 +1166,7 @@ function resolveFreeAgency(
 
     const agreement = fighter.agreementId
       ? (db.agreements.findById(fighter.agreementId as string) as
-          | (PromotionalAgreement & Entity)
-          | undefined)
+          (PromotionalAgreement & Entity) | undefined)
       : undefined;
 
     const promotion = fighter.promotionId
@@ -1214,7 +1224,8 @@ function resolveFreeAgency(
     const earned = affordable.filter((p) => p.prestige <= 42 + fighter.reputation * 0.9);
 
     const pool = earned.length > 0 ? earned : affordable.length > 0 ? affordable : candidates;
-    const next = promotion && fRng.chance(0.55) && pool.includes(promotion) ? promotion : fRng.pick(pool);
+    const next =
+      promotion && fRng.chance(0.55) && pool.includes(promotion) ? promotion : fRng.pick(pool);
 
     const terms = defaultTerms(fighter, next);
     const signed = createAgreement({
@@ -1226,7 +1237,8 @@ function resolveFreeAgency(
         signingBonus: 0,
         revenuePoints: 0,
         fightsOwed: fRng.int(3, 5),
-        championshipExtension: next.tier === 'global' || next.tier === 'major' ? 'standard' : 'none',
+        championshipExtension:
+          next.tier === 'global' || next.tier === 'major' ? 'standard' : 'none',
         matchingRights: fRng.chance(0.5),
         exclusive: next.tier !== 'regional' && next.tier !== 'developmental',
         outsideBouts: next.tier === 'regional' || next.tier === 'developmental' ? 2 : 0,
@@ -1408,9 +1420,8 @@ function vacateAbandonedBelts(db: GameDb, day: number): NewsItem[] {
 
       updated = setChampion(updated, divisionId as never, undefined);
 
-      const title = db.championships.findById(
-        championshipId(promotion.id, divisionId as never),
-      ) as Championship | undefined;
+      const title = db.championships.findById(championshipId(promotion.id, divisionId as never)) as
+        Championship | undefined;
       if (title) {
         db.championships.upsert(vacate({ title, day, reason }) as Championship & Entity);
       }
@@ -1438,7 +1449,10 @@ function vacateAbandonedBelts(db: GameDb, day: number): NewsItem[] {
 
 /** A division id as it reads in a headline. */
 const divisionLabel = (divisionId: string): string =>
-  divisionId.replace(/^mens-/, '').replace(/^womens-/, "women's ").replace(/-/g, ' ');
+  divisionId
+    .replace(/^mens-/, '')
+    .replace(/^womens-/, "women's ")
+    .replace(/-/g, ' ');
 
 /**
  * Which promotion a debutant signs with.
@@ -1530,9 +1544,7 @@ function replenish(
   const all = db.fighters.findAll() as Fighter[];
 
   for (const division of DIVISIONS) {
-    const active = all.filter(
-      (f) => f.divisionId === division.id && f.retiredDay === undefined,
-    );
+    const active = all.filter((f) => f.divisionId === division.id && f.retiredDay === undefined);
     const target = divisionTargetFor(getWorld(db), division.id as string, division.sex);
 
     for (let i = active.length; i < target; i++) {
@@ -1547,7 +1559,10 @@ function replenish(
        * Weighted hard toward the bottom instead. Almost everybody starts small, a few start at a
        * major, and the leader signs essentially nobody straight out of the amateurs.
        */
-      const promotion = pickStartingPromotion(promotions, rng.fork(`start:${day}:${division.id}:${i}`));
+      const promotion = pickStartingPromotion(
+        promotions,
+        rng.fork(`start:${day}:${division.id}:${i}`),
+      );
       /*
        * Most people who turn professional are never going to be anything. A few are.
        *
@@ -1823,8 +1838,7 @@ function enforceActivity(
     if (fighter.retiredDay !== undefined || !fighter.promotionId || !fighter.agreementId) continue;
 
     const agreement = db.agreements.findById(fighter.agreementId as string) as
-      | PromotionalAgreement
-      | undefined;
+      PromotionalAgreement | undefined;
     if (!agreement) continue;
 
     /*
@@ -1942,8 +1956,7 @@ function playerActivity(
   if (!me || me.retiredDay !== undefined || !me.promotionId || !me.agreementId) return [];
 
   const agreement = db.agreements.findById(me.agreementId as string) as
-    | (PromotionalAgreement & Entity)
-    | undefined;
+    (PromotionalAgreement & Entity) | undefined;
   const promotion = db.promotions.findById(me.promotionId) as Promotion | undefined;
   if (!agreement || !promotion) return [];
 
