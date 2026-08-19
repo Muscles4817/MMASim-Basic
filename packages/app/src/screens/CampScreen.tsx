@@ -228,7 +228,16 @@ export function CampScreen() {
   const heat = currentHeat(rivalry, world.day);
   // A title fight is a main event, which is where the money for it now lives — the old flat
   // ×1.5 on the base was cancelling the champion-versus-draw grievance doc 08 promises.
-  const purse = currentPurse(db, playerFighter, booking.bout.isTitleFight ? 'mainEvent' : 'mainCard');
+  /*
+   * Quoted at the slot this fight is actually booked into.
+   *
+   * It read `isTitleFight ? 'mainEvent' : 'mainCard'`, which is neither of the two things the
+   * game does with card position: settlement pays the real slot, so a non-title main event was
+   * quoted a main-card purse here and then paid 2.5× it, and a prelim was quoted 2× what it
+   * would earn. Money on this screen is the number a player decides how much camp to buy
+   * against — being wrong in either direction is worse than not showing it.
+   */
+  const purse = currentPurse(db, playerFighter, booking.bout.position ?? 'mainCard');
 
   const baseCamp = computeCampQuality(
     weeks,

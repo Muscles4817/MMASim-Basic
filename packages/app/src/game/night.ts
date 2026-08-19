@@ -89,13 +89,17 @@ export function runSupportingCard(
     promotion: Promotion;
     day: number;
     isTitleFight: boolean;
+    /** The slot agreed at booking. Falls back to deriving it, for bookings made before it existed. */
+    position?: CardPosition;
+    /** Rounds the bout was actually fought at, so the card cannot contradict the fight. */
+    rounds?: 3 | 5;
   },
 ): NightOutcome | undefined {
   const { playerBoutId, player, opponent, playerResult, promotion, day, isTitleFight } = input;
   const world = getWorld(db);
   const rng = createRng(`${world.seed}:night:${playerBoutId}`);
 
-  const position = playerCardPosition(player, opponent, isTitleFight);
+  const position = input.position ?? playerCardPosition(player, opponent, isTitleFight);
   const playerDraw = drawWeight({
     promotion,
     red: player,
@@ -124,6 +128,9 @@ export function runSupportingCard(
       // Nudged so the player lands at the position the matchmaker decided, rather than
       // wherever a pure draw sort happens to put them.
       draw: playerDraw + positionBias(position),
+      // Already fought. `buildCard`'s rounds rule is a policy for bouts it is deciding, and
+      // this one is a matter of record.
+      rounds: input.rounds,
     },
   ];
 

@@ -301,6 +301,17 @@ export function bookFight(
   const judges = db.judges.findAll() as Judge[];
   const commentators = db.commentators.findAll() as Commentator[];
 
+  /*
+   * Where on the card this lands, decided here rather than three times over.
+   *
+   * `playerCardPosition` is a pure read of the two fighters and the stakes, and it was being
+   * recomputed independently at settlement (for the purse) and again when the night was
+   * assembled (for the running order) — from star power that moves in between, on a fight
+   * booked eight to ten weeks earlier. Agreeing it once, at the moment the fight is agreed, is
+   * both more honest and the only way the answers cannot drift apart.
+   */
+  const position = playerCardPosition(fighter, opponent, isTitleFight);
+
   const bout: Bout = {
     id: `bout_${fighter.id}_${world.day}`,
     redId: fighter.id,
@@ -308,9 +319,18 @@ export function bookFight(
     divisionId: fighter.divisionId,
     promotionId: (fighter.promotionId ?? asPromotionId('p_apex')) as string,
     day: world.day + weeks * 7,
-    // Championship bouts are five rounds. That is not cosmetic: it is where a gas tank and
-    // a late-round game plan stop being a nice-to-have.
-    rounds: isTitleFight ? 5 : 3,
+    /*
+     * Five rounds for a main event or a title fight. That is not cosmetic: it is where a gas
+     * tank and a late-round game plan stop being a nice-to-have.
+     *
+     * It used to read `isTitleFight ? 5 : 3`, which meant the player was the only fighter in
+     * the sport who never headlined a five-round card. The world's own bouts have taken their
+     * rounds from `buildCard` since events shipped — five for whatever tops the night — so the
+     * roster fought five-rounders, the player was paid a main event's purse for them, the card
+     * printed "5 rounds" beside their name, and the engine was handed three.
+     */
+    rounds: position === 'mainEvent' ? 5 : 3,
+    position,
     isTitleFight,
     // Officials are assigned at booking and shown before the fight, so a prepared player can
     // factor a stand-up-happy referee into their game plan. That is the point of showing it.
@@ -805,10 +825,13 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
       Math.max(1, Math.round((booking.bout.day - booking.campStartDay) / 7)),
     ),
     campWeeks: Math.max(1, Math.round((booking.bout.day - booking.campStartDay) / 7)),
-    // The real slot, from the same function the card uses. This was hardcoded, so the 0.5x
-    // prelim and 1.6x co-main rungs were unreachable for the player and "get off the
-    // prelims" — doc 12's second axis of a career — was worth nothing.
-    position: playerCardPosition(red, blue, booking.bout.isTitleFight),
+    // The slot agreed at booking. This was hardcoded, so the 0.5x prelim and 1.6x co-main
+    // rungs were unreachable for the player and "get off the prelims" — doc 12's second axis
+    // of a career — was worth nothing; then it recomputed the slot from star power that had
+    // moved during the camp, so the fighter could be paid for a different card position than
+    // the one they were booked and scheduled into. The fallback is for bookings already in
+    // session storage when this shipped.
+    position: booking.bout.position ?? playerCardPosition(red, blue, booking.bout.isTitleFight),
     isChampion: booking.bout.isTitleFight && playerWon,
   });
 
@@ -892,6 +915,11 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
         promotion: promotionForNight,
         day,
         isTitleFight: booking.bout.isTitleFight,
+        // The slot and the rounds this bout was actually booked and fought at, so the card
+        // reports the night that happened rather than re-deciding it from a star power that
+        // has moved since — see `bookFight`.
+        position: booking.bout.position,
+        rounds: booking.bout.rounds,
       })
     : undefined;
 
