@@ -281,6 +281,27 @@ export function runSupportingCard(
     rng.fork('venue'),
   );
 
+  /*
+   * Revenue first, because the night wants one number out of it.
+   *
+   * `attendance` is the only thing separating "you fought at Riverside Hall" from "you fought
+   * in front of 9,412 people at Riverside Hall", and the second is the sentence that makes a
+   * card position feel like anything. Computed here rather than inside `settleNight` below so
+   * the stored night carries it; `settleNight` is handed the same object, so nothing is
+   * computed twice and no number can disagree with itself.
+   */
+  const revenue = eventRevenue({
+    promotion,
+    venue,
+    broadcast,
+    // The player's own bout is not necessarily the headline — `playerCardPosition` decides
+    // that — so this reads the draw of whatever actually tops the card.
+    headlineDraw,
+    bouts: card.length,
+    purses: cardPurses(db, card),
+    bonuses: bonusPool,
+  });
+
   const night: FightNight = {
     id: eventId(promotion.id, day),
     promotionId: promotion.id,
@@ -296,6 +317,7 @@ export function runSupportingCard(
     status: 'complete',
     bouts: card,
     bonusPool,
+    attendance: revenue.attendance,
   };
   db.events.upsert(night as FightNight & Entity);
 
@@ -320,17 +342,7 @@ export function runSupportingCard(
 
   const settled = settleNight({
     promotion: current,
-    revenue: eventRevenue({
-      promotion,
-      venue,
-      broadcast,
-      // The player's own bout is not necessarily the headline — `playerCardPosition` decides
-      // that — so this reads the draw of whatever actually tops the card.
-      headlineDraw,
-      bouts: card.length,
-      purses: cardPurses(db, card),
-      bonuses: bonusPool,
-    }),
+    revenue,
     results: results.map((r) => r.result),
     recentDelivery: current.recentDelivery,
   });

@@ -198,6 +198,27 @@ export interface StoredResult {
   notes?: readonly string[];
   /** The undercard, so the card has results on it rather than dashes. */
   undercard?: readonly { boutId: string; winnerName?: string; method: string; round: number }[];
+  /**
+   * The three people who will be scoring it, and the one who can stop it.
+   *
+   * Kept beside the result because the booking they were assigned in is cleared the moment the
+   * fight is run, and the fight screen wants them *before* the first bell — which is the whole
+   * point of assigning them at booking. `bookFight` has said so in a comment since officials
+   * shipped: "shown before the fight, so a prepared player can factor a stand-up-happy referee
+   * into their game plan." Nothing showed them.
+   */
+  refereeId?: string;
+  judgeIds?: readonly string[];
+  /**
+   * How many rounds this bout was actually scheduled for.
+   *
+   * Taken from the booking rather than from the card, because the two disagree: `buildCard`
+   * gives whatever tops the night five rounds, while `runBookedFight` fights `booking.bout.rounds`
+   * — three unless it is for a title. Nothing read either field until the pre-fight card did, at
+   * which point the screen would have promised five rounds and delivered three. The booking is
+   * the one the engine actually used, so it is the one that is true.
+   */
+  rounds?: number;
 }
 
 export const getLastResult = (): FightResult | undefined =>
@@ -962,6 +983,9 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
   writeJson(RESULT_KEY, {
     result,
     commentatorId: booking.bout.commentatorId,
+    refereeId: booking.bout.refereeId,
+    judgeIds: booking.bout.judgeIds,
+    rounds: booking.bout.rounds,
     notes,
     undercard: (night?.undercard ?? []).map(({ bout, result: r }) => ({
       boutId: bout.boutId,

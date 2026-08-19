@@ -196,6 +196,36 @@ export interface DamageReport {
   traumaIncrement: number;
 }
 
+/**
+ * Everything that happened to one fighter in one round, from a judge's point of view.
+ *
+ * Lives here rather than in `scoring.ts` so `FightResult.roundStats` can name it without
+ * `types.ts` importing from a module that already imports `types.ts`. `scoring.ts` re-exports
+ * both, so every existing import keeps working.
+ */
+export interface RoundTally {
+  damageDealt: number;
+  significantStrikes: number;
+  controlSeconds: number;
+  takedowns: number;
+  submissionAttempts: number;
+  knockdowns: number;
+  /** Strikes thrown — a proxy for forward pressure and octagon control. */
+  strikesAttempted: number;
+}
+
+export function emptyTally(): RoundTally {
+  return {
+    damageDealt: 0,
+    significantStrikes: 0,
+    controlSeconds: 0,
+    takedowns: 0,
+    submissionAttempts: 0,
+    knockdowns: 0,
+    strikesAttempted: 0,
+  };
+}
+
 export interface RoundScore {
   round: number;
   red: number;
@@ -224,6 +254,20 @@ export interface FightResult {
   events: readonly FightEvent[];
   scorecards: readonly Scorecard[];
   stats: Record<Corner, FightStats>;
+  /**
+   * The same statistics, split by round — index 0 is round one.
+   *
+   * `simulateFight` has always built these: they are what the judges score, and the fighters
+   * themselves read them mid-fight to know whether they are behind. They were then dropped on
+   * the floor when the function returned, which left the app in the impossible position of
+   * showing whole-fight totals beside per-round scorecards and inviting the player to
+   * reconcile them. A fighter who banked eighty strikes in round three and lost the first two
+   * looks robbed in aggregate and is not, and there was no way to see it.
+   *
+   * Optional because a `FightResult` outlives the process that made it — the last one sits in
+   * session storage — and a result written before this existed has none.
+   */
+  roundStats?: readonly Record<Corner, RoundTally>[];
   damage: Record<Corner, DamageReport>;
   /** Every foul called or missed, in order. Empty in the overwhelming majority of fights. */
   fouls: readonly FoulIncident[];

@@ -75,6 +75,15 @@ export interface FightNight {
   bouts: readonly CardBout[];
   /** Thousands. Fight of the Night and Performance of the Night come out of this. */
   bonusPool: number;
+  /**
+   * How many were actually in the building.
+   *
+   * `eventRevenue` has computed this on every card ever run and it reached the gate receipt and
+   * nothing else — so the game knew whether a fighter walked out in front of four hundred people
+   * or a sold-out arena, and had no way to say so. Optional because a night settled before this
+   * existed has none.
+   */
+  attendance?: number;
 }
 
 export const eventId = (promotionId: PromotionId, day: GameDay): EventId =>
