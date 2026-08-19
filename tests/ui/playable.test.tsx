@@ -132,7 +132,12 @@ describe('the game is playable', () => {
     await user.click(await screen.findByRole('button', { name: /^Fight /i }));
     await user.click(await screen.findByRole('button', { name: /walk out/i }));
 
-    // 6. The replay screen renders and reaches a conclusion.
+    // 6. Fight night opens on the card, not on the feed: the event, the tale of the tape and
+    // the officials, and then a walk. The play-by-play does not start until it is asked to.
+    expect(await screen.findByText(/Tale of the tape/i)).toBeTruthy();
+    await user.click(await screen.findByRole('button', { name: /Make the walk/i }));
+
+    // 7. The replay screen renders and reaches a conclusion.
     expect(await screen.findByText(/Play-by-play/i)).toBeTruthy();
     expectNoCrash();
 

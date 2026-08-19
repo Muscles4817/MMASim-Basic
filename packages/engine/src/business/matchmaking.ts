@@ -15,6 +15,7 @@ import { isActive } from '../domain/fighter.js';
 import { favourFor } from './matchmakingStyle.js';
 import type { FinishMethod } from '../domain/fighter.js';
 import type { Promotion } from '../domain/organisations.js';
+import type { CardPosition } from './money.js';
 import { overallRating } from '../ratings/attributes.js';
 
 export interface Bout {
@@ -26,6 +27,16 @@ export interface Bout {
   day: GameDay;
   rounds: 3 | 5;
   isTitleFight: boolean;
+  /**
+   * Where on the card this sits, agreed when the bout is made.
+   *
+   * Optional because the world's own cards get their position from `buildCard` when the night
+   * is assembled, and for those the two are the same thing. It matters for the player, whose
+   * bout is booked weeks before a card exists around it: the slot decides the purse multiplier
+   * and the number of rounds, and deriving it twice from a star power that moves in between is
+   * how those two came to disagree.
+   */
+  position?: CardPosition;
   refereeId?: string;
   judgeIds?: readonly string[];
   /** Who is calling it. Assigned at booking, because the booth is part of the card. */

@@ -137,6 +137,78 @@ export function defaultJudges(): readonly Judge[] {
 }
 
 /** Noise added to a judge's round margin, in margin units. Low consistency = wild cards. */
+/**
+ * What a judge rewards, measured against what a balanced judge rewards.
+ *
+ * Not simply "their largest weight", which is the tempting version and is wrong: the balanced
+ * archetype's largest weight is damage, so a straight argmax describes the most even-handed
+ * judge in the pool as a damage judge. Worse, the gap between first and second is 0.10 for
+ * `balanced` and 0.10 for `controlFirst` — identical — so no threshold on that gap can
+ * separate them either.
+ *
+ * Deviation from the balanced vector does separate them, and it is the honest question anyway:
+ * a judge is not "a control judge" because control is 35% of their card, they are one because
+ * that is more control than a reasonable person would weight. Balanced deviates from itself by
+ * nothing, and every other archetype lands squarely on its own name.
+ *
+ * The archetypes have been in the seed since officials existed and the player has never been
+ * told which one is sitting cageside. That is most of the difference between "the game robbed
+ * me" and "that was Frawley": a card only reads as arbitrary when you do not know who wrote it.
+ */
+function judgeEmphasis(judge: Judge): { key: keyof JudgeBias; deviation: number } | undefined {
+  const bias = normaliseBias(judge.bias);
+  const baseline = normaliseBias(JUDGE_ARCHETYPES.balanced!);
+  const keys: readonly (keyof JudgeBias)[] = [
+    'damage',
+    'significantStrikes',
+    'controlTime',
+    'grappling',
+    'aggression',
+  ];
+
+  let best: { key: keyof JudgeBias; deviation: number } | undefined;
+  for (const key of keys) {
+    const deviation = bias[key] - baseline[key];
+    if (!best || deviation > best.deviation) best = { key, deviation };
+  }
+  // Below this the judge simply is balanced, whatever their largest single weight happens to be.
+  return best && best.deviation >= 0.06 ? best : undefined;
+}
+
+const JUDGE_REWARDS: Readonly<Record<keyof JudgeBias, string>> = {
+  damage: 'the fighter who did the visible harm',
+  significantStrikes: 'volume — they count what lands',
+  controlTime: 'control and position',
+  grappling: 'the grappling exchanges',
+  aggression: 'forward pressure, whatever it achieves',
+};
+
+const JUDGE_LEANINGS: Readonly<Record<keyof JudgeBias, string>> = {
+  damage: 'Damage',
+  significantStrikes: 'Volume',
+  controlTime: 'Control',
+  grappling: 'Grappling',
+  aggression: 'Pressure',
+};
+
+/** What this judge rewards, in the words a corner would use. */
+export function describeJudge(judge: Judge): string {
+  const emphasis = judgeEmphasis(judge);
+  const rewards = emphasis ? `rewards ${JUDGE_REWARDS[emphasis.key]}` : 'scores a balanced card';
+
+  if (judge.consistency < 55) {
+    return `${rewards} — and is erratic enough that nobody can predict the card`;
+  }
+  if (judge.consistency >= 85) return `${rewards}, and applies it the same way every time`;
+  return rewards;
+}
+
+/** The single word for what a judge rewards, for a table column. */
+export function judgeLeaning(judge: Judge): string {
+  const emphasis = judgeEmphasis(judge);
+  return emphasis ? JUDGE_LEANINGS[emphasis.key] : 'Balanced';
+}
+
 export function judgeNoiseScale(judge: Judge): number {
   return clamp((100 - judge.consistency) / 100, 0, 1) * 0.5;
 }
