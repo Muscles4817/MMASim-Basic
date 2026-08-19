@@ -84,7 +84,11 @@ import {
   hasDriftedOut,
   shouldRetire,
   MAX_CARDS_PER_YEAR,
+  isKoMethod,
   overallRating,
+  paperOdds,
+  summariseRecord,
+  type FinishMethod,
   daysBetweenCards,
   hashSeed,
   simulateFight,
@@ -281,7 +285,37 @@ export interface WorldExclusion {
    * opinion about where the player is.
    */
   resolve?: BoutResolver;
+  /**
+   * How much of the tick to actually run. Defaults to `'full'`.
+   *
+   * Doc 27 § 5's **Bulk** level, and it is a property of the *tick* rather than of the fight —
+   * which is the finding § 10 was built to produce. Making the fight nine times cheaper bought 25%
+   * of a pre-history run, because profiled at the Reduced level the fight is 13% of a tick and the
+   * work around each bout is 45%: ranking the whole division to decide what counts as an upset,
+   * writing news nobody will read, settling a gate, awarding bonuses, storing a card.
+   *
+   * All of that is right for a fight somebody watches. All of it is waste for a fight that exists
+   * so a 34-year-old has a plausible record. See `runBulkTick` for the full list of what goes.
+   */
+  detail?: WorldDetail;
+  /**
+   * Below this prestige, a promotion's fights are resolved from ratings rather than simulated.
+   *
+   * Doc 27 § 10.3's third lever, and only meaningful with `detail: 'bulk'`. The base of a
+   * five-thousand-fighter pyramid exists so that people can climb out of it; it does not need
+   * fifteen years of individually simulated bouts to do that job. Undefined — the default — means
+   * every promotion in the world runs real cards.
+   */
+  statisticalBelowPrestige?: number;
 }
+
+/**
+ * How much of the world tick to run.
+ *
+ * `'full'` is the game. `'bulk'` is pre-history: the same fighters, the same fights, the same
+ * records, and none of the presentation.
+ */
+export type WorldDetail = 'full' | 'bulk';
 
 export function advanceWorld(
   db: GameDb,
@@ -305,6 +339,7 @@ export function advanceWorld(
     return { fights: 0, news, truncated: false };
   }
 
+  const bulk = exclusion.detail === 'bulk';
   const rng = createRng(`${world.seed}:world:${fromDay}`);
   const promotions = db.promotions.findAll() as unknown as Promotion[];
 
@@ -329,20 +364,26 @@ export function advanceWorld(
     /*
      * How many active fighters each promotion has, in one pass.
      *
-     * Read by two things that would otherwise each walk the roster per promotion: `cardsPerYear`,
-     * which decides whether this promotion runs a card this fortnight, and free agency, which
-     * decides who signs a fighter whose deal is up. At five thousand fighters and seventy-odd
-     * promotions the per-promotion form is O(fighters x promotions) on every step.
+     * Read by three things that would otherwise each walk the roster: `cardsPerYear`, which
+     * decides whether this promotion runs a card this fortnight; free agency, which decides who
+     * signs a fighter whose deal is up; and `rankDivision`, which decides whether a bout is for a
+     * belt. That last one was being handed **every fighter in the world, once per candidate bout**
+     * — 5,082 of them to rank a division of four hundred — which is 5% of a tick spent scanning
+     * past people who could not possibly be in the division.
      *
      * Taken before the quarterly intake rather than after, so it is at most one fortnight stale —
      * which is closer than a promotion's own front office would be.
      */
-    const rosterSizes = new Map<string, number>();
+    const rosters = new Map<string, Fighter[]>();
     for (const row of db.fighters.findAll() as Fighter[]) {
       if (row.retiredDay !== undefined || !row.promotionId) continue;
       const id = row.promotionId as string;
-      rosterSizes.set(id, (rosterSizes.get(id) ?? 0) + 1);
+      const list = rosters.get(id);
+      if (list) list.push(row);
+      else rosters.set(id, [row]);
     }
+    const rosterSizes = new Map<string, number>();
+    for (const [id, list] of rosters) rosterSizes.set(id, list.length);
 
     // Quarterly intake, matching how a promotion actually signs people.
     if (Math.floor(day / QUARTER_DAYS) !== Math.floor((day - STEP_DAYS) / QUARTER_DAYS)) {
@@ -408,10 +449,30 @@ export function advanceWorld(
       const phase = hashSeed(promotion.id as string) % Math.ceil(interval);
       let cardDay = Math.ceil((day - phase) / interval) * interval + phase;
 
+      /*
+       * The bottom of the pyramid, when it has been asked for. See `runStatisticalCard`.
+       */
+      const statistical =
+        bulk &&
+        exclusion.statisticalBelowPrestige !== undefined &&
+        promotion.prestige < exclusion.statisticalBelowPrestige;
+
       for (; cardDay < day + span; cardDay += interval) {
         if (fights >= fightBudget) {
           truncated = true;
           break;
+        }
+        if (statistical) {
+          fights += runStatisticalCard({
+            db,
+            day: Math.floor(cardDay),
+            rng: rng.fork(`stat:${promotion.id}:${Math.floor(cardDay)}`),
+            promotion,
+            available,
+            readyOn,
+            exceptId,
+          });
+          continue;
         }
         const built = buildNight({
           db,
@@ -423,6 +484,9 @@ export function advanceWorld(
           lastSeen,
           exceptId,
           resolve: exclusion.resolve,
+          detail: exclusion.detail,
+          roster: rosters.get(promotion.id as string) ?? [],
+          allPromotions: promotions,
         });
         if (!built) continue;
         fights += built.fights;
@@ -436,7 +500,7 @@ export function advanceWorld(
 
   // Everyone who never got booked still gets older. Without this, a fighter who sat out the
   // whole period would be returned to the player at exactly the age they were.
-  ageEveryone(db, fromDay, toDay, exceptId, lastSeen);
+  ageEveryone(db, fromDay, toDay, exceptId, lastSeen, bulk);
 
   /*
    * The bill for existing.
@@ -479,6 +543,16 @@ export function advanceWorld(
    */
   news.push(...vacateAbandonedBelts(db, toDay));
 
+  /*
+   * The inbox, the feed and the save, none of which a bulk tick has anybody to serve.
+   *
+   * `db.save()` is the one worth naming: it serialises every collection to JSON, which at five
+   * thousand fighters is a quarter of a second. During world creation there is nothing to be
+   * durable about — the world does not exist yet — and doing it once per simulated year of
+   * pre-history is four seconds of pure waste.
+   */
+  if (bulk) return { fights, news: [], truncated };
+
   scanForInbox(db, toDay);
 
   const stored = appendNews(db, news);
@@ -504,8 +578,13 @@ function buildNight(ctx: {
   exceptId: FighterId | undefined;
   /** Defaults to `simulateFight`. See `BoutResolver`. */
   resolve?: BoutResolver;
+  detail?: WorldDetail;
+  /** This promotion's active fighters, indexed once per step. See the caller. */
+  roster: readonly Fighter[];
+  allPromotions: readonly Promotion[];
 }): { fights: number; news: NewsItem[] } | undefined {
   const { db, day, rng, promotion, available, readyOn, lastSeen, resolve } = ctx;
+  const bulk = ctx.detail === 'bulk';
 
   // --- Matchmaking: collect the bouts before deciding where any of them sit ----------------
   const seeds: BoutSeed[] = [];
@@ -554,7 +633,7 @@ function buildNight(ctx: {
       promotion.id,
       day,
       undefined,
-      db.promotions.findAll() as unknown as Promotion[],
+      ctx.allPromotions,
     );
     /*
      * Two, because two is what a title fight takes.
@@ -662,12 +741,12 @@ function buildNight(ctx: {
       const challengerId = champion === subject.id ? opponent.id : subject.id;
       const wanted = nextContender({
         ranked: rankDivision(
-          db.fighters.findAll() as Fighter[],
+          ctx.roster,
           subject.divisionId,
           promotion.id,
           day,
           champion as FighterId,
-          db.promotions.findAll() as unknown as Promotion[],
+          ctx.allPromotions,
         ),
         promotion,
         championId: champion as string,
@@ -710,6 +789,32 @@ function buildNight(ctx: {
   if (seeds.length === 0) return undefined;
 
   const card = buildCard(seeds);
+
+  /*
+   * Everything from here to the bouts is the *night* rather than the fights, and a bulk tick has
+   * no use for any of it: the venue it was staged at, what it was called, who broadcast it, what
+   * the gate was worth. Fifteen years of a seventy-promotion world is on the order of twenty-two
+   * thousand cards, and storing them is a save nobody will ever open.
+   */
+  if (bulk) {
+    let bulkFights = 0;
+    for (const bout of card) {
+      const outcome = runCardBout({
+        db,
+        day,
+        rng: rng.fork(`bout:${bout.boutId}`),
+        promotion,
+        bout,
+        readyOn,
+        lastSeen,
+        resolve,
+        detail: 'bulk',
+      });
+      if (outcome) bulkFights++;
+    }
+    return { fights: bulkFights, news: [] };
+  }
+
   const headlineDraw = card[0] ? (seeds.find((s) => s.boutId === card[0]!.boutId)?.draw ?? 0) : 0;
   const broadcast = broadcastFor(promotion, headlineDraw, rng.fork('broadcast'));
 
@@ -865,24 +970,35 @@ export function runCardBout(ctx: {
   lastSeen: Map<string, number>;
   /** Defaults to `simulateFight`. See `BoutResolver`. */
   resolve?: BoutResolver;
+  detail?: WorldDetail;
 }): { news: NewsItem[]; result: ReducedFightResult } | undefined {
   const { db, day, rng, promotion, bout, readyOn, lastSeen } = ctx;
+  const bulk = ctx.detail === 'bulk';
 
   const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
   const blue = db.fighters.findById(bout.blueId as string) as Fighter | undefined;
   if (!red || !blue) return undefined;
 
-  // Ranks *before* the fight, which is what makes an upset an upset.
-  const divisionRanked = rankDivision(
-    (db.fighters.findAll() as Fighter[]).filter(
-      (f) => f.divisionId === red.divisionId && f.retiredDay === undefined,
-    ),
-    red.divisionId,
-    promotion.id,
-    day,
-    promotion.champions[red.divisionId],
-    db.promotions.findAll() as unknown as Promotion[],
-  );
+  /*
+   * Ranks *before* the fight, which is what makes an upset an upset — and the single most
+   * expensive thing in the tick that nothing but a headline reads.
+   *
+   * `rankDivision` walks every fighter in the world to find the division, then ranks it, and it
+   * runs **once per bout**. The only consumer is `fightNews`, which puts "the number four
+   * contender" in a sentence. A bulk tick writes no sentences, so it does none of this.
+   */
+  const divisionRanked = bulk
+    ? []
+    : rankDivision(
+        (db.fighters.findAll() as Fighter[]).filter(
+          (f) => f.divisionId === red.divisionId && f.retiredDay === undefined,
+        ),
+        red.divisionId,
+        promotion.id,
+        day,
+        promotion.champions[red.divisionId],
+        db.promotions.findAll() as unknown as Promotion[],
+      );
   const rankOfId = (id: FighterId): number | undefined => {
     const index = divisionRanked.findIndex((r) => r.fighter.id === id);
     return index >= 0 ? index + 1 : undefined;
@@ -980,23 +1096,39 @@ export function runCardBout(ctx: {
     }).fighter,
   };
 
+  /*
+   * The camp that follows, and the purse that paid for it.
+   *
+   * Both skipped in bulk, and the development one is the largest single saving left in a
+   * pre-history tick — 18.6% of it, profiled. A bulk tick does not stamp `lastSeen` either, so
+   * `ageEveryone` picks these two up with everybody else and gives them the same block of work.
+   * That is what doc 27 § 5.3 means by "development: annual, batched": the fighter still grows,
+   * they just grow on the sport's clock rather than on their own camp's.
+   *
+   * What it costs is real: a fight camp is eight weeks aimed at the hole the last fight exposed,
+   * and the general work is four weeks aimed at whatever has most room. A fighter who came up
+   * through fifteen years of bulk pre-history is a little further from their ceiling than one who
+   * fought the same fights at full detail.
+   */
   const redWon = result.winnerId === red.id;
-  const developed = {
-    red: settleRosterFighter(
-      db,
-      develop(db, hurt.red, day, rng.fork(`dev:${red.id}`), lastSeen),
-      redWon,
-      day,
-      bout.position,
-    ),
-    blue: settleRosterFighter(
-      db,
-      develop(db, hurt.blue, day, rng.fork(`dev:${blue.id}`), lastSeen),
-      result.winnerId === blue.id,
-      day,
-      bout.position,
-    ),
-  };
+  const developed = bulk
+    ? { red: hurt.red, blue: hurt.blue }
+    : {
+        red: settleRosterFighter(
+          db,
+          develop(db, hurt.red, day, rng.fork(`dev:${red.id}`), lastSeen),
+          redWon,
+          day,
+          bout.position,
+        ),
+        blue: settleRosterFighter(
+          db,
+          develop(db, hurt.blue, day, rng.fork(`dev:${blue.id}`), lastSeen),
+          result.winnerId === blue.id,
+          day,
+          bout.position,
+        ),
+      };
 
   const news: NewsItem[] = [];
   const winner =
@@ -1007,26 +1139,28 @@ export function runCardBout(ctx: {
         : undefined;
   const loser = winner ? (winner.id === red.id ? developed.blue : developed.red) : undefined;
 
-  const item = fightNews({
-    day,
-    boutId,
-    winnerName: winner ? displayName(winner) : undefined,
-    loserName: loser ? displayName(loser) : undefined,
-    winnerId: winner?.id,
-    loserId: loser?.id,
-    method: result.method,
-    round: result.round,
-    submissionName: result.submissionName,
-    divisionId: red.divisionId,
-    promotionId: promotion.id,
-    winnerRank: winner ? rankOfId(winner.id) : undefined,
-    loserRank: loser ? rankOfId(loser.id) : undefined,
-    isTitleFight,
-    titleChangedHands,
-  });
+  const item = bulk
+    ? undefined
+    : fightNews({
+        day,
+        boutId,
+        winnerName: winner ? displayName(winner) : undefined,
+        loserName: loser ? displayName(loser) : undefined,
+        winnerId: winner?.id,
+        loserId: loser?.id,
+        method: result.method,
+        round: result.round,
+        submissionName: result.submissionName,
+        divisionId: red.divisionId,
+        promotionId: promotion.id,
+        winnerRank: winner ? rankOfId(winner.id) : undefined,
+        loserRank: loser ? rankOfId(loser.id) : undefined,
+        isTitleFight,
+        titleChangedHands,
+      });
   if (item) news.push(item);
 
-  if (winner) {
+  if (winner && !bulk) {
     const streak = streakNews({
       day,
       fighterId: winner.id,
@@ -1041,7 +1175,7 @@ export function runCardBout(ctx: {
   const retireRng = rng.fork('retire');
   for (const fighter of [developed.red, developed.blue]) {
     const finalised = finalise(db, fighter, day, retireRng.fork(fighter.id as string), promotion);
-    if (finalised.news) news.push(finalised.news);
+    if (finalised.news && !bulk) news.push(finalised.news);
     db.fighters.upsert(finalised.fighter as Fighter & Entity);
 
     /*
@@ -1057,7 +1191,7 @@ export function runCardBout(ctx: {
         day,
         retireRng.fork(`cut:${fighter.id}`),
       );
-      if (cut) news.push(cut);
+      if (cut && !bulk) news.push(cut);
     }
   }
 
@@ -1083,6 +1217,158 @@ export function runCardBout(ctx: {
   }
 
   return { news, result };
+}
+
+/**
+ * A promotion's night, resolved from ratings instead of fought.
+ *
+ * Doc 27 § 10.3's third lever, and the honest name for it is **the base of the pyramid does not
+ * need to be simulated**. A five-thousand-fighter world exists so that people can climb out of the
+ * bottom of it; nobody will ever open a 2019 Cage Warriors prelim and read the significant strikes.
+ * What has to survive is the *record* — coherent, with real opponents, and with wins that balance
+ * losses — because that is the thing a fighter carries upward with them.
+ *
+ * So this skips the two most expensive things in a card and keeps everything a career is made of:
+ *
+ *   `offerOpponents` — matchmaking, which walks the promotion's whole roster per bout
+ *   `simulateFight`  — the fight, replaced by `paperOdds` plus a method draw
+ *
+ *   record, summary, streak      ← kept
+ *   development between fights   ← kept, or the base tier is a dead end nobody climbs out of
+ *   wear, trauma, medical suspension, retirement ← kept
+ *
+ * What is given up, and it is a real loss rather than a free one: **style stops mattering**.
+ * `paperOdds` reads overall rating and nothing else, so the wrestler-versus-striker matchups that
+ * `simulateFight` gets right and a rating gap cannot see are decided by the bigger number. A
+ * fighter who arrives from the base tier has a plausible record rather than the record they would
+ * have had. That is the trade, it is only ever applied to promotions the player has never heard
+ * of, and it is why this is opt-in per prestige rather than on by default.
+ */
+function runStatisticalCard(ctx: {
+  db: GameDb;
+  day: number;
+  rng: Rng;
+  promotion: Promotion;
+  available: Fighter[];
+  readyOn: Map<string, number>;
+  exceptId: FighterId | undefined;
+}): number {
+  const { db, day, rng, promotion, available, readyOn, exceptId } = ctx;
+
+  // This promotion's bookable fighters, by division. Same constraint the matchmaker works under:
+  // a card is made of people who are signed here and fight at the same weight.
+  const byDivision = new Map<string, Fighter[]>();
+  for (const f of available) {
+    if (f.promotionId !== promotion.id || f.id === exceptId) continue;
+    const list = byDivision.get(f.divisionId as string);
+    if (list) list.push(f);
+    else byDivision.set(f.divisionId as string, [f]);
+  }
+
+  const pairs: [Fighter, Fighter][] = [];
+  for (const [divisionId, roster] of byDivision) {
+    if (roster.length < 2) continue;
+    /*
+     * Matched on level rather than at random, because a record built out of coin flips is not a
+     * record. Sorting by rating and pairing neighbours is what a matchmaker's output looks like
+     * from a distance, and it costs one sort instead of a walk over the roster per bout.
+     */
+    const shuffled = rng
+      .fork(`pairs:${divisionId}`)
+      .shuffle(roster)
+      .sort((a, b) => overallRating(b.attributes) - overallRating(a.attributes));
+    for (let i = 0; i + 1 < shuffled.length; i += 2) pairs.push([shuffled[i]!, shuffled[i + 1]!]);
+  }
+
+  const card = rng.fork('card').shuffle(pairs).slice(0, CARD_SIZE);
+  const booked = new Set<string>();
+
+  for (const [a, b] of card) {
+    if (booked.has(a.id as string) || booked.has(b.id as string)) continue;
+    booked.add(a.id as string);
+    booked.add(b.id as string);
+
+    const boutRng = rng.fork(`bout:${a.id}:${b.id}:${day}`);
+    const aWins = boutRng.chance(paperOdds(a, b));
+    const winner = aWins ? a : b;
+    const loser = aWins ? b : a;
+
+    /*
+     * How it ended, from the population the fight model actually produces.
+     *
+     * Measured across the shipped roster rather than chosen: `roster-profile.test.ts` reads
+     * 31% by knockout, 20% by submission and the rest to the cards. A mismatch finishes more
+     * often than an even fight, which is the one thing worth carrying over from the gap.
+     */
+    const dominance = Math.abs(paperOdds(a, b) - 0.5) * 2;
+    const finishes = boutRng.chance(clamp01(0.5 + dominance * 0.3));
+    const method: FinishMethod = finishes
+      ? boutRng.chance(0.61)
+        ? 'tko'
+        : 'submission'
+      : boutRng.chance(0.72)
+        ? 'decisionUnanimous'
+        : boutRng.chance(0.5)
+          ? 'decisionSplit'
+          : 'decisionMajority';
+    const round = finishes ? boutRng.int(1, 3) : 3;
+    const timeSeconds = finishes ? boutRng.int(20, 299) : 300;
+    const boutId = `stat_${promotion.id}_${day}_${a.id}`;
+
+    for (const [fighter, outcome] of [
+      [winner, 'win'],
+      [loser, 'loss'],
+    ] as const) {
+      const stored = db.fighters.findById(fighter.id as string) as Fighter | undefined;
+      if (!stored) continue;
+
+      const record = [
+        ...stored.record,
+        {
+          boutId,
+          opponentId: (fighter.id === winner.id ? loser : winner).id,
+          promotionId: promotion.id,
+          day,
+          outcome,
+          method,
+          round,
+          timeSeconds,
+          divisionId: stored.divisionId,
+          wasTitleFight: false,
+        },
+      ];
+
+      /*
+       * What it took out of them. Coarse on purpose — a fight that is not simulated has no damage
+       * report to read — but not zero, or the base tier would produce forty-year-olds with
+       * pristine chins who have had fifty fights.
+       */
+      const stopped = outcome === 'loss' && isKoMethod(method);
+      const condition = {
+        ...stored.condition,
+        headTrauma: clamp(stored.condition.headTrauma + (stopped ? 2.4 : 0.5), 0, 100),
+        bodyWear: clamp(stored.condition.bodyWear + (finishes ? 0.6 : 1.1), 0, 100),
+      };
+
+      const next: Fighter = {
+        ...stored,
+        record,
+        summary: summariseRecord(record),
+        condition,
+        // Standing moves with results, or nothing ever climbs out of the bottom of the sport.
+        reputation: clamp(stored.reputation + (outcome === 'win' ? 1.6 : -0.8), 0, 100),
+      };
+
+      // No camp here either — `ageEveryone` trains everybody, including these two.
+      const finalised = finalise(db, next, day, boutRng.fork(`retire:${fighter.id}`), promotion);
+      const until =
+        day + readinessDelay(finalised.fighter, outcome === 'loss' ? method : undefined);
+      readyOn.set(fighter.id as string, until);
+      db.fighters.upsert({ ...finalised.fighter, readyOnDay: until } as Fighter & Entity);
+    }
+  }
+
+  return booked.size / 2;
 }
 
 /**
@@ -1841,6 +2127,7 @@ function ageEveryone(
   // Optional: in promoter mode there is no player fighter to leave alone.
   exceptId: FighterId | undefined,
   lastSeen?: Map<string, number>,
+  bulk = false,
 ): void {
   const world = getWorld(db);
   for (const fighter of db.fighters.findAll() as Fighter[]) {
@@ -1871,7 +2158,25 @@ function ageEveryone(
      * trains for one month of it. Scaling it is a real balance change and wants its own measured
      * pass; it is recorded rather than smuggled in.
      */
-    const trained = develop(db, fighter, toDay, rng, new Map([[fighter.id as string, since]]), 4);
+    /*
+     * Four weeks per call in the running game, and a block scaled to the span in bulk.
+     *
+     * The flat four is a known defect rather than a choice — it makes the fighter you get out
+     * depend on how the caller chopped up the time — and fixing it in the running game is a real
+     * balance change that wants its own measured pass. But a bulk tick advances a year at a time
+     * and books nobody a camp, so leaving it flat would put a fifteen-year pre-history through
+     * fifteen months of training and hand the start date a world of people nowhere near their
+     * ceilings. Capped, because a fighter cannot spend every week of a year in a hard camp.
+     */
+    const weeks = bulk ? clamp(((toDay - since) / 7) * 0.4, 4, 26) : 4;
+    const trained = develop(
+      db,
+      fighter,
+      toDay,
+      rng,
+      new Map([[fighter.id as string, since]]),
+      weeks,
+    );
     if (trained !== fighter) db.fighters.upsert(trained as Fighter & Entity);
   }
 }

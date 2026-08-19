@@ -511,23 +511,84 @@ for every fighter on every step, so the check gets slower every year the sport r
 
 ### 10.3 What to do instead
 
-Not one thing — the gap is 20–30× and nothing on this list is worth 20× alone.
+Not one thing — the gap is 40–70× and nothing on this list is worth that alone.
 
-1. **A bulk tick, not a bulk fight.** Skip what nobody will read: per-bout ranking, news, purses,
-   bonuses, scorecards. Batch development annually instead of per bout. This is where the 45% is,
-   and it is the same argument doc 27 § 5.1 makes about Bulk — applied to the tick rather than to
-   the resolver, which is where it should have been applied first.
-2. **Shorten pre-history.** Fifteen years is a choice, not a requirement. Eight still gives a
-   35-year-old a full career behind them, and it halves everything above.
-3. **Do not generate the whole pyramid at depth.** The base tier of a 5,000-fighter world exists so
-   that people can climb out of it. It does not need fifteen years of individually simulated bouts.
-4. **Stop saving during generation.** `db.save()` serialises every collection; at 5,000 fighters
-   that is ~250ms, and during world creation there is nothing to be durable about.
-5. **Only then, B.** It is worth about 10% of a bulk tick, which is worth having once the tick is
-   the right shape and worth nothing before that.
+1. **A bulk tick, not a bulk fight.** Skip what nobody will read. **Built — § 10.4.**
+2. **Stop saving during generation.** **Built** — part of the bulk tick.
+3. **Do not simulate the base tier at depth.** **Built** — `statisticalBelowPrestige`.
+4. **Shorten pre-history.** Fifteen years is a choice, not a requirement. Not done; § 10.5 is why
+   it is now the obvious next move.
+5. **Only then, B.** Worth about 16% of a bulk tick — see § 10.4's profile, where the fight is
+   finally one of the larger items rather than a rounding error.
 
-**What this does not change:** C stays. It is the Reduced level for the _running_ world, where it
-was always aimed, and there it is a straight 33% off every tick outside the player's orbit.
+---
+
+### 10.4 Built: the bulk tick
+
+`detail: 'bulk'` on `advanceWorld`. Same fighters, same fights, same records, none of the
+presentation. Fifteen years, measured across three world sizes:
+
+| World                         |   Full |  Bulk | Bulk + statistical base |
+| ----------------------------- | -----: | ----: | ----------------------: |
+| 858 fighters, 8 promotions    |  21.3s |  6.9s |                    6.2s |
+| 2,778 fighters, 38 promotions |  83.0s | 26.1s |                   24.1s |
+| 5,082 fighters, 74 promotions | 172.6s | 55.2s |                   49.1s |
+
+**3.5× at the size that matters.** What it drops, and why each one is safe:
+
+| Dropped                              | Because                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------------- |
+| `rankDivision` per bout              | Its only consumer is a headline saying "the number four contender"           |
+| All news                             | Nobody reads a feed from before the save existed                             |
+| Bonuses, purses, gate, `settleNight` | The economy is frozen through pre-history, which is a feature                |
+| The stored `FightNight`              | Fifteen years of a 74-promotion world is ~22,000 cards                       |
+| `db.save()` per tick                 | A quarter of a second at 5,000 fighters, for a world that does not exist yet |
+| The per-bout fight camp              | `ageEveryone` picks the same fighters up with everybody else                 |
+
+Two of those cost something real and are recorded rather than hidden. **Development** moves from an
+eight-week camp aimed at the hole the last fight exposed to the general four-week block everyone
+gets, so a fighter who came up through bulk pre-history sits a little further from their ceiling —
+`bulk-tick.test.ts` holds the gap under 6% of mean overall. And the **statistical base tier**
+resolves from `paperOdds`, which reads overall rating and nothing else, so the
+wrestler-versus-striker matchups the fight model gets right are decided by the bigger number.
+
+Two things turned up on the way that were not about bulk at all:
+
+- **`rankDivision` was being handed every fighter in the world, once per candidate bout** — 5,082 of
+  them to rank a division of four hundred — to decide whether a bout was for a belt. Indexing the
+  rosters once per step fixed it everywhere, not only in bulk. 5% of a tick.
+- **The seeded rosters carry a summary with no bouts behind it.** A first version of
+  `bulk-tick.test.ts` counted wins and losses off `summary` and read a 62% imbalance in _both_
+  ticks, which says nothing about either. Counted off the records a run actually produced, bulk
+  balances to within 2%.
+
+`tests/integration/bulk-tick.test.ts` runs six years both ways and asserts the two produce the same
+sport: fight count, record length, win/loss balance, population, standard, wear, and the shape of
+the pyramid — and that bulk writes no news, stores no cards and awards no bonuses.
+
+### 10.5 Where that leaves it
+
+| World  | 15 years | 8 years (estimated) |
+| ------ | -------: | ------------------: |
+| Small  |     6.2s |                3.3s |
+| Medium |    24.1s |               12.9s |
+| Large  |    49.1s |               26.2s |
+
+§ 7's budget is 10 seconds and a mid-range phone is three to five times slower again, so **only the
+Small world is in budget today**, and only on a desktop.
+
+The profile is now flat — the fight is 16%, matchmaking 8%, ageing 9%, free agency 8%, the
+aftermath 6% — which means there is no single remaining lever worth 5×. What is left is arithmetic
+rather than engineering:
+
+- **Shorten pre-history** (§ 10.3 item 4). Halves everything, and eight years still gives a
+  35-year-old a full career behind them.
+- **Ship Medium as the default** rather than Large. Doc 26 § 2's realistic pyramid is a target, not
+  a requirement for the first release.
+- **Generate the base tier's records rather than simulating them at all.** § 4 rejected synthesised
+  history as a trap, and the trap is coherence — which matters much less for a promotion the player
+  will never look at than for the division they are fighting in.
+- **B**, worth 16% now that everything cheaper has gone.
 
 ---
 
@@ -551,8 +612,8 @@ was always aimed, and there it is a straight 33% off every tick outside the play
 
 0. **The cheap resolvers, measured.** § 9 and § 10. C is built. B is deferred — § 10.1 measured it
    as worth ~10% of a pre-history tick, which is not where the problem is.
-   0b. **The bulk tick.** § 10.3. The piece that decides whether pre-history is affordable at all, and
-   the thing to build before any of the below.
+   0b. **The bulk tick.** Built — § 10.4. 3.5× off a pre-history run, which leaves the Large world 5×
+   over budget and the Small world inside it. § 10.5 has what is left, and none of it is code.
 1. **Talent map.** Named nations, grouped regions, expanded name pools. Data, incremental, useful
    on its own — the existing seeded worlds get better nationality spread immediately.
 2. **Promotion generation.** The five-tier pyramid from parameters, with `baseCountry` from the map.

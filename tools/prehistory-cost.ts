@@ -35,12 +35,16 @@ interface Run {
   promotions: number;
 }
 
-function run(scale: number, resolver: 'full' | 'reduced'): Run {
+type Mode = 'full' | 'reduced' | 'bulk' | 'bulk+stat';
+
+function run(scale: number, mode: Mode): Run {
   const db =
     scale <= 1 ? createNewGame({ era: '2026', seed: 'prehistory:1' }) : buildScaledWorld(scale);
   const start = getWorld(db).day;
   const fightersStart = (db.fighters.findAll() as Fighter[]).length;
-  const resolve = resolver === 'reduced' ? resolveFightByRound : simulateFight;
+  const resolve = mode === 'full' ? simulateFight : resolveFightByRound;
+  const detail = mode === 'full' || mode === 'reduced' ? undefined : ('bulk' as const);
+  const statisticalBelowPrestige = mode === 'bulk+stat' ? 40 : undefined;
 
   let fights = 0;
   let firstYear = 0;
@@ -49,7 +53,11 @@ function run(scale: number, resolver: 'full' | 'reduced'): Run {
   for (let year = 0; year < YEARS; year++) {
     const from = start + year * 365;
     const yearBegan = performance.now();
-    fights += advanceWorld(db, from, from + 365, { resolve }).fights;
+    fights += advanceWorld(db, from, from + 365, {
+      resolve,
+      detail,
+      statisticalBelowPrestige,
+    }).fights;
     const took = (performance.now() - yearBegan) / 1000;
     if (year === 0) firstYear = took;
     lastYear = took;
@@ -75,7 +83,7 @@ console.log(
     'promos',
     'fighters',
     'end',
-    'resolver',
+    'mode'.padEnd(10),
     'fights',
     'total s',
     'ms/year',
@@ -84,8 +92,10 @@ console.log(
   ].join('\t'),
 );
 
+const MODES = (process.env.MODES ?? 'full,reduced,bulk,bulk+stat').split(',') as Mode[];
+
 for (const scale of SCALES) {
-  for (const resolver of ['full', 'reduced'] as const) {
+  for (const resolver of MODES) {
     const r = run(scale, resolver);
     console.log(
       [
@@ -93,7 +103,7 @@ for (const scale of SCALES) {
         r.promotions,
         r.fightersStart,
         r.fightersEnd,
-        resolver.padEnd(8),
+        resolver.padEnd(10),
         r.fights,
         r.seconds.toFixed(2),
         ((r.seconds * 1000) / YEARS).toFixed(0),
