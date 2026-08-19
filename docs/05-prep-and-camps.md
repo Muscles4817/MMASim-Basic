@@ -106,115 +106,154 @@ weight so ten pounds at flyweight is a far harder cut than at heavyweight.
 `Weight-Cut Gambler` amplifies all three. It is the archetypal double-edged trait: a real,
 earned advantage and a real, recurring cost.
 
-## Approaches
+## The tactical plan
 
-Seven, each shifting intent weights in the simulator:
+**`approach` is gone.** It was seven buttons answering four unrelated questions:
 
-| Approach     | The fight you are trying to have                         |
-| ------------ | -------------------------------------------------------- |
-| Pressure     | Walk them down, take the centre, never let them breathe   |
-| Counter      | Give them the centre and punish everything they throw     |
-| Wrestle      | Get it to the mat early and often; chain the attempts     |
-| Grind        | Fence, clinch, control. Win ugly and drain them           |
-| Point Fight  | Bank rounds, take no risks, get out with the decision     |
-| Hunt Sub     | Get it to the floor and go looking                        |
-| Hunt Finish  | Swing for it, and accept the damage that comes with that  |
+```
+  Pressure / Counter          → initiative: how do you take the centre?
+  Wrestle / Grind             → position:   where do you want the fight?
+  Point Fight                 → risk:       what are you willing to lose?
+  Hunt Submission / Finish    → finishing:  what ends it?
+```
 
-## Where the fight happens
+Those are not alternatives. A pressure fighter who wants it on the fence and takes no risks is an
+extremely common fighter, and the old control made the player pick *one* of the four things that
+describe him. And because the answer was a single row in a weight table with a factor of three
+across it, the engine could only read it as a nudge. Measured: an 84-striking, 38-wrestling
+fighter across from a wrestler spent **138 seconds of a 900-second fight at distance, and all
+seven approaches moved that number between 133 and 143.** Every plan produced the same fight —
+which meant "the plan failed" and "the plan did not matter" were indistinguishable, and the second
+one was always the truth.
 
-**Every row of that table answers "what do I throw", and none of them answers "where is this
-fight".** That is not a nuance; it is the difference between a plan and a shot selection, and
-until `groundIntent` landed the plan did not carry it.
+A plan now answers five questions. `domain/tactics.ts` is the vocabulary; `fight/policy.ts` is
+what makes the engine obey it.
 
-Measured before the axis existed, an 84-striking, 38-wrestling striker across from a wrestler
-spent **138 seconds of a 900-second fight at distance and 368 being controlled** — and the seven
-approaches moved the first number between 133 and 143. A player who built a striker and picked
-`Counter` was not saying *keep it standing*. They were being told what to do during the fifteen
-per cent of the night they were on their feet, and the approach table had nothing to say about
-the takedown they were defending, the tie-up they were trying to leave, or the floor they were
-trying to get up off. So the screen that promises a considered decision was, on the single
-question the player most wanted answered, not listening.
+### 1. Where do you want the fight?
 
-`groundIntent` is a 0–1 dial alongside `riskLevel`, and 0.5 is a mathematically exact no-op.
-`phaseProfile` turns it into six multipliers, three of which are the lever and three the price:
+| | |
+| --- | --- |
+| **Outside** | Kick and jab at range. Refuse the pocket, the fence and the floor. |
+| **Pocket** | Box at close range. Accept the exchanges, start none of the grappling. |
+| **Clinch** | Fence and tie-up. Dirty box, knees, trips, control. |
+| **Ground — Top** | Take them down and stay on top of them. |
+| **Ground — Submission** | Get it to the floor and go hunting, from either position. |
+| **Adaptive** | Take what the opponent gives you. Applies no bias at all. |
 
-| Term         | What it moves                                          | Which half pays |
-| ------------ | ------------------------------------------------------- | --------------- |
-| `entry`      | How hard you look for the takedown and the tie-up       | both            |
-| `sprawl`     | What your takedown defence is worth when they shoot     | refusing only   |
-| `escape`     | How urgently you leave the fence and the floor          | refusing only   |
-| `output`     | How much you throw                                      | chasing only    |
-| `exposure`   | How open you are to the counter                         | both            |
-| `exertion`   | What the night costs you in the tank                    | both            |
+### 2. How do you get it there?
 
-**`sprawl` and `escape` are one-sided on purpose, and the reason is the most useful thing this
-section records.** The first cut made both symmetric — a fighter chasing the takedown was 18%
-easier to take down and 45% less interested in standing back up. Both read plausibly and both
-were wrong. A wrestler is still a wrestler when you shoot back, and *nobody* wants to be
-underneath: wanting the fight on the floor is not the same as wanting to be on the bottom of
-it, and conflating the two took 18 points off every world grappler's takedown defence and
-flattened the striker/grappler control-time gap that `styles.test.ts` G1 protects.
+Standing preferences pick from **Lead / Counter / Pressure / Movement**; grappling ones from
+**Reactive shots / Chain wrestling / Clinch first / Trips and throws**. The pair
+`(preferredState, entry)` is where the expressiveness lives: `pocket`+`pressure` is a pressure
+boxer, `top`+`pressure` is a relentless chain wrestler, `top`+`counter` is a reactive wrestler who
+shoots when you overextend. One axis could say none of that.
 
-**The price is not a flat tax, and four attempts at one failed before that was clear.** Charging
-`output`, `commitment` or `exertion` against the refusing half each cancelled precisely what the
-plan was buying: less volume and softer shots undo the striking fight you bought, and faster
-fatigue degrades the takedown defence you bought it with — a penalty that compounds against its
-own lever is not a price, it is a bug with a rationale. What makes this a decision is structural
-rather than taxed: **picking the wrong end means choosing to fight in the phase where the other
-man is better**, and that is expensive enough on its own.
+### 3. What do you do once you are there?
 
-Measured at n=4000, for the striker above:
+On top: **Control / Damage / Advance / Submit.** Underneath: **Stand up / Scramble / Play guard /
+Recover / Attack.**
 
-|                             | vs the wrestler | vs another striker |
-| --------------------------- | --------------- | ------------------ |
-| Keep it standing, win rate  | 38.1% → 42.4%   | 58.7% → 57.4%      |
-| Seconds held on the floor   | 337 → 304       | 155 → 89           |
-| Takedowns stuffed           | 1.47 → 2.15     | 1.50 → 1.38        |
-| Time at distance            | 136s → 148s     | 201s → 186s        |
+The bottom list is what the whole rework exists for. A striker with 32 submissions used to get
+taken down and *hunt a guillotine*, because the three bottom actions were drawn from weights that
+happened to be close together and the game plan was not in the room.
 
-Which is the shape the whole thing is for: **against the man built to exploit your hole it is
-worth four points and a visibly different fight; against a man who was never going to shoot it
-is worth nothing at all.** The same asymmetry the prepped reads have, on the axis that did not
-have it — and note the second column carefully, because refusing the floor still cuts that
-fight's ground time by 43%. Choosing where the fight happens *always* changes the fight. It only
-pays when somebody was trying to put you there.
+### 4. Finishing
 
-The other end of the dial is where the real punishment lives: a striker who asks for the floor
-loses 14 to 19 points, and a wrestler who refuses it loses 13. That is what makes this a
-decision without needing a tax bolted onto it.
+**Stay disciplined / Press advantages / Hunt the finish** — how much the plan is abandoned the
+moment somebody is hurt. Exchange risk is `riskLevel`, which already exists and is already
+measured; positional risk was folded into the top intent, because `control` against `advance`
+*is* that axis asked where the fighter actually chooses.
 
-### What the world gets
+### 5. What changes when the fight does
 
-`planFor` gives every AI corner a lean on this axis — a wrestler above neutral, a counter-striker
-below — but a **deliberately faint one**, ±0.06 rather than the ±0.5 the player can reach. The
-width is measured, and the second measurement was the surprise. At ±0.24 the world's regional
-promotions ended a decade with mean budget growth of **0.167 against 0.043 before this axis
-existed**, over twelve start days, while the leader's was unchanged: strikers who sprawl are held
-less, grapplers who are sprawled on hold less, the sport's fights get marginally more decisive,
-and the bottom of the sport quietly stops being marginal — which is the thing
-`promotion-costs.test.ts` exists to prevent. At ±0.12 the mean returns to 0.043 but two start days
-in ten bankrupt a regional where none did before. At ±0.06 neither shows, and the styles
-separation `styles.test.ts` G1 protects is unchanged at all three widths.
+Five contingencies — losing the round, winning it, badly hurt, opponent hurt, final minute — each
+taking one response from a shared vocabulary (hold the plan, raise output, raise risk, lower risk,
+force grappling, hunt the finish, survive, secure position). Folded away on the screen by default:
+unset situations behave exactly as they did before this existed.
 
-So the world leans and the player commits, and that asymmetry is not a compromise — it is the
-same one `pickRisk` already makes, for the same reason: the extremes belong to whoever is
-choosing them against a named opponent and paying knowingly.
+## How intent becomes behaviour
 
-**The round-level resolver does not model this axis**, and joins `approach` on doc 27 § 9's list
-of what the Reduced level gives up. Wiring it in was tried and measured backwards: control at that
-level is a clamped share of a round rather than a sequence of positions, so a fighter already near
-the control ceiling absorbed a 30% cut to both grappling terms without moving, while the
-second-order effects did move — a striker refusing the floor came out with *more* of the round
-spent underneath, 0.570 → 0.590, where the full simulator gave 0.658 → 0.639. A term that survives
-only where it does not matter is not fidelity. Since `planFor` keeps the world within ±0.06 and
-anything in the player's orbit is resolved at Full, the gap costs almost nothing in practice.
+Every decision in the simulator is a weighted draw over locally reasonable actions. The policy
+layer scores each candidate for **alignment** with the fight the corner asked for, in −1…+1, and
+multiplies:
 
-**What is still open**, and it is the honest limit of this change: against an elite wrestler the
-striker still spends 300 seconds underneath, because the base rate of takedowns in this engine is
-high — a merely rounded 66-wrestling opponent books 2.6 takedowns and four minutes of control
-against a 44-takedown-defence striker over fifteen minutes. The dial makes that a choice the
-player can push against. It does not make it a choice they can win, and whether the base rate
-itself is right is a separate question this change deliberately did not answer.
+```
+  bias = exp(alignment × 1.9 × urgency)
+```
+
+Exponential rather than linear because the ends must be reciprocal — at full urgency, doubling
+what you want has to halve what you don't, or every plan quietly becomes "do more of everything".
+
+**`urgency` is derived, never a dial.** It is the plan's own conviction, scaled by whether the
+fighter can execute a plan at all (discipline × fight IQ), by how much of the plan is left
+(`planIntegrity`, which erodes while hurt or losing and only partly recovers between rounds), and
+by whether they are somewhere they did not choose to be. A slider reading "how much do you mean
+it?" is not a question anybody can answer.
+
+Two rules keep it from becoming a straitjacket:
+
+- **Exceptional opportunities override suppression.** A man on his back told to stand up still
+  takes a fight-ending choke if one is genuinely there — `submissionOpportunity` is built from the
+  *gap* and the position, so a 90-submissions fighter gets an exemption when the position offers
+  one, not a permanent licence.
+- **Intent is not ability.** Nothing here makes anybody better at anything. A 25-wrestling fighter
+  told to take it to the floor shoots constantly, misses, gets countered and empties his tank.
+  That is a *failed game plan*, and it is the outcome the old model could not produce.
+
+## What proves it
+
+`tests/statistical/tactics.test.ts` holds the fighters and the seeds fixed and changes only the
+plan. On two identical 70-across fighters:
+
+| plan | distance | top | takedowns tried | subs tried | kick share |
+| --- | --- | --- | --- | --- | --- |
+| Outside + movement | 267s | 117s | 2.25 | 1.71 | 41% |
+| Pressure boxer | 268s | 133s | 2.59 | 1.89 | 27% |
+| Clinch grinder | 214s | 209s | 3.88 | 2.56 | 20% |
+| Point wrestler | 189s | 338s | 6.91 | 3.35 | 17% |
+| Submission hunter | 167s | 295s | 5.18 | **9.69** | 27% |
+
+And the plan has to *suit* the fighter. Win rate by (fighter, plan) against the same opponent:
+
+| plan | striker | grappler | balanced |
+| --- | --- | --- | --- |
+| no plan (adaptive) | 66 | 79 | 71 |
+| outside striker | **76** | 65 | 63 |
+| counter striker | **77** | 67 | 67 |
+| point wrestler | 57 | 82 | 74 |
+| ground and pound | 66 | **86** | 80 |
+
+A 20-point swing for picking the plan that matches who you are, and a real penalty for picking
+against it.
+
+## What it cost
+
+Two things worth stating plainly.
+
+**The old default plan was not neutral.** `defaultGamePlan()` carried `approach: 'pressure'`,
+which multiplied striking by 1.25 and takedowns by 0.8 — and every "unplanned" fight the whole
+statistical tier is calibrated against ran on it. Removing it is a correctness fix and it moved
+real numbers; `BASE_ATTEMPTS` in the round resolver came down from 15.5 to 15.0 to follow it.
+
+**The sport is more decisive.** When every fighter commits to the phase they are best in, more
+fights end. Across the whole 2026 roster:
+
+```
+                    before   after     real sport
+  finishes           49.1%    52.5%       ~48%
+  decisions          47.7%    44.1%      ~48-52%
+  KO : submission     1.51     1.91       ~1.8
+  first round        31.1%    35.1%       ~16%
+```
+
+The knockout-to-submission ratio moved *toward* the real sport; the first-round rate moved away
+from it. That gap is the next piece of work and it is not reachable from the tactical layer —
+absorbing it in `BASE_KD_HAZARD` was tried and rejected, because it takes the kicking attribute's
+win-rate swing under the floor `styles.test.ts` holds it to.
+
+**What it bought**, measured on the styles fingerprint: G1 separation went from **3 of 15 pairs to
+6**, and wrestling finally separated from jiu-jitsu — the pair whose whole difference is what you
+do having arrived on the floor, which the one-axis model had no vocabulary for.
 
 ## Targeting
 

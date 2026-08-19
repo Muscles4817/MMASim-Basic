@@ -25,6 +25,7 @@ export * from './domain/disposition.js';
 export * from './domain/divisions.js';
 export * from './domain/nationalities.js';
 export * from './domain/gameplan.js';
+export * from './domain/tactics.js';
 export * from './domain/officials.js';
 export * from './domain/organisations.js';
 

@@ -211,20 +211,28 @@ describe('G1 — separation between the six disciplines', () => {
     ).toBeGreaterThanOrEqual(3);
   });
 
-  it('has not separated a single same-family pair, which is what phase 6 is for', () => {
+  it('has separated exactly one same-family pair, and it is the grappling one', () => {
     /*
-     * **Tripwire**, and the successor to the one above: the *complement* of what phase 5 achieved.
+     * **This assertion has been inverted, and the version it replaced asked to be.**
      *
-     * Boxing against kickboxing against karate; wrestling against judo against jiu-jitsu. Six
-     * pairs, none of them meeting G1, and the reason is structural rather than tuned — two arts
-     * that want the same phase of the fight and reach for it with the same intents can only be
-     * told apart by *where inside that phase* they operate, and the engine has one standing
-     * position. Measured: kickboxing/karate 0.067, jiu-jitsu/judo 0.100, wrestling/jiu-jitsu 0.195,
-     * wrestling/judo 0.193, jiu-jitsu/judo 0.191 — **all three grappling pairs within a hundredth
-     * of the target**, from 0.077 / 0.156 / 0.101 before §13.7 and §13.8. The striking family has
-     * not moved and is where 6A is aimed.
+     * It used to read "has not separated a single same-family pair, which is what phase 6 is for",
+     * and its own comment ended: *"When phase 6's positions land this breaks. Invert it then to
+     * the G1 target for every pair."* The tactical layer is what landed, and it broke it.
      *
-     * When phase 6's positions land this breaks. Invert it then to the G1 target for every pair.
+     * Measured across the whole matrix, G1 pairs went from **3 of 15 to 6 of 15**, and the one
+     * same-family pair that cleared it is wrestling against jiu-jitsu — the pair whose difference
+     * is *entirely* about what you do having arrived on the floor. That is the axis the old model
+     * had no vocabulary for: both arts were `wrestle`, both were resolved from the same weights,
+     * and the engine could not tell a man who wants to hold you down from one who wants your arm.
+     * `topIntent` and `bottomIntent` say it, and the fingerprint can now see it.
+     *
+     * Bounded on both sides on purpose. It must not go back to zero — that would mean the floor
+     * work stopped expressing — and it must not quietly become all six, because the striking
+     * family is *not* separated and pretending otherwise is what the original tripwire existed to
+     * prevent. Boxing, kickboxing and karate still differ only in what they throw: one standing
+     * position, and this model gives them two (`longRange` and `pocket`) where the simulator has
+     * one. Splitting the standing phase for real is the next piece of work, and this is where it
+     * will show.
      */
     const striking: CombatDiscipline[] = ['boxing', 'kickboxing', 'karate'];
     const grappling: CombatDiscipline[] = ['wrestling', 'jiuJitsu', 'judo'];
@@ -239,8 +247,8 @@ describe('G1 — separation between the six disciplines', () => {
     );
     expect(
       met.map(([a, b]) => `${a}/${b}`),
-      `same-family pairs now meeting G1 — phase 6 has landed, raise this`,
-    ).toEqual([]);
+      'the floor work stopped expressing, or the standing phase started',
+    ).toEqual(['wrestling/jiuJitsu']);
   });
 
   it('tells the throwing art from the shooting art, and not the two submission arts', () => {

@@ -9,7 +9,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { App } from '../../packages/app/src/App';
@@ -177,15 +177,20 @@ describe('the fight plan survives leaving the screen', () => {
     expect(after[0]!.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('keeps the chosen approach across a navigation', async () => {
+  it('keeps the chosen game plan across a navigation', async () => {
+    /*
+     * The plan is five decisions now rather than one, and each is a separate writer into the
+     * saved booking — which is exactly the shape of the defect this block was written for. A
+     * stale spread erasing whatever the last writer wrote reappears one field at a time.
+     */
     const user = userEvent.setup();
     await startCareer(user);
     await bookAFight(user);
 
-    // Pick an approach that is not the default.
-    const approaches = await screen.findAllByRole('button', { name: /Counter|Grind|Pressure/i });
-    const notSelected = approaches.find((b) => b.getAttribute('aria-pressed') === 'false');
-    expect(notSelected, 'no unselected approach to switch to').toBeTruthy();
+    // Where the fight happens: pick something that is not the default.
+    const states = await screen.findAllByRole('button', { name: /Ground — Top|Clinch|Outside/i });
+    const notSelected = states.find((b) => b.getAttribute('aria-pressed') === 'false');
+    expect(notSelected, 'no unselected preference to switch to').toBeTruthy();
     const label = notSelected!.textContent ?? '';
     await user.click(notSelected!);
 
@@ -193,34 +198,50 @@ describe('the fight plan survives leaving the screen', () => {
     await screen.findByText(/not on ability/i);
     goTo('#/camp');
 
-    const after = await screen.findAllByRole('button', { name: /Counter|Grind|Pressure/i });
+    const after = await screen.findAllByRole('button', { name: /Ground — Top|Clinch|Outside/i });
     const stillSelected = after.find((b) => b.getAttribute('aria-pressed') === 'true');
     expect(stillSelected?.textContent).toBe(label);
   });
 
-  it('keeps where you want the fight across a navigation', async () => {
+  it('asks what to do underneath, which the old plan never did', async () => {
     /*
-     * The plan's second axis, held to the same promise as the first. It is a separate test
-     * rather than an extra assertion on the one above because it is a separate writer into the
-     * saved booking, and the defect that test was written for — a stale spread erasing whatever
-     * the last writer wrote — is exactly the kind that reappears one field at a time.
+     * The control the whole rework exists for. A striker on his back used to hunt guillotines he
+     * could not finish because the engine drew from three near-equal weights and the plan was not
+     * in the room; this is the instruction that stops it, and it has to be *on the screen* or the
+     * engine work is unreachable.
      */
     const user = userEvent.setup();
     await startCareer(user);
     await bookAFight(user);
 
-    const slider = await screen.findByLabelText(/where you want the fight/i);
-    // Sliders do not respond to typing; set it the way a drag would and fire the change.
-    fireEvent.change(slider, { target: { value: '0' } });
-    // Named on the control and restated on the commit card, so both must move together.
-    await waitFor(() => expect(screen.getAllByText(/Keep it standing/i).length).toBe(2));
+    expect(await screen.findByText(/When you are underneath/i)).toBeTruthy();
+    const standUp = await screen.findByRole('button', { name: /Stand up/i });
+    await user.click(standUp);
+    await waitFor(() => expect(standUp.getAttribute('aria-pressed')).toBe('true'));
 
+    // And it survives the round trip, like everything else on this screen.
     goTo('#/rankings');
     await screen.findByText(/not on ability/i);
     goTo('#/camp');
+    const again = await screen.findByRole('button', { name: /Stand up/i });
+    expect(again.getAttribute('aria-pressed')).toBe('true');
+  });
 
-    const after = await screen.findByLabelText(/where you want the fight/i);
-    expect((after as HTMLInputElement).value).toBe('0');
+  it('offers the entry styles that go with the fight you asked for', async () => {
+    // `(preferredState, entry)` is the pair that carries the expressiveness, and an entry left
+    // over from a previous preference is a stale control rather than a plan.
+    const user = userEvent.setup();
+    await startCareer(user);
+    await bookAFight(user);
+
+    const top = await screen.findByRole('button', { name: /Ground — Top/i });
+    await user.click(top);
+    expect(await screen.findByRole('button', { name: /Chain wrestling/i })).toBeTruthy();
+
+    const outside = await screen.findByRole('button', { name: /Outside/i });
+    await user.click(outside);
+    await waitFor(() => expect(screen.queryByRole('button', { name: /Chain wrestling/i })).toBeNull());
+    expect(await screen.findByRole('button', { name: /Circle, reset/i })).toBeTruthy();
   });
 });
 

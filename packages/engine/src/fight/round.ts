@@ -41,6 +41,12 @@ import { createRng, type Rng } from '../core/rng.js';
 import type { FighterId } from '../core/ids.js';
 import type { FinishMethod } from '../domain/fighter.js';
 import { defaultGamePlan, normaliseGamePlan, riskProfile } from '../domain/gameplan.js';
+import {
+  controlResistance,
+  grapplingAppetite,
+  strikingAppetite,
+  submissionAppetite,
+} from './policy.js';
 import { defaultJudges, defaultReferee } from '../domain/officials.js';
 import { traitMul } from '../domain/traits.js';
 import { effect, fatiguedEffect } from '../ratings/curve.js';
@@ -77,8 +83,15 @@ const ROUND_SECONDS = 300;
  * Not itself a measured count — the measured count is 12.3, and this is the number that produces it
  * once `workRate` has taken its cut over three rounds. Setting it to 12.3 directly gave 9.5, which
  * is the same mistake as reading a fighter's round-one output off their card.
+ *
+ * Trimmed from 15.5 when the tactical layer landed, and the reason is worth recording because it
+ * is not about this level of detail at all. `defaultGamePlan()` used to carry `approach: 'pressure'`
+ * — a 1.25× multiplier on striking that every "unplanned" fight in the game silently ran on — and
+ * removing it lowered the full simulator's volume by a few per cent. These constants are measured
+ * *against* the full simulator, so the calibration moved with it. 15.5 would now over-state a
+ * Reduced round by just over the 30% the parity suite allows on its two most lopsided matchups.
  */
-const BASE_ATTEMPTS = 15.5;
+const BASE_ATTEMPTS = 15.0;
 
 /**
  * How much of a round the two fighters can spend in controlling positions.
@@ -251,31 +264,20 @@ const SUBMISSION_REPEAT_DECAY = 0.4;
  */
 function controlShare(a: Combatant, d: Combatant): number {
   /*
-   * **`groundIntent` is deliberately not read here, and the attempt to read it is why.**
+   * What they do, times what they were told to do.
    *
-   * The obvious wiring — divide `push` by the other man's `sprawl` and `hold` by his `escape` —
-   * is directionally right and measured *backwards*. Against the same wrestler, a striker who
-   * refuses the floor moved this level's control share 0.570 → 0.590 while `simulate.ts` moved
-   * it 0.658 → 0.639, and his win rate here fell where it rose there. The reason is structural:
-   * control at this level is a clamped share of a round rather than a sequence of positions, so
-   * a fighter who is already near `MAX_CONTROL_PER_FIGHTER` absorbs a 30% cut to both terms
-   * without moving, while the second-order effects — a longer fight, a different finish rate —
-   * do move. A term that survives only where it does not matter is not fidelity.
-   *
-   * So this joins `approach` on the list of things the Reduced level does not model, which is
-   * the honest place for it. One term does still reach here — `exertion`, through the shared
-   * `accrueFatigue` — so a fighter at an extreme setting pays a sliver of the price at this level
-   * without collecting the benefit, worth about two points of win rate at ±0.5. That is a real
-   * asymmetry and it is bounded where it matters: `planFor` keeps every AI corner within ±0.06 of
-   * neutral, where `exertion` is 1.012, and a player-orbit fight is resolved at Full, which is
-   * where the dial the player actually set lives.
+   * `tendencies` is the fighter; `grapplingAppetite` is the plan, read off the same alignment
+   * table `simulate.ts` uses so the two levels of detail cannot disagree about what a plan means.
+   * Clamped after the multiply rather than before, so a plan can push a middling grappler up to
+   * the ceiling but never past it.
    */
   const wants = clamp01(
-    (a.tendencies.singleLeg +
+    ((a.tendencies.singleLeg +
       a.tendencies.doubleLeg +
       a.tendencies.fenceClinch +
       a.tendencies.bodyLock) /
-      3,
+      3) *
+      grapplingAppetite(a),
   );
 
   const push =
@@ -285,8 +287,10 @@ function controlShare(a: Combatant, d: Combatant): number {
   const hold =
     (fatiguedEffect(a.attrs.groundControl, 'groundControl', a.fatigue) +
       fatiguedEffect(a.derived.clinchOffence, 'strength', a.fatigue)) /
-    (fatiguedEffect(d.attrs.scrambling, 'scrambling', d.fatigue) +
-      fatiguedEffect(d.derived.clinchDefence, 'takedownDefence', d.fatigue));
+    ((fatiguedEffect(d.attrs.scrambling, 'scrambling', d.fatigue) +
+      fatiguedEffect(d.derived.clinchDefence, 'takedownDefence', d.fatigue)) *
+      // A man told to get up is a man you hold for less of the round.
+      controlResistance(d));
 
   return clamp(
     BASE_CONTROL * (wants / 0.42) * push ** 0.9 * hold ** 0.8,
@@ -352,7 +356,10 @@ function attemptsFor(
     roundBiasMultiplier(a, round, totalRounds) *
     momentumMultiplier(a) *
     initiativeShare(a, d) ** 0.7 *
-    riskProfile(a.plan.riskLevel).exertion ** 0.5;
+    riskProfile(a.plan.riskLevel).exertion ** 0.5 *
+    // Damped, because plenty of a grappler's volume comes from on top of somebody rather than
+    // from choosing to strike at range, and `position` below already pays him for that.
+    strikingAppetite(a) ** 0.35;
 
   /*
    * Top position is a place to work from; bottom position is a place to *survive* in — and how
@@ -600,13 +607,34 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
       byRegion.legs *= flush;
       const damage = byRegion.head + byRegion.body + byRegion.legs;
 
+      /*
+       * **Wanting it buys attempts, not takedowns** — the same separation `simulate.ts` enforces
+       * by leaving every contest untouched, stated at this level of detail.
+       *
+       * `own` is control share *after* the plan has pushed on it, so deriving both the attempt
+       * count and the conversion rate from it paid a committed wrestler twice: he shot more and
+       * landed a higher share of what he shot. Measured against the full simulator, that is
+       * precisely backwards — a fighter chasing takedowns against somebody expecting them
+       * converts *worse*, not better.
+       *
+       * So attempts scale with the plan and conversion reads the control share the fighter would
+       * have had without it. A 25-wrestling fighter told to take it to the floor now shoots all
+       * night at this level too, and still does not get anybody down.
+       */
       const grapple = own / Math.max(BASE_CONTROL, 0.05);
       const takedownsAttempted = around(roundRng, BASE_TAKEDOWN_ATTEMPTS * grapple ** 0.7, 0.4);
-      const takedownsLanded = takedownsAttempted * clamp01(0.35 + own * 0.75);
-      // A guard player is dangerous off his back, so a *little* of it comes from being underneath.
+      const unplanned = own / Math.max(0.2, grapplingAppetite(a));
+      const takedownsLanded = takedownsAttempted * clamp01(0.35 + unplanned * 0.75);
+      /*
+       * A guard player is dangerous off his back, so a *little* of it comes from being underneath
+       * — and the two positions read different halves of the plan, because "hunt from top" and
+       * "attack off your back" are different instructions and `simulate.ts` treats them as such.
+       */
       const submissionAttempts = around(
         roundRng,
-        (SUBMISSION_FLOOR + SUBMISSION_PER_CONTROL * (own + under * 0.15)) *
+        (SUBMISSION_FLOOR +
+          SUBMISSION_PER_CONTROL *
+            (own * submissionAppetite(a, true) + under * 0.15 * submissionAppetite(a, false))) *
           (0.75 + a.tendencies.backTake * 0.5),
         0.4,
       );
