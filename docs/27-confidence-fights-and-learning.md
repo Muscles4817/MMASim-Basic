@@ -1,8 +1,9 @@
 # 27 — Confidence, what a fight teaches, and when learning stops
 
-**Status:** §1 (confidence), §2 (what a fight teaches) and §3 (the learning window) are all
-**built** — see §5, §6 and §7 for what each one measured. §7 also records two defects found on the
-way that are **not** fixed, and one proposal from §3.4 that measurement rejected.
+**Status:** §1 (confidence), §2 (what a fight teaches), §3 (the learning window), §8 (ambient
+work), §11 (the day tick) and §10's mileage half (§12) are **built** — see §5, §6 and §7 for what each one measured. §7 also records one proposal from §3.4
+that measurement rejected. §8 is the first of §7.4's two recorded defects, now **fixed**. §9 is the
+next workstream and is **not started**.
 
 Three findings that came out of tracing created careers through the 2026 world. They are filed
 together because they are one story: **a career ends before it develops, and the things that
@@ -620,7 +621,7 @@ Two things it caught:
 
 ### 7.4 Two defects found and not fixed
 
-**`ageEveryone` trains a flat four weeks per _call_, not per elapsed week.** So the fighter you get
+**`ageEveryone` trains a flat four weeks per _call_, not per elapsed week.** _(Fixed — §8.)_ So the fighter you get
 out depends on how the caller chopped up the time — the same defect `recoverConfidence` was written
 to avoid. The app advances in camp-length spans, so this is four weeks per eight; the long-sim
 harness advances a _year_ per call, and every unbooked fighter in the world trains for one month of
@@ -634,3 +635,417 @@ it is empty, so `expect(best).toBeGreaterThan(68)` has never been evaluated. It 
 asserting once these changes let newcomers survive long enough to accumulate a record, which is how
 the `ageEveryone` defect above surfaced at all. A guard that passes vacuously is worse than no guard,
 because it reads as coverage.
+
+---
+
+## 8. Ambient work, priced per week — built
+
+§7.4's first defect. `ageEveryone` gave every unbooked fighter a flat four weeks of training **per
+call**, and priced it through `trainingBlocks`, which describes a _camp_: two weeks of ramp that
+produce nothing, then diminishing returns as a single peak is approached.
+
+Both halves are wrong for continuous work, and together they meant the world depended on how the
+caller happened to chop up the clock:
+
+| Caller span | Calls a year | Blocks per call | **Blocks a year** |
+| ----------- | -----------: | --------------: | ----------------: |
+| 14 days     |         26.1 |           0.595 |         **15.50** |
+| 28 days     |         13.0 |           0.595 |          **7.75** |
+| 56 days     |          6.5 |           0.595 |          **3.88** |
+| 84 days     |          4.3 |           0.595 |          **2.58** |
+| 365 days    |          1.0 |           0.595 |          **0.59** |
+
+Twenty-six times apart, on the same fighter in the same game — and the player was choosing it
+without knowing, because a four-week training block advances the world in four-week steps and a
+twelve-week one in twelve. It is also why the ramp made the naive fix worse: scaling `weeks` down
+to two produces _exactly zero_, because `trainingBlocks(2)` is 0.
+
+`applyTraining` now takes an optional `blocks`, and the ambient path passes
+`elapsedWeeks × AMBIENT_BLOCKS_PER_WEEK` — **linear**, so blocks add and the same elapsed time gives
+the same fighter however it arrives. Camps are untouched and still priced by `trainingBlocks`.
+
+### 8.1 Choosing the rate, and a correction
+
+Once training is proportional to elapsed time, the per-week rate has to be chosen. It was first set
+by matching the old behaviour at 56-day steps on a single seed, and **that was wrong twice over**.
+
+**It was fitted to noise.** Across three seeds rather than one, 56-day steps produced 38 fighters
+rated 70+ before the change, not the 45 a single seed had shown. So the rate that looked like it
+preserved the world in fact raised development at that cadence by about a quarter.
+
+**And there was no single world to preserve.** Before the change the sport's quality was a function
+of the clock, so "the old world" was five different worlds. Calibrating against one of them was
+calibrating against nothing.
+
+`AMBIENT_BLOCKS_PER_WEEK` is therefore a **dial**, set at 0.1 — a week of ordinary work worth a
+little under 60% of a week of fight camp — which lands the now-consistent world between the old
+extremes. It is a judgement, not a derived value, and it is the number to move if the sport should
+be deeper or shallower overall.
+
+### 8.2 What it measured
+
+Fighters rated 70+ after ten world years, three seeds per cell, mean in bold:
+
+| Clock step | Before              | After               |
+| ---------- | ------------------- | ------------------- |
+| 28 days    | 66, 59, 57 → **61** | 47, 47, 43 → **46** |
+| 56 days    | 35, 39, 40 → **38** | 46, 41, 53 → **47** |
+| 365 days   | 24, 23, 17 → **21** | 32, 33, 35 → **33** |
+
+The two cadences the app actually uses now agree — 46 against 47, inside seed noise, where they
+previously differed by 60%. Across the whole range the spread falls from **2.9x to 1.4x**.
+
+**The residual is not training.** `enforceActivity`, `playerActivity`, `scanForInbox` and
+`vacateAbandonedBelts` all still run once per _call_ rather than per elapsed step, so a
+year-per-call caller runs them a thirteenth as often. That is what is left of the 365-day column,
+and it is a smaller and separate defect of the same family.
+
+---
+
+## 9. The roster does not move — not started
+
+The talent fix (`generateNaturals`, curved to 97) put real potential in the world, and §8 lets it
+develop consistently. Over twenty years the top fifteen fighters in the sport are now entirely
+home-grown. But the sport's _shape_ is still wrong at the top, and it is no longer a progression
+problem:
+
+> After twenty years the leading promotion's roster is down to **50 fighters, median rating 54, with
+> five rated 70+** — while **71 fighters in the world** are rated 70+.
+
+The good fighters exist. They are not on the big show. `replenish` weights debutants to the bottom
+of the ladder, which is right, and nothing pulls the risen talent back up it.
+
+Two halves, and both are missing:
+
+**What a fighter wants.** Ambition and reputation should make somebody actively seek the biggest
+room that will have them — chase the better promotion, take the fight that gets them seen, leave a
+regional deal that has stopped serving them. Right now a fighter's promotion is close to an accident
+of where they debuted.
+
+**What a promotion wants.** A promotion should be _scouting_: identifying the best unsigned or
+poorly-signed fighters in a division and bidding real money for them, with the bid scaled to
+prestige and budget. `freeAgency.ts` resolves deals that expire; nothing goes looking.
+
+Until both exist, the leading promotion is a retirement home for whoever it happened to sign a
+decade ago, and the ladder the whole career mode is built around does not actually connect.
+
+---
+
+## 10. Peak age — the target, recorded
+
+Measured after §8: the average generated fighter is **still improving at 36** and does not turn over
+until about 38. That is too late, and it is the same complaint doc 24 finding 2 raised. This records
+what "right" looks like so the next pass has a target rather than a taste.
+
+**Overall peak for men is roughly 30–32.** MMA peaks later than sports built on raw athleticism,
+because a fighter needs years to accumulate striking, grappling, defensive instinct, tactical
+judgement and composure, and physical decline around 30 is not severe — so there is a window where
+experience and athleticism overlap.
+
+| Age   | Stage                                                   |
+| ----- | ------------------------------------------------------- |
+| 18–22 | Athletic development, usually technically inexperienced |
+| 23–26 | Rapid improvement, approaching elite physical ability   |
+| 27–29 | Entering prime                                          |
+| 30–32 | **Overall peak**                                        |
+| 33–34 | Still prime for many elite fighters                     |
+| 35–36 | Decline increasingly common                             |
+| 37–39 | Significant decline for most                            |
+| 40+   | Well past prime, heavyweight excepted                   |
+
+**Division matters, and the model does not know it.** Flyweight and bantamweight peak earlier
+because speed and reactions dominate — around 27–30. Featherweight and lightweight 28–31,
+welterweight 29–32, middleweight 30–33, light heavyweight 31–34, heavyweight easily 32–36 and
+beyond. `PEAK_AGE` is currently a function of `ageCurve` alone and has no idea what somebody weighs.
+
+**Physical peak and fighting peak are different things**, and this the model already gets right in
+principle: `PEAK_OFFSET` puts speed four years early and fight IQ six years late, so a fighter can
+have their best explosiveness at 26 and be a substantially better fighter at 31. The structure is
+sound; §3's floors made the second half too generous and pushed the composite out past 36.
+
+**Decline should not be a smooth age curve — mileage should dominate it.** A 34-year-old who came to
+the sport at 25 and has taken little damage is competitively younger than a 30-year-old who turned
+professional at 18 with 35 fights, several knockouts, repeated injuries and years of hard weight
+cuts. The model has all of those facts — `record.length`, `headTrauma`, `bodyWear`, the injury
+history — and `applyAgeing` reads none of them. Decline is a pure function of birthdays.
+
+So the fix is **not** a `peakAge` number to tune. It is:
+
+1. shift `PEAK_AGE` by division, so a flyweight and a heavyweight do not share a prime;
+2. make decline read mileage and damage alongside age, so two fighters the same age decline
+   differently; and
+3. re-check that the composite then turns over at 30–32 on its own, as an emergent result of the
+   per-attribute curves crossing rather than because a constant says so.
+
+---
+
+## 11. The world ticks days now
+
+The sport did not have a clock. It had a **chunk simulator**: "give me a fortnight and I will invent
+three cards inside it, charge everybody once, and age everybody once." Nothing was scheduled on a
+date, so nothing could happen _on_ a date.
+
+That one decision produced every symptom in this document's §7.4 and §8, and one the player feels
+directly:
+
+- `advanceWorld` **did nothing at all** for a span under fourteen days — it aged people and
+  returned. So `CHECK_STEP_DAYS` in the clock had to be fourteen too, with a comment concluding
+  that "a fortnight is therefore the floor on interrupt precision".
+- Which meant **"a day" on the calendar moved the date and changed nothing**, and an offer that
+  arrived on the 3rd was not seen until the 14th.
+- And everything else had to be per-chunk, which is why training was worth the same whether a call
+  spanned a fortnight or a year (§8), and why `enforceActivity` and friends ran once per call
+  regardless of how much time that call covered.
+
+### 11.1 What changed
+
+**Cards happen on dates.** The daily loop asks "is there a show today?" at the rate the step model
+produced — `MAX_CARDS_PER_STEP` shows every `STEP_DAYS`, so about eighty nights a year across the
+sport, exactly as before.
+
+**The expensive pass is paid only on show days.** Filtering the whole roster for who is available is
+O(roster), and paying it on the four days in five with no card is what a daily tick is always
+accused of costing. It runs when a card runs.
+
+**Everything that is genuinely per-span stays per-span.** Ageing, promotion costs, activity and
+contract enforcement all still happen once for the whole advance — they walk all 850 fighters, and
+doing that daily would be 3.1 million passes a decade. They now run over `reached`, the day the loop
+actually got to.
+
+**The clock asks the world to stop.** `advanceWorld` takes an `onDayEnd` predicate and reports
+`reached`. `clock.ts` passes one that raises the inbox for that day and stops if something new is
+waiting — so the world does not decide what is worth interrupting for, which is right, because
+"should the player be stopped" is a question about the player.
+
+### 11.2 What it measured
+
+**The world is now the same world however it is advanced.** Two simulated years, caller stepping one
+day at a time against fifty-six: median rating 47.7 against 47.4, fighters rated 70+ 61 against 60.
+Before this, the same comparison differed by 60%.
+
+**It is fast enough.** Every button on the calendar screen is about a tenth of a second:
+
+| Advance     |  Time |
+| ----------- | ----: |
+| A day       |  86ms |
+| A week      | 135ms |
+| A fortnight | 107ms |
+| A month     | 124ms |
+
+**The calendar stops on real days.** Traced across eight advances of "a year": stops at +19 and +30
+days, rather than only ever at multiples of fourteen.
+
+**The inbox is not spammed** by scanning daily. Nine items across three years — raising is
+idempotent on a stable id, which the inbox was already built for.
+
+### 11.3 The rest of the per-call work — and what it turned out to be
+
+Written first as "four functions still run once per call and should be monthly sweeps". Reading them
+properly, three of the four needed nothing, and the fourth needed something different from a sweep.
+
+**`enforceActivity` was already right.** It converts an annual hazard to the span being simulated —
+`chance = 1 - (1 - perYear) ** (span / 365)` — which composes exactly: thirteen monthly calls and one
+yearly call give the same probability of a fighter walking. There is a comment above it recording
+that this was itself a fix, for the same class of bug, made when a call was always a fortnight.
+
+**`playerActivity` was already right.** It reads a _state_ — how long the player has been idle, what
+stage the promotion's patience has reached — and raises an inbox item keyed on day zero rather than
+today, deliberately, "the stage is what must happen once". Calling it every day raises it once.
+
+**`chargePromotions` was already right**, being proportional to elapsed days.
+
+**`vacateAbandonedBelts` was the real one, and not for the reason given.** The problem was not that it
+ran once per call, but that it ran at the _end_. A champion who retired in March kept the belt until
+the following March, and a division cannot stage a title fight while its belt sits on somebody who is
+filtered out of every card — which is the exact failure the function exists to prevent, one
+timescale up. It now runs at the end of each simulated day. Eight promotions by twelve divisions,
+with every already-vacant slot costing nothing, so the calendar is unaffected: a day 79ms, a week
+129ms, a fortnight 100ms, a month 162ms.
+
+`CARDS_PER_STEP` went with it. It sat beside `MAX_CARDS_PER_STEP` and was always the larger of the
+two, so it never decided anything — the cap did.
+
+Nothing in the world loop is now priced per call rather than per day.
+
+---
+
+## 12. Decline reads the miles now — §10 item 2
+
+`applyAgeing` decided decline from the birthday alone. Two fighters born the same day declined
+identically however they had spent the years between — which is the one thing about ageing in this
+sport that everybody who follows it knows to be false.
+
+### 12.1 A dimension that did not exist
+
+The first thing measurement found was that half the intended input was not in the data.
+`generateFighter` set `proDebutDay` to `age - 20` for **everybody**, and the seed's median age at
+turning professional is exactly 20.0. So "years as a professional" was age with a constant
+subtracted, and the model could not tell a fighter who came up through a gym at 18 from one who
+turned to it at 25 — because it had decided they both started at 20.
+
+Debut age is now drawn properly: median 21, quartiles 20 and 22, tails to 17 and 26.
+
+### 12.2 The model
+
+`mileageYears` returns how much older than their birthday a fighter's body is, from four things the
+model already knew and never read:
+
+| Term                    | Per unit | Why                                                                               |
+| ----------------------- | -------: | --------------------------------------------------------------------------------- |
+| Years as a professional |     0.10 | The clock that starts when you turn pro, not when you were born                   |
+| Professional bouts      |     0.10 | A fight week is a cut, a camp, and fifteen minutes of somebody trying to hurt you |
+| Body wear               |     0.03 | The grind — the cuts, the injuries, the miles                                     |
+| Head trauma             |    0.015 | Small _here_: trauma already has its own channel straight into durability         |
+
+Decline then runs on `age + mileageYears` rather than `age`. Because that shifts _when_ decline
+starts, it flows through `DECLINE_RATE` automatically — a battered fighter loses speed and
+durability much faster and fight IQ barely quicker at all, since those were already the rates.
+
+**Learning still runs on the real age**, deliberately. Somebody who has been in wars is slower and
+more brittle, not less able to be taught, and the sport is full of fighters who added a whole
+discipline in their thirties precisely because they could no longer rely on being the athlete.
+
+### 12.3 What it measured
+
+Same starting attributes, three years of ageing:
+
+| Fighter                                      | Mileage | Decline over 3y |
+| -------------------------------------------- | ------: | --------------: |
+| Fresh 30 — pro at 28, 4 bouts, no damage     |   +0.7y |       **−1.90** |
+| Typical 30 — pro at 21, 16 bouts, moderate   |   +3.5y |           −2.80 |
+| Clean 34 — pro at 25, 12 bouts, light damage |   +2.5y |           −3.80 |
+| Worn 30 — pro at 18, 35 bouts, heavy damage  |   +6.9y |       **−4.20** |
+
+The case the design is written around holds: **the worn 30-year-old now declines faster than the
+clean 34-year-old**, and a fresh 30-year-old declines at less than half the rate of a worn one.
+
+Across a 25-year world, individual peak age (each fighter's own best year, which is the honest
+measure — a population average is confounded by who retired):
+
+|                             |           Before |            After |
+| --------------------------- | ---------------: | ---------------: |
+| Peak age p25 / median / p75 | 33 / **34** / 36 | 32 / **33** / 35 |
+| Average rating at 42        |             67.9 |             54.5 |
+| Fighters rated 70+          |              102 |               72 |
+
+The late-career shape is the bigger change. The population average used to _climb_ to 68.2 at 43 —
+survivorship of fighters who essentially never declined — and now flattens around 57 and turns
+down.
+
+### 12.4 What it did not fix
+
+Median peak age moved 34 → 33 against a target of 30–32. Mileage differentiates fighters; it does
+not by itself set where the sport peaks. The remaining levers are §10's other two items — peaks
+that shift by division, and re-checking §3's learning floors, which are what pushed the composite
+out past 36 in the first place.
+
+Vacancies also became rare enough to make a test flaky: champions now tend to lose the belt in the
+cage before they are old enough to abandon it, so `championships.test.ts` drives a vacancy
+deliberately rather than hoping a decade produces one.
+
+---
+
+## 13. The screens and the model disagreed
+
+Prompted by one question — does the game still tell the player they have a ceiling in a skill? It
+does not any more, and looking for the answer turned up a pattern rather than an incident.
+
+### 13.1 The ceiling that was not there
+
+Doc 23 replaced the hard skill ceiling with a rate. `difficulty` has honoured that from the
+beginning:
+
+```ts
+isPhysical(key)
+  ? headroom(current, fighter.potential[key]) // a real wall
+  : skillResistance(current); // only ever gets harder
+```
+
+For a skill, `potential[key]` is **never read**. It is a projection. But three screens reached past
+that and treated it as a wall for all fifteen attributes.
+
+Measured over twenty world years, across 858 active fighters:
+
+|           | Values above their stated ceiling |
+| --------- | --------------------------------: |
+| Skills    |                         **1,928** |
+| Physicals |                                 1 |
+
+The worst was a fighter with **fight IQ 92 against a displayed ceiling of 27**. Sixty-five points
+over. This was not a soft guide the player could discount; it was noise presented as fact.
+
+Three sites, and the third is the one that mattered:
+
+1. **`FighterScreen`** drew a ceiling tick on every attribute, labelled to screen readers as
+   "scouted ceiling N".
+2. **The camp report** computed `potential[key] − current` for every trained attribute and said "at
+   your ceiling" at zero — so the fighter with fight IQ 92 was told they were finished with the
+   thing they were improving fastest at.
+3. **`TrainingScreen`** ranked which camp to take by calling the _physical_ `headroom()` on skills.
+   That is advice, and it disagreed with the arithmetic that would actually run. **The AI's own
+   planner had the correct split all along** — `trainingPlan.room` has always branched on
+   `isPhysical` — so the world's fighters were being advised honestly and the player was not.
+
+Fixed by giving all of them one shared answer: `attributeRoom(fighter, key)`, exported from the
+engine, which is `difficulty` under a public name. `attributeIsSpent` goes with it, and
+`headroomExhausted` now uses it rather than restating the branch.
+
+### 13.2 Three sets of numbers for one fact
+
+The audit that followed found the same shape again in the damage displays:
+
+|                 | Warns at | Serious at |
+| --------------- | -------: | ---------: |
+| `FighterScreen` |       45 |         65 |
+| `HubScreen`     |       30 |         55 |
+| The engine      |   **25** |     **55** |
+
+A player reading both screens got two different accounts of the same fighter, and neither matched
+what the model does. `TRAUMA_CONCERN`, `TRAUMA_MEDICAL` and `WEAR_CONCERN` are now exported from
+`retirement.ts` — the module that decides what damage means — and both screens read them. Body wear
+was shown as a bare number on the profile and a coloured one on the hub; it is now the same on both.
+
+### 13.3 Left alone, and why
+
+**`effectiveDurability` is invisible.** Career trauma erodes the chin at fight time by
+`(headTrauma / 100) × 14`, so a fighter with 65 trauma walks out with about nine points less
+durability than their profile shows. That is a real thing the player cannot see. It is arguably
+_meant_ to be hidden — the chin going is something you discover — but it is a candidate for the
+fight preview rather than the profile.
+
+**Mileage had no UI at all.** _(Fixed — §13.4.)_
+
+**The editor still shows a ceiling for every attribute**, and that is correct: it is a data editor
+and `potential` is a real stored field. The label is the only thing that overstates it.
+
+### 13.4 Body age, on the screen
+
+§12 made a fighter's body older than their birthday and nothing showed it, so a worn thirty-year-old
+and a fresh one looked identical — the one distinction the mechanic exists to draw.
+
+`mileageBreakdown` itemises the four sources, and `bodyAge` adds the total to the fighter's age.
+Both live in the engine for the reason §13.1 exists: a screen that restated the weights would drift
+from the model the moment either changed. `ui/mileage.ts` decides only the words, and it is shared
+between the profile and the hub so the two cannot describe the same fighter differently — which is
+exactly what the trauma thresholds were doing in §13.2.
+
+What it reads:
+
+| Fighter                            | Age |   Body |      |
+| ---------------------------------- | --: | -----: | ---- |
+| Debutant                           |  22 |     22 | —    |
+| Fresh 30 — pro at 28, 4 bouts      |  30 |     31 | —    |
+| Typical 30 — pro at 21, 16 bouts   |  30 |     34 | warn |
+| **Worn 30 — pro at 18, 35 bouts**  |  30 | **37** | bad  |
+| **Clean 34 — pro at 25, 12 bouts** |  34 | **36** | warn |
+| Veteran 38 — pro at 20, 44 bouts   |  38 |     47 | bad  |
+
+The case §12 is written around is now visible rather than only true: the worn thirty-year-old reads
+as older than the well-kept thirty-four-year-old.
+
+It also names the cause, because "worn out" is not actionable and "thirty-five professional bouts"
+is: _"30 years old, but the body is nearer 37 — mostly 35 professional bouts. Decline runs on this
+number rather than on the birthday."_
+
+The copy carries no pronouns, and there is a test for that. The sport in this game has women's
+divisions, and an earlier draft said "not on his age".

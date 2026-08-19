@@ -83,8 +83,50 @@ export function generateAptitudes(rng: Rng, motorLearning: number): Aptitudes {
   };
 }
 
+/**
+ * How far a talent tier stretches at the very top.
+ *
+ * `remap(tier, 1, 100, 38, 78)` was the old mapping and the 78 was the whole problem: a *perfect*
+ * tier produced naturals centred on 78, and since ceilings are derived from naturals, the game
+ * could not generate a fighter with a genuinely elite ceiling at all. Measured over 20,000
+ * debutants rolled the way `replenish` rolls them, **1.5%** had an overall potential of 80 or
+ * better and **0.2%** reached 85. There was nothing at the top of the sport to grow into, so the
+ * top of the sport never changed.
+ */
+const NATURALS_TOP = 97;
+
+/**
+ * The floor stays where it was, because most people who turn professional are ordinary and the
+ * model was never wrong about that.
+ */
+const NATURALS_FLOOR = 38;
+
+/**
+ * Curved rather than linear, and that is the entire point of the change.
+ *
+ * A straight remap to a higher top lifts the *whole* distribution — raising the ceiling for the
+ * gifted also makes the median debutant better, which is not what the sport looks like. Measured:
+ * a linear map to 97 moved median potential from 57 to 65 and made a third of all debutants
+ * capable of reaching 70, which is nonsense.
+ *
+ * An exponent above one keeps the bottom of the range exactly where it was and spends all of the
+ * new headroom on the tail. At 1.5 the median debutant is unchanged (57 → 58) while fighters with
+ * 80+ potential go from 1.5% to 5.4% and 85+ from 0.2% to 1.8%.
+ *
+ * That is the shape the design wants, and it is a claim about *potential* rather than about
+ * outcomes. Most people carrying an elite ceiling will never get near it — the personality that
+ * will not train, the knee that goes, the three losses that take the belief — and the model has
+ * all of those. It just had nothing for them to act on: you cannot have a story about wasted
+ * talent in a world with no talent in it. Played long enough, a golden generation with several
+ * genuinely elite fighters in one division should now be *possible* without being likely.
+ */
+const NATURALS_CURVE = 1.5;
+
+const naturalsCentre = (tier: number): number =>
+  NATURALS_FLOOR + (clamp(tier, 1, 100) / 100) ** NATURALS_CURVE * (NATURALS_TOP - NATURALS_FLOOR);
+
 export function generateNaturals(rng: Rng, tier: number, walkingWeightLbs: number): Naturals {
-  const centre = remap(tier, 1, 100, 38, 78);
+  const centre = naturalsCentre(tier);
   const roll = (sd = 12) => toRating(rng.normalClamped(centre, sd, 12, 97));
 
   return {
@@ -377,6 +419,23 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     resentment: 0,
     reputation: toRating(rng.normalClamped(25, 9, 5, 50)),
 
-    proDebutDay: birthDayForAge(Math.max(0, age - 20), options.day, 1, 1),
+    /*
+     * When they turned professional, which is not a fixed offset from how old they are.
+     *
+     * This was `age - 20` for everybody, so "years as a professional" carried no information that
+     * age did not already carry — the two were the same number with a constant between them. That
+     * matters now that mileage drives decline: the whole point is that a 30-year-old who turned
+     * pro at 18 has more miles on him than a 30-year-old who turned pro at 25, and the model could
+     * not tell them apart because it had decided they both turned pro at 20.
+     *
+     * Weighted toward the early twenties, with a real tail both ways: the teenager who came up
+     * through a fight gym, and the wrestler who only turned to it after college.
+     */
+    proDebutDay: birthDayForAge(
+      Math.max(0, age - Math.round(rng.normalClamped(21, 2.6, 17, 29))),
+      options.day,
+      1,
+      1,
+    ),
   };
 }

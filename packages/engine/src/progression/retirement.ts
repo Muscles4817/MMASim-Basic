@@ -15,6 +15,20 @@ import { clamp01, remap } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import type { Fighter } from '../domain/fighter.js';
 
+/**
+ * The damage thresholds the sport actually reacts at, named so the screens cannot drift from them.
+ *
+ * They already had: `FighterScreen` warned at 45 and called the chin gone at 65, `HubScreen`
+ * warned at 30 and 55, and the engine started weighing trauma at 25 and called it medical at 55.
+ * Three sets of numbers for one fact, none of them agreeing, and a player reading both screens
+ * got two different accounts of the same fighter. See docs/27 §13.
+ */
+export const TRAUMA_CONCERN = 25;
+/** Where the sport stops calling it wear and starts calling it medical. */
+export const TRAUMA_MEDICAL = 55;
+/** Body wear at which the miles begin to weigh on the decision. */
+export const WEAR_CONCERN = 20;
+
 /** Age at which decline begins to weigh on the decision at all. */
 const DECLINE_AGE = 33;
 /** Age past which almost nobody is still competing at a meaningful level. */
@@ -79,8 +93,8 @@ export function retirementDrivers(fighter: Fighter, onDay: GameDay): RetirementD
    * was dead code, and `traumaTerm` at 45 fired for barely the top decile. The sport's most
    * characteristic ending — being told to stop — was arithmetically almost unreachable.
    */
-  const traumaTerm = clamp01(remap(fighter.condition.headTrauma, 25, 85, 0, 0.55));
-  const wearTerm = clamp01(remap(fighter.condition.bodyWear, 20, 65, 0, 0.3));
+  const traumaTerm = clamp01(remap(fighter.condition.headTrauma, TRAUMA_CONCERN, 85, 0, 0.55));
+  const wearTerm = clamp01(remap(fighter.condition.bodyWear, WEAR_CONCERN, 65, 0, 0.3));
 
   // A skid, and the confidence collapse that comes with it — both weighted by how much career is
   // left to go back to. Losing is a setback early and a verdict late.
@@ -256,7 +270,7 @@ export function retirementReason(fighter: Fighter, onDay: GameDay): string {
    * damage was told they had retired on a losing run, because the skid was the only label that
    * fitted.
    */
-  if (fighter.condition.headTrauma >= 55) {
+  if (fighter.condition.headTrauma >= TRAUMA_MEDICAL) {
     return 'Walked away on medical advice after years of accumulated damage.';
   }
   if (age >= HARD_AGE) return 'Age finally caught up.';
