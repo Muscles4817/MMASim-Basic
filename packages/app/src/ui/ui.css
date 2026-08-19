@@ -840,3 +840,24 @@ a.list__item:hover {
     grid-template-areas: 'name value trend room';
   }
 }
+
+/* What a night did to you: the belt, the bonus, the injury, the money — and, when the fight
+   never happened, the ten weeks of work you keep anyway.
+
+   Lives here rather than in `FightScreen.css` because the fight screen stopped being its only
+   caller. A camp that ends in a withdrawal shows the same list, and a screen borrowing another
+   screen's stylesheet only works for as long as both happen to be in the same bundle. */
+.aftermath {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.aftermath li {
+  padding-inline-start: var(--space-3);
+  border-inline-start: 3px solid var(--accent);
+  line-height: 1.45;
+}
