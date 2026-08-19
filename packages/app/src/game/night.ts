@@ -89,13 +89,17 @@ export function runSupportingCard(
     promotion: Promotion;
     day: number;
     isTitleFight: boolean;
+    /** The slot agreed at booking. Falls back to deriving it, for bookings made before it existed. */
+    position?: CardPosition;
+    /** Rounds the bout was actually fought at, so the card cannot contradict the fight. */
+    rounds?: 3 | 5;
   },
 ): NightOutcome | undefined {
   const { playerBoutId, player, opponent, playerResult, promotion, day, isTitleFight } = input;
   const world = getWorld(db);
   const rng = createRng(`${world.seed}:night:${playerBoutId}`);
 
-  const position = playerCardPosition(player, opponent, isTitleFight);
+  const position = input.position ?? playerCardPosition(player, opponent, isTitleFight);
   const playerDraw = drawWeight({
     promotion,
     red: player,
@@ -124,6 +128,9 @@ export function runSupportingCard(
       // Nudged so the player lands at the position the matchmaker decided, rather than
       // wherever a pure draw sort happens to put them.
       draw: playerDraw + positionBias(position),
+      // Already fought. `buildCard`'s rounds rule is a policy for bouts it is deciding, and
+      // this one is a matter of record.
+      rounds: input.rounds,
     },
   ];
 
@@ -281,6 +288,27 @@ export function runSupportingCard(
     rng.fork('venue'),
   );
 
+  /*
+   * Revenue first, because the night wants one number out of it.
+   *
+   * `attendance` is the only thing separating "you fought at Riverside Hall" from "you fought
+   * in front of 9,412 people at Riverside Hall", and the second is the sentence that makes a
+   * card position feel like anything. Computed here rather than inside `settleNight` below so
+   * the stored night carries it; `settleNight` is handed the same object, so nothing is
+   * computed twice and no number can disagree with itself.
+   */
+  const revenue = eventRevenue({
+    promotion,
+    venue,
+    broadcast,
+    // The player's own bout is not necessarily the headline — `playerCardPosition` decides
+    // that — so this reads the draw of whatever actually tops the card.
+    headlineDraw,
+    bouts: card.length,
+    purses: cardPurses(db, card),
+    bonuses: bonusPool,
+  });
+
   const night: FightNight = {
     id: eventId(promotion.id, day),
     promotionId: promotion.id,
@@ -296,6 +324,7 @@ export function runSupportingCard(
     status: 'complete',
     bouts: card,
     bonusPool,
+    attendance: revenue.attendance,
   };
   db.events.upsert(night as FightNight & Entity);
 
@@ -320,17 +349,7 @@ export function runSupportingCard(
 
   const settled = settleNight({
     promotion: current,
-    revenue: eventRevenue({
-      promotion,
-      venue,
-      broadcast,
-      // The player's own bout is not necessarily the headline — `playerCardPosition` decides
-      // that — so this reads the draw of whatever actually tops the card.
-      headlineDraw,
-      bouts: card.length,
-      purses: cardPurses(db, card),
-      bonuses: bonusPool,
-    }),
+    revenue,
     results: results.map((r) => r.result),
     recentDelivery: current.recentDelivery,
   });

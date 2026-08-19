@@ -21,21 +21,21 @@ import {
 } from '@mmasim/engine';
 import { advanceWorld, type WorldExclusion } from './world';
 import { getBooking } from './career';
-import { readInbox } from './inbox';
+import { readInbox, scanForInbox } from './inbox';
 
-/**
- * How far one call of the loop moves before checking whether to stop.
+/*
+ * There is no step any more, and that is the change.
  *
- * Must be at least the world's own `STEP_DAYS`. A first version used a week, reasoning that a
- * finer step gives a more precise interrupt — and it silently did nothing at all, because
- * `advanceWorld` short-circuits any span shorter than its own step and only ages people. Cards
- * stopped happening, costs stopped being charged, and the whole loop became an expensive way to
- * increment a number.
+ * This was `CHECK_STEP_DAYS = 14`, with a comment explaining that a finer step "silently did
+ * nothing at all, because `advanceWorld` short-circuits any span shorter than its own step", and
+ * concluding that "a fortnight is therefore the floor on interrupt precision". Both halves were
+ * true and the conclusion was the problem: it made the player live in fortnights. "A day" on the
+ * calendar moved the date and changed nothing, and an offer that arrived on the 3rd was not seen
+ * until the 14th.
  *
- * A fortnight is therefore the floor on interrupt precision, and that is fine: it is also the
- * resolution at which the world decides anything, so there is no finer truth to interrupt.
+ * The world ticks days now, so `advanceWorld` takes the stop test itself and reports the day it
+ * reached. See docs/27 §11.
  */
-const CHECK_STEP_DAYS = 14;
 
 export interface AdvanceResult {
   /** Where the clock actually stopped, which is not always where it was asked to stop. */
@@ -91,20 +91,34 @@ export function advanceTo(db: GameDb, targetDay: number): AdvanceResult {
   // they have seen it, and refusing to move would be a lock rather than an interrupt.
   const alreadyWaiting = new Set(blocking(readInbox(db)).map((i) => i.id));
 
-  while (day < targetDay) {
-    const to = Math.min(targetDay, day + CHECK_STEP_DAYS);
-    const advance = advanceWorld(db, day, to, exclusion);
-    fights += advance.fights;
-    truncated ||= advance.truncated;
+  /*
+   * One call, stopped on the exact day something happened.
+   *
+   * This used to walk forward a fortnight at a time and check the inbox between hops, because
+   * `advanceWorld` did nothing at all for a shorter span. That is what made the player live in
+   * fortnights: "a day" on the calendar moved the clock and changed nothing, and an offer that
+   * arrived on the 3rd was not seen until the 14th.
+   *
+   * The world ticks days now, so the check moves inside it. Everything that has to be paid over a
+   * whole span — ageing, promotion costs, activity and contract enforcement — still happens once,
+   * for however far the loop actually got, which is what `reached` reports.
+   */
+  const advance = advanceWorld(db, day, targetDay, exclusion, (onDay) => {
+    // Raise anything the player needs to answer *on the day it becomes true*, then stop only if
+    // it is something they have not already seen.
+    scanForInbox(db, onDay);
+    return blocking(readInbox(db)).some((i) => !alreadyWaiting.has(i.id));
+  });
 
-    day = to;
-    setWorld(db, { day });
+  fights += advance.fights;
+  truncated ||= advance.truncated;
+  day = advance.reached;
+  setWorld(db, { day });
 
-    const fresh = blocking(readInbox(db)).filter((i) => !alreadyWaiting.has(i.id));
-    if (fresh.length > 0) {
-      db.save();
-      return { day, interrupted: true, waiting: fresh, fights, truncated };
-    }
+  const fresh = blocking(readInbox(db)).filter((i) => !alreadyWaiting.has(i.id));
+  if (fresh.length > 0) {
+    db.save();
+    return { day, interrupted: true, waiting: fresh, fights, truncated };
   }
 
   db.save();

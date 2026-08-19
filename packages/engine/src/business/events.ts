@@ -75,6 +75,15 @@ export interface FightNight {
   bouts: readonly CardBout[];
   /** Thousands. Fight of the Night and Performance of the Night come out of this. */
   bonusPool: number;
+  /**
+   * How many were actually in the building.
+   *
+   * `eventRevenue` has computed this on every card ever run and it reached the gate receipt and
+   * nothing else — so the game knew whether a fighter walked out in front of four hundred people
+   * or a sold-out arena, and had no way to say so. Optional because a night settled before this
+   * existed has none.
+   */
+  attendance?: number;
 }
 
 export const eventId = (promotionId: PromotionId, day: GameDay): EventId =>
@@ -108,6 +117,16 @@ export interface BoutSeed {
   isTitleFight: boolean;
   /** Unitless. `drawWeight()` from heat.ts — how much of the demand this bout carries. */
   draw: number;
+  /**
+   * Rounds already agreed for this bout, when something upstream has agreed them.
+   *
+   * The player's fight is booked, camped for and *fought* before a card is assembled around
+   * it, so by the time `buildCard` runs the number of rounds is a matter of record rather than
+   * a matter of policy. Without this the card applied the policy anyway and overwrote the
+   * fact — it gave whatever topped the night five rounds, and the player's three-round bout
+   * was listed as a five-rounder on the very screen that had just shown three rounds of it.
+   */
+  rounds?: 3 | 5;
 }
 
 /**
@@ -131,8 +150,10 @@ export function buildCard(bouts: readonly BoutSeed[]): CardBout[] {
     divisionId: bout.divisionId,
     order,
     position: positionFor(order, bout.isTitleFight),
-    // Five rounds for a main event or any title fight; three for everything else.
-    rounds: order === 0 || bout.isTitleFight ? 5 : 3,
+    // Five rounds for a main event or any title fight; three for everything else — unless the
+    // bout arrived with its rounds already settled, in which case that is not this function's
+    // decision to make.
+    rounds: bout.rounds ?? (order === 0 || bout.isTitleFight ? 5 : 3),
     isTitleFight: bout.isTitleFight,
   }));
 }

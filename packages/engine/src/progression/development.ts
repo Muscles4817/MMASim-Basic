@@ -32,7 +32,12 @@ import type { Rng } from '../core/rng.js';
 import type { Fighter } from '../domain/fighter.js';
 import { campGainMultiplier, idleDecayMultiplier } from '../domain/personality.js';
 import { recoverConfidence } from '../domain/confidence.js';
-import { coachEffectiveness, type Coach, type CoachSpecialism, type Gym } from '../domain/organisations.js';
+import {
+  coachEffectiveness,
+  type Coach,
+  type CoachSpecialism,
+  type Gym,
+} from '../domain/organisations.js';
 import { traitMul } from '../domain/traits.js';
 import {
   ATTRIBUTE_KEYS,
@@ -393,7 +398,44 @@ export interface TrainingInput {
   coach?: Coach;
   day: GameDay;
   rng: Rng;
+  /**
+   * Effective training blocks, overriding what `weeks` would imply.
+   *
+   * For the continuous work a fighter does between bouts, which is not a camp and must not be
+   * priced like one. `trainingBlocks` models a *camp*: two weeks of ramp that produce nothing,
+   * then diminishing returns as a single peak is approached. Neither applies to somebody simply
+   * training all year, and charging the ramp every time the world happens to tick made the whole
+   * model depend on how the caller chopped up the clock. See `AMBIENT_BLOCKS_PER_WEEK`.
+   *
+   * `weeks` is still read for everything else it drives — injury risk scales with camp length —
+   * so callers pass both.
+   */
+  blocks?: number;
 }
+
+/**
+ * Effective training blocks per elapsed week of ordinary, non-camp work.
+ *
+ * Deliberately **linear**, which is the whole point: blocks accumulated this way add, so two
+ * half-year steps and one full-year step produce exactly the same fighter. `trainingBlocks` is
+ * convex and starts with a dead ramp, so ambient work priced through it was worth
+ * 0.59 blocks per *call* no matter how long the call was — measured, that is 15.5 blocks a year
+ * to a caller stepping a fortnight at a time and 0.59 to one stepping a year, a **26x** spread on
+ * the same fighter in the same game. Worse, the player chose it: a four-week training block
+ * developed the entire rest of the world three times faster than a twelve-week one.
+ *
+ * A dial, not a derived value, and worth being honest about. It was first set by matching the old
+ * behaviour at the app's 56-day cadence, which was wrong twice: that measurement was a single seed
+ * (across three, the old world produced 38 fighters rated 70+ at that cadence rather than 45), and
+ * there was no single old world to match anyway — quality was a function of the clock, so "before"
+ * was five different worlds at once.
+ *
+ * So 0.1 is a judgement that lands the now-consistent sport between the old extremes: 46 fighters
+ * rated 70+ after a decade, against 61 / 38 / 21 depending on how the caller used to step. For
+ * scale, a week of ordinary work is worth a little under 60% of a week of fight camp. This is the
+ * number to move if the sport should be deeper or shallower overall.
+ */
+export const AMBIENT_BLOCKS_PER_WEEK = 0.1;
 
 export interface TrainingResult {
   fighter: Fighter;
@@ -465,10 +507,33 @@ export const isPhysical = (key: AttributeKey): boolean => PHYSICAL_KEYS.has(key)
  * ends up is where their gains stop outrunning their decline rather than a number rolled before
  * they ever trained.
  */
-function difficulty(fighter: Fighter, key: AttributeKey, current: number): number {
+/**
+ * How much room this fighter has left in one attribute, on the model's own terms.
+ *
+ * Public because the *screens* were answering this question themselves and getting it wrong.
+ * `difficulty` has always split physicals from skills correctly, and so have
+ * `headroomExhausted` and the AI's own `trainingPlan.room` — but `FighterScreen`, `TrainingScreen`
+ * and the camp report each reached past all three for `potential[key]` and treated it as a wall
+ * for everything. Measured over twenty world years, **1,928 skill values sat above their stated
+ * ceiling** against one physical, the worst of them a fight IQ of 92 against a displayed ceiling
+ * of 27. See docs/27 §13.
+ *
+ * For a physical this is remaining headroom against a real wall, and reaches zero. For a skill it
+ * is resistance, which only ever gets smaller — there is no wall to be near.
+ */
+export function attributeRoom(fighter: Fighter, key: AttributeKey): number {
+  return difficulty(fighter, key, fighter.attributes[key]);
+}
+
+/** True when this attribute is genuinely finished — at the wall, or past the point a camp pays. */
+export function attributeIsSpent(fighter: Fighter, key: AttributeKey): boolean {
   return isPhysical(key)
-    ? headroom(current, fighter.potential[key])
-    : skillResistance(current);
+    ? attributeRoom(fighter, key) <= 0
+    : attributeRoom(fighter, key) <= SKILL_STALL;
+}
+
+function difficulty(fighter: Fighter, key: AttributeKey, current: number): number {
+  return isPhysical(key) ? headroom(current, fighter.potential[key]) : skillResistance(current);
 }
 
 /**
@@ -489,7 +554,11 @@ const carriedStrength = (frame: number): number => 45 + (frame - 45) * 0.55;
  */
 export const STRENGTH_CARDIO_INTERFERENCE = 0.6;
 
-export function strengthCardioCost(fighter: Fighter, strengthGain: number, strength: number): number {
+export function strengthCardioCost(
+  fighter: Fighter,
+  strengthGain: number,
+  strength: number,
+): number {
   if (strengthGain <= 0) return 0;
   const excess = clamp((strength - carriedStrength(fighter.naturals.frame)) / 25, 0, 1);
   return strengthGain * STRENGTH_CARDIO_INTERFERENCE * excess;
@@ -556,7 +625,7 @@ export function applyTraining(input: TrainingInput): TrainingResult {
   const gains: Partial<Record<AttributeKey, number>> = {};
 
   const age = ageOn(fighter.birthDay, day);
-  const blocks = trainingBlocks(weeks);
+  const blocks = input.blocks ?? trainingBlocks(weeks);
   const lesson = activeLesson(fighter, day);
 
   // Splitting focus costs: two focuses get 65% each, not 100% each.
@@ -741,7 +810,7 @@ export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingFor
   const focuses = input.focuses.slice(0, 2);
 
   const age = ageOn(fighter.birthDay, day);
-  const blocks = trainingBlocks(weeks);
+  const blocks = input.blocks ?? trainingBlocks(weeks);
   const lesson = activeLesson(fighter, day);
   const focusShare = focuses.length > 1 ? 0.65 : 1;
 
@@ -801,12 +870,9 @@ export function forecastTraining(input: Omit<TrainingInput, 'rng'>): TrainingFor
 const SKILL_STALL = 0.03;
 
 function headroomExhausted(fighter: Fighter, focus: TrainingFocus): boolean {
-  return Object.keys(TRAINING_META[focus].attributes).every((raw) => {
-    const key = raw as AttributeKey;
-    return isPhysical(key)
-      ? headroom(fighter.attributes[key], fighter.potential[key]) <= 0
-      : skillResistance(fighter.attributes[key]) <= SKILL_STALL;
-  });
+  return Object.keys(TRAINING_META[focus].attributes).every((raw) =>
+    attributeIsSpent(fighter, raw as AttributeKey),
+  );
 }
 
 // --- Neglect ---------------------------------------------------------------------------------
@@ -1074,6 +1140,83 @@ const TRAUMA_DECLINE_PER_YEAR = 1.1;
 /** Convexity. The first twenty points of trauma are nearly free; the last twenty are not. */
 const TRAUMA_DECLINE_CURVE = 1.2;
 
+/**
+ * How much older than their birthday a fighter's body is, in years.
+ *
+ * Doc 27 §10. Decline was a pure function of age: two fighters born the same day declined
+ * identically however they had spent the intervening years. That is the one thing about ageing in
+ * this sport that everybody who follows it knows to be false. A 34-year-old who came to it at 25
+ * and has taken little is competitively younger than a 30-year-old who turned professional at 18,
+ * has thirty-five fights, several knockouts and years of hard weight cuts behind him.
+ *
+ * Four terms, and each is a thing the model already knew and never read:
+ *
+ * - **Years as a professional**, which is not a restatement of age. It was until now — generation
+ *   set `proDebutDay` to `age - 20` for everybody — so the two were the same number with a
+ *   constant between them and there was nothing to read. Debut age now varies properly.
+ * - **Bouts**, because a fight week is a weight cut, a training camp and fifteen minutes of
+ *   somebody trying to hurt you, and thirty-five of those leave a mark that ten do not.
+ * - **Body wear**, which is the grind: the cuts, the injuries, the miles.
+ * - **Head trauma**, at a deliberately small weight *here*, because it already has its own
+ *   channel straight into durability above. This term is the general cost of having been
+ *   knocked out — the half-step slower, the reactions that were there at 26 — rather than the chin.
+ *
+ * The effect is a shift in *when* decline starts and how steep it is by then, so it flows through
+ * `DECLINE_RATE` automatically: a battered fighter loses speed and durability much faster and
+ * fight IQ barely quicker at all, because those are the rates that were already there.
+ */
+export function mileageYears(fighter: Fighter, onDay: GameDay): number {
+  return mileageBreakdown(fighter, onDay).years;
+}
+
+/**
+ * The same number, itemised, so a screen can say *why* a body is older than its birthday.
+ *
+ * Split out rather than recomputed in the UI: the weights below are the model's, and a screen that
+ * restated them would drift from it the moment either changed. That is the exact failure docs/27
+ * §13 is about.
+ */
+export interface MileageBreakdown {
+  /** Total years of body beyond the birthday. */
+  years: number;
+  /** Years contributed by time served as a professional. */
+  career: number;
+  /** Years contributed by the number of professional bouts. */
+  bouts: number;
+  /** Years contributed by accumulated body wear. */
+  wear: number;
+  /** Years contributed by accumulated head trauma. */
+  trauma: number;
+}
+
+export function mileageBreakdown(fighter: Fighter, onDay: GameDay): MileageBreakdown {
+  const proYears = Math.max(0, (onDay - fighter.proDebutDay) / 365);
+  const career = proYears * MILEAGE_PER_PRO_YEAR;
+  const bouts = fighter.record.length * MILEAGE_PER_BOUT;
+  const wear = fighter.condition.bodyWear * MILEAGE_PER_WEAR;
+  const trauma = fighter.condition.headTrauma * MILEAGE_PER_TRAUMA;
+  return { years: career + bouts + wear + trauma, career, bouts, wear, trauma };
+}
+
+/**
+ * How old this fighter's body is, which is the number the sport actually reacts to.
+ *
+ * Their age plus what the years in it cost. Doc 27 §12 has the model; this exists so the screens
+ * do not have to add two things together and hope they got the same answer as `applyAgeing`.
+ */
+export function bodyAge(fighter: Fighter, onDay: GameDay): number {
+  return ageOn(fighter.birthDay, onDay) + mileageYears(fighter, onDay);
+}
+
+/** Years of body added per year spent as a professional. */
+const MILEAGE_PER_PRO_YEAR = 0.1;
+/** Per professional bout: the cut, the camp, and the fifteen minutes. */
+const MILEAGE_PER_BOUT = 0.1;
+/** Per point of accumulated body wear. */
+const MILEAGE_PER_WEAR = 0.03;
+/** Per point of head trauma. Small — trauma's main channel is durability, above. */
+const MILEAGE_PER_TRAUMA = 0.015;
+
 export interface AgeingResult {
   fighter: Fighter;
   losses: Partial<Record<AttributeKey, number>>;
@@ -1086,12 +1229,25 @@ export interface AgeingResult {
  * Called by the world tick, not per fight, so a fighter who sits out for two years ages the
  * same as one who fought four times.
  */
-export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, rng: Rng): AgeingResult {
+export function applyAgeing(
+  fighter: Fighter,
+  fromDay: GameDay,
+  toDay: GameDay,
+  rng: Rng,
+): AgeingResult {
   const years = (toDay - fromDay) / 365;
   if (years <= 0) return { fighter, losses: {}, notes: [] };
 
   const age = ageOn(fighter.birthDay, toDay);
   const peak = PEAK_AGE[fighter.naturals.ageCurve];
+
+  /*
+   * Decline runs on the body's age, not the birthday's. See `mileageYears`.
+   *
+   * Learning deliberately still runs on the real age: a veteran who has been in wars is slower and
+   * more brittle, not stupider, and `learningRate` is about how well somebody still takes coaching.
+   */
+  const wornAge = age + mileageYears(fighter, toDay);
 
   const attributes: Attributes = { ...fighter.attributes };
   const losses: Partial<Record<AttributeKey, number>> = {};
@@ -1174,7 +1330,7 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
      * their speed and chin and years short of their submissions — which is what makes a career a
      * shape rather than a single hill.
      */
-    const yearsPast = age - (peak + PEAK_OFFSET[key]);
+    const yearsPast = wornAge - (peak + PEAK_OFFSET[key]);
     if (yearsPast <= 0) continue;
 
     // Decline accelerates: the second five years past peak cost far more than the first.

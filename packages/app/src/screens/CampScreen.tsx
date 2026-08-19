@@ -50,6 +50,7 @@ import {
   getBooking,
   isBoutOff,
   runBookedFight,
+  type BoutOffOutcome,
   saveBookingFocus,
   saveBookingIntensity,
   saveBookingPlan,
@@ -90,6 +91,12 @@ export function CampScreen() {
   );
   const [running, setRunning] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  /**
+   * The night that did not happen.
+   *
+   * Held rather than navigated away from. See `BoutOff` at the foot of this file for why.
+   */
+  const [boutOff, setBoutOff] = useState<BoutOffOutcome | undefined>();
 
   const opponent = booking
     ? (db.fighters.findById(booking.opponentId) as Fighter | undefined)
@@ -190,6 +197,23 @@ export function CampScreen() {
     );
   };
 
+  /*
+   * Checked before the "no fight booked" guard below, because by this point there genuinely is
+   * no booking any more — `runBookedFight` cleared it. Falling through would answer the player's
+   * click with an empty screen, which is the same silence in a different shape.
+   */
+  if (boutOff) {
+    return (
+      <BoutOff
+        outcome={boutOff}
+        isPlayer={boutOff.pullOut.fighterId === playerFighter?.id}
+        opponentName={opponent ? displayName(opponent) : 'Your opponent'}
+        onLeave={() => navigate({ name: 'hub' })}
+        onInbox={() => navigate({ name: 'inbox' })}
+      />
+    );
+  }
+
   if (!booking || !opponent || !playerFighter) {
     return (
       <Empty title="No fight booked">
@@ -204,7 +228,16 @@ export function CampScreen() {
   const heat = currentHeat(rivalry, world.day);
   // A title fight is a main event, which is where the money for it now lives — the old flat
   // ×1.5 on the base was cancelling the champion-versus-draw grievance doc 08 promises.
-  const purse = currentPurse(db, playerFighter, booking.bout.isTitleFight ? 'mainEvent' : 'mainCard');
+  /*
+   * Quoted at the slot this fight is actually booked into.
+   *
+   * It read `isTitleFight ? 'mainEvent' : 'mainCard'`, which is neither of the two things the
+   * game does with card position: settlement pays the real slot, so a non-title main event was
+   * quoted a main-card purse here and then paid 2.5× it, and a prelim was quoted 2× what it
+   * would earn. Money on this screen is the number a player decides how much camp to buy
+   * against — being wrong in either direction is worse than not showing it.
+   */
+  const purse = currentPurse(db, playerFighter, booking.bout.position ?? 'mainCard');
 
   const baseCamp = computeCampQuality(
     weeks,
@@ -269,11 +302,20 @@ export function CampScreen() {
       /*
        * Sometimes there is no fight. The camp happened, the work is banked and the opponent is
        * not coming — so there is no bout to show, and sending the player to the fight screen for
-       * a fight that did not take place would be a blank page and a lie. The hub reads the inbox,
-       * which is where the news of it is.
+       * a fight that did not take place would be a blank page and a lie.
+       *
+       * This used to `navigate({ name: 'hub' })` and drop `outcome.notes` on the floor, on the
+       * grounds that the inbox has the news. It does — behind a tab, under a badge, on a screen
+       * the player did not ask for. What the player actually experienced was pressing "walk out"
+       * and being returned to the career hub with no fight, no message and their booking gone,
+       * roughly one booked bout in eight. That is indistinguishable from the app losing their
+       * fight, and it is the commonest bug report this screen produces.
+       *
+       * So the answer stays here, on the screen the click was made from, and the player leaves
+       * when they have read it.
        */
       if (isBoutOff(outcome)) {
-        navigate({ name: 'hub' });
+        setBoutOff(outcome);
         return;
       }
       navigate({ name: 'fight', boutId: outcome.result.boutId });
@@ -821,6 +863,80 @@ export function CampScreen() {
           Your plan is saved as you build it, so you can leave this screen and come back.
         </p>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * The fight is off.
+ *
+ * A whole screen rather than a toast, because losing a booked fight is one of the largest things
+ * that can happen to a career and the player has just spent ten weeks and up to £58k on it. The
+ * three questions it has to answer are the three the silent redirect answered none of: what
+ * happened, what it cost, and what is left.
+ *
+ * `notes` is the same list the fight screen shows under "Afterwards" — the camp that still
+ * counted, the ageing that still happened — and it was already being computed and returned by
+ * `runBookedFight` for a caller that threw it away.
+ */
+function BoutOff({
+  outcome,
+  isPlayer,
+  opponentName,
+  onLeave,
+  onInbox,
+}: {
+  outcome: BoutOffOutcome;
+  /** Whether it was the player who pulled out, which is a different piece of news entirely. */
+  isPlayer: boolean;
+  opponentName: string;
+  onLeave(): void;
+  onInbox(): void;
+}) {
+  const rest = outcome.notes.filter((note) => note !== outcome.pullOut.note);
+
+  return (
+    <div className="stack" style={{ gap: 'var(--space-4)' }}>
+      <Card raised>
+        {/*
+          The same words the inbox uses, deliberately. A player who sees this and later finds the
+          item under the badge should recognise it as the same event rather than wonder whether
+          something else went wrong as well.
+        */}
+        <h2 style={{ fontSize: 'var(--text-xl)' }}>The fight is off</h2>
+        <p className="muted" style={{ marginBottom: 'var(--space-3)' }}>
+          {isPlayer ? 'You are not walking out.' : `${opponentName} is not coming.`}
+        </p>
+        {/*
+          `danger` rather than `warn`: this is the outcome of the action the player just took,
+          and it is the one tone that carries role="alert" — so a screen-reader user is told the
+          fight was cancelled instead of being moved to a screen that never mentions it.
+        */}
+        <Alert tone="danger" title="No fight tonight">
+          {outcome.pullOut.note}
+        </Alert>
+      </Card>
+
+      {/*
+        The withdrawal note itself is the first entry in `notes`, and it is already the headline
+        above — so it is dropped here rather than said twice on one screen.
+      */}
+      {rest.length > 0 && (
+        <Card title="What the camp still did">
+          <ul className="aftermath">
+            {rest.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <div className="row" style={{ flexWrap: 'wrap' }}>
+        <Button variant="primary" onClick={onLeave}>
+          Back to career
+        </Button>
+        <Button onClick={onInbox}>Read it in the inbox</Button>
+      </div>
     </div>
   );
 }

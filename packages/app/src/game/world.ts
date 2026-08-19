@@ -26,6 +26,7 @@ import {
   applyAftermath,
   applyAgeing,
   applyTraining,
+  AMBIENT_BLOCKS_PER_WEEK,
   campInjuryChance,
   rollInjury,
   createRng,
@@ -244,6 +245,13 @@ export interface WorldAdvance {
   news: NewsItem[];
   /** True when the budget bound and some fights were skipped. */
   truncated: boolean;
+  /**
+   * The day the loop actually reached.
+   *
+   * Equal to `toDay` unless `onDayEnd` asked it to stop, which is how the calendar interrupts on
+   * the exact day something happened rather than at the end of a fortnight.
+   */
+  reached: number;
 }
 
 /**
@@ -322,6 +330,14 @@ export function advanceWorld(
   fromDay: number,
   toDay: number,
   except: FighterId | WorldExclusion,
+  /**
+   * Called at the end of each simulated day. Return true to stop there.
+   *
+   * The world does not decide what is worth interrupting for — `clock.ts` does, because "should
+   * the player be stopped" is a question about the player. This is only the hook that makes a
+   * day-precise answer possible at all.
+   */
+  onDayEnd?: (day: number) => boolean,
 ): WorldAdvance {
   // Accepts a bare id so fighter mode's dozens of call sites and tests stay as they are; the
   // object form is what promoter mode passes.
@@ -331,13 +347,6 @@ export function advanceWorld(
   const news: NewsItem[] = [];
   let fights = 0;
   let truncated = false;
-
-  // Nothing meaningful happens in under a fortnight, and the common case — a four-week camp
-  // — should not pay for a loop that cannot produce a card.
-  if (toDay - fromDay < STEP_DAYS) {
-    ageEveryone(db, fromDay, toDay, exceptId);
-    return { fights: 0, news, truncated: false };
-  }
 
   const bulk = exclusion.detail === 'bulk';
   const rng = createRng(`${world.seed}:world:${fromDay}`);
@@ -360,21 +369,24 @@ export function advanceWorld(
   const readyOn = new Map<string, number>();
   const lastSeen = new Map<string, number>();
 
-  for (let day = fromDay; day < toDay; day += STEP_DAYS) {
-    /*
-     * How many active fighters each promotion has, in one pass.
-     *
-     * Read by three things that would otherwise each walk the roster: `cardsPerYear`, which
-     * decides whether this promotion runs a card this fortnight; free agency, which decides who
-     * signs a fighter whose deal is up; and `rankDivision`, which decides whether a bout is for a
-     * belt. That last one was being handed **every fighter in the world, once per candidate bout**
-     * — 5,082 of them to rank a division of four hundred — which is 5% of a tick spent scanning
-     * past people who could not possibly be in the division.
-     *
-     * Taken before the quarterly intake rather than after, so it is at most one fortnight stale —
-     * which is closer than a promotion's own front office would be.
-     */
-    const rosters = new Map<string, Fighter[]>();
+  let reached = fromDay;
+
+  /*
+   * The roster index, refreshed on a schedule rather than daily.
+   *
+   * Read by three things that would otherwise each walk the roster: `cardsPerYear`, which decides
+   * whether a promotion is due a card; free agency, which decides who signs a fighter whose deal is
+   * up; and `rankDivision`, which decides whether a bout is for a belt. That last one was being
+   * handed **every fighter in the world, once per candidate bout** — 5,082 of them to rank a
+   * division of four hundred.
+   *
+   * A fortnight stale at worst, which is closer than a promotion's own front office would be, and
+   * the alternative is a pass over six thousand people on every one of a year's 365 ticks.
+   */
+  let rosters = new Map<string, Fighter[]>();
+  let rosterSizes = new Map<string, number>();
+  const reindex = (): void => {
+    rosters = new Map();
     for (const row of db.fighters.findAll() as Fighter[]) {
       if (row.retiredDay !== undefined || !row.promotionId) continue;
       const id = row.promotionId as string;
@@ -382,11 +394,18 @@ export function advanceWorld(
       if (list) list.push(row);
       else rosters.set(id, [row]);
     }
-    const rosterSizes = new Map<string, number>();
+    rosterSizes = new Map();
     for (const [id, list] of rosters) rosterSizes.set(id, list.length);
+  };
+  reindex();
+
+  for (let day = fromDay; day < toDay; day += 1) {
+    reached = day + 1;
+
+    if ((day - fromDay) % STEP_DAYS === 0 && day !== fromDay) reindex();
 
     // Quarterly intake, matching how a promotion actually signs people.
-    if (Math.floor(day / QUARTER_DAYS) !== Math.floor((day - STEP_DAYS) / QUARTER_DAYS)) {
+    if (Math.floor(day / QUARTER_DAYS) !== Math.floor((day - 1) / QUARTER_DAYS)) {
       // A belt held by somebody who is never getting in a cage again kills its division,
       // because retirees are filtered out of every card. Swept rather than only handled at
       // the moment of retirement, because a fighter can reach that state by more than one
@@ -397,76 +416,83 @@ export function advanceWorld(
       news.push(...replenish(db, day, rng, promotions, rosterSizes));
       // Deals run out across the roster too, so the market has other people in it.
       news.push(...resolveFreeAgency(db, day, rng, promotions, exceptId, rosterSizes));
+      reindex();
     }
 
     /*
-     * Availability, with a real activity ceiling.
+     * Who is putting on a show today, from each promotion's own calendar.
      *
-     * `readinessDelay` is a *medical* gate — how long until a fighter is cleared. It is not
-     * a schedule, and on its own it let the top of the roster fight five or six times a year
-     * for a decade: measured, ten years produced records of 63-0 and a 47-year-old champion.
-     * Elite fighters average one and a half to two and a half bouts a year, and the ceiling
-     * is availability of *opponents and dates*, not of medical clearance.
+     * The world used to run a fixed number of cards and draw *whose* they were from a
+     * prestige-weighted lottery — a global quota rather than a schedule. See `cardsPerYear` for
+     * what was wrong with that; the short version is that founding a promotion in Poland took
+     * dates away from the one at the top of the sport, and the sport could not get busier than
+     * eighty nights a year however many promotions existed.
+     *
+     * Each promotion runs on its own interval with a stable phase derived from its id, so the
+     * calendar is a property of the promotion and independent of how the player advances the
+     * clock: the same day produces the same cards whether it was reached in one call or four
+     * hundred. The cycle test is the same one `implicitTermExpires` uses — a promotion is due on
+     * the day its interval rolls over, and never twice on one date.
+     *
+     * That last part matters beyond realism: `eventId` is `evt_${promotionId}_${day}`, so two
+     * cards from one promotion on one day are the *same event id*, and `db.events.upsert` would
+     * silently overwrite the first after it had already been written to everybody's record.
      */
-    const available = (db.fighters.findAll() as Fighter[]).filter((f) => {
-      if (f.id === exceptId || f.retiredDay !== undefined) return false;
-      // Both the in-call map and the persisted day, because a suspension handed out by the
-      // player's own card in a previous session is every bit as binding as one from this loop.
-      if (Math.max(readyOn.get(f.id as string) ?? 0, f.readyOnDay ?? 0) > day) return false;
-      const inLastYear = f.record.filter((r) => day - r.day < 365).length;
-      return inLastYear < MAX_BOUTS_PER_YEAR;
-    });
-
-    /*
-     * Whose night it is, from each promotion's own calendar.
-     *
-     * This was three cards a fortnight for the whole sport, with a prestige-weighted draw deciding
-     * who got them — a global quota rather than a schedule. See `cardsPerYear` for what was wrong
-     * with that; the short version is that founding a promotion in Poland took dates away from the
-     * one at the top of the sport, and the sport could not get bigger than seventy-eight cards a
-     * year however many promotions existed.
-     *
-     * Each promotion now runs on a fixed interval with a stable phase derived from its id, which
-     * makes the calendar a property of the promotion and independent of how the player advances
-     * the clock: the same day produces the same cards whether it was reached in one step or forty.
-     *
-     * Cards inside a step therefore land on different dates by construction. That matters beyond
-     * realism — `eventId` is `evt_${promotionId}_${day}`, so two cards from one promotion on one
-     * day are the *same event id*, and `db.events.upsert` silently overwrote the first after it had
-     * already been simulated and written to everybody's record.
-     */
-    const span = Math.min(STEP_DAYS, toDay - day);
-
+    const dueToday: Promotion[] = [];
     for (const promotion of promotions) {
       if (promotion.id === exclusion.promotionId) continue;
-      if (available.length < 2) break;
-
       const interval = daysBetweenCards(promotion, rosterSizes.get(promotion.id as string) ?? 0);
       if (!Number.isFinite(interval) || interval <= 0) continue;
+      const phase = hashSeed(promotion.id as string) % Math.max(1, Math.ceil(interval));
+      const cycle = (at: number) => Math.floor((at - phase) / interval);
+      if (cycle(day) > cycle(day - 1)) dueToday.push(promotion);
+    }
 
-      // A stable offset per promotion, so the sport's shows are spread through the calendar
-      // rather than every promotion running on the same fortnight boundary.
-      const phase = hashSeed(promotion.id as string) % Math.ceil(interval);
-      let cardDay = Math.ceil((day - phase) / interval) * interval + phase;
+    if (dueToday.length > 0) {
+      if (fights >= fightBudget) {
+        truncated = true;
+        break;
+      }
 
       /*
-       * The bottom of the pyramid, when it has been asked for. See `runStatisticalCard`.
+       * Availability, with a real activity ceiling.
+       *
+       * `readinessDelay` is a *medical* gate — how long until a fighter is cleared. It is not
+       * a schedule, and on its own it let the top of the roster fight five or six times a year
+       * for a decade: measured, ten years produced records of 63-0 and a 47-year-old champion.
+       * Elite fighters average one and a half to two and a half bouts a year, and the ceiling
+       * is availability of *opponents and dates*, not of medical clearance.
+       *
+       * Computed only on days that actually have a show. It is a pass over the whole roster, and
+       * paying for it on the days with no card would make a daily tick cost what a daily tick is
+       * always accused of costing.
        */
-      const statistical =
-        bulk &&
-        exclusion.statisticalBelowPrestige !== undefined &&
-        promotion.prestige < exclusion.statisticalBelowPrestige;
+      const available = (db.fighters.findAll() as Fighter[]).filter((f) => {
+        if (f.id === exceptId || f.retiredDay !== undefined) return false;
+        // Both the in-call map and the persisted day, because a suspension handed out by the
+        // player's own card in a previous session is every bit as binding as one from this loop.
+        if (Math.max(readyOn.get(f.id as string) ?? 0, f.readyOnDay ?? 0) > day) return false;
+        const inLastYear = f.record.filter((r) => day - r.day < 365).length;
+        return inLastYear < MAX_BOUTS_PER_YEAR;
+      });
 
-      for (; cardDay < day + span; cardDay += interval) {
+      for (const promotion of dueToday) {
+        if (available.length < 2) break;
         if (fights >= fightBudget) {
           truncated = true;
           break;
         }
-        if (statistical) {
+
+        // The bottom of the pyramid, when it has been asked for. See `runStatisticalCard`.
+        if (
+          bulk &&
+          exclusion.statisticalBelowPrestige !== undefined &&
+          promotion.prestige < exclusion.statisticalBelowPrestige
+        ) {
           fights += runStatisticalCard({
             db,
-            day: Math.floor(cardDay),
-            rng: rng.fork(`stat:${promotion.id}:${Math.floor(cardDay)}`),
+            day,
+            rng: rng.fork(`stat:${promotion.id}:${day}`),
             promotion,
             available,
             readyOn,
@@ -474,10 +500,11 @@ export function advanceWorld(
           });
           continue;
         }
+
         const built = buildNight({
           db,
-          day: Math.floor(cardDay),
-          rng: rng.fork(`night:${promotion.id}:${Math.floor(cardDay)}`),
+          day,
+          rng: rng.fork(`night:${promotion.id}:${day}`),
           promotion,
           available,
           readyOn,
@@ -492,15 +519,30 @@ export function advanceWorld(
         fights += built.fights;
         news.push(...built.news);
       }
-      if (truncated) break;
     }
 
-    if (truncated) break;
+    /*
+     * Reconcile the belts on the day, not at the end of the advance.
+     *
+     * This ran once per call, which was right when a call was a fortnight and wrong the moment the
+     * clock could be asked for a year. A champion who retires in March would keep the belt until
+     * the following March, and a division cannot stage a title fight while its belt is on somebody
+     * filtered out of every card.
+     *
+     * On the step cadence rather than daily, because it is a pass over every promotion's every
+     * division and doc 26 § 2.2's pyramid is a hundred and seventy promotions rather than eight.
+     * A fortnight of staleness on a vacancy is not something anybody can see.
+     */
+    if ((day - fromDay) % STEP_DAYS === 0 || day === toDay - 1) {
+      news.push(...vacateAbandonedBelts(db, day));
+    }
+
+    if (onDayEnd?.(day)) break;
   }
 
   // Everyone who never got booked still gets older. Without this, a fighter who sat out the
   // whole period would be returned to the player at exactly the age they were.
-  ageEveryone(db, fromDay, toDay, exceptId, lastSeen, bulk);
+  ageEveryone(db, fromDay, reached, exceptId, lastSeen);
 
   /*
    * The bill for existing.
@@ -514,14 +556,20 @@ export function advanceWorld(
    * Charged to every promotion including the player's: this is a rule of the sport rather than
    * a difficulty applied to whoever is playing.
    */
-  chargePromotions(db, toDay - fromDay);
+  chargePromotions(db, reached - fromDay);
 
   // And the deals of anybody the world forgot to book. See `enforceActivity`.
-  news.push(...enforceActivity(db, fromDay, toDay, rng.fork('breach'), exceptId));
+  news.push(...enforceActivity(db, fromDay, reached, rng.fork('breach'), exceptId));
 
   // The player's own side of the same question, which is a conversation rather than a rule.
   news.push(
-    ...playerActivity(db, toDay, exceptId, exclusion.playerHasBooking ?? false, rng.fork('chase')),
+    ...playerActivity(
+      db,
+      reached,
+      exceptId,
+      exclusion.playerHasBooking ?? false,
+      rng.fork('chase'),
+    ),
   );
 
   /*
@@ -541,8 +589,6 @@ export function advanceWorld(
    * have already left is a belt nobody can defend and a division that cannot stage a title
    * fight. Running it at the end is both cheap and the only placement that cannot be stale.
    */
-  news.push(...vacateAbandonedBelts(db, toDay));
-
   /*
    * The inbox, the feed and the save, none of which a bulk tick has anybody to serve.
    *
@@ -551,14 +597,14 @@ export function advanceWorld(
    * durable about — the world does not exist yet — and doing it once per simulated year of
    * pre-history is four seconds of pure waste.
    */
-  if (bulk) return { fights, news: [], truncated };
+  if (bulk) return { fights, news: [], truncated, reached };
 
-  scanForInbox(db, toDay);
+  scanForInbox(db, reached);
 
   const stored = appendNews(db, news);
   db.save();
 
-  return { fights, news: stored, truncated };
+  return { fights, news: stored, truncated, reached };
 }
 
 /**
@@ -1753,6 +1799,13 @@ function develop(
   lastSeen: Map<string, number>,
   /** Eight is a fight camp. A shorter block is the general work everyone does anyway. */
   weeks = 8,
+  /**
+   * Effective blocks, when this is ordinary between-bouts work rather than a camp.
+   *
+   * Left undefined for a fight camp, which is priced by `trainingBlocks(weeks)` as it always has
+   * been. `weeks` is still passed either way because camp injury risk reads it.
+   */
+  blocks?: number,
 ): Fighter {
   const gym = fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined;
   const coach = fighter.headCoachId
@@ -1765,6 +1818,7 @@ function develop(
     // this was and which pulled every fighter in the world toward the same shape (docs/19 §12).
     focuses: [pickTrainingFocus(rng, fighter)],
     weeks,
+    blocks,
     gym,
     coach,
     day,
@@ -2127,7 +2181,6 @@ function ageEveryone(
   // Optional: in promoter mode there is no player fighter to leave alone.
   exceptId: FighterId | undefined,
   lastSeen?: Map<string, number>,
-  bulk = false,
 ): void {
   const world = getWorld(db);
   for (const fighter of db.fighters.findAll() as Fighter[]) {
@@ -2151,31 +2204,33 @@ function ageEveryone(
      *
      * Four weeks rather than eight: this is the general work everyone does, not a fight camp.
      *
-     * A flat block per *call* rather than per elapsed week, and that is a known defect rather than
-     * a choice — see docs/27 §7. It makes the fighter you get out depend on how the caller chopped
-     * up the time: the app advances in camp-length spans, so this is four weeks per eight, but the
-     * long-sim harness advances a year per call and every unbooked fighter in the world therefore
-     * trains for one month of it. Scaling it is a real balance change and wants its own measured
-     * pass; it is recorded rather than smuggled in.
-     */
-    /*
-     * Four weeks per call in the running game, and a block scaled to the span in bulk.
+     * Priced per elapsed week, not per call, and not as a camp.
      *
-     * The flat four is a known defect rather than a choice — it makes the fighter you get out
-     * depend on how the caller chopped up the time — and fixing it in the running game is a real
-     * balance change that wants its own measured pass. But a bulk tick advances a year at a time
-     * and books nobody a camp, so leaving it flat would put a fifteen-year pre-history through
-     * fifteen months of training and hand the start date a world of people nowhere near their
-     * ceilings. Capped, because a fighter cannot spend every week of a year in a hard camp.
+     * This was a flat four weeks every time the function ran, which made the fighter you got out
+     * depend entirely on how the caller chopped up the clock — and `trainingBlocks` has a two-week
+     * ramp that produces nothing, so it was worth the same 0.59 blocks whether the call spanned a
+     * fortnight or a year. Measured across the callers that actually exist: 15.5 blocks a year at
+     * a fortnight a step against 0.59 at a year a step, a **26x** spread on the same fighter in
+     * the same game.
+     *
+     * `AMBIENT_BLOCKS_PER_WEEK` is linear, so blocks add and the same elapsed time gives the same
+     * fighter however it arrives. That is also what makes a bulk tick honest: pre-history advances
+     * a year at a time and books nobody a camp, and it now develops people at the rate ordinary
+     * play does rather than at a twenty-sixth of it — which is what a bulk-only weeks fudge was
+     * standing in for before this landed.
+     *
+     * `weeks` stays at four: it no longer prices the training, but camp injury risk still reads it,
+     * and this is ordinary work rather than a fight camp.
      */
-    const weeks = bulk ? clamp(((toDay - since) / 7) * 0.4, 4, 26) : 4;
+    const elapsedWeeks = Math.max(0, toDay - since) / 7;
     const trained = develop(
       db,
       fighter,
       toDay,
       rng,
       new Map([[fighter.id as string, since]]),
-      weeks,
+      4,
+      elapsedWeeks * AMBIENT_BLOCKS_PER_WEEK,
     );
     if (trained !== fighter) db.fighters.upsert(trained as Fighter & Entity);
   }

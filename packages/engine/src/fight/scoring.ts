@@ -11,31 +11,15 @@ import { clamp } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import type { Judge } from '../domain/officials.js';
 import { normaliseBias, judgeNoiseScale } from '../domain/officials.js';
-import type { Corner, RoundScore, Scorecard } from './types.js';
+import type { Corner, RoundScore, RoundTally, Scorecard } from './types.js';
 
-/** Everything that happened to one fighter in one round, from a judge's point of view. */
-export interface RoundTally {
-  damageDealt: number;
-  significantStrikes: number;
-  controlSeconds: number;
-  takedowns: number;
-  submissionAttempts: number;
-  knockdowns: number;
-  /** Strikes thrown — a proxy for forward pressure and octagon control. */
-  strikesAttempted: number;
-}
-
-export function emptyTally(): RoundTally {
-  return {
-    damageDealt: 0,
-    significantStrikes: 0,
-    controlSeconds: 0,
-    takedowns: 0,
-    submissionAttempts: 0,
-    knockdowns: 0,
-    strikesAttempted: 0,
-  };
-}
+/*
+ * `RoundTally` and `emptyTally` moved to `types.ts` when `FightResult` gained `roundStats`.
+ * They are re-exported here because this module is where the concept is *used* and every
+ * existing import points at it — and because a judge's view of a round belongs beside the
+ * code that scores one.
+ */
+export { emptyTally, type RoundTally } from './types.js';
 
 /**
  * Normalised advantage for one input, −1 … +1.

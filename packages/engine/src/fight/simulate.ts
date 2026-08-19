@@ -336,6 +336,16 @@ export function simulateFight(config: FightConfig): FightResult {
     events,
     scorecards,
     stats: { red: red.stats, blue: blue.stats },
+    /*
+     * The judges' own evidence, kept rather than discarded.
+     *
+     * These were built for scoring and for the corner's read of the fight and then thrown away
+     * at this line, which is why the app could only ever show whole-fight totals next to
+     * per-round cards. Copied rather than passed by reference: `tallies` is mutated in place
+     * throughout the fight and a caller holding a live reference to the engine's working state
+     * is a bug waiting for its first mutation.
+     */
+    roundStats: tallies.map((t) => ({ red: { ...t.red }, blue: { ...t.blue } })),
     damage: { red: damageReport(red, method, winnerId), blue: damageReport(blue, method, winnerId) },
     fouls: state.fouls,
     deductions: { ...state.deductions },

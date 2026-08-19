@@ -79,7 +79,9 @@ describe('every belt has somebody holding it', () => {
   it('puts the belt on somebody credible', () => {
     // Merit rather than a die roll, or the world ships with champions nobody can justify.
     const all = db.fighters.findAll() as Fighter[];
-    const ufc = promotions(db).slice().sort((a, b) => b.prestige - a.prestige)[0]!;
+    const ufc = promotions(db)
+      .slice()
+      .sort((a, b) => b.prestige - a.prestige)[0]!;
 
     for (const title of titles(db).filter((t) => t.promotionId === ufc.id)) {
       const champion = all.find((f) => f.id === championOf(title))!;
@@ -87,7 +89,9 @@ describe('every belt has somebody holding it', () => {
         (f) => f.promotionId === ufc.id && f.divisionId === title.divisionId,
       );
       const clearlyBetter = division.filter((f) => f.starPower > champion.starPower + 25);
-      expect(clearlyBetter.length, `${champion.lastName} holds ${title.divisionId}`).toBeLessThan(3);
+      expect(clearlyBetter.length, `${champion.lastName} holds ${title.divisionId}`).toBeLessThan(
+        3,
+      );
     }
   });
 });
@@ -109,7 +113,9 @@ describe('a reign is a thing with a shape', () => {
     // two live champions.
     const db = game();
     const title = titles(db)[0]!;
-    const challenger = (db.fighters.findAll() as Fighter[]).find((f) => f.id !== championOf(title))!;
+    const challenger = (db.fighters.findAll() as Fighter[]).find(
+      (f) => f.id !== championOf(title),
+    )!;
 
     const after = crown({ title, fighterId: challenger.id, day: START + 100 });
     expect(after.lineage).toHaveLength(title.lineage.length + 1);
@@ -222,12 +228,49 @@ describe('the sport keeps its belts occupied', () => {
     expect(longest, 'no reign anywhere lasted two years').toBeGreaterThan(730);
   });
 
-  it('reports title changes and vacancies in the news', () => {
+  it('reports title changes in the news', () => {
     const news = (db.news.findAll() as readonly { kind: string; headline: string }[]).filter(
       (n) => n.kind === 'titleChange',
     );
     expect(news.length).toBeGreaterThan(0);
-    expect(news.some((n) => /vacated/i.test(n.headline))).toBe(true);
+  });
+
+  it('says so when a belt is actually vacated', () => {
+    /*
+     * Driven deliberately rather than hoped for.
+     *
+     * This used to assert that a ten-year run of the world produced at least one *vacancy*
+     * headline, and it did — until decline started reading mileage, after which champions tend to
+     * lose the belt in the cage before they are old enough to abandon it. Measured across three
+     * seeds afterwards: one produced a vacancy in a decade, two produced none. That is a better
+     * sport, and it made the assertion a coin toss.
+     *
+     * So the vacancy is caused here. What is under test is that the sweep notices and says so,
+     * which is the thing the test is named for and the thing that was once silently missing.
+     */
+    const fresh = game();
+    const player = (fresh.fighters.findAll() as Fighter[])[0]!;
+    const promotion = promotions(fresh).find((p) =>
+      Object.values(p.champions).some((c) => c !== undefined),
+    )!;
+    const [divisionId, championId] = Object.entries(promotion.champions).find(
+      ([, c]) => c !== undefined,
+    )!;
+
+    const champion = fresh.fighters.findById(championId as string) as Fighter;
+    fresh.fighters.upsert({ ...champion, retiredDay: START } as never);
+
+    advanceWorld(fresh, START, START + 30, player.id);
+
+    const news = (fresh.news.findAll() as readonly { kind: string; headline: string }[]).filter(
+      (n) => n.kind === 'titleChange' && /vacated/i.test(n.headline),
+    );
+    expect(news.length, `no vacancy reported for ${divisionId}`).toBeGreaterThan(0);
+    expect(
+      (fresh.promotions.findById(promotion.id) as unknown as Promotion).champions[
+        divisionId as never
+      ],
+    ).toBeUndefined();
   });
 
   it('never lets a champion be cut, or walk out over inactivity', () => {
