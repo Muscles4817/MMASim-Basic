@@ -39,9 +39,14 @@ import {
   type TitleShotVerdict,
   type TrainingFocus,
   isPhysical,
+  ATTRIBUTE_META,
+  activeInjuries,
+  weeksUntilFit,
+  type InboxItem,
 } from '@mmasim/engine';
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
 import { advanceWorld } from './world';
+import { advanceTo } from './clock';
 import { campCostFor, payForCamp } from './money';
 import { toll } from './contracts';
 
@@ -297,6 +302,149 @@ export function runLayoff(db: GameDb, fighter: Fighter, weeks: number): Training
         : ['A quiet few weeks.'],
     days,
   };
+}
+
+/**
+ * One day of a rest block, as the player watches it go by.
+ *
+ * The reason this exists at all is that the fighter career could only move in months. Every
+ * control that touched the clock — the hub's "wait eight weeks", the training screen's shortest
+ * block — consumed four weeks or more in a single press, so freshness went from 48 to 96 between
+ * one frame and the next and read as a number the game was making up rather than one it was
+ * keeping. A resource nobody sees accrue is a resource nobody believes in.
+ *
+ * The values here are not an animation of the result: they are the model. Freshness recovers at a
+ * flat `recoveryRate` per day (see `applyAgeing`, which charges exactly this rate once over the
+ * whole span), and an injury heals on the day its `healedDay` arrives. So walking the timeline and
+ * jumping to the end give the same fighter, which is the property that makes showing the walk
+ * honest rather than decorative.
+ */
+export interface RestDay {
+  day: number;
+  freshness: number;
+  /** Injuries that reached full fitness on this day, described. */
+  healed: readonly string[];
+}
+
+export interface RestOutcome {
+  from: number;
+  /** Where the clock actually stopped, which is not always where it was asked to. */
+  to: number;
+  days: number;
+  /** True when something needed the player and the clock stopped early to say so. */
+  interrupted: boolean;
+  waiting: readonly InboxItem[];
+  timeline: readonly RestDay[];
+  freshnessBefore: number;
+  freshnessAfter: number;
+  /** What the time off cost, if anything. Rest is recovery *and* decay. */
+  losses: Partial<Record<AttributeKey, number>>;
+  notes: readonly string[];
+  /** Everything that finished healing across the whole block. */
+  healed: readonly string[];
+  /** Weeks until fully fit at the end of it. 0 when there is nothing left to heal. */
+  weeksToFit: number;
+}
+
+/**
+ * Sit out for a number of **days**, and say what happened on each of them.
+ *
+ * `runLayoff` is the same idea in weeks and stays for the training screen, which genuinely thinks
+ * in camp-length blocks. This is the one the hub uses, and it differs in two ways that matter.
+ *
+ * It stops when the player is needed. The hub's old wait ran `advanceWorld` directly and therefore
+ * skipped straight past anything that arrived mid-span — an offer, a release, a title becoming
+ * vacant — which is exactly the class of thing `advanceTo` exists to catch. Sitting out was the
+ * only route through the game that could not be interrupted.
+ *
+ * And it charges the player for the days. The old wait excluded them from the world tick and then
+ * moved the calendar, so nobody aged, nothing decayed, and **freshness did not come back at all**:
+ * the single most common reason to sit out did not work. That is why this runs `applyAgeing` over
+ * the span the clock actually covered rather than the span it was asked for.
+ */
+export function restDays(db: GameDb, fighter: Fighter, days: number): RestOutcome {
+  const from = getWorld(db).day;
+  const advance = advanceTo(db, from + Math.max(1, Math.round(days)));
+  const to = advance.day;
+
+  /*
+   * Everything the fighter actually experienced comes back from the clock.
+   *
+   * Deliberately not recomputed here. `advanceTo` charges the days — decline, decay, contract
+   * tolling, freshness — for *every* route through the clock, so a second implementation on this
+   * one would be the exact defect this whole change is about: two ways of spending time that
+   * disagree about what time costs.
+   */
+  const elapsed = advance.player;
+  const before = elapsed?.freshnessBefore ?? 0;
+  const rate = elapsed?.recoveryPerDay ?? 0;
+  const healedOn = elapsed?.healedOn ?? new Map<number, readonly string[]>();
+
+  const timeline: RestDay[] = [];
+  for (let i = 1; i <= (elapsed?.days ?? 0); i++) {
+    const day = from + i;
+    timeline.push({
+      day,
+      freshness: Math.max(0, Math.min(100, before + rate * i)),
+      healed: healedOn.get(day) ?? [],
+    });
+  }
+
+  const healed = [...healedOn.values()].flat();
+  const losses = elapsed?.losses ?? {};
+  const current = (db.fighters.findById(fighter.id as string) as Fighter | undefined) ?? fighter;
+
+  /*
+   * What the time off actually did, named rather than gestured at.
+   *
+   * The first version said "Time off the mats. Some sharpness has gone." whenever `losses` was
+   * non-empty, and `losses` picks up anything `applyAgeing` took — which over a fortnight is a
+   * point of neglect on something nobody has worked in months. So a two-week rest reported a cost
+   * it had barely incurred, on the screen whose whole job is to make resting a legible decision.
+   *
+   * A point is the bar, because ratings are integers and anything under one is the carry ledger
+   * rather than a change the player can see on their card. Past it, the thing that faded is named:
+   * "some sharpness has gone" is not actionable and "your cardio faded" is.
+   */
+  const faded = (Object.entries(losses) as [AttributeKey, number][])
+    .filter(([, delta]) => delta <= -1)
+    .sort((a, b) => a[1] - b[1])
+    .slice(0, 2)
+    .map(([key]) => ATTRIBUTE_META[key].label.toLowerCase());
+
+  const notes: string[] = [];
+  if (healed.length > 0) notes.push(`${healed.join(' and ')} healed up.`);
+  if (faded.length > 0) {
+    notes.push(`Time off the mats: ${faded.join(' and ')} faded while you were away.`);
+  }
+  if (notes.length === 0) notes.push('A quiet stretch. Nothing happened, which is the point.');
+
+  return {
+    from,
+    to,
+    days: to - from,
+    interrupted: advance.interrupted,
+    waiting: advance.waiting,
+    timeline,
+    freshnessBefore: before,
+    freshnessAfter: elapsed?.freshnessAfter ?? before,
+    losses,
+    notes,
+    healed,
+    weeksToFit: weeksUntilFit(current.injuries ?? [], to),
+  };
+}
+
+/**
+ * How long a fighter would have to sit out to be fully fit, in days.
+ *
+ * Zero when there is nothing to heal, which the caller should read as "there is no rest button
+ * to offer here" rather than as "rest for no days".
+ */
+export function daysUntilFit(fighter: Fighter, day: number): number {
+  const active = activeInjuries(fighter.injuries ?? [], day);
+  if (active.length === 0) return 0;
+  return Math.max(...active.map((i) => i.healedDay)) - day;
 }
 
 /**

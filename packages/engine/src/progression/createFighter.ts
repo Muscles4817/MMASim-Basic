@@ -134,15 +134,39 @@ export const BACKGROUND_META: Readonly<Record<Background, BackgroundMeta>> = {
 export const BUILDS = ['rangy', 'balanced', 'powerful'] as const;
 export type Build = (typeof BUILDS)[number];
 
+type NaturalLean = Readonly<Partial<Record<'explosiveness' | 'engine' | 'constitution', number>>>;
+
+/**
+ * What a build leans, in rating points on the naturals it actually implies.
+ *
+ * This used to be one signed `buildShift` applied to two naturals at once: **rangy cost four
+ * points of explosiveness**, and explosiveness is the driver of speed. So the game's own word for
+ * "long and light" quietly meant *slower*, which is not what the label says, not what the sport
+ * looks like, and the single most misleading thing on the creation screen — a player building a
+ * rangy, quick striker was choosing the slowest version of him available.
+ *
+ * Length is not a speed penalty, so there is no longer one. What a build genuinely trades is
+ * carried mass: a thicker fighter hits harder and takes a shot better, and pays for it with the
+ * engine, which is exactly what `frame` and `engine` already model. Powerful keeps a small
+ * explosiveness lean because mass really does move force; rangy does not need a matching penalty
+ * to be balanced, because it is already paying in `frame` — which enters power, strength and
+ * durability — and being repaid in reach.
+ */
+const BUILD_NATURALS: Readonly<Record<Build, NaturalLean>> = {
+  rangy: { engine: 5, constitution: -2 },
+  balanced: {},
+  powerful: { explosiveness: 3, engine: -5, constitution: 3 },
+};
+
 export const BUILD_META: Readonly<Record<Build, { label: string; blurb: string }>> = {
   rangy: {
     label: 'Rangy',
-    blurb: 'Long and light for the weight. More reach, less to hit you with.',
+    blurb: 'Long and light for the weight. More reach, a better engine, less to hit you with.',
   },
   balanced: { label: 'Balanced', blurb: 'No particular physical advantage or disadvantage.' },
   powerful: {
     label: 'Powerful',
-    blurb: 'Thick and heavy for the weight. Hits harder, cuts harder, tires sooner.',
+    blurb: 'Thick and heavy for the weight. Hits harder, takes one better, tires sooner.',
   },
 };
 
@@ -298,14 +322,84 @@ export function validateCreation(spec: CreateFighterSpec): CreationIssue[] {
  * At 46 they debut around 50 — at or just below the bottom of the professional roster,
  * plainly not ready for anybody ranked, and with a career's worth of growth between them
  * and a belt. The climb is still the game; it is now a climb that can actually be finished.
+ *
+ * Down to 44 with the physical rewrite above, and the two numbers have to be read together. That
+ * change raises the five physicals by nine or ten points apiece, which on a fifteen-attribute
+ * average is worth about three points of overall — so leaving this at 46 would have quietly moved
+ * a created fighter's debut *past* the bottom of the professional roster and made the climb two
+ * fights shorter.
+ *
+ * What changed is the **shape**, not the level. A created fighter used to be uniformly mediocre:
+ * a little below average at everything, including the things nobody has to be taught. They now
+ * debut as what they actually are — an athlete with a novice's hands — at the same overall the
+ * design has always put them at. That is a better fighter to be handed, and it is the honest one:
+ * the growth in a career comes from the technical half, and the technical half is where a
+ * debutant genuinely has nothing.
  */
-const BASELINE = 46;
+const BASELINE = 44;
 
 /**
- * How much of their own physical ceiling a debutant has reached, against a fighter of the same age
- * already on a roster. See the physical branch of the attribute loop.
+ * How much of their own physical ceiling a debutant has already reached, per attribute.
+ *
+ * This replaces a single flat `RAW_ATHLETE = 0.82` applied to all five physicals and described as
+ * "the discount for never having been in a professional room". Two things were wrong with it.
+ *
+ * **It was an asymmetry, not a discount.** A *generated* debutant's physicals are
+ * `potential × arrivalFactor` with nothing else applied — 0.91 of their speed ceiling at twenty.
+ * A created fighter got 0.82 of that, so an identical body coming through the create screen was
+ * eighteen per cent slower than the same body coming out of the generator, forever. The player's
+ * own fighter was the one person in the world charged for it.
+ *
+ * **And it charged the wrong qualities.** `ARRIVAL` in `generation.ts` is explicit that "physical"
+ * is not one thing: speed and a chin are *born*, and a twenty-one-year-old has all of both.
+ * Strength and cardio are genuinely *built*, and a professional room is genuinely where that
+ * happens. So the discount survives only where it was ever true, and at a size that reads as a
+ * couple of years of proper strength and conditioning rather than as a tax on being new.
+ *
+ * The visible consequence is the one this exists for: a fighter built as fast **is fast on debut**.
+ * Their hands and their wrestling are still a novice's, which is where a career's growth was always
+ * supposed to come from.
  */
-const RAW_ATHLETE = 0.82;
+const RAW_ROOM: Readonly<Partial<Record<AttributeKey, number>>> = {
+  speed: 1,
+  durability: 1,
+  power: 0.97,
+  strength: 0.92,
+  cardio: 0.92,
+};
+
+/**
+ * How much of a discipline's physical bias is a fact about the body rather than about the training.
+ *
+ * A taekwondo background hands out eleven points of `speed`, and until now every one of them was
+ * added to the *current* rating and then, if it happened to overshoot, quietly used to raise the
+ * ceiling onto it. So the player's headline choice bought a number with no room left above it: the
+ * screen said speed 66 against a ceiling of 70, which reads — correctly — as "the game has decided
+ * you are not going to be fast".
+ *
+ * That is backwards for a physical. Nobody trains their way to being quick; the fast ones were
+ * selected for being fast, by the sport they came out of. So half the bias goes into the *ceiling*
+ * and the fighter then arrives at it on the normal age curve, which raises where they start **and**
+ * leaves them somewhere to go.
+ *
+ * Half rather than all, because a discipline's bias is doing two jobs at once — a karateka is
+ * quick partly because he is quick and partly because he has spent ten years learning to move —
+ * and only the first half is a claim about the body.
+ */
+const ORIGIN_TO_BODY = 0.5;
+
+/**
+ * The same, for the points the player spends themselves.
+ *
+ * Slightly higher than the origin's share because it is a more direct statement of intent: a
+ * player putting points into speed is saying "this fighter is fast", not "this fighter trained".
+ * It is still not 1, or the allocation would be a ceiling purchase and the twenty-four points
+ * would decide a career on their own.
+ */
+const ALLOCATION_TO_BODY = 0.6;
+
+/** Room every physical keeps at debut, so no part of the body is finished before the first fight. */
+const MIN_PHYSICAL_HEADROOM = 3;
 
 /**
  * Build the player's fighter.
@@ -371,6 +465,7 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
   const origin = resolveSpecOrigin(spec);
 
   const buildShift = spec.build === 'powerful' ? 1 : spec.build === 'rangy' ? -1 : 0;
+  const build = BUILD_NATURALS[spec.build ?? 'balanced'];
   const walkingWeightLbs = Math.round(division.limitLbs * (1.07 + buildShift * 0.035));
 
   // --- Naturals: background leaning, build, and a roll the player does not control --------
@@ -391,13 +486,23 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
   const naturals: Naturals = {
     frame: toRating(clamp((walkingWeightLbs / 300) * 100, 5, 99)),
     explosiveness: toRating(
-      rng.normalClamped(centre + (origin.naturals.explosiveness ?? 0) + buildShift * 4, 11, 30, 96),
+      rng.normalClamped(
+        centre + (origin.naturals.explosiveness ?? 0) + (build.explosiveness ?? 0),
+        11,
+        30,
+        96,
+      ),
     ),
     engine: toRating(
-      rng.normalClamped(centre + (origin.naturals.engine ?? 0) - buildShift * 4, 11, 30, 96),
+      rng.normalClamped(centre + (origin.naturals.engine ?? 0) + (build.engine ?? 0), 11, 30, 96),
     ),
     constitution: toRating(
-      rng.normalClamped(centre + (origin.naturals.constitution ?? 0), 11, 30, 96),
+      rng.normalClamped(
+        centre + (origin.naturals.constitution ?? 0) + (build.constitution ?? 0),
+        11,
+        30,
+        96,
+      ),
     ),
     recovery: toRating(rng.normalClamped(centre + (origin.naturals.recovery ?? 0), 11, 30, 96)),
     // The single most important hidden number, and the one the player has least say over.
@@ -432,15 +537,22 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
        * explosiveness 85 debuted with power ~48 while a generated fighter with the identical
        * ceiling debuted at 77.5. Doc 23 § 4.6.
        *
-       * `RAW_ATHLETE` is the discount for never having been in a professional room. Tuned to land
-       * a default creation's overall at ~51–52 against a hand-authored roster floor of 51.1 —
-       * which is the same target the flat 46 was tuned to, reached with a body instead of a
-       * constant.
+       * What is new is *where the player's choices land*. Both the discipline's bias and the
+       * allocated points now buy body — they raise the ceiling, and the fighter then arrives at
+       * that raised ceiling on the same age curve everybody else uses. Adding them to the current
+       * rating instead, as this did, produced the exact reading the whole change exists to remove:
+       * a fighter built for speed who starts at 66 against a stated ceiling of 70, with the
+       * player's own investment having bought four points and closed the door behind them.
        */
-      const arrived = potential[key] * arrivalFactor(key, spec.age) * RAW_ATHLETE;
-      attributes[key] = toRating(arrived + fromOrigin + fromAllocation + rng.range(-2, 2));
-      // A ceiling can only ever be raised to fit what the player chose, never lowered onto it.
-      potential[key] = toRating(Math.max(potential[key], attributes[key]));
+      const ceiling =
+        potential[key] + fromOrigin * ORIGIN_TO_BODY + fromAllocation * ALLOCATION_TO_BODY;
+      const arrived = ceiling * arrivalFactor(key, spec.age) * (RAW_ROOM[key] ?? 1);
+      attributes[key] = toRating(arrived + rng.range(-2, 2));
+      // A ceiling can only ever be raised to fit what the player chose, never lowered onto it —
+      // and it always keeps a little room, so no physical is finished before the first fight.
+      potential[key] = toRating(
+        Math.max(ceiling, attributes[key] + MIN_PHYSICAL_HEADROOM),
+      );
       continue;
     }
 

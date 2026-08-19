@@ -40,6 +40,7 @@ import {
   type ReadKey,
   type StrikeTarget,
 } from '@mmasim/engine';
+import { InjuryRisk } from './Recovery';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
@@ -408,6 +409,23 @@ export function CampScreen() {
           >
             {INTENSITY_META[intensity].blurb} You walk to the cage in the state this leaves you in.
           </p>
+
+          {/*
+            The camp before a fight is the majority of all the training a player ever does, and it
+            has rolled for an injury since `playerCampInjury` was written — silently, with the
+            result arriving as a withdrawal or as a fighter who was quietly worse on the night.
+            The dial that moves it is directly above this line, so the number belongs directly
+            below it.
+          */}
+          <div style={{ marginTop: 'var(--space-3)' }}>
+            <InjuryRisk
+              fighter={playerFighter}
+              day={world.day}
+              weeks={weeks}
+              intensity={intensity}
+              intensityLabel="Camp intensity"
+            />
+          </div>
         </div>
 
         {/*

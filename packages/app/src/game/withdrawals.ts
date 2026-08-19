@@ -16,6 +16,7 @@
 
 import type { GameDb } from '@mmasim/data';
 import {
+  FIGHT_THROUGH_WEEKS,
   campInjuryChance,
   describePullOut,
   pullOutRisk,
@@ -33,26 +34,22 @@ import type { Booking } from './career';
 /**
  * How much healing left a fighter will still go through with it.
  *
- * Eight weeks sounds generous until you remember what the sport actually looks like: people fight
- * with broken hands, torn labrums and knees that need surgery afterwards, and the game already
- * models what that costs them — `injuredAttributes` gives them their real numbers rather than
- * their card, `aggravationChance` can turn it into something far worse on the night, and nobody is
- * told. Setting this low does not make the game more realistic, it deletes that entire mechanic by
- * cancelling every fight it would have applied to.
+ * Moved into the engine, and re-exported here so the callers that named it through this module
+ * keep working. It moved because the *world* has to hold its own fighters to the same rule: as an
+ * app-layer constant only the player's bout ever consulted it, so eight hundred professionals were
+ * matched while carrying knees that would not heal for a year — and every one of those bouts ran
+ * `aggravate` on the knee. See `canFightOn` and `AGGRAVATION_CEILING`.
  *
- * The number is swept rather than chosen. `pullOutRisk` states the sport's rate as "around one
- * bout in eight losing a fighter", and measured across eight full careers with both corners able
- * to withdraw:
+ * The sweep behind the number, retained because it is the justification for it. `pullOutRisk`
+ * states the sport's rate as "around one bout in eight losing a fighter", and measured across
+ * eight full careers with both corners able to withdraw:
  *
  *   3 weeks -> 20.6% of booked bouts collapse, 1 in 4.9
  *   5 weeks -> 18.3%, 1 in 5.5
  *   6 weeks -> 16.8%, 1 in 5.9
  *   8 weeks -> 12.0%, 1 in 8.3   <- the documented target
- *
- * It is used by both sides on purpose. A rule that lets the world fight hurt but makes the player
- * withdraw, or the reverse, is exactly the family of asymmetries this change exists to close.
  */
-export const FIGHT_THROUGH_WEEKS = 8;
+export { FIGHT_THROUGH_WEEKS };
 
 /**
  * Whether the player's opponent is still going to be there.

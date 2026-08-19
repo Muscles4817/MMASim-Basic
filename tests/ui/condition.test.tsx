@@ -56,6 +56,21 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+/**
+ * The hub's freshness `Fact`, specifically.
+ *
+ * Scoped rather than `findByText(/Freshness/i)` because the hub now carries a rest card that
+ * explains what freshness is *for* — which is the point of it being there, and which makes a bare
+ * case-insensitive text match ambiguous. The claim these tests make is about the labelled figure,
+ * so they point at the labelled figure.
+ */
+async function freshnessFact(): Promise<HTMLElement> {
+  const labels = await screen.findAllByText(/Freshness/i);
+  const label = labels.find((node) => node.classList.contains('fact__label'));
+  if (!label) throw new Error('no freshness fact on the hub');
+  return label;
+}
+
 describe('the hub says what the career has cost', () => {
   it('shows freshness, in words rather than as a bare number', async () => {
     // "62 / 100" tells a player nothing about whether to take the fight. "Sharp" does.
@@ -63,8 +78,8 @@ describe('the hub says what the career has cost', () => {
     await createFighter(user);
     goTo('#/hub');
 
-    const hub = await screen.findByText(/Freshness/i);
-    expect(hub).toBeTruthy();
+    const label = await freshnessFact();
+    expect(label).toBeTruthy();
     expect(document.body.textContent ?? '').toMatch(/Fresh|Sharp|Worked|Flat|Running on empty/);
   });
 
@@ -78,7 +93,7 @@ describe('the hub says what the career has cost', () => {
     await createFighter(user);
     goTo('#/hub');
 
-    await screen.findByText(/Freshness/i);
+    await freshnessFact();
     const text = document.body.textContent ?? '';
     expect(text).toMatch(/Body wear/i);
     expect(text).toMatch(/Head trauma/i);
@@ -101,8 +116,8 @@ describe('the hub says what the career has cost', () => {
     await createFighter(user);
     goTo('#/hub');
 
-    const label = await screen.findByText(/Freshness/i);
-    const fact = label.closest('div')?.parentElement ?? label.parentElement!;
+    const label = await freshnessFact();
+    const fact = label.closest('.fact') ?? label.parentElement!;
     expect(within(fact as HTMLElement).queryByText(/Running on empty/i)).toBeNull();
     expect(document.body.textContent ?? '').toMatch(/Fresh/);
   });

@@ -103,21 +103,47 @@ describe('the sport can still afford itself', () => {
    * nearer 8,600k, and bankrupted every promotion in the game inside six years. The world's
    * matchmaker picks from a spread of offers rather than always taking the biggest fight, so a
    * forecast and the running world diverge sharply — and only the running world is real.
+   *
+   * **Three worlds rather than one**, and that is a repair rather than a widening. A decade of
+   * the running world is chaotic: the matchmaker, the injuries and the retirements all consume
+   * the same stream, so any change anywhere reorders the whole trajectory. Measured on five seeds
+   * against an unmodified codebase, the marginality assertion below passed on **three of them** —
+   * so a single draw was testing which seed it happened to be given as much as it was testing the
+   * economy, and an unrelated change elsewhere in the sim could fail it without anything about
+   * the money having moved.
+   *
+   * Averaging across worlds is what makes it a claim about the design. Each world is still a full
+   * decade, and every one of them must stay solvent.
    */
-  const db = game();
-  const start = new Map(promotions(db).map((p) => [p.id as string, p.budget]));
-  const player = (db.fighters.findAll() as Fighter[])[0]!;
-  for (let year = 0; year < 10; year++) {
-    advanceWorld(db, 2192 + year * 365, 2192 + (year + 1) * 365, player.id);
-  }
+  const SEEDS = ['economy-a', 'economy-b', 'economy-c'] as const;
 
-  const summary = promotions(db)
-    .map((p) => `${p.shortName} ${start.get(p.id as string)}→${Math.round(p.budget)}`)
-    .join(' | ');
+  const decade = (seed: string) => {
+    const db = createNewGame({ adapter: undefined, era: '2026', seed });
+    const start = new Map(promotions(db).map((p) => [p.id as string, p.budget]));
+    const player = (db.fighters.findAll() as Fighter[])[0]!;
+    for (let year = 0; year < 10; year++) {
+      advanceWorld(db, 2192 + year * 365, 2192 + (year + 1) * 365, player.id);
+    }
+    const growth = (p: Promotion) => p.budget / start.get(p.id as string)! - 1;
+    return {
+      db,
+      seed,
+      growth,
+      summary: promotions(db)
+        .map((p) => `${p.shortName} ${start.get(p.id as string)}→${Math.round(p.budget)}`)
+        .join(' | '),
+    };
+  };
+
+  const worlds = SEEDS.map(decade);
+  const mean = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
   it('leaves every promotion standing after a decade', () => {
-    for (const p of promotions(db)) {
-      expect(p.budget, `${p.shortName} went broke. ${summary}`).toBeGreaterThan(0);
+    // Solvency is per world, not on average: one bankrupt sport is a bankrupt sport.
+    for (const world of worlds) {
+      for (const p of promotions(world.db)) {
+        expect(p.budget, `${p.shortName} went broke on ${world.seed}. ${world.summary}`).toBeGreaterThan(0);
+      }
     }
   });
 
@@ -130,45 +156,41 @@ describe('the sport can still afford itself', () => {
      * Measured as *relative* growth rather than as absolute decline. The original bound asked
      * that the smallest promotion end poorer than it started, which was a workable proxy only
      * while the bottom of the sport was quietly collapsing — measured across three seeds, every
-     * promotion below the top three fell to near zero within a decade, and the single-seed
-     * solvency test above passed only because that one draw happened to leave Cage Warriors a
-     * few thousand above the line. Promotions now earn sponsorship, so the bottom survives, and
-     * "marginal" has to mean what it actually means: not keeping pace with the top.
-     */
-    const all = ranked(db);
-    const leader = all[0]!;
-
-    // Growth *over* the starting position, in proportional terms, so a promotion that shrinks
-    // scores negative and one that merely holds station scores zero. Comparing the multiples
-    // directly would demand the bottom shrink whenever the top grows, which is the absolute
-    // bound this replaced.
-    const growth = (p: (typeof all)[number]) => p.budget / start.get(p.id as string)! - 1;
-
-    /*
-     * The regional *tier*, not the single smallest promotion.
+     * promotion below the top three fell to near zero within a decade, and the solvency test
+     * above passed only because that one draw happened to leave Cage Warriors a few thousand
+     * above the line. Promotions now earn sponsorship, so the bottom survives, and "marginal" has
+     * to mean what it actually means: not keeping pace with the top.
      *
-     * One promotion is too small a sample to carry the claim, and it started mattering once
-     * promotions ran their own schedules rather than sharing a global quota: card volume at the
-     * bottom of the sport now varies with each promotion's roster, so which of five regionals
-     * happens to finish poorest is largely a draw. Measured across a decade, three of the five
-     * shrink and two grow slightly — that *is* a marginal tier — but the poorest-by-final-budget
-     * happened to be one that grew.
-     *
-     * The design claim was never about one promotion. It is that the bottom of the sport does not
-     * keep pace with the top, and the tier's mean is how to say that.
+     * The regional *tier*, not the single smallest promotion, and now averaged across worlds as
+     * well. Card volume at the bottom of the sport varies with each promotion's roster, so which
+     * of five regionals finishes poorest in any one decade is largely a draw — and so, it turns
+     * out, is whether the leader grows at all. The design claim was never about one promotion in
+     * one world.
      */
-    const regionals = all.filter((p) => p.tier === 'regional' || p.tier === 'developmental');
-    const meanRegionalGrowth =
-      regionals.reduce((total, p) => total + growth(p), 0) / Math.max(1, regionals.length);
+    const leaderGrowth: number[] = [];
+    const regionalGrowth: number[] = [];
+    for (const world of worlds) {
+      const all = ranked(world.db);
+      leaderGrowth.push(world.growth(all[0]!));
+      const regionals = all.filter((p) => p.tier === 'regional' || p.tier === 'developmental');
+      regionalGrowth.push(
+        regionals.reduce((total, p) => total + world.growth(p), 0) / Math.max(1, regionals.length),
+      );
+    }
 
-    expect(meanRegionalGrowth, `${summary} — the bottom kept pace with the top`).toBeLessThan(
-      growth(leader) * 0.5,
-    );
+    expect(
+      mean(regionalGrowth),
+      `the bottom kept pace with the top. ${worlds.map((w) => `${w.seed}: ${w.summary}`).join(' || ')}`,
+    ).toBeLessThan(mean(leaderGrowth) * 0.5);
   });
 
   it('keeps the leader clearly ahead, so the ladder survives', () => {
-    const all = ranked(db);
-    expect(all[0]!.budget, summary).toBeGreaterThan(all[all.length - 1]!.budget * 10);
+    for (const world of worlds) {
+      const all = ranked(world.db);
+      expect(all[0]!.budget, `${world.seed}: ${world.summary}`).toBeGreaterThan(
+        all[all.length - 1]!.budget * 10,
+      );
+    }
   });
 });
 
