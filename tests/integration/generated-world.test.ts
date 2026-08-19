@@ -16,14 +16,16 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  DAY_2026,
   PREHISTORY_YEARS,
   WORLD_SIZE_META,
   getWorld,
   worldSizeMeta,
   type GenerationProgress,
 } from '@mmasim/data';
-import { overallRating, type Fighter, type Promotion } from '@mmasim/engine';
+import { fighterAge, overallRating, type Fighter, type Promotion } from '@mmasim/engine';
 import { generateWorld } from '../../packages/app/src/game/newWorld';
+import { advanceWorld } from '../../packages/app/src/game/world';
 
 const progress: GenerationProgress[] = [];
 const db = await generateWorld({
@@ -73,12 +75,106 @@ describe('it builds a sport', () => {
 });
 
 describe('and eight years of it having happened', () => {
-  it('leaves the clock on the start date, not eight years past it', () => {
-    // Pre-history runs *forward* and the clock is wound back, which is what makes those years
-    // history rather than a game that started without the player.
-    const seeded = getWorld(db).day;
-    expect(seeded).toBeGreaterThan(0);
+  it('opens on the era\u2019s start date', () => {
+    // Pre-history runs *up to* the start date rather than past it, so the clock arrives where it
+    // belongs instead of being wound back onto it.
+    expect(getWorld(db).day).toBe(DAY_2026);
     expect(progress.some((p) => p.label.includes(String(PREHISTORY_YEARS)))).toBe(true);
+  });
+
+  it('anchors the day the player arrives, so \u201cnever booked here\u201d has a meaning', () => {
+    expect(getWorld(db).startedDay).toBe(DAY_2026);
+  });
+});
+
+/*
+ * The world is dated, and the dates agree with each other.
+ *
+ * Every assertion in this block failed before the generator was rebased onto doc 27 § 4.2, and the
+ * suite did not notice: the only clock test asserted `day > 0`. The population was built *at* the
+ * start date, simulated eight years past it and the clock wound back — and the clock was the one
+ * thing that wound back. Everything the run stamped in absolute game days stayed in what had
+ * become the player's future, which left 90% of the roster serving a medical suspension ending
+ * years after the game began, 53 children holding professional records, and a sport that staged
+ * two cards in four months.
+ */
+describe('the world is internally dated', () => {
+  const day = getWorld(db).day;
+
+  it('has nobody whose last fight is in the future', () => {
+    const ahead = active.filter((f) => (f.record[f.record.length - 1]?.day ?? -1) > day);
+    expect(ahead.map((f) => f.lastName)).toEqual([]);
+  });
+
+  it('has no bout anywhere dated after the start date', () => {
+    // Not only the last one: a single forward-dated entry means the whole history is misplaced.
+    const worst = Math.max(day, ...fighters.flatMap((f) => f.record.map((r) => r.day)));
+    expect(worst).toBeLessThanOrEqual(day);
+  });
+
+  it('carries only suspensions a real fight could have caused', () => {
+    /*
+     * `readinessDelay` caps at 260 days, so anything past a year is arithmetic rather than a
+     * knockout — which is exactly the shape the wind-back produced, up to 3,063 days.
+     */
+    const longest = Math.max(0, ...active.map((f) => (f.readyOnDay ?? 0) - day));
+    expect(longest).toBeLessThanOrEqual(365);
+  });
+
+  it('leaves most of the roster bookable on the day the player arrives', () => {
+    // A third of a division carrying a suspension is the design (see `depth.ts`); nine in ten is
+    // a broken world that no promoter can put a card together in.
+    const bookable = active.filter((f) => (f.readyOnDay ?? 0) <= day);
+    expect(bookable.length / active.length).toBeGreaterThan(0.5);
+  });
+
+  it('crowns nobody who has retired', () => {
+    for (const promotion of promotions) {
+      for (const championId of Object.values(promotion.champions)) {
+        const champion = fighters.find((f) => f.id === championId);
+        expect(champion?.retiredDay, `${promotion.shortName} champion has retired`).toBeUndefined();
+      }
+    }
+  });
+});
+
+describe('the people are plausible', () => {
+  const day = getWorld(db).day;
+  const ages = active.map((f) => fighterAge(f, day));
+
+  it('has no children on the roster, and certainly none with a professional record', () => {
+    // Ageing is the one thing pre-history definitely does to everybody, so a population built with
+    // the ages the player should end up seeing arrives eight years too old — and the fighters who
+    // *debuted* during the run come out the other side as children holding records.
+    const young = active.filter((f) => fighterAge(f, day) < 18);
+    expect(young.map((f) => f.lastName)).toEqual([]);
+  });
+
+  it('looks like the roster a person wrote by hand', () => {
+    /*
+     * The hand-authored 2026 era, measured: min 20, median 28, max 42. The generated world is
+     * held to the same band rather than to a number of its own, because "is this a plausible
+     * roster" has exactly one reference in the codebase and this is it.
+     */
+    const sorted = [...ages].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)]!;
+    expect(median).toBeGreaterThanOrEqual(25);
+    expect(median).toBeLessThanOrEqual(32);
+    expect(sorted[sorted.length - 1]!).toBeLessThanOrEqual(46);
+  });
+});
+
+describe('the sport is still moving when the player arrives', () => {
+  it('stages cards once the clock starts', () => {
+    /*
+     * The consequence that made the defect worth chasing rather than merely noting. Every
+     * matchmaking path filters on `readyOnDay`, so a roster that is 90% suspended does not
+     * produce a quieter sport, it produces a stopped one.
+     */
+    const day = getWorld(db).day;
+    const before = db.events.findAll().length;
+    advanceWorld(db, day, day + 120, {});
+    expect(db.events.findAll().length - before).toBeGreaterThan(5);
   });
 
   it('gives fighters records with real opponents behind them', () => {

@@ -17,6 +17,7 @@
  */
 
 import {
+  DAY_2026,
   PREHISTORY_YEARS,
   STATISTICAL_BELOW_PRESTIGE,
   generatePyramid,
@@ -52,8 +53,34 @@ export async function generateWorld(options: GenerateWorldOptions = {}): Promise
   const { onProgress, yieldToUi = nextFrame, ...rest } = options;
   const report = (progress: GenerationProgress) => onProgress?.(progress);
 
+  /*
+   * The population is built *before* the start date, and pre-history runs up to it.
+   *
+   * Doc 27 § 4.2: "build the population at start-date minus N years, then run the sport at low
+   * fidelity up to the start date". This used to build at the start date, run eight years past it,
+   * and wind the clock back — and the clock was the only thing that wound back. Every date the run
+   * stamped stayed where it was written, in what had become the future, and two of those broke the
+   * game outright:
+   *
+   *  - `readinessDelay` stamps an absolute `readyOnDay` after every loss, so nine fighters in ten
+   *    opened the game serving a medical suspension that ended years later. Every matchmaking path
+   *    filters on it, which is why a fresh world staged two cards in four months and a promoter
+   *    could not book anybody at all.
+   *  - `birthDay` never moved, so a fighter who was 25 when the generator built them fought
+   *    through to 33 and was 25 again afterwards. The ones who debuted *during* pre-history came
+   *    out as children holding professional records.
+   *
+   * Simulating forward onto the start date makes all of it right by construction rather than by
+   * correction: there is nothing to unwind, because nothing was ever written ahead of the clock.
+   */
+  const span = PREHISTORY_YEARS * 365;
+
   report({ phase: 'pyramid', done: 0, label: 'Founding the promotions' });
-  const db = generatePyramid(rest);
+  const db = generatePyramid({
+    ...rest,
+    day: DAY_2026 - span,
+    ageForwardYears: PREHISTORY_YEARS,
+  });
   await yieldToUi();
 
   const start = getWorld(db).day;
@@ -84,25 +111,18 @@ export async function generateWorld(options: GenerateWorldOptions = {}): Promise
   }
 
   /*
-   * Back to the start date.
+   * The clock is already where it belongs; this only records it.
    *
-   * Pre-history runs *forward* from the world's own start day, so when it finishes the clock is
-   * eight years past where the player is supposed to begin. Winding it back is what makes those
-   * eight years history rather than a game that started without them — every record, reign and
-   * ranking stays, and the date on the calendar is the one the era says it is.
+   * Pre-history ran *up to* the era's start date rather than past it, so there is nothing to wind
+   * back — which is the whole point of building the population before the start date. `advanceWorld`
+   * does not own the world clock (`advanceTo` sets it for the same reason), so it is written here.
    *
-   * The alternative — generating the population eight years younger and letting the clock run up
-   * to the start date — is the same thing said backwards, and it costs a generator that has to
-   * reason about who would have existed in 2018. This does not.
+   * `startedDay` is the day the player arrives, which is now the same day pre-history ends. The
+   * promoter screens measure "how long have I left this person unbooked" from it, and it is what
+   * lets them tell "never fought here" apart from "shelved for a year".
    */
-  /*
-   * `startedDay` moves with the clock, because it is the day the *player* arrives rather than the
-   * day the generator ran. Pre-history has just written eight years of records, and the promoter
-   * screens measure "how long have I left this person unbooked" from here — anchoring it to the
-   * generation day instead would tell a new player they had already shelved the entire roster for
-   * eight years.
-   */
-  setWorld(db, { day: start, startedDay: start });
+  const arrived = start + span;
+  setWorld(db, { day: arrived, startedDay: arrived });
 
   report({ phase: 'settling', done: 1, label: 'Ready' });
   db.save();

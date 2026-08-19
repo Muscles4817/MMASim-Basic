@@ -71,7 +71,31 @@ export interface DepthOptions {
   seed: string;
   /** Divisions this world runs. Defaults to all of them. */
   divisions?: readonly DivisionId[];
+  /**
+   * Years of simulation this population is about to be aged through before anybody sees it.
+   *
+   * Zero for a world that opens on the day it is built, which is every seeded era. Non-zero for a
+   * generated world, where doc 27 § 4.2 builds the population *before* the start date and
+   * simulates forward to it — and a roster generated with the ages the player should eventually
+   * see arrives eight years too old, because ageing is the one thing the run definitely does to
+   * everybody.
+   *
+   * The right roster to build for 2018 is a younger one: the fighters in their prime when the
+   * player arrives are the prospects of eight years earlier, and that year's veterans should have
+   * retired by the time the game opens. Shifting the draw down by the span says exactly that, and
+   * the professional floor below stops it saying anything sillier.
+   */
+  ageForwardYears?: number;
 }
+
+/**
+ * The youngest a generated fighter can be, whatever the shift.
+ *
+ * Professional debuts happen at eighteen and essentially never before it. Without a floor, a large
+ * `ageForwardYears` would put children on the roster — and, worse, give them a record, because
+ * pre-history books whoever is there.
+ */
+const MINIMUM_PRO_AGE = 18;
 
 /**
  * Fill every promotion up to its depth target.
@@ -83,6 +107,7 @@ export interface DepthOptions {
 export function buildDepthFighters(options: DepthOptions): Fighter[] {
   const { targets, existing, day, seed } = options;
   const divisions = options.divisions ?? DIVISIONS.map((d) => d.id);
+  const shift = Math.max(0, options.ageForwardYears ?? 0);
   const generated: Fighter[] = [];
 
   for (const target of targets) {
@@ -110,7 +135,23 @@ export function buildDepthFighters(options: DepthOptions): Fighter[] {
          * 27-year-olds has no shape: nobody is retiring, nobody is a prospect, and the world
          * cannot tell a story about a division turning over.
          */
-        const age = Math.round(rng.normalClamped(27, 4.5, 20, 39));
+        /*
+         * Drawn rather than fixed, and skewed young, because a roster that is entirely
+         * 27-year-olds has no shape: nobody is retiring, nobody is a prospect, and the world
+         * cannot tell a story about a division turning over.
+         *
+         * The whole draw slides down by `ageForwardYears`, so that a population about to be aged
+         * through pre-history arrives at the start date looking like the one this line describes
+         * rather than eight years past it.
+         */
+        const age = Math.round(
+          rng.normalClamped(
+            27 - shift,
+            4.5,
+            Math.max(MINIMUM_PRO_AGE, 20 - shift),
+            Math.max(MINIMUM_PRO_AGE + 1, 39 - shift),
+          ),
+        );
 
         generated.push(
           generateFighter(rng, {

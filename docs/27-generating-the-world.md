@@ -725,6 +725,66 @@ a much smaller problem than generating a sport — § 2 and § 6 are where they 
 
 ---
 
+## 11a. Built, and one correction: pre-history has to run _up to_ the start date
+
+§ 4.2's method is one sentence — "build the population at start-date minus _N_ years, then run the
+sport at low fidelity up to the start date" — and the shipped implementation inverted it. It built
+the population _at_ the start date, ran eight years past it, and wound the clock back onto the era's
+date. The comment defending that read "every record, reign and ranking stays, and the date on the
+calendar is the one the era says it is", which is true, and it missed that **the clock was the only
+thing that wound back.**
+
+Everything pre-history stamps is an absolute game day. None of it moved.
+
+| On a Small generated world, 824 active fighters |                  Winding back | Simulating forward |
+| ----------------------------------------------- | ----------------------------: | -----------------: |
+| Last fight dated _after_ the start date         |         745 of 745 — **100%** |                  0 |
+| Medically suspended on day one                  |               745 — **90.4%** |        278 — 33.7% |
+| Longest suspension                              |                **3,063 days** |           136 days |
+| Fighters under 18                               | **99** (53 with a pro record) |                  0 |
+| Bookable on day one                             |                      **9.6%** |              66.3% |
+| Cards staged in the next 120 days               |                         **2** |                 17 |
+
+Two mechanisms, both invisible from a screenshot of the roster:
+
+**`readinessDelay` stamps an absolute `readyOnDay` after every loss.** Wind the clock back eight
+years and nine fighters in ten are serving a medical suspension that ends years after the game
+begins. Every matchmaking path in the codebase filters on it, so this does not produce a quieter
+sport — it produces a stopped one, and a promoter who cannot book a single fighter.
+
+**`birthDay` never moved either.** A fighter who was 25 when the generator built them fought through
+to 33 and was 25 again afterwards, holding a 33-year-old's record; the ones who _debuted_ during the
+run came out as children with professional records.
+
+The fix is to do what § 4.2 said: `generatePyramid` takes the day to build on, `generateWorld` passes
+`DAY_2026 − 8 years`, and pre-history arrives at the start date instead of overshooting it. Nothing
+needs unwinding because nothing is ever written ahead of the clock.
+
+### The second half: a population built to be aged
+
+Simulating forward alone moved the median age from 28 to **33** and the oldest fighter to **47**,
+because ageing is the one thing the run definitely does to everybody and churn does not offset it —
+measured, 189 of 824 retire across the eight years and are replaced one for one, so the median
+simply marches a year per year.
+
+So the generator takes `ageForwardYears` and slides its draw down by it, floored at a professional
+eighteen. The statement is not a fudge factor: **the roster that existed in 2018 was a younger one,
+and the fighters in their prime when the player arrives are that year's prospects.** Against the
+hand-authored 2026 era, which is the only reference in the codebase for "a plausible roster":
+
+|      | Hand-authored 2026        | Generated                 |
+| ---- | ------------------------- | ------------------------- |
+| Ages | min 20, median 28, max 42 | min 21, median 29, max 39 |
+
+Generation cost is unchanged — 3.0s Small, 12.1s Medium against § 10.5's 2.8s and 11.2s — because
+this moves _when_ the population is built, not how much work the run does.
+
+`tests/integration/generated-world.test.ts` pins all six invariants; every one of them fails against
+the wind-back. `tools/generated-world-audit.ts` prints the table above, with the seeded era beside
+it as a control.
+
+---
+
 ## 12. Phasing
 
 0. **The cheap resolvers, measured.** § 9 and § 10. C is built. B is deferred — § 10.1 measured it
