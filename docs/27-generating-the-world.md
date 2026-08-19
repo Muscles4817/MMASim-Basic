@@ -307,14 +307,14 @@ Everything except pre-history and the invariant check already exists in some for
 
 ## 7. Numbers to pick
 
-| Constant                   | First guess | Calibrated against                                        |
-| -------------------------- | ----------- | --------------------------------------------------------- |
-| `SPORT_SIZE` — Small       | ~800        | Roughly today's 2026 era; a fast world for weak devices   |
-| `SPORT_SIZE` — Medium      | ~2,500      | The default                                               |
-| `SPORT_SIZE` — Large       | ~5,000      | Doc 26 § 2's realistic pyramid                            |
-| Pre-history length         | 12–15 years | A 35-year-old at start date has a full career behind them |
-| Share of population signed | ~40%        | The apex stays selective; the base is mostly unsigned     |
-| World-creation budget      | **< 10s**   | With a progress indicator; it happens once per save       |
+| Constant                   | First guess | Calibrated against                                                                                                              |
+| -------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `SPORT_SIZE` — Small       | ~800        | Roughly today's 2026 era; a fast world for weak devices                                                                         |
+| `SPORT_SIZE` — Medium      | ~2,500      | The default                                                                                                                     |
+| `SPORT_SIZE` — Large       | ~5,000      | Doc 26 § 2's realistic pyramid                                                                                                  |
+| Pre-history length         | **8 years** | Measured — § 10.5. Everything saturates by year six to eight, and the share of the roster with a real record _falls_ after that |
+| Share of population signed | ~40%        | The apex stays selective; the base is mostly unsigned                                                                           |
+| World-creation budget      | **< 10s**   | With a progress indicator; it happens once per save                                                                             |
 
 ---
 
@@ -516,8 +516,8 @@ Not one thing — the gap is 40–70× and nothing on this list is worth that al
 1. **A bulk tick, not a bulk fight.** Skip what nobody will read. **Built — § 10.4.**
 2. **Stop saving during generation.** **Built** — part of the bulk tick.
 3. **Do not simulate the base tier at depth.** **Built** — `statisticalBelowPrestige`.
-4. **Shorten pre-history.** Fifteen years is a choice, not a requirement. Not done; § 10.5 is why
-   it is now the obvious next move.
+4. **Shorten pre-history.** **Measured — § 10.5.** Eight years, and the reason fifteen was picked
+   turns out not to hold at all.
 5. **Only then, B.** Worth about 16% of a bulk tick — see § 10.4's profile, where the fight is
    finally one of the larger items rather than a rounding error.
 
@@ -566,7 +566,43 @@ Two things turned up on the way that were not about bulk at all:
 sport: fight count, record length, win/loss balance, population, standard, wear, and the shape of
 the pyramid — and that bulk writes no news, stores no cards and awards no bonuses.
 
-### 10.5 Where that leaves it
+### 10.5 How long pre-history has to be
+
+Fifteen years was picked in § 7 so that "a 35-year-old at the start date has a full career behind
+them", and **that reason does not hold.** `generateFighter` already gives everybody a synthetic
+`priorRecord` of roughly `(age − 20) × 2` bouts, and `careerSummary` merges it with what they have
+actually fought — so the deep past is covered whatever this number is. The 35-year-old has their
+career either way.
+
+What pre-history has to produce is the part a player can _open_: champions with reigns behind them,
+rankings that came from results, enough bouts in the `record` array for rematch cooldowns and
+rivalries to work, and an apex roster somebody climbed to rather than one generated in place.
+Measured against the clock on the 2,778-fighter world (`tools/prehistory-length.ts`):
+
+| Years | Seconds | Mean real record | 5+ real bouts | Climbed to the apex | Belts won in-run |
+| ----: | ------: | ---------------: | ------------: | ------------------: | ---------------: |
+|     2 |     2.8 |              3.6 |           23% |                 70% |           66/120 |
+|     4 |     5.5 |              7.1 |       **90%** |                 81% |          124/164 |
+|     6 |     7.5 |             10.0 |       **90%** |                 86% |          170/199 |
+|     8 |    11.1 |             12.2 |           87% |                 90% |          193/217 |
+|    10 |    13.6 |             13.7 |           84% |                 92% |          206/221 |
+|    12 |    16.4 |             13.8 |           79% |                 92% |          210/218 |
+|    15 |    19.5 |             12.8 |           77% |                 97% |          217/220 |
+
+**It saturates at six to eight years**, and the share of the roster with a real history actually
+_falls_ after that — from 90% to 77% — because the intake keeps adding debutants and the population
+turns over. Running longer costs linearly and buys one thing: a more settled title picture, 97% of
+belts won in-run against 90%.
+
+So the number is **8**, and the reason is a measurement rather than an anecdote about a 35-year-old.
+
+| World  | 6 years | 8 years | 15 years |
+| ------ | ------: | ------: | -------: |
+| Small  |    2.4s |    2.8s |     5.2s |
+| Medium |    8.2s |   11.2s |    22.8s |
+| Large  |   18.7s |   24.9s |    45.7s |
+
+### 10.6 Where that leaves it
 
 | World  | 15 years | 8 years (estimated) |
 | ------ | -------: | ------------------: |
@@ -574,26 +610,36 @@ the pyramid — and that bulk writes no news, stores no cards and awards no bonu
 | Medium |    24.1s |               12.9s |
 | Large  |    49.1s |               26.2s |
 
-§ 7's budget is 10 seconds and a mid-range phone is three to five times slower again, so **only the
-Small world is in budget today**, and only on a desktop.
+Four levers in, at eight years of pre-history:
 
-The profile is now flat — the fight is 16%, matchmaking 8%, ageing 9%, free agency 8%, the
-aftermath 6% — which means there is no single remaining lever worth 5×. What is left is arithmetic
-rather than engineering:
+| World  | Where it started |   Now | § 7's budget |
+| ------ | ---------------: | ----: | -----------: |
+| Small  |            21.3s |  2.8s |          10s |
+| Medium |            83.0s | 11.2s |          10s |
+| Large  |           172.6s | 24.9s |          10s |
 
-- **Shorten pre-history** (§ 10.3 item 4). Halves everything, and eight years still gives a
-  35-year-old a full career behind them.
-- **Ship Medium as the default** rather than Large. Doc 26 § 2's realistic pyramid is a target, not
-  a requirement for the first release.
+**Small is comfortably in budget and Medium is within a second of it**, on a desktop. A mid-range
+phone is three to five times slower, so on the device this game is for, only Small is currently
+playable at world creation and Medium wants another 3–4×.
+
+The profile is flat — the fight is 16%, matchmaking 8%, ageing 9%, free agency 8%, the aftermath 6%
+— so there is no single remaining lever worth 3×. What is left:
+
+- **Ship Small as the default and Medium as an option**, with Large behind a warning. Doc 26 § 2's
+  realistic pyramid is a target, not a requirement for a first release.
 - **Generate the base tier's records rather than simulating them at all.** § 4 rejected synthesised
   history as a trap, and the trap is coherence — which matters much less for a promotion the player
-  will never look at than for the division they are fighting in.
+  will never look at than for the division they are fighting in. This is the biggest one left.
 - **B**, worth 16% now that everything cheaper has gone.
+- **Measure on an actual phone**, because every number in this document is a desktop number and the
+  3–5× multiplier is an assumption.
 
 ---
 
 ## 11. Definition of done
 
+- Pre-history is long enough that champions have reigns, rankings came from results, and the apex
+  roster was climbed to rather than generated in place — § 10.5 says that is eight years.
 - A new game with no seed produces a complete, playable world: promotions across five tiers,
   fighters with coherent records, champions with reigns, gyms, coaches and officials.
 - No real person, promotion or venue appears anywhere in the shipped build.
@@ -602,8 +648,9 @@ rather than engineering:
 - A national promotion's roster is drawn predominantly from its own region.
 - A created fighter's opening offers sit in a 30–70% band in every preset and size.
 - Background and foreground fights are distributionally indistinguishable.
-- World creation completes inside the § 7 budget on a mid-range phone. **Currently 20–30× over —
-  § 10.**
+- World creation completes inside the § 7 budget on a mid-range phone. **Small is in budget on a
+  desktop and Medium is within a second of it; the phone multiplier is still an assumption —
+  § 10.6.**
 - Every fighter in a generated world averages two to three bouts a year of pre-history, not 0.86.
 
 ---
