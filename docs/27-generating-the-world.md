@@ -602,37 +602,73 @@ So the number is **8**, and the reason is a measurement rather than an anecdote 
 | Medium |    8.2s |   11.2s |    22.8s |
 | Large  |   18.7s |   24.9s |    45.7s |
 
-### 10.6 Where that leaves it
+### 10.6 Built: the base tier, and the world shape that was hiding how much it was worth
 
-| World  | 15 years | 8 years (estimated) |
-| ------ | -------: | ------------------: |
-| Small  |     6.2s |                3.3s |
-| Medium |    24.1s |               12.9s |
-| Large  |    49.1s |               26.2s |
+Doc 27 § 10.3's remaining lever was "generate the base tier's records rather than simulating them",
+and against the world every previous measurement used it looked like **11%** — barely worth having.
+That number was wrong, and it was wrong because of the world, not the lever.
 
-Four levers in, at eight years of pre-history:
+Every cost figure up to this point was taken against a _scaled copy of the shipped era_: eight
+promotions between prestige 36 and 97, cloned six times. That is a plateau with a spike on it. Doc
+26 § 2.2's pyramid is one apex, four majors, fifteen nationals, thirty feeders and **two to six
+hundred local shows** — so in the world this is actually for, the base tier is 87% of the promotions
+and half the fighters, and in the proxy it was a third of the promotions sitting in the _middle_.
 
-| World  | Where it started |   Now | § 7's budget |
-| ------ | ---------------: | ----: | -----------: |
-| Small  |            21.3s |  2.8s |          10s |
-| Medium |            83.0s | 11.2s |          10s |
-| Large  |           172.6s | 24.9s |          10s |
+`tools/pyramid-world.ts` builds the real shape. Measured on it, eight years:
 
-**Small is comfortably in budget and Medium is within a second of it**, on a desktop. A mid-range
-phone is three to five times slower, so on the device this game is for, only Small is currently
-playable at world creation and Medium wants another 3–4×.
+| World  | Fighters | Promotions |  Bulk | Bulk + statistical base |
+| ------ | -------: | ---------: | ----: | ----------------------: |
+| Small  |      824 |         42 |  3.0s |                **2.3s** |
+| Medium |    2,732 |        117 | 11.6s |                **8.9s** |
+| Large  |    6,024 |        172 | 32.9s |                   22.2s |
 
-The profile is flat — the fight is 16%, matchmaking 8%, ageing 9%, free agency 8%, the aftermath 6%
-— so there is no single remaining lever worth 3×. What is left:
+**The lever is worth 24–32%, not 11%**, and **Medium now fits inside § 7's ten-second budget.**
 
-- **Ship Small as the default and Medium as an option**, with Large behind a warning. Doc 26 § 2's
-  realistic pyramid is a target, not a requirement for a first release.
-- **Generate the base tier's records rather than simulating them at all.** § 4 rejected synthesised
-  history as a trap, and the trap is coherence — which matters much less for a promotion the player
-  will never look at than for the division they are fighting in. This is the biggest one left.
-- **B**, worth 16% now that everything cheaper has gone.
-- **Measure on an actual phone**, because every number in this document is a desktop number and the
-  3–5× multiplier is an assumption.
+Two things fell out of building the real shape:
+
+**Doc 26's pyramid has a floor of about 4,000 signed fighters** — one apex of 400, four majors of
+200, fifteen nationals of 100 and thirty feeders of 50, before a single local show exists. A world
+of 850 therefore cannot have that shape by adding fewer local promotions; it has to be a _smaller
+pyramid_, with fewer promotions per tier and thinner rosters on each. The builder scales rosters
+faster than counts, which is what a smaller sport looks like: the same ladder with thinner rungs
+rather than a ladder with rungs missing.
+
+**The base tier is now 3% of a run**, profiled — so this lever is finished rather than merely
+improved. There is nothing left to win by making those fights cheaper.
+
+Quality holds. Eight years on the Large pyramid with the base tier statistical: a mean of 10.5 real
+bouts per fighter, 80% of the roster with five or more, 86% of the apex roster having climbed there,
+and every belt in the world won during the run.
+
+### 10.7 Where that leaves it
+
+Five levers in, at eight years of pre-history, on a world shaped like the one the design asks for:
+
+| World  | Where it started |      Now | § 7's budget |
+| ------ | ---------------: | -------: | -----------: |
+| Small  |            21.3s | **2.3s** |          10s |
+| Medium |            83.0s | **8.9s** |          10s |
+| Large  |           172.6s |    22.2s |          10s |
+
+**Small and Medium are both inside budget on a desktop.** Large is 2.2× over.
+
+The profile is now spread across things that are inherent rather than wasteful: free agency 12.5%,
+ageing and development 12.2%, the fights the top thirty promotions still simulate 9%, retirement 5%.
+These are per-fighter passes over the whole population, and a world of six thousand people costs
+what six thousand people cost.
+
+So the remaining moves are decisions rather than optimisations:
+
+- **Ship Small and Medium**, with Large behind a warning and a longer progress bar. Doc 26 § 2's
+  realistic pyramid is a target, not a first-release requirement.
+- **Stop simulating the base tier's _people_, not just their fights** — no individual ageing,
+  development or free agency below a prestige, resolved in aggregate instead. This is the only
+  remaining 2× and it is a real design decision, because those people stop being able to climb into
+  the player's orbit coherently.
+- **B**, worth 9% now.
+- **Measure on an actual phone.** Every number in this document is a desktop number and the 3–5×
+  multiplier is an assumption, not a measurement. It is the single most load-bearing untested claim
+  here.
 
 ---
 

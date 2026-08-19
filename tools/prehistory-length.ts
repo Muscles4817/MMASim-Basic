@@ -20,11 +20,14 @@ import { advanceWorld } from '../packages/app/src/game/world';
 import { createNewGame, getWorld } from '@mmasim/data';
 import { overallRating, resolveFightByRound, type Fighter, type Promotion } from '@mmasim/engine';
 import { buildScaledWorld } from './scaled-world';
+import { buildPyramidWorld } from './pyramid-world';
 
 const SCALE = Number(process.env.SCALE ?? 6);
 const LENGTHS = (process.env.LENGTHS ?? '4,6,8,10,12,15').split(',').map(Number);
 /** Below this prestige a promotion's fights are resolved from ratings. See doc 27 § 10.4. */
-const STATISTICAL_BELOW = 40;
+const STATISTICAL_BELOW = Number(process.env.STAT_BELOW ?? 40);
+/** Build a doc 26 § 2.2-shaped pyramid instead of a scaled copy of the shipped world. */
+const PYRAMID = process.env.PYRAMID === '1';
 
 interface Shape {
   seconds: number;
@@ -43,7 +46,11 @@ interface Shape {
 }
 
 function run(years: number): Shape {
-  const db = SCALE <= 1 ? createNewGame({ era: '2026', seed: 'length' }) : buildScaledWorld(SCALE);
+  const db = PYRAMID
+    ? buildPyramidWorld(SCALE * 850)
+    : SCALE <= 1
+      ? createNewGame({ era: '2026', seed: 'length' })
+      : buildScaledWorld(SCALE);
   const start = getWorld(db).day;
 
   const apex = (db.promotions.findAll() as unknown as Promotion[])

@@ -19,10 +19,15 @@ import { advanceWorld } from '../packages/app/src/game/world';
 import { createNewGame, getWorld } from '@mmasim/data';
 import { resolveFightByRound, simulateFight, type Fighter, type Promotion } from '@mmasim/engine';
 import { buildScaledWorld } from './scaled-world';
+import { buildPyramidWorld, describePyramid } from './pyramid-world';
 
 const YEARS = Number(process.env.YEARS ?? 15);
 /** Multiples of the shipped 2026 world's regional tier. 1 = as shipped. */
 const SCALES = (process.env.SCALES ?? '1,3,6').split(',').map(Number);
+/** Build a doc 26 § 2.2-shaped pyramid instead of a scaled copy of the shipped world. */
+const PYRAMID = process.env.PYRAMID === '1';
+/** Below this prestige, resolve from ratings. Only meaningful in a bulk run. */
+const STAT_BELOW = Number(process.env.STAT_BELOW ?? 40);
 
 interface Run {
   seconds: number;
@@ -38,13 +43,17 @@ interface Run {
 type Mode = 'full' | 'reduced' | 'bulk' | 'bulk+stat';
 
 function run(scale: number, mode: Mode): Run {
-  const db =
-    scale <= 1 ? createNewGame({ era: '2026', seed: 'prehistory:1' }) : buildScaledWorld(scale);
+  const db = PYRAMID
+    ? buildPyramidWorld(scale * 850)
+    : scale <= 1
+      ? createNewGame({ era: '2026', seed: 'prehistory:1' })
+      : buildScaledWorld(scale);
+  if (PYRAMID && mode === MODES[0]) console.log(`  ${describePyramid(db)}`);
   const start = getWorld(db).day;
   const fightersStart = (db.fighters.findAll() as Fighter[]).length;
   const resolve = mode === 'full' ? simulateFight : resolveFightByRound;
   const detail = mode === 'full' || mode === 'reduced' ? undefined : ('bulk' as const);
-  const statisticalBelowPrestige = mode === 'bulk+stat' ? 40 : undefined;
+  const statisticalBelowPrestige = mode === 'bulk+stat' ? STAT_BELOW : undefined;
 
   let fights = 0;
   let firstYear = 0;
@@ -76,7 +85,9 @@ function run(scale: number, mode: Mode): Run {
   };
 }
 
-console.log(`${YEARS} years of pre-history, per world size.\n`);
+console.log(
+  `${YEARS} years of pre-history, per world size.${PYRAMID ? ` Pyramid shape, statistical below prestige ${STAT_BELOW}.` : ''}\n`,
+);
 console.log(
   [
     'scale',
