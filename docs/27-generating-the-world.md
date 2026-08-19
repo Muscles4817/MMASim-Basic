@@ -209,17 +209,71 @@ Doc 26 § 1.7, re-measured after PR #4:
 population. That is what makes 3,000–5,000 fighters plausible, and it is also the trap: any design
 that scales card count with headcount throws the advantage away.
 
-Three bands:
+There is a second measurement that changes where the effort goes, and it cuts the other way. In a
+_running_ world, fights are only **14% of a tick** (609 fights × 649µs = 395ms of a 2211ms sim-year;
+the rest is matchmaking, training, ageing and ranking). The tick is budget-bound rather than
+population-bound: 200, 400 and 858 active fighters cost 2154 / 2168 / 2080ms, because the promotions
+run the same number of cards either way.
 
-| Band           | Who                                           | Fights resolved by    | Development     |
-| -------------- | --------------------------------------------- | --------------------- | --------------- |
-| **Foreground** | The player's promotion and division           | `simulateFight`, full | Per camp        |
-| **Midground**  | The rest of the top tiers                     | `simulateFight`       | Per bout        |
-| **Background** | The base tier, and anyone far from the player | Cheap resolver (§ 9)  | Quarterly, bulk |
+So cheap resolution is not primarily a running-world optimisation. **It is what makes pre-history
+affordable** — fifteen years of simulated past where nothing but the results is kept, and where the
+fight is the only thing being computed. That is the workload the levels below are shaped for.
 
-A fighter is **promoted between bands** when they enter the player's orbit — signed to a promotion
-the player is in, ranked, or offered as an opponent. What must match across the boundary is the
-_distribution_ of outcomes, not the mechanism; that is testable and § 9 is where it gets tested.
+### 5.1 Three levels, not two bands
+
+An earlier draft of this section had three _bands_ that differed in how much of the world got
+simulated. That was the wrong axis. The right one is **how much a fight has to produce**, and there
+are exactly three honest answers.
+
+| Level       | Used for                              | Must produce                                                        | Budget |
+| ----------- | ------------------------------------- | ------------------------------------------------------------------- | -----: |
+| **Full**    | The player's orbit (§ 5.2)            | Play-by-play, commentary, scorecards, stats, damage, news, purses   | ~650µs |
+| **Reduced** | The current world outside their orbit | Result, method, round, damage, **fight stats** — no play-by-play    |  ~50µs |
+| **Bulk**    | Pre-history                           | Result, method, damage. No stats, no scorecards, no news, no purses |  ~10µs |
+
+The dividing line between Full and Reduced is **narration**: whether a human will ever read the
+round-by-round. The line between Reduced and Bulk is **the historical record**: whether anyone will
+ever open the fight and look at significant strikes landed. A fight from eleven years before the
+start date is a row in a record and a contribution to accumulated damage; nobody is going to audit
+its takedown accuracy, and computing it is pure waste multiplied by fifteen years of cards.
+
+Bulk is not a worse Reduced. It answers a smaller question, which is the only reason it can be
+cheaper — and the same reasoning says Reduced must not be a worse Full. What has to match across
+every boundary is the **distribution** of outcomes, not the mechanism. A fighter who arrives in the
+player's orbit with a 14-3 record built at Bulk must have a record that could have been built at
+Full. That is testable, and § 9 is where it gets tested.
+
+### 5.2 What "orbit" means
+
+Orbit is a **relationship**, not a geography. A fighter is in it if any of:
+
+- they are signed to a promotion the player is in;
+- they are in the player's division _and_ ranked in a promotion the player could plausibly reach;
+- the player has fought them, is booked against them, or has been offered them;
+- they hold or challenge for a title at the apex, because everyone in the sport watches that;
+- the player has scouted them (Coach Mode — § 2.3).
+
+Geography deliberately does not appear. A Polish regional prospect two tiers below the player is not
+in their orbit merely because they share a country; the apex champion on the other side of the world
+is, because the player will see them on television. Orbit membership is recomputed each tick and a
+fighter is **promoted to Full** the moment they enter it — which is the one hard constraint on the
+Reduced level: it must keep enough state that promotion is seamless. Damage, injuries, freshness and
+attributes are all carried at Reduced for exactly this reason.
+
+Sized against doc 26 § 2's pyramid, orbit is **100–300 fighters** even in a 5,000-fighter world.
+Everything else runs Reduced.
+
+### 5.3 What each level runs
+
+| Level   | Fight resolution               | Development     | Injuries            |
+| ------- | ------------------------------ | --------------- | ------------------- |
+| Full    | `simulateFight`                | Per camp        | Full, per doc 25    |
+| Reduced | Round-level resolver (§ 9's C) | Per bout        | Full, per doc 25    |
+| Bulk    | Statistical resolver (§ 9's B) | Annual, batched | Damage accrual only |
+
+Injuries stay full-fidelity at Reduced on purpose. Doc 25 built `FightExposure` so that how a night
+went decides what it costs, and a world where only the player's orbit can get hurt in a war is the
+same family of asymmetry doc 24 spent its length closing.
 
 ---
 
@@ -288,19 +342,110 @@ talent map is a name generator with extra steps. The country → roster link nee
 
 ## 9. Phase 0 — the measurement that gates everything
 
-Before any of the above is written, build a **cheap fight resolver** and measure it against
-`simulateFight` on two axes:
+### 9.1 The four candidates
 
-1. **Fidelity.** Across many thousands of matchups spanning the rating range, the two must agree on
-   win rate, method mix (KO / submission / decision), round distribution, and — because doc 25's
-   whole health model reads it — damage taken. Not identical; _distributionally_ indistinguishable
-   at the tolerances the statistical tier already uses.
-2. **Speed.** How many times faster. That single ratio decides the pre-history length, the
-   `SPORT_SIZE` ceiling, and where the background band's boundary sits.
+| Option | What it is                                                                      | Verdict         |
+| ------ | ------------------------------------------------------------------------------- | --------------- |
+| **A**  | `simulateFight` with a coarser exchange clock — same model, fewer steps         | Superseded by C |
+| **B**  | Statistical: one roll from ratings gives winner, method and round. No fight.    | **Bulk**        |
+| **C**  | Round-level: one resolution per round, carrying damage and fatigue between them | **Reduced**     |
+| **D**  | Quiet mode: `simulateFight` with commentary and event objects suppressed        | **Dead — 9.2**  |
 
-If it is 20× or better, everything in this document is affordable. If it is 3×, pre-history has to
-shrink and the Large world does not happen. **The design does not commit to a number until this is
-measured.**
+### 9.2 Option D is dead, and the measurement says why
+
+D was the tempting one because it changes no model behaviour at all. Measured on `simulateFight`:
+
+|                                | µs/fight |    Share |
+| ------------------------------ | -------: | -------: |
+| Baseline `simulateFight`       |      649 |     100% |
+| Commentary string generation   |       13 |       2% |
+| `FightEvent` object allocation |        3 |     0.5% |
+| **Quiet-mode ceiling**         |  **633** | **1.0×** |
+
+Suppressing every byte of output the fight produces buys **nothing**. The cost is not narration; it
+is `resolveExchange`, run about 83 times per fight at ~8µs each, and it scales cleanly with duration:
+
+| Fight length | Fight time simulated |  Cost |
+| ------------ | -------------------: | ----: |
+| 1 round      |                 274s | 359µs |
+| 3 rounds     |                 722s | 687µs |
+| 5 rounds     |                1088s | 903µs |
+
+So a cheap resolver has to **do fewer steps**, not print less. That is exactly what C and B are, and
+it is why A collapses into C: once you are coarsening the clock, "one step per round" is the natural
+stopping point, and it is the coarsest granularity at which the round is still a real unit with
+scorecards and a stoppage point.
+
+### 9.3 C, built and measured
+
+`packages/engine/src/fight/round.ts`. One resolution per round, sharing the full model's actual
+primitives — `createCombatant`, `strikeDamage`, `knockdownHazard`, `accrueFatigue`,
+`recoverBetweenRounds`, `buildScorecards`, `readDecision` — and replacing only the loop.
+
+**Speed: 733µs → 79µs, a 9.3× speedup.** Short of the 50µs / 13× target and comfortably enough:
+Reduced now costs less than the matchmaking that books the fight.
+
+**Fidelity**, across six matchups spanning the rating range, 1,000 fights each. The largest
+disagreement on any win rate or method share is **11.3 points**, in the most lopsided pairings the
+game will never book:
+
+| Matchup                | win% (full → C) | KO% (full → C) | SUB% (full → C) | knockdowns (full → C) |
+| ---------------------- | --------------- | -------------- | --------------- | --------------------- |
+| even                   | 45.2 → 50.9     | 5.8 → 5.0      | 12.7 → 15.0     | 0.47 → 0.36           |
+| striker v grinder      | 28.7 → 34.1     | 26.4 → 17.5    | 17.8 → 22.9     | 1.17 → 0.75           |
+| bomber v journeyman    | 89.1 → 90.5     | 82.6 → 81.8    | 3.8 → 6.2       | 2.69 → 2.26           |
+| contender v can        | 100 → 99.5      | 60.1 → 53.2    | 33.7 → 30.8     | 1.70 → 1.56           |
+| guard player v smother | 8.7 → 12.3      | 5.4 → 5.3      | 24.0 → 22.7     | 0.40 → 0.36           |
+| smotherer v striker    | 70.1 → 74.6     | 24.4 → 13.1    | 30.4 → 40.4     | 0.83 → 0.58           |
+
+`tests/statistical/reduced-fidelity.test.ts` holds all of it: win rate and method mix to 12 points,
+mean finishing round to 0.35, damage and knockdowns and per-round fight stats to a stated ratio, and
+the speedup to a loose 3× that catches the regression that matters — somebody making the Reduced
+level call into the exchange loop.
+
+### 9.4 What building it actually taught us
+
+Five things, each of which was a defect before it was a finding, and three of which are statements
+about the **full** model that nobody had made before:
+
+**Volume is a property of the situation, not of the striker.** The striker throws 12.2 significant
+strikes a round on Striking 90 and Cardio 72; the journeyman throws 12.2 on fifty across. What moves
+output is who is dictating, where the round is being fought, and whether the man opposite is still
+all there. Two versions of the resolver led with a cardio-driven willingness term and both had to be
+pulled.
+
+**Submission attempts are bought with position, not with submissions.** The guard player, at 92
+submissions, attempts 1.2 a round — fewer than the striker's grinder opponent at 62, because he
+spends the round underneath. The rating buys conversion. Paying the specialist in both had him
+beating a smotherer 28% of the time against a measured 8.7%.
+
+**How much a fighter throws from underneath is a question about who they are.** The striker and the
+guard player are pinned for the same two thirds of a round and throw 12.4 against 4.8. No position
+penalty produces that; `strikeLean` does, and it is now exported for the purpose.
+
+**Most of what a knockout does to somebody happens after the knockdown that caused it.** Prorating a
+round to its finish and stopping there left the bomber having dealt 44 head damage against a
+measured 68. The finishing sequence — four or so unanswered strikes at `alreadyHurt` — is where the
+rest of it is.
+
+**A distribution that cannot go negative must not be made out of one that can.** Knockdown counts
+were drawn from a normal floored at zero. For a mean of 0.083 with a standard deviation of 0.317
+that truncation more than _doubles_ the mean, and two average fighters came out at 0.62 knockdowns a
+fight against a measured 0.46. Poisson.
+
+### 9.5 What is left
+
+Two cells carry the residual, both involving a striker against a grappler: **C under-counts the
+striker's knockdowns by about a third**, which shows up as the KO rate reading 13% where the full
+model reads 24%. The mechanism is legible — an elite striker's case against a wrestler is what
+happens in the seconds before the takedown, and a round has no seconds in it — and the fix is not
+obviously worth having, because the matchups where it bites are far more lopsided than anything a
+matchmaker books. It is recorded rather than hidden: the test asserts the gap it currently has.
+
+**B is not built yet.** Its budget is ~10µs and it is what decides how long pre-history can be:
+fifteen years of a 5,000-fighter world is on the order of 40,000 fights, which is 0.4s at 10µs, 3.2s
+at C's 79µs, and 29s at the full model's 733µs. C alone probably makes a _short_ pre-history
+affordable; the design does not commit to `SPORT_SIZE` or pre-history length until B is measured.
 
 ---
 
@@ -320,13 +465,15 @@ measured.**
 
 ## 11. Phasing
 
-0. **The cheap resolver, measured.** § 9. Nothing else starts until this number exists.
+0. **The cheap resolvers, measured.** § 9. C first, because Reduced is the level the running world
+   needs; B follows, because it is what sets pre-history's length. Nothing else starts until those
+   two numbers exist.
 1. **Talent map.** Named nations, grouped regions, expanded name pools. Data, incremental, useful
    on its own — the existing seeded worlds get better nationality spread immediately.
 2. **Promotion generation.** The five-tier pyramid from parameters, with `baseCountry` from the map.
 3. **Fighter generation at scale**, with division shape and the roster-nationality link.
 4. **Pre-history and the invariant check.** The piece that makes records real.
-5. **Level of detail.** Band assignment, promotion between bands, the background tick.
+5. **Level of detail.** Orbit membership, promotion to Full, and the Reduced tick — § 5.
 6. **Presets.** Modern first; Dawn of MMA once churn exists, because a sport that starts in 1995
    and has no way to found new promotions cannot become the modern one.
 

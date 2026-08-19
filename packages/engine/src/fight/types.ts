@@ -29,7 +29,8 @@ export const GROUND_DOMINANCE: Readonly<Record<GroundPosition, number>> = {
   back: 1.0,
 };
 
-export type StrikeTarget = 'head' | 'body' | 'legs';
+export const STRIKE_TARGETS = ['head', 'body', 'legs'] as const;
+export type StrikeTarget = (typeof STRIKE_TARGETS)[number];
 
 export type DamageRegion = StrikeTarget;
 
