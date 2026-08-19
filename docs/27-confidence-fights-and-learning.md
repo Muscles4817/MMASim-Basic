@@ -1,7 +1,7 @@
 # 27 — Confidence, what a fight teaches, and when learning stops
 
-**Status:** §1 (confidence), §2 (what a fight teaches) and §3 (the learning window) are all
-**built** — see §5, §6 and §7 for what each one measured. §7 also records one proposal from §3.4
+**Status:** §1 (confidence), §2 (what a fight teaches), §3 (the learning window), §8 (ambient
+work), §11 (the day tick) and §10's mileage half (§12) are **built** — see §5, §6 and §7 for what each one measured. §7 also records one proposal from §3.4
 that measurement rejected. §8 is the first of §7.4's two recorded defects, now **fixed**. §9 is the
 next workstream and is **not started**.
 
@@ -866,3 +866,79 @@ with every already-vacant slot costing nothing, so the calendar is unaffected: a
 two, so it never decided anything — the cap did.
 
 Nothing in the world loop is now priced per call rather than per day.
+
+---
+
+## 12. Decline reads the miles now — §10 item 2
+
+`applyAgeing` decided decline from the birthday alone. Two fighters born the same day declined
+identically however they had spent the years between — which is the one thing about ageing in this
+sport that everybody who follows it knows to be false.
+
+### 12.1 A dimension that did not exist
+
+The first thing measurement found was that half the intended input was not in the data.
+`generateFighter` set `proDebutDay` to `age - 20` for **everybody**, and the seed's median age at
+turning professional is exactly 20.0. So "years as a professional" was age with a constant
+subtracted, and the model could not tell a fighter who came up through a gym at 18 from one who
+turned to it at 25 — because it had decided they both started at 20.
+
+Debut age is now drawn properly: median 21, quartiles 20 and 22, tails to 17 and 26.
+
+### 12.2 The model
+
+`mileageYears` returns how much older than their birthday a fighter's body is, from four things the
+model already knew and never read:
+
+| Term                    | Per unit | Why                                                                               |
+| ----------------------- | -------: | --------------------------------------------------------------------------------- |
+| Years as a professional |     0.10 | The clock that starts when you turn pro, not when you were born                   |
+| Professional bouts      |     0.10 | A fight week is a cut, a camp, and fifteen minutes of somebody trying to hurt you |
+| Body wear               |     0.03 | The grind — the cuts, the injuries, the miles                                     |
+| Head trauma             |    0.015 | Small _here_: trauma already has its own channel straight into durability         |
+
+Decline then runs on `age + mileageYears` rather than `age`. Because that shifts _when_ decline
+starts, it flows through `DECLINE_RATE` automatically — a battered fighter loses speed and
+durability much faster and fight IQ barely quicker at all, since those were already the rates.
+
+**Learning still runs on the real age**, deliberately. Somebody who has been in wars is slower and
+more brittle, not less able to be taught, and the sport is full of fighters who added a whole
+discipline in their thirties precisely because they could no longer rely on being the athlete.
+
+### 12.3 What it measured
+
+Same starting attributes, three years of ageing:
+
+| Fighter                                      | Mileage | Decline over 3y |
+| -------------------------------------------- | ------: | --------------: |
+| Fresh 30 — pro at 28, 4 bouts, no damage     |   +0.7y |       **−1.90** |
+| Typical 30 — pro at 21, 16 bouts, moderate   |   +3.5y |           −2.80 |
+| Clean 34 — pro at 25, 12 bouts, light damage |   +2.5y |           −3.80 |
+| Worn 30 — pro at 18, 35 bouts, heavy damage  |   +6.9y |       **−4.20** |
+
+The case the design is written around holds: **the worn 30-year-old now declines faster than the
+clean 34-year-old**, and a fresh 30-year-old declines at less than half the rate of a worn one.
+
+Across a 25-year world, individual peak age (each fighter's own best year, which is the honest
+measure — a population average is confounded by who retired):
+
+|                             |           Before |            After |
+| --------------------------- | ---------------: | ---------------: |
+| Peak age p25 / median / p75 | 33 / **34** / 36 | 32 / **33** / 35 |
+| Average rating at 42        |             67.9 |             54.5 |
+| Fighters rated 70+          |              102 |               72 |
+
+The late-career shape is the bigger change. The population average used to _climb_ to 68.2 at 43 —
+survivorship of fighters who essentially never declined — and now flattens around 57 and turns
+down.
+
+### 12.4 What it did not fix
+
+Median peak age moved 34 → 33 against a target of 30–32. Mileage differentiates fighters; it does
+not by itself set where the sport peaks. The remaining levers are §10's other two items — peaks
+that shift by division, and re-checking §3's learning floors, which are what pushed the composite
+out past 36 in the first place.
+
+Vacancies also became rare enough to make a test flaky: champions now tend to lose the belt in the
+cage before they are old enough to abandon it, so `championships.test.ts` drives a vacancy
+deliberately rather than hoping a decade produces one.

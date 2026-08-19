@@ -419,6 +419,23 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     resentment: 0,
     reputation: toRating(rng.normalClamped(25, 9, 5, 50)),
 
-    proDebutDay: birthDayForAge(Math.max(0, age - 20), options.day, 1, 1),
+    /*
+     * When they turned professional, which is not a fixed offset from how old they are.
+     *
+     * This was `age - 20` for everybody, so "years as a professional" carried no information that
+     * age did not already carry — the two were the same number with a constant between them. That
+     * matters now that mileage drives decline: the whole point is that a 30-year-old who turned
+     * pro at 18 has more miles on him than a 30-year-old who turned pro at 25, and the model could
+     * not tell them apart because it had decided they both turned pro at 20.
+     *
+     * Weighted toward the early twenties, with a real tail both ways: the teenager who came up
+     * through a fight gym, and the wrestler who only turned to it after college.
+     */
+    proDebutDay: birthDayForAge(
+      Math.max(0, age - Math.round(rng.normalClamped(21, 2.6, 17, 29))),
+      options.day,
+      1,
+      1,
+    ),
   };
 }

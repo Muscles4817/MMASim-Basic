@@ -1111,6 +1111,50 @@ const TRAUMA_DECLINE_PER_YEAR = 1.1;
 /** Convexity. The first twenty points of trauma are nearly free; the last twenty are not. */
 const TRAUMA_DECLINE_CURVE = 1.2;
 
+/**
+ * How much older than their birthday a fighter's body is, in years.
+ *
+ * Doc 27 §10. Decline was a pure function of age: two fighters born the same day declined
+ * identically however they had spent the intervening years. That is the one thing about ageing in
+ * this sport that everybody who follows it knows to be false. A 34-year-old who came to it at 25
+ * and has taken little is competitively younger than a 30-year-old who turned professional at 18,
+ * has thirty-five fights, several knockouts and years of hard weight cuts behind him.
+ *
+ * Four terms, and each is a thing the model already knew and never read:
+ *
+ * - **Years as a professional**, which is not a restatement of age. It was until now — generation
+ *   set `proDebutDay` to `age - 20` for everybody — so the two were the same number with a
+ *   constant between them and there was nothing to read. Debut age now varies properly.
+ * - **Bouts**, because a fight week is a weight cut, a training camp and fifteen minutes of
+ *   somebody trying to hurt you, and thirty-five of those leave a mark that ten do not.
+ * - **Body wear**, which is the grind: the cuts, the injuries, the miles.
+ * - **Head trauma**, at a deliberately small weight *here*, because it already has its own
+ *   channel straight into durability above. This term is the general cost of having been
+ *   knocked out — the half-step slower, the reactions that were there at 26 — rather than the chin.
+ *
+ * The effect is a shift in *when* decline starts and how steep it is by then, so it flows through
+ * `DECLINE_RATE` automatically: a battered fighter loses speed and durability much faster and
+ * fight IQ barely quicker at all, because those are the rates that were already there.
+ */
+export function mileageYears(fighter: Fighter, onDay: GameDay): number {
+  const proYears = Math.max(0, (onDay - fighter.proDebutDay) / 365);
+  return (
+    proYears * MILEAGE_PER_PRO_YEAR +
+    fighter.record.length * MILEAGE_PER_BOUT +
+    fighter.condition.bodyWear * MILEAGE_PER_WEAR +
+    fighter.condition.headTrauma * MILEAGE_PER_TRAUMA
+  );
+}
+
+/** Years of body added per year spent as a professional. */
+const MILEAGE_PER_PRO_YEAR = 0.1;
+/** Per professional bout: the cut, the camp, and the fifteen minutes. */
+const MILEAGE_PER_BOUT = 0.1;
+/** Per point of accumulated body wear. */
+const MILEAGE_PER_WEAR = 0.03;
+/** Per point of head trauma. Small — trauma's main channel is durability, above. */
+const MILEAGE_PER_TRAUMA = 0.015;
+
 export interface AgeingResult {
   fighter: Fighter;
   losses: Partial<Record<AttributeKey, number>>;
@@ -1129,6 +1173,14 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
 
   const age = ageOn(fighter.birthDay, toDay);
   const peak = PEAK_AGE[fighter.naturals.ageCurve];
+
+  /*
+   * Decline runs on the body's age, not the birthday's. See `mileageYears`.
+   *
+   * Learning deliberately still runs on the real age: a veteran who has been in wars is slower and
+   * more brittle, not stupider, and `learningRate` is about how well somebody still takes coaching.
+   */
+  const wornAge = age + mileageYears(fighter, toDay);
 
   const attributes: Attributes = { ...fighter.attributes };
   const losses: Partial<Record<AttributeKey, number>> = {};
@@ -1211,7 +1263,7 @@ export function applyAgeing(fighter: Fighter, fromDay: GameDay, toDay: GameDay, 
      * their speed and chin and years short of their submissions — which is what makes a career a
      * shape rather than a single hill.
      */
-    const yearsPast = age - (peak + PEAK_OFFSET[key]);
+    const yearsPast = wornAge - (peak + PEAK_OFFSET[key]);
     if (yearsPast <= 0) continue;
 
     // Decline accelerates: the second five years past peak cost far more than the first.
