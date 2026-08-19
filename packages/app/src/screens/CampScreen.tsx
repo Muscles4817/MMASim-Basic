@@ -6,6 +6,7 @@ import {
   TRAINING_FOCUSES,
   APPROACH_META,
   MAX_PREPPED_READS,
+  NEUTRAL_GROUND_INTENT,
   PURCHASES,
   PURCHASE_KEYS,
   campPurchaseEffects,
@@ -31,6 +32,7 @@ import {
   type AttributeKey,
   READ_META,
   scoutOpponent,
+  strikeLean,
   type Approach,
   type TrainingFocus,
   type Attributes,
@@ -135,8 +137,37 @@ export function CampScreen() {
     return scoutOpponent(truth, coach?.scouting ?? 45, footage, rng);
   }, [opponent, coach, world.seed, booking?.bout.id]);
 
+  /*
+   * The takedown threat as the *report* sees it, not as the opponent's attributes state it.
+   *
+   * Deliberately the scouted number rather than the truth: this screen never shows the player
+   * a fact about the opponent it has not paid a coach for, and a warning sourced from the
+   * ground truth would be the one place the camp screen quietly told them everything.
+   */
+  const shootThreat = useMemo(() => {
+    if (!report) return undefined;
+    const of = (key: ReadKey) => report.reads.find((r) => r.read === key)?.estimate ?? 0;
+    return Math.max(of('doubleLeg'), of('singleLeg'), of('bodyLock'), of('fenceClinch'));
+  }, [report]);
+
   const [approach, setApproach] = useState<Approach>(booking?.plan.approach ?? 'pressure');
   const [risk, setRisk] = useState<number>(booking?.plan.riskLevel ?? 0.5);
+  /*
+   * Where the fight happens — the plan's second axis, and the one that used not to exist.
+   *
+   * `approach` is seven offensive intents and every one of them answers "what do I throw".
+   * None answers "where is this fight", which is why a striker could pick `counter`, mean
+   * *keep it standing*, and be told by the engine only that he should counter-punch during
+   * the two and a half minutes of a fifteen-minute fight he spent on his feet. See
+   * `phaseProfile` in the engine for what this now buys and what it costs.
+   */
+  const [groundIntent, setGroundIntent] = useState<number>(
+    booking?.plan.groundIntent ?? NEUTRAL_GROUND_INTENT,
+  );
+
+  const planMismatch = playerFighter
+    ? planMismatchOf({ intent: groundIntent, fighter: playerFighter, opponent, shootThreat })
+    : undefined;
   const [targeting, setTargeting] = useState<Record<StrikeTarget, number>>(
     booking?.plan.targeting ?? { head: 0.6, body: 0.25, legs: 0.15 },
   );
@@ -177,6 +208,7 @@ export function CampScreen() {
   const persist = (next: {
     approach?: Approach;
     riskLevel?: number;
+    groundIntent?: number;
     targeting?: Record<StrikeTarget, number>;
     selected?: ReadKey[];
   }) => {
@@ -187,6 +219,7 @@ export function CampScreen() {
         ...booking.plan,
         approach: next.approach ?? approach,
         riskLevel: next.riskLevel ?? risk,
+        groundIntent: next.groundIntent ?? groundIntent,
         targeting: normaliseTargeting(next.targeting ?? targeting),
         preppedReads: reads.map((read) => ({
           read,
@@ -275,6 +308,7 @@ export function CampScreen() {
       approach,
       targeting: normaliseTargeting(targeting),
       riskLevel: risk,
+      groundIntent,
       campQuality: camp,
       preppedReads: selected.map((read) => {
         const scouted = report?.reads.find((r) => r.read === read);
@@ -699,6 +733,51 @@ export function CampScreen() {
             </p>
 
             {/*
+              Where the fight happens.
+
+              The decision the plan did not carry, and the reason this whole screen could feel
+              like it was not being listened to: a striker who picked `Counter` was telling the
+              engine what to do in the fifteen per cent of the fight he spent on his feet, and
+              nothing at all about the other eighty-five. Measured, the seven approaches moved
+              a striker's time at distance between 133 and 143 seconds of 900. This moves it.
+
+              Stated as a cost on both sides, like the risk slider above it, because the whole
+              point is that it is a *decision* — sprawling on every feint is not free, and it is
+              worthless against a man who was never going to shoot.
+            */}
+            <h3 className="section-title" style={{ marginTop: 'var(--space-4)' }}>
+              Where you want it
+            </h3>
+            <label style={{ display: 'block' }}>
+              <span className="row" style={{ justifyContent: 'space-between' }}>
+                <span>{intentLabel(groundIntent)}</span>
+                <span className="numeric muted">{Math.round(groundIntent * 100)}</span>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(groundIntent * 100)}
+                aria-label="Where you want the fight"
+                aria-valuetext={`${intentLabel(groundIntent)}. ${intentDescription(groundIntent)}`}
+                onChange={(e) => {
+                  const next = Number(e.target.value) / 100;
+                  setGroundIntent(next);
+                  persist({ groundIntent: next });
+                }}
+                style={{ width: '100%', accentColor: 'var(--accent)' }}
+              />
+            </label>
+            <p className="faint" style={{ fontSize: 'var(--text-sm)' }}>
+              {intentDescription(groundIntent)}
+            </p>
+            {planMismatch ? (
+              <Alert tone="warn" title={planMismatch.title}>
+                {planMismatch.body}
+              </Alert>
+            ) : null}
+
+            {/*
               What money can buy for this camp.
 
               `PURCHASES` was a price list in the engine with no callers and no effects, which
@@ -803,6 +882,10 @@ export function CampScreen() {
             <strong>
               {APPROACH_META[approach].label} · {riskLabel(risk).toLowerCase()}
             </strong>
+          </li>
+          <li className="row" style={{ justifyContent: 'space-between' }}>
+            <span className="muted">Where</span>
+            <strong>{intentLabel(groundIntent)}</strong>
           </li>
           <li className="row" style={{ justifyContent: 'space-between' }}>
             <span className="muted">Drilled</span>
@@ -1010,6 +1093,79 @@ function ExposureLine({
  * corner would actually use, and the description names the trade in both directions so the
  * slider reads as a decision with a cost rather than a difficulty setting.
  */
+/**
+ * Where the fight happens, in words.
+ *
+ * Mirrors `riskLabel` deliberately: two sliders on the same screen that read differently are
+ * two sliders the player treats as unrelated, and these are the two halves of one decision.
+ */
+function intentLabel(intent: number): string {
+  if (intent < 0.2) return 'Keep it standing';
+  if (intent < 0.4) return 'Stay off the floor';
+  if (intent < 0.6) return 'Fight what turns up';
+  if (intent < 0.8) return 'Look for the takedown';
+  return 'Put it on the floor';
+}
+
+function intentDescription(intent: number): string {
+  if (intent < 0.2) {
+    return 'Sprawl on everything, fight the hands, wall-walk the second you hit the mat. You will not take anybody down, you will not sit down on your shots, and you will be watching for the level change rather than the counter.';
+  }
+  if (intent < 0.4) {
+    return 'Wary of the shot. A little harder to put down and a little quicker back up, at some cost to what your own shots carry.';
+  }
+  if (intent < 0.6) {
+    return 'No preference. You fight the fight that breaks out.';
+  }
+  if (intent < 0.8) {
+    return 'Change levels when it is there. More entries, and a little less in the air while you look for them.';
+  }
+  return 'Chase the takedown and stay on top of them. Your volume goes, and every failed entry is a chance for them to meet you coming in.';
+}
+
+/**
+ * The plan arguing with itself, said out loud before the player commits to it.
+ *
+ * The camp screen's promise is a *considered* decision, and the two commonest ways to get this
+ * axis wrong are both invisible from the controls: telling a fighter with no grappling to go
+ * looking for the floor, and spending a camp bracing for a takedown from a man who does not
+ * shoot. The second is the more expensive of the two and the harder to see — `prepValue`
+ * already refuses to pay out on a read the opponent does not carry, and this axis has the same
+ * asymmetry with no equivalent warning attached.
+ *
+ * A warning, never a block. The player is allowed to be wrong on purpose.
+ */
+function planMismatchOf(input: {
+  intent: number;
+  fighter: Fighter;
+  opponent: Fighter | undefined;
+  /** The scouted takedown threat, 0–1 — an estimate, so it is quoted as one. */
+  shootThreat: number | undefined;
+}): { title: string; body: string } | undefined {
+  const { intent, fighter, opponent, shootThreat } = input;
+  const lean = strikeLean(fighter);
+
+  if (intent >= 0.7 && lean > 0.6) {
+    return {
+      title: 'This is not your fight',
+      body: 'You are asking a striker to go looking for the floor. Every entry you chase is volume you did not put in the air, and the man you take down is the man you then have to hold.',
+    };
+  }
+  if (intent <= 0.3 && lean < 0.4) {
+    return {
+      title: 'You are giving up your best phase',
+      body: 'Your game is on the mat and this plan refuses to go there. You keep the fight where they are better than you and pay for the privilege.',
+    };
+  }
+  if (intent <= 0.3 && opponent && shootThreat !== undefined && shootThreat < 0.4) {
+    return {
+      title: 'They may not shoot at all',
+      body: `Nothing in the report says ${opponent.lastName} wants this on the floor. A camp spent sprawling against a man who never changes levels is a camp spent on nothing — and you will still pay for it in what your shots carry.`,
+    };
+  }
+  return undefined;
+}
+
 function riskLabel(risk: number): string {
   if (risk < 0.2) return 'Stay safe';
   if (risk < 0.4) return 'Measured';

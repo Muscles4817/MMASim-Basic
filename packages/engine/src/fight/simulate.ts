@@ -15,7 +15,14 @@ import { createRng, type Rng } from '../core/rng.js';
 import type { FighterId } from '../core/ids.js';
 import type { Fighter, FinishMethod } from '../domain/fighter.js';
 import type { GamePlan, ReadKey } from '../domain/gameplan.js';
-import { PREP_MAX_BONUS, defaultGamePlan, normaliseGamePlan, prepValue, riskProfile } from '../domain/gameplan.js';
+import {
+  PREP_MAX_BONUS,
+  defaultGamePlan,
+  normaliseGamePlan,
+  phaseProfile,
+  prepValue,
+  riskProfile,
+} from '../domain/gameplan.js';
 import type { Judge, Referee } from '../domain/officials.js';
 import { defaultJudges, defaultReferee } from '../domain/officials.js';
 import { traitMul } from '../domain/traits.js';
@@ -673,6 +680,21 @@ function resolveDistance(
 ): ExchangeOutcome {
   const { rng, state, emit } = ctx;
   const plan = actor.plan;
+  const phase = phaseProfile(plan.groundIntent);
+  /*
+   * The other man's sprawl, as the actor sees it — and the term that makes "keep it standing"
+   * buy standing time rather than merely scrappier takedowns.
+   *
+   * Without it, a striker who sprawls on everything stuffed a third more shots and spent the
+   * same 136 seconds of a 900-second fight on his feet, because the wrestler kept shooting at
+   * the same rate all night and simply landed the same number of the extra attempts. Measured:
+   * takedowns conceded moved 3.25 → 2.92 while distance time moved 136 → 144.
+   *
+   * A corner does not do that. Three shots stuffed in a round is how a wrestler ends up
+   * boxing — so the fighter's *decision* to shoot has to read the same defence the shot
+   * itself will be contested against, and `exploitFactor` was reading the raw attribute.
+   */
+  const theirs = phaseProfile(target.plan.groundIntent);
 
   // Intent weights. Approach shifts them; the fighter's own attributes dominate; and a
   // switched-on fighter leans toward whatever their opponent cannot deal with.
@@ -688,15 +710,17 @@ function resolveDistance(
   const takedownW =
     fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
     approachWeight(plan.approach, 'takedown') *
+    phase.entry *
     // How often they shoot, which is what `takedownRate` means. It was on the takedown contest
     // instead — better shots rather than more of them — and no trait in the game set it, so the
     // hook had a reader and no writer for as long as it has existed (docs/19 §9a).
     traitMul(actor.fighter.traits, 'takedownRate') *
-    exploitFactor(actor, actor.attrs.wrestling, target.attrs.takedownDefence);
+    exploitFactor(actor, actor.attrs.wrestling, target.attrs.takedownDefence * theirs.sprawl);
   const clinchW =
     fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) *
     approachWeight(plan.approach, 'clinch') *
-    exploitFactor(actor, actor.derived.clinchOffence, target.derived.clinchDefence);
+    phase.entry *
+    exploitFactor(actor, actor.derived.clinchOffence, target.derived.clinchDefence * theirs.sprawl);
 
   const intent = rng.pickWeighted(
     ['strike', 'kick', 'takedown', 'clinchUp'] as const,
@@ -886,7 +910,9 @@ function resolveStrikeExchange(
     // fighter sitting down on their shots is stationary at the exact moment the counter
     // comes back, which is where fights turn.
     const counterScale =
-      (target.plan.approach === 'counter' ? 0.9 : 0.55) * riskProfile(actor.plan.riskLevel).exposure;
+      (target.plan.approach === 'counter' ? 0.9 : 0.55) *
+      riskProfile(actor.plan.riskLevel).exposure *
+      phaseProfile(actor.plan.groundIntent).exposure;
     /*
      * The counter is thrown with the counter-fighter's own weapons.
      *
@@ -927,7 +953,8 @@ function throwBurst(
     1,
     Math.round(
       rng.int(2, actor.fighter.traits.includes('volumeMachine') ? 7 : 5) *
-        riskProfile(actor.plan.riskLevel).output,
+        riskProfile(actor.plan.riskLevel).output *
+        phaseProfile(actor.plan.groundIntent).output,
     ),
   );
   const burst = Math.max(1, Math.round(base * scale * workRate(actor, false)));
@@ -1203,6 +1230,10 @@ function resolveTakedown(
   const defence =
     fatiguedEffect(target.attrs.takedownDefence, 'takedownDefence', target.fatigue) *
     (1 + bonus) *
+    // A fighter who came in to keep this standing sprawls on the first level change rather than
+    // the third. Bought by giving up their own entries, by being more open to the counter, and
+    // by the tank — see `phaseProfile`.
+    phaseProfile(target.plan.groundIntent).sprawl *
     // Chewed-up legs are a chewed-up base. This is the payoff for a calf-kick game plan.
     legImpairment(target) *
     (target.hurtSeconds > 0 ? 0.5 : 1);
@@ -1331,8 +1362,10 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
      * the position rather than multiplied by it.
      */
     const clinchAppetite = approachWeight(actor.plan.approach, 'clinch');
+    const escape = phaseProfile(actor.plan.groundIntent).escape;
     const breakW =
-      fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) / clinchAppetite;
+      (fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) / clinchAppetite) *
+      escape;
     /*
      * Weighted toward the door, because that is what the sport does: a fighter with their back to
      * the fence is mostly trying to get off it, and the short shots and the reversal are what they
@@ -1370,9 +1403,13 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
       return { seconds: rng.int(6, 12) };
     }
 
-    const escape = fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue);
+    // Damped here and off the floor, because wanting to be standing is not a grappling rating:
+    // the whole of the intent moves *how often they try to leave*, and less than that moves
+    // whether it works.
+    const breakOut =
+      fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) * escape ** 0.85;
     const hold = fatiguedEffect(target.derived.clinchOffence, 'strength', target.fatigue);
-    if (rng.chance(escape / (escape + hold))) {
+    if (rng.chance(breakOut / (breakOut + hold))) {
       state.position = 'distance';
       state.clinchControl = undefined;
       state.stalledSeconds = 0;
@@ -1427,9 +1464,11 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
   if (onTop) return resolveGroundTop(ctx, actor, target);
 
   // Bottom: get up, sweep, or attack a submission off the back foot.
+  const urgency = phaseProfile(actor.plan.groundIntent).escape;
   const getUpW =
     fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
     legImpairment(actor) *
+    urgency *
     (1 - GROUND_DOMINANCE[state.groundPosition] * 0.7);
   const sweepW = fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * 0.6;
   const subW =
@@ -1448,6 +1487,8 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
   const escape =
     fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
     legImpairment(actor) *
+    // Only on the way up. A fighter who wanted the floor is not held there *less* for sweeping.
+    (intent === 'standUp' ? urgency ** 0.85 : 1) *
     (1 - GROUND_DOMINANCE[state.groundPosition] * 0.5);
   const hold =
     fatiguedEffect(target.attrs.groundControl, 'groundControl', target.fatigue) * (1 + bonus);

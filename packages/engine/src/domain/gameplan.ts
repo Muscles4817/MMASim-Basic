@@ -220,6 +220,16 @@ export interface GamePlan {
   targeting: Record<StrikeTarget, number>;
   /** 0 (risk-averse) to 1 (reckless). Trades damage output against damage taken. */
   riskLevel: number;
+  /**
+   * 0 (keep it standing at all costs) to 1 (put it on the floor and keep it there).
+   *
+   * The plan's second axis, and the one `approach` never had. See {@link phaseProfile}.
+   *
+   * Optional because a `GamePlan` outlives the process that made it — a booking saved before
+   * this existed carries no value — and `phaseProfile` reads 0.5 for `undefined`, which is
+   * exactly the behaviour that save already had.
+   */
+  groundIntent?: number;
   preppedReads: readonly PreppedRead[];
   /** 0–1 overall camp quality. Scales every prep bonus. */
   campQuality: number;
@@ -231,6 +241,7 @@ export function defaultGamePlan(): GamePlan {
     approach: 'pressure',
     targeting: { head: 0.6, body: 0.25, legs: 0.15 },
     riskLevel: 0.5,
+    groundIntent: NEUTRAL_GROUND_INTENT,
     preppedReads: [],
     campQuality: 0.5,
   };
@@ -247,6 +258,7 @@ export function normaliseGamePlan(plan: GamePlan): GamePlan {
     ...plan,
     targeting: normaliseTargeting(plan.targeting),
     riskLevel: clamp01(plan.riskLevel),
+    groundIntent: clamp01(plan.groundIntent ?? NEUTRAL_GROUND_INTENT),
     campQuality: clamp01(plan.campQuality),
     preppedReads: plan.preppedReads.slice(0, MAX_PREPPED_READS),
   };
@@ -346,5 +358,102 @@ export function riskProfile(riskLevel: number): RiskProfile {
     exposure: 1 + r * 0.20,
     exertion: 1 + r * 0.08,
     output: 1 + r * 0.30,
+  };
+}
+
+// --- Where the fight happens --------------------------------------------------------------
+
+/**
+ * The neutral setting: every multiplier in {@link phaseProfile} is exactly 1.0.
+ *
+ * A plan with no `groundIntent` — an old save, an AI filler bout, `defaultGamePlan` — behaves
+ * exactly as it did before this axis existed.
+ */
+export const NEUTRAL_GROUND_INTENT = 0.5;
+
+/**
+ * What `groundIntent` does in a fight, and why `approach` could not do it.
+ *
+ * `approach` is a table of **offensive intents**: it says what a fighter reaches for when they
+ * have the initiative. Every row of it — `pressure`, `counter`, `finish` — answers "what do I
+ * throw", and not one of them answers "where is this fight happening". So a striker who picks
+ * `counter` is not saying *keep it standing*; they are saying *when I am standing, counter*.
+ *
+ * Measured, that is the whole of the player's complaint. An 84-striking, 38-wrestling striker
+ * across from a wrestler spent **138 of 900 seconds at distance and 368 being controlled**, and
+ * the seven approaches moved that number between 133 and 143. The one decision the player most
+ * wants to make about a fight — *which fight is this going to be* — was the one the plan did not
+ * carry, on either side of it: nothing in `approach` reads on the takedown they are defending,
+ * on the tie-up they are trying to leave, or on the floor they are trying to get up off.
+ *
+ * Six effects, and **four of them are one-sided**. That asymmetry is the whole design, and it was
+ * arrived at by watching symmetric versions fail.
+ *
+ * **The lever.** `entry` is how hard they look for the takedown and the tie-up themselves, and it
+ * is the only term that moves both ways — wanting the floor and refusing it are genuinely
+ * opposite intents. `sprawl` is what their takedown defence is worth when somebody shoots on
+ * them, and `escape` is how urgently they leave the fence and the floor. Both are bought only by
+ * the fighter *refusing* the floor:
+ *
+ *  - A wrestler who commits to taking you down is still a wrestler when you shoot back. Making
+ *    `sprawl` symmetric took 18% off every world grappler's takedown defence and flattened the
+ *    striker/grappler control-time gap `styles.test.ts` G1 protects.
+ *  - And **nobody wants to be underneath.** Wanting the fight on the floor is not the same as
+ *    wanting to be on the bottom of it; a symmetric `escape` had wrestlers content to lie there,
+ *    which is not a style, it is a bug with a rationale.
+ *
+ * `escape` is intent rather than ability, which is why `simulate.ts` gives the whole of it to the
+ * intent weights and a damped power of it to the contests. A fighter who insists on staying up
+ * gets up more often *because he is trying to*, on exactly the same scrambling rating.
+ *
+ * **The price.** `output` is charged only to the fighter chasing the floor: he throws less
+ * because he is shooting. `exposure` and `exertion` are charged to both, because deciding the
+ * shape of a fight in advance means not reading the man in front of you, and holding a decision
+ * against what the fight wants to be is work.
+ *
+ * **There is deliberately no flat tax on the refusing half, and four attempts to add one is how
+ * that was learned.** Charging `output`, `commitment` or `exertion` against it each cancelled
+ * exactly what the plan was buying — less volume and softer shots undo the striking fight, and
+ * faster fatigue degrades, through `fatiguedEffect`, the very takedown defence the plan was
+ * bought for. A penalty that compounds against its own lever is not a price. What makes this a
+ * decision is structural: picking the wrong end means choosing to fight in the phase where the
+ * other man is better, and `ground-intent.test.ts` measures that at 15 to 21 points of win rate
+ * for a striker who asks for the floor and 13 for a wrestler who refuses it. Against that, the
+ * cost of guessing your opponent wrong is small on purpose — half a point — because the *shape*
+ * of the fight still changes enormously either way, and that is what the dial is for.
+ *
+ * Deliberately modest coefficients, for the same reason `riskProfile`'s are. `sprawl` divides
+ * into a contest that already runs through the convex effect curve, and `escape` compounds with
+ * itself every time a fighter stands back up, so a large number here does not produce a stronger
+ * decision — it produces a dominant one.
+ */
+export interface PhaseProfile {
+  /** Multiplier on how hard this fighter looks for the takedown and the tie-up. */
+  entry: number;
+  /** Multiplier on their takedown defence when somebody shoots on them. */
+  sprawl: number;
+  /** Multiplier on how urgently they leave the fence and the floor. */
+  escape: number;
+  /** Multiplier on how much they throw. Chasing the takedown costs volume. */
+  output: number;
+  /** Multiplier on the opponent's counter opportunity against them. */
+  exposure: number;
+  /** Multiplier on the fatigue cost of working. Deciding the shape in advance is work. */
+  exertion: number;
+}
+
+export function phaseProfile(groundIntent: number | undefined): PhaseProfile {
+  // −1 at "keep it standing", 0 at neutral, +1 at "put it on the floor".
+  const r = clamp01(groundIntent ?? NEUTRAL_GROUND_INTENT) * 2 - 1;
+  const committed = Math.abs(r);
+  const refusing = Math.max(0, -r);
+  const chasing = Math.max(0, r);
+  return {
+    entry: 1 + r * 0.4,
+    sprawl: 1 + refusing * 0.5,
+    escape: 1 + refusing * 0.7,
+    output: 1 - chasing * 0.16,
+    exposure: 1 + committed * 0.3,
+    exertion: 1 + committed * 0.1,
   };
 }

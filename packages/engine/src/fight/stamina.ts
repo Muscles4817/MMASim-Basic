@@ -11,7 +11,7 @@
  */
 
 import { clamp, clamp01 } from '../core/math.js';
-import { riskProfile } from '../domain/gameplan.js';
+import { phaseProfile, riskProfile } from '../domain/gameplan.js';
 import { traitMul } from '../domain/traits.js';
 import { effect } from '../ratings/curve.js';
 import { bodyDrag } from './damage.js';
@@ -59,6 +59,9 @@ export function accrueFatigue(c: Combatant, ctx: FatigueContext): void {
     // Swinging hard is expensive. The third leg of the `riskLevel` trade: recklessness buys
     // power now and pays for it in the championship rounds.
     riskProfile(c.plan.riskLevel).exertion *
+    // And so is deciding in advance where the fight goes — sprawling on every feint, or chasing
+    // the tie-up all night, both cost more than fighting whatever turns up.
+    phaseProfile(c.plan.groundIntent).exertion *
     (1 / cardio);
 
   c.fatigue = clamp01(c.fatigue + delta);

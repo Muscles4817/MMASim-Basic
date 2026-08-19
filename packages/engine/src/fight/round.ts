@@ -250,6 +250,26 @@ const SUBMISSION_REPEAT_DECAY = 0.4;
  * whether it stays imposed once it is. A wrestler who cannot hold produces scrambles, not control.
  */
 function controlShare(a: Combatant, d: Combatant): number {
+  /*
+   * **`groundIntent` is deliberately not read here, and the attempt to read it is why.**
+   *
+   * The obvious wiring — divide `push` by the other man's `sprawl` and `hold` by his `escape` —
+   * is directionally right and measured *backwards*. Against the same wrestler, a striker who
+   * refuses the floor moved this level's control share 0.570 → 0.590 while `simulate.ts` moved
+   * it 0.658 → 0.639, and his win rate here fell where it rose there. The reason is structural:
+   * control at this level is a clamped share of a round rather than a sequence of positions, so
+   * a fighter who is already near `MAX_CONTROL_PER_FIGHTER` absorbs a 30% cut to both terms
+   * without moving, while the second-order effects — a longer fight, a different finish rate —
+   * do move. A term that survives only where it does not matter is not fidelity.
+   *
+   * So this joins `approach` on the list of things the Reduced level does not model, which is
+   * the honest place for it. One term does still reach here — `exertion`, through the shared
+   * `accrueFatigue` — so a fighter at an extreme setting pays a sliver of the price at this level
+   * without collecting the benefit, worth about two points of win rate at ±0.5. That is a real
+   * asymmetry and it is bounded where it matters: `planFor` keeps every AI corner within ±0.06 of
+   * neutral, where `exertion` is 1.012, and a player-orbit fight is resolved at Full, which is
+   * where the dial the player actually set lives.
+   */
   const wants = clamp01(
     (a.tendencies.singleLeg +
       a.tendencies.doubleLeg +

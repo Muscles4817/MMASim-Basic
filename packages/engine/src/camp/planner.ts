@@ -141,6 +141,65 @@ function pickRisk(fighter: Fighter): number {
 }
 
 /**
+ * Where this corner wants the fight, on the axis `approach` does not carry.
+ *
+ * `approach` says what the fighter reaches for; `groundIntent` says whether they will accept the
+ * other fight at all. The AI needs both, or every world fighter fights on the neutral setting and
+ * the player is the only person in the sport who can decide to sprawl.
+ *
+ * Two terms. The approach sets the *sign* — a wrestler wants the floor, a counter-striker does
+ * not — and the fighter's own hole sets the *conviction*: a striker with 40 takedown defence is
+ * the man in the gym who spends all camp on it, because he is the man it will cost the fight.
+ *
+ * Kept inside a **narrow** band, like `pickRisk` and for a sharper reason than `pickRisk` has.
+ * The extremes belong to the player, who is choosing them against a named opponent and paying for
+ * the choice knowingly; the world gets a lean. Two measurements set the width, and the second was
+ * the surprise:
+ *
+ *  1. **Style separation.** Give the world the full range and strikers who sprawl are held less
+ *     while grapplers who are sprawled on hold less, so the two families converge on control
+ *     time — the axis `styles.test.ts` G1 uses to tell them apart.
+ *  2. **The sport's economy.** At ±0.24 from neutral, regional promotions' mean budget growth over
+ *     a decade ran **0.167 against 0.043 before this axis existed**, measured over twelve start
+ *     days, while the leader's was unchanged at 0.25. The bottom of the sport was quietly getting
+ *     comfortable, which `promotion-costs.test.ts` exists to prevent. At ±0.12 it reads 0.043 —
+ *     the same number, to three places — and the styles count is unchanged at three G1 pairs.
+ *
+ * So the wide band bought no measurable expressiveness and moved a decade of world economics.
+ * Half of it costs nothing and does the same job.
+ */
+function pickGroundIntent(
+  fighter: Fighter,
+  opponent: Fighter,
+  approach: GamePlan['approach'],
+): number {
+  const a = fighter.attributes;
+  const o = opponent.attributes;
+
+  const base: Record<GamePlan['approach'], number> = {
+    pressure: 0.495,
+    counter: 0.48,
+    wrestle: 0.56,
+    grind: 0.55,
+    pointFight: 0.49,
+    submit: 0.555,
+    finish: 0.49,
+  };
+
+  /*
+   * How badly the other man's game threatens the fight this one wants.
+   *
+   * A striker across from a wrestler leans harder on keeping it up than the same striker across
+   * from another striker — which is the read a corner actually makes, and it means the dial moves
+   * per opponent rather than being a second fingerprint.
+   */
+  const threat = clamp01(remap(deriveRatings(o).chainWrestling - a.takedownDefence, -10, 35, 0, 1));
+  const wantsUp = base[approach] < 0.5;
+
+  return clamp(base[approach] + (wantsUp ? -0.035 : 0.015) * threat, 0.45, 0.6);
+}
+
+/**
  * What an average fighter's tendency for each read looks like, as a shape rather than a level.
  *
  * `pickReads` divides by this, and the first cut of that function did not — which produced a
@@ -212,10 +271,12 @@ function pickReads(opponent: Fighter, count: number): ReadKey[] {
  * is what the whole statistical tier rests on.
  */
 export function planFor(fighter: Fighter, opponent: Fighter): GamePlan {
+  const approach = pickApproach(fighter, opponent);
   return {
-    approach: pickApproach(fighter, opponent),
+    approach,
     targeting: pickTargeting(fighter, opponent),
     riskLevel: pickRisk(fighter),
+    groundIntent: pickGroundIntent(fighter, opponent, approach),
     campQuality: AI_CAMP_QUALITY,
     preppedReads: pickReads(opponent, AI_READS).map((read) => ({
       read,
