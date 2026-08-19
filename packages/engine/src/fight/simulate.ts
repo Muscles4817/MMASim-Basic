@@ -30,8 +30,10 @@ import {
 import {
   createCombatant,
   effectiveComposure,
+  kickLean,
   momentumMultiplier,
   roundBiasMultiplier,
+  targetMix,
   type Combatant,
 } from './profile.js';
 import {
@@ -49,6 +51,7 @@ import {
   GROUND_DOMINANCE,
   GROUND_POSITIONS,
   OTHER_CORNER,
+  STRIKE_TARGETS,
   emptyStats,
   type Corner,
   type DamageReport,
@@ -772,77 +775,6 @@ function approachWeight(approach: GamePlan['approach'], action: string): number 
 }
 
 /**
- * The average fighter's targeting habit, as a shape rather than a level.
- *
- * `pickTarget` divides by this, which is what makes the change it implements a **shape-only**
- * change: a fighter whose habits match the roster's average aims exactly where the engine already
- * had them aiming, and only a deviation from the average bends the plan. Without it, the arbitrary
- * constants inside the tendency formulas — `bodyWork`'s 0.9 against `headKick`'s 0.85 — would leak
- * into the population's damage distribution, because those numbers were written as independent
- * propensities for a scouting report and were never a distribution over anything.
- *
- * Measured over both shipped rosters, mean-normalised so it is level-free, then divided by the
- * split the engine produced before this existed (60/25/15 with half the leg shots redirected
- * upstairs, so effectively 65/27/7.5):
- *
- * ```
- *          head   body   legs        → divided through
- * 2020    1.190  1.310  0.500          1.09  1.20  1.00
- * 2026    1.151  1.391  0.458          1.06  1.28  0.92
- * ```
- *
- * Two rosters that differ enormously in level — 139 hand-authored fighters against 858 — agree on
- * the shape to within a few per cent, which is what makes a baked constant a measurement rather
- * than a fit. The midpoint is used, and being wrong by the width of that disagreement moves the
- * population's leg share by well under a point.
- */
-const NEUTRAL_HABIT: Readonly<Record<StrikeTarget, number>> = { head: 1.08, body: 1.24, legs: 0.96 };
-
-/**
- * Where this shot is going: the corner's plan, bent by the fighter's own habits.
- *
- * This read only the plan, which made *where a fighter aims* a property of their game plan and
- * never of their art — the one column that was flat by construction at the phase 0 baseline
- * (docs/19 §7.2), and every AI fight in the game uses the same default plan (doc 18 §2.5).
- *
- * The plan still sets the shape and the population still lands where it landed before. What the
- * fighter adds is *deviation*: a headhunter with a third of the body work aims high more than the
- * corner asked, a karateka goes low twice as often as a boxer, and a fighter whose legs have been
- * chewed up stops aiming at legs at all. That is also what keeps this out of the double-count §5
- * rejects — `plan.targeting` is not attribute-derived, so an attribute enters the decision once,
- * and what the tendencies add on top is the trait layer and `fightIq`, which targeting could not
- * see at all before.
- *
- * `legs` carries `kickLean` because going low means throwing a kick, so whether a fighter aims
- * there is a question about their feet — including a tired fighter's feet and a chewed-up base,
- * both live in `kickLean`. That gate used to sit one level down in `pickShot`, which redirected a
- * leg shot upstairs when the fighter could not kick; it is here now because deciding where to aim
- * and deciding what to throw are the same decision, and splitting them read `kicking` twice.
- */
-function pickTarget(rng: Rng, actor: Combatant): StrikeTarget {
-  const plan = actor.plan.targeting;
-  const t = actor.tendencies;
-
-  // `counterRight` rather than `leadHook` for the hand half, deliberately: `leadHook` carries
-  // `strikeLean`, which reads the grappling attributes, and a fighter's wrestling has no business
-  // deciding where their punches go. Measured, that channel was worth 4 points of win rate to a
-  // 98-`wrestling` fighter — a grappling attribute paying out through the striking targeting
-  // table, which is exactly the kind of borrowed effect this phase is supposed to remove.
-  const habit: Record<StrikeTarget, number> = {
-    head: (t.counterRight + t.headKick) / 2,
-    body: t.bodyWork,
-    legs: t.calfKick * kickLean(actor),
-  };
-  const mean = (habit.head + habit.body + habit.legs) / 3;
-  if (mean <= 0) return rng.pickWeighted(['head', 'body', 'legs'] as const, (k) => plan[k]);
-
-  return rng.pickWeighted(
-    ['head', 'body', 'legs'] as const,
-    (k) => plan[k] * (habit[k] / mean / NEUTRAL_HABIT[k]),
-  );
-}
-
-/**
  * The open-stance edge, as a multiplier on the landing contest.
  *
  * `Fighter.stance` was stored, hand-authored on the real fighters in both seed rosters, rendered
@@ -889,12 +821,6 @@ function stanceEdge(actor: Combatant, target: Combatant): number {
  * sits at 0.5 and a pure kicker near 0.8; chewed-up legs drag it toward the hands, which is the
  * other half of what a calf-kick game plan buys.
  */
-function kickLean(c: Combatant): number {
-  const hands = fatiguedEffect(c.attrs.strikingOffence, 'strikingOffence', c.fatigue);
-  const feet = fatiguedEffect(c.attrs.kicking, 'kicking', c.fatigue) * legImpairment(c);
-  return clamp01(feet / Math.max(1e-6, feet + hands));
-}
-
 /**
  * What this shot is thrown with, chosen *together* with where it is going.
  *
@@ -913,7 +839,8 @@ function pickShot(
   actor: Combatant,
   prefersKick: boolean,
 ): { target: StrikeTarget; weapon: Weapon } {
-  const target = pickTarget(rng, actor);
+  const mix = targetMix(actor);
+  const target = rng.pickWeighted(STRIKE_TARGETS, (k) => mix[k]);
   const lean = kickLean(actor);
 
   /*

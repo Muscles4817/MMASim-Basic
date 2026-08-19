@@ -13,7 +13,14 @@
  */
 
 import { useState } from 'react';
-import { ERAS, type EraId, type SaveSummary } from '@mmasim/data';
+import {
+  DEFAULT_WORLD_SIZE,
+  ERAS,
+  WORLD_SIZE_META,
+  type EraId,
+  type SaveSummary,
+  type WorldSize,
+} from '@mmasim/data';
 import { Button, Card, Empty, Segmented } from '../ui';
 import { Alert } from '../ui/signals';
 import { formatGameDay } from '../shell/Shell';
@@ -27,11 +34,19 @@ export function MenuScreen({
 }: {
   saves: readonly SaveSummary[];
   onContinue(save: SaveSummary): void;
-  onNew(era: EraId, name: string): void;
+  onNew(era: EraId, name: string, size?: WorldSize): void;
   onDelete(id: string): void;
 }) {
-  const [era, setEra] = useState<EraId>(ERAS[0]!.id);
+  /*
+   * Generation is the default and the eras are the alternative, which is the way round doc 27 § 1.2
+   * argues for: the seeded worlds are a testing artifact and, later, the shape the mod space fills.
+   * A new player should get a world nobody has played before, not a snapshot of a real sport this
+   * game cannot legally ship.
+   */
+  const [world, setWorld] = useState<'generated' | EraId>('generated');
+  const [size, setSize] = useState<WorldSize>(DEFAULT_WORLD_SIZE);
   const [confirmingDelete, setConfirmingDelete] = useState<string | undefined>();
+  const sizeMeta = WORLD_SIZE_META.find((s) => s.id === size) ?? WORLD_SIZE_META[1]!;
   const mostRecent = saves[0];
 
   return (
@@ -71,14 +86,57 @@ export function MenuScreen({
           */}
           <Segmented
             label="Which world"
-            value={era}
-            onChange={setEra}
-            options={ERAS.map((e) => ({ value: e.id, label: e.name.split(' — ')[0]! }))}
+            value={world}
+            onChange={setWorld}
+            options={[
+              { value: 'generated' as const, label: 'Generated' },
+              ...ERAS.map((e) => ({ value: e.id, label: e.name.split(' — ')[0]! })),
+            ]}
           />
           <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
-            {ERAS.find((e) => e.id === era)?.blurb}
+            {world === 'generated'
+              ? 'A sport nobody has played before — promotions, fighters and eight years of history, built from a seed. Every save is a different world.'
+              : ERAS.find((e) => e.id === world)?.blurb}
           </p>
-          <Button variant="primary" block onClick={() => onNew(era, defaultSaveName(saves, era))}>
+
+          {world === 'generated' && (
+            <>
+              <Segmented
+                label="How big"
+                value={size}
+                onChange={setSize}
+                options={WORLD_SIZE_META.map((s) => ({ value: s.id, label: s.name }))}
+              />
+              <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
+                {sizeMeta.blurb}
+              </p>
+              {/*
+                The warning is on the size rather than in the prose, because it is a different
+                kind of statement: the blurb says what you get and this says what it costs. Doc 27
+                § 10.6 measured a Large world at about half a minute on a desktop, and the phone
+                multiplier behind "several minutes" is an assumption rather than a measurement.
+              */}
+              {sizeMeta.warning && (
+                <p
+                  role="note"
+                  className="prose"
+                  style={{ fontSize: 'var(--text-sm)', color: 'var(--text-warning, #b45309)' }}
+                >
+                  {sizeMeta.warning}
+                </p>
+              )}
+            </>
+          )}
+
+          <Button
+            variant="primary"
+            block
+            onClick={() =>
+              world === 'generated'
+                ? onNew(ERAS[0]!.id, defaultSaveName(saves, 'generated'), size)
+                : onNew(world, defaultSaveName(saves, world))
+            }
+          >
             New game
           </Button>
         </div>
@@ -176,7 +234,12 @@ function describeSave(save: SaveSummary): string {
  * that world rather than the second save you have ever made. It is renamed to the fighter's
  * name the moment there is one.
  */
-function defaultSaveName(saves: readonly SaveSummary[], era: EraId): string {
-  const n = saves.filter((s) => s.era === era).length + 1;
-  return `${era} career${n > 1 ? ` ${n}` : ''}`;
+function defaultSaveName(saves: readonly SaveSummary[], world: EraId | 'generated'): string {
+  const matches =
+    world === 'generated'
+      ? saves.filter((s) => s.size !== undefined)
+      : saves.filter((s) => s.size === undefined && s.era === world);
+  const n = matches.length + 1;
+  const label = world === 'generated' ? 'career' : `${world} career`;
+  return `${label}${n > 1 ? ` ${n}` : ''}`;
 }

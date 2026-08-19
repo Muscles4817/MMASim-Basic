@@ -18,12 +18,12 @@ import { applyRingExperience } from '../progression/development.js';
 import { lessonFrom } from './lessons.js';
 import { overallRating } from '../ratings/attributes.js';
 import { findTraitConflicts, traitMul, type TraitId } from '../domain/traits.js';
-import type { Corner, FightResult } from '../fight/types.js';
+import type { Corner, ReducedFightResult } from '../fight/types.js';
 import { exposureFrom } from '../health/injuries.js';
 import { fightFreshnessCost, freshnessOf, withFreshness } from '../health/freshness.js';
 
 export interface AftermathInput {
-  result: FightResult;
+  result: ReducedFightResult;
   red: Fighter;
   blue: Fighter;
   day: GameDay;
@@ -290,7 +290,7 @@ function methodFor(method: FinishMethod, drew: boolean): FinishMethod {
  * early finish and nobody remembers a fight they were knocked out of by how the first round was
  * scored.
  */
-function scoreMarginFor(result: FightResult, corner: Corner): number | undefined {
+function scoreMarginFor(result: ReducedFightResult, corner: Corner): number | undefined {
   if (!isDecisionMethod(result.method) && result.method !== 'draw') return undefined;
   const cards = result.scorecards.filter((card) => card.rounds.length > 0);
   if (cards.length === 0) return undefined;

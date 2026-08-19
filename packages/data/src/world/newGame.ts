@@ -71,15 +71,22 @@ export function createNewGame(options: NewGameOptions = {}): GameDb {
    * a custom world could differ by more again.
    */
   const divisionTargets: Record<string, number> = {};
+  const rosterTargets: Record<string, number> = {};
   for (const row of db.fighters.findAll()) {
-    const fighter = row as { divisionId?: string; retiredDay?: number };
-    if (!fighter.divisionId || fighter.retiredDay !== undefined) continue;
-    divisionTargets[fighter.divisionId] = (divisionTargets[fighter.divisionId] ?? 0) + 1;
+    const fighter = row as { divisionId?: string; promotionId?: string; retiredDay?: number };
+    if (fighter.retiredDay !== undefined) continue;
+    if (fighter.divisionId) {
+      divisionTargets[fighter.divisionId] = (divisionTargets[fighter.divisionId] ?? 0) + 1;
+    }
+    if (fighter.promotionId) {
+      rosterTargets[fighter.promotionId] = (rosterTargets[fighter.promotionId] ?? 0) + 1;
+    }
   }
 
   setWorld(db, {
     day: seed.day,
     divisionTargets,
+    rosterTargets,
     seed: options.seed ?? `mmasim-${era}`,
     era,
     playerRole: options.playerRole,
@@ -135,8 +142,7 @@ function repairContractMismatch(db: GameDb): void {
     if (!fighter.agreementId) continue;
 
     const agreement = db.agreements.findById(fighter.agreementId) as
-      | (Entity & { promotionId?: string })
-      | undefined;
+      (Entity & { promotionId?: string }) | undefined;
     if (!agreement?.promotionId) continue;
     if (agreement.promotionId === fighter.promotionId) continue;
 
@@ -160,4 +166,3 @@ function backfillCommentators(db: GameDb): void {
   db.commentators.upsertMany(buildSeedWorld().commentators as unknown as (Commentator & Entity)[]);
   db.save();
 }
-

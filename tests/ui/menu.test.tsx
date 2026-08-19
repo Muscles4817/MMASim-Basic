@@ -58,16 +58,39 @@ describe('landing on the menu', () => {
     expect(screen.queryByRole('button', { name: /^Continue$/i })).toBeNull();
   });
 
-  it('offers both worlds, and says what is different about them', () => {
+  it('offers a generated world by default, with the seeded eras as the alternative', async () => {
     /*
-     * The era is a choice about which world rather than a difficulty setting, so the menu has
-     * to state what actually differs. `Segmented` renders its hints visibly, which is the only
-     * reason this reads as a decision rather than two words.
+     * Which world is a choice rather than a difficulty setting, so the menu has to state what
+     * actually differs. `Segmented` renders its hints visibly, which is the only reason this
+     * reads as a decision rather than three words.
+     *
+     * **Generated is the default**, which is doc 27 § 1.2's argument the right way round: a new
+     * player should get a sport nobody has played before rather than a snapshot of a real one this
+     * game cannot legally ship. The seeded eras stay, as a testing artifact and later as the shape
+     * the mod space fills.
      */
+    const user = userEvent.setup();
     renderApp();
+    expect(screen.getByRole('radio', { name: /generated/i })).toBeTruthy();
     expect(screen.getByRole('radio', { name: /2026/i })).toBeTruthy();
     expect(screen.getByRole('radio', { name: /2020/i })).toBeTruthy();
+    expect(screen.getByText(/nobody has played before/i)).toBeTruthy();
+
+    // And the era's own blurb when you ask for one.
+    await user.click(screen.getByRole('radio', { name: /2026/i }));
     expect(screen.getByText(/Real promotions and real fighters/i)).toBeTruthy();
+  });
+
+  it('offers a size, and warns about the one that needs warning about', async () => {
+    // Doc 27 § 10.6 measured Large at about half a minute on a desktop. Telling somebody after
+    // they have pressed the button is not telling them.
+    const user = userEvent.setup();
+    renderApp();
+    expect(screen.getByRole('radio', { name: /^small$/i })).toBeTruthy();
+    expect(screen.queryByRole('note')).toBeNull();
+
+    await user.click(screen.getByRole('radio', { name: /^large$/i }));
+    expect(screen.getByRole('note').textContent).toMatch(/half a minute/i);
   });
 
   it('is honest about where the save lives', () => {
@@ -124,12 +147,24 @@ describe('starting a game', () => {
   });
 });
 
+/**
+ * Start a game on a **seeded** world rather than a generated one.
+ *
+ * The menu's default is a generated world, which is eight simulated years of sport before anything
+ * renders — right for a player and wrong for a test about save slots. These want *a* game, quickly,
+ * and say so.
+ */
+async function startSeededGame(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('radio', { name: /2020/i }));
+  await user.click(screen.getByRole('button', { name: /New game/i }));
+}
+
 describe('coming back to it', () => {
   it('lists a save you have already started, and lets you continue it', async () => {
     const user = userEvent.setup();
     const first = renderApp();
 
-    await user.click(screen.getByRole('button', { name: /New game/i }));
+    await startSeededGame(user);
     await waitFor(() => expect(listSaves(localStorage)).toHaveLength(1));
 
     // A new session: the save survives, the "which save is open" pointer does not.
@@ -147,13 +182,13 @@ describe('coming back to it', () => {
     const user = userEvent.setup();
     const first = renderApp();
 
-    await user.click(screen.getByRole('button', { name: /New game/i }));
+    await startSeededGame(user);
     await waitFor(() => expect(listSaves(localStorage)).toHaveLength(1));
 
     first.unmount();
     sessionStorage.clear();
     const second = renderApp();
-    await user.click(screen.getByRole('button', { name: /New game/i }));
+    await startSeededGame(user);
     await waitFor(() => expect(listSaves(localStorage)).toHaveLength(2));
 
     second.unmount();
@@ -167,7 +202,7 @@ describe('deleting a save', () => {
   it('does not delete on the first tap', async () => {
     const user = userEvent.setup();
     const first = renderApp();
-    await user.click(screen.getByRole('button', { name: /New game/i }));
+    await startSeededGame(user);
     await waitFor(() => expect(listSaves(localStorage)).toHaveLength(1));
 
     first.unmount();
@@ -181,7 +216,7 @@ describe('deleting a save', () => {
   it('names the save in the confirmation rather than asking “are you sure”', async () => {
     const user = userEvent.setup();
     const first = renderApp();
-    await user.click(screen.getByRole('button', { name: /New game/i }));
+    await startSeededGame(user);
     await waitFor(() => expect(listSaves(localStorage)).toHaveLength(1));
     const name = listSaves(localStorage)[0]!.name;
 
@@ -196,7 +231,7 @@ describe('deleting a save', () => {
   it('deletes on the second, and the save is gone', async () => {
     const user = userEvent.setup();
     const first = renderApp();
-    await user.click(screen.getByRole('button', { name: /New game/i }));
+    await startSeededGame(user);
     await waitFor(() => expect(listSaves(localStorage)).toHaveLength(1));
 
     first.unmount();
@@ -213,7 +248,7 @@ describe('deleting a save', () => {
   it('lets you back out', async () => {
     const user = userEvent.setup();
     const first = renderApp();
-    await user.click(screen.getByRole('button', { name: /New game/i }));
+    await startSeededGame(user);
     await waitFor(() => expect(listSaves(localStorage)).toHaveLength(1));
 
     first.unmount();

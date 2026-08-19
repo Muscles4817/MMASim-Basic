@@ -26,12 +26,15 @@ import {
   nextSaveId,
   openSaveStorage,
   upsertSave,
+  worldSizeMeta,
   type EraId,
   type SaveStorage,
   type SaveSummary,
+  type WorldSize,
 } from '@mmasim/data';
 import { GameProvider } from './GameProvider';
 import { MenuScreen } from '../screens/MenuScreen';
+import { generateWorld } from '../game/newWorld';
 import { Button } from '../ui';
 
 /** Which save is open right now. Session-scoped: a new tab starts at the menu. */
@@ -68,6 +71,22 @@ function readActive(): string | undefined {
 /** The save being opened, and how far that has got. */
 type Session =
   | { status: 'opening'; id: string; era: EraId }
+  /**
+   * Building a generated world, which is seconds of simulated sport rather than a read.
+   *
+   * A distinct status rather than a flag on `opening`, because it is a different promise to the
+   * player: opening is a wait they cannot influence and this is a job with a length. Doc 27 § 10.6
+   * measured it at three seconds for a Small world and twenty-five for a Large one on a desktop.
+   */
+  | {
+      status: 'building';
+      id: string;
+      era: EraId;
+      storage: SaveStorage;
+      size: WorldSize;
+      done: number;
+      label: string;
+    }
   | { status: 'open'; id: string; era: EraId; storage: SaveStorage }
   | { status: 'failed'; id: string; era: EraId; error: Error };
 
@@ -76,13 +95,15 @@ export function SaveGate({ children }: { children: ReactNode }) {
     const store = storage();
     return store ? listSaves(store) : [];
   });
-  const [active, setActive] = useState<{ id: string; era: EraId } | undefined>(() => {
-    const id = readActive();
-    if (!id) return undefined;
-    const store = storage();
-    const found = store ? listSaves(store).find((s) => s.id === id) : undefined;
-    return found ? { id: found.id, era: found.era } : undefined;
-  });
+  const [active, setActive] = useState<{ id: string; era: EraId; size?: WorldSize } | undefined>(
+    () => {
+      const id = readActive();
+      if (!id) return undefined;
+      const store = storage();
+      const found = store ? listSaves(store).find((s) => s.id === id) : undefined;
+      return found ? { id: found.id, era: found.era, size: found.size } : undefined;
+    },
+  );
   const [session, setSession] = useState<Session | undefined>();
 
   /**
@@ -102,9 +123,57 @@ export function SaveGate({ children }: { children: ReactNode }) {
 
     openSaveStorage(namespaceFor(active.id)).then(
       (opened) => {
-        if (current) setSession({ status: 'open', ...active, storage: opened });
         // Lost the race: nothing else will ever read this, so do not leave writes queued.
-        else void opened.flush();
+        if (!current) {
+          void opened.flush();
+          return;
+        }
+
+        /*
+         * A generated world that has not been built yet.
+         *
+         * Probed on the storage rather than trusted from the registry, because reopening a
+         * generated save must *not* rebuild it — the world is already in there, and eight years
+         * of somebody's history would be replaced by eight different years.
+         */
+        const size = active.size;
+        if (size !== undefined && opened.read('world') === undefined) {
+          setSession({
+            status: 'building',
+            ...active,
+            size,
+            storage: opened,
+            done: 0,
+            label: 'Founding the promotions',
+          });
+
+          void generateWorld({
+            size,
+            seed: `${active.id}`,
+            adapter: opened,
+            createdAtIso: new Date().toISOString(),
+            onProgress: ({ done, label }) => {
+              if (current) {
+                setSession((s) => (s?.status === 'building' ? { ...s, done, label } : s));
+              }
+            },
+          }).then(
+            () => {
+              if (current) setSession({ status: 'open', ...active, storage: opened });
+            },
+            (cause: unknown) => {
+              if (!current) return;
+              setSession({
+                status: 'failed',
+                ...active,
+                error: cause instanceof Error ? cause : new Error(String(cause)),
+              });
+            },
+          );
+          return;
+        }
+
+        setSession({ status: 'open', ...active, storage: opened });
       },
       (cause: unknown) => {
         if (!current) return;
@@ -142,14 +211,14 @@ export function SaveGate({ children }: { children: ReactNode }) {
     } catch {
       /* Playable without it; you simply land on the menu after a reload. */
     }
-    setActive({ id: save.id, era: save.era });
+    setActive({ id: save.id, era: save.era, size: save.size });
   }, []);
 
   const create = useCallback(
-    (era: EraId, name: string) => {
+    (era: EraId, name: string, size?: WorldSize) => {
       const nowIso = new Date().toISOString();
       const id = nextSaveId(saves, nowIso);
-      open({ id, name, era, createdAtIso: nowIso, lastPlayedIso: nowIso, day: 0 });
+      open({ id, name, era, size, createdAtIso: nowIso, lastPlayedIso: nowIso, day: 0 });
     },
     [saves, open],
   );
@@ -182,6 +251,10 @@ export function SaveGate({ children }: { children: ReactNode }) {
   // `session` is undefined for the one render between choosing a save and the effect that
   // opens it. Falling through to the menu there would flash it back at the player.
   if (!session || session.status === 'opening') return <Opening />;
+
+  if (session.status === 'building') {
+    return <Building size={session.size} done={session.done} label={session.label} />;
+  }
 
   if (session.status === 'failed') {
     return <OpenFailed error={session.error} onBack={toMenu} />;
@@ -220,6 +293,62 @@ function Opening() {
       }}
     >
       <p>Opening your save…</p>
+    </div>
+  );
+}
+
+/**
+ * Building a world, with a bar.
+ *
+ * A real bar rather than a spinner, and the difference matters here in a way it did not for
+ * `Opening`: this is a job with a known length, so the honest thing is to show how much of it is
+ * left. It is also the one screen in the game a player is asked to wait a measurable time in
+ * front of, and doc 27 § 7's whole budget exists because of it.
+ */
+function Building({ size, done, label }: { size: WorldSize; done: number; label: string }) {
+  const meta = worldSizeMeta(size);
+  return (
+    <div
+      style={{
+        minHeight: '100dvh',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 'var(--space-4)',
+      }}
+    >
+      <div style={{ maxWidth: '28rem', width: '100%', textAlign: 'center' }}>
+        <h1 style={{ marginBottom: 'var(--space-2)' }}>Building the sport</h1>
+        <p className="prose" style={{ marginBottom: 'var(--space-4)' }}>
+          A {meta.name.toLowerCase()} world — promotions, fighters, and eight years of history for
+          them to have lived through.
+        </p>
+        <div
+          role="progressbar"
+          aria-valuenow={Math.round(done * 100)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Building the world"
+          style={{
+            height: '0.5rem',
+            borderRadius: '999px',
+            background: 'var(--surface-2, rgba(127,127,127,0.2))',
+            overflow: 'hidden',
+            marginBottom: 'var(--space-2)',
+          }}
+        >
+          <div
+            style={{
+              width: `${Math.round(done * 100)}%`,
+              height: '100%',
+              background: 'var(--accent, currentColor)',
+              transition: 'width 200ms linear',
+            }}
+          />
+        </div>
+        <p className="faint" style={{ fontSize: 'var(--text-sm)' }}>
+          {label}
+        </p>
+      </div>
     </div>
   );
 }

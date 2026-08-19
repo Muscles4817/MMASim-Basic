@@ -36,6 +36,7 @@ export * from './fight/scoring.js';
 export * from './fight/fouls.js';
 export * from './fight/broadcast.js';
 export * from './fight/simulate.js';
+export * from './fight/round.js';
 
 // Health
 export * from './health/injuries.js';
@@ -72,6 +73,7 @@ export * from './business/freeAgency.js';
 export * from './business/events.js';
 export * from './business/boutAgreements.js';
 export * from './business/promotionCosts.js';
+export * from './business/schedule.js';
 export * from './business/inbox.js';
 export * from './business/championships.js';
 export * from './business/matchmakingStyle.js';

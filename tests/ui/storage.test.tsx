@@ -24,6 +24,19 @@ import { RouterProvider } from '../../packages/app/src/state/router';
 import { ThemeProvider } from '../../packages/app/src/state/theme';
 import { ErrorBoundary } from '../../packages/app/src/shell/ErrorBoundary';
 
+/**
+ * Start a game on a **seeded** world rather than a generated one.
+ *
+ * These tests are about what storage does, not about what the generator produces, and the menu's
+ * default is now a generated world — which is eight simulated years of sport before anything
+ * renders. Building one to find out whether a quota refusal shows a banner is ten seconds spent on
+ * the wrong question, and it made every one of these time out.
+ */
+async function startSeededGame(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole('radio', { name: /2020/i }));
+  await user.click(screen.getByRole('button', { name: /New game/i }));
+}
+
 function renderApp() {
   return render(
     <StrictMode>
@@ -107,7 +120,7 @@ describe('a device that will not store the save', () => {
     installFullStorage(64 * 1024);
     renderApp();
 
-    await user.click(screen.getByRole('button', { name: /New game/i }));
+    await startSeededGame(user);
 
     // The regression. This was "Something went wrong", on every load, forever.
     expect(
@@ -121,7 +134,7 @@ describe('a device that will not store the save', () => {
     installFullStorage(64 * 1024);
     renderApp();
 
-    await user.click(screen.getByRole('button', { name: /New game/i }));
+    await startSeededGame(user);
 
     // Loud, but survivable — which is the whole trade. A write-behind backend cannot report by
     // throwing, so this banner is the only thing standing between the player and hours of
@@ -135,7 +148,7 @@ describe('a device that will not store the save', () => {
     const user = userEvent.setup();
     renderApp();
 
-    await user.click(screen.getByRole('button', { name: /New game/i }));
+    await startSeededGame(user);
 
     expect(
       await screen.findByText(/Or take over an existing fighter/i, {}, { timeout: 6000 }),
