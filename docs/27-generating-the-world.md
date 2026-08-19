@@ -659,8 +659,7 @@ what six thousand people cost.
 
 So the remaining moves are decisions rather than optimisations:
 
-- **Ship Small and Medium**, with Large behind a warning and a longer progress bar. Doc 26 § 2's
-  realistic pyramid is a target, not a first-release requirement.
+- **Ship it.** Done — § 10.8.
 - **Stop simulating the base tier's _people_, not just their fights** — no individual ageing,
   development or free agency below a prestige, resolved in aggregate instead. This is the only
   remaining 2× and it is a real design decision, because those people stop being able to climb into
@@ -672,13 +671,48 @@ So the remaining moves are decisions rather than optimisations:
 
 ---
 
+### 10.8 Shipped
+
+`generatePyramid` in the data layer builds the world; `generateWorld` in the app lives eight years
+of it. The menu offers **Generated** as the default with the two seeded eras beside it, a size
+picker, and a warning on Large. Building runs behind a real progress bar rather than a spinner,
+because it is a job with a known length and it is the one screen a player is asked to wait a
+measurable time in front of.
+
+| Size   | Fighters | Promotions | Built in |
+| ------ | -------: | ---------: | -------: |
+| Small  |      824 |         42 |     3.2s |
+| Medium |    2,672 |        112 |    11.4s |
+| Large  |   ~6,000 |       ~170 |     ~25s |
+
+Two details worth stating because they are not obvious from the outside.
+
+**Pre-history runs forward and the clock is wound back.** The world is built on its start date, then
+lives eight years, then the calendar is set back to where it began. Every record, reign and ranking
+stays; the date does not. The alternative — generating the population eight years younger and
+running up to the start date — is the same thing said backwards and costs a generator that has to
+reason about who would have existed in 2018.
+
+**Reopening a generated save must not rebuild it.** The build is triggered by probing the _storage_
+for a world rather than by trusting the registry, because a save that rebuilt itself on open would
+replace eight years of somebody's history with eight different ones.
+
+What is still seeded rather than generated: gyms, coaches, referees, judges and managers. They carry
+no real person's name, so they are not what the legal constraint is about, and generating a judge is
+a much smaller problem than generating a sport — § 2 and § 6 are where they get done properly.
+
+---
+
 ## 11. Definition of done
 
 - Pre-history is long enough that champions have reigns, rankings came from results, and the apex
   roster was climbed to rather than generated in place — § 10.5 says that is eight years.
 - A new game with no seed produces a complete, playable world: promotions across five tiers,
-  fighters with coherent records, champions with reigns, gyms, coaches and officials.
-- No real person, promotion or venue appears anywhere in the shipped build.
+  fighters with coherent records, champions with reigns, gyms, coaches and officials. **Done —
+  § 10.8**, except that the officials and gyms are still seeded.
+- No real person, promotion or venue appears anywhere in a generated world. **Asserted** —
+  `generated-world.test.ts`. The seeded eras still carry real names and remain the testing artifact
+  § 1.2 describes.
 - The same seed string always produces the same world.
 - Division depth follows doc 26 § 2.1's shape, heaviest at lightweight and thinnest at heavyweight.
 - A national promotion's roster is drawn predominantly from its own region.

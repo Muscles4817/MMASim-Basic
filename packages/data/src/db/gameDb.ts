@@ -99,6 +99,14 @@ export interface WorldMeta extends Entity {
    * the 2026 seed puts 204 on the leader and 64 on a regional, and that ratio *is* the pyramid.
    */
   rosterTargets?: Record<string, number>;
+  /**
+   * Which size this world was generated at, when it was generated rather than seeded.
+   *
+   * Absent on a seeded save, which is how the two are told apart — the eras become what doc 27
+   * § 1.2 says they already effectively are, a testing artifact and later the shape the mod space
+   * fills, and a generated world is the default a new player gets.
+   */
+  generatedSize?: string;
   schemaVersion: number;
 }
 
