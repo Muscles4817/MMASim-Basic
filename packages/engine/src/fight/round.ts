@@ -58,15 +58,12 @@ import {
 import { buildScorecards, emptyTally, readDecision, type RoundTally } from './scoring.js';
 import { accrueFatigue, recoverBetweenRounds, workRate } from './stamina.js';
 import type { FightConfig } from './simulate.js';
-import { OTHER_CORNER, type Corner, type DamageReport, type FightResult } from './types.js';
-
-/**
- * A fight without its play-by-play.
- *
- * `FightResult` minus `events`, which makes a full result assignable to a reduced one and not the
- * reverse — so a screen that renders a transcript cannot silently be handed a fight that has none.
- */
-export type ReducedFightResult = Omit<FightResult, 'events'>;
+import {
+  OTHER_CORNER,
+  type Corner,
+  type DamageReport,
+  type ReducedFightResult,
+} from './types.js';
 
 const ROUND_SECONDS = 300;
 

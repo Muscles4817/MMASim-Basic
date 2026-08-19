@@ -433,23 +433,98 @@ were drawn from a normal floored at zero. For a mean of 0.083 with a standard de
 that truncation more than _doubles_ the mean, and two average fighters came out at 0.62 knockdowns a
 fight against a measured 0.46. Poisson.
 
-### 9.5 What is left
+### 9.5 What is left in C
 
-Two cells carry the residual, both involving a striker against a grappler: **C under-counts the
-striker's knockdowns by about a third**, which shows up as the KO rate reading 13% where the full
-model reads 24%. The mechanism is legible — an elite striker's case against a wrestler is what
-happens in the seconds before the takedown, and a round has no seconds in it — and the fix is not
-obviously worth having, because the matchups where it bites are far more lopsided than anything a
-matchmaker books. It is recorded rather than hidden: the test asserts the gap it currently has.
-
-**B is not built yet.** Its budget is ~10µs and it is what decides how long pre-history can be:
-fifteen years of a 5,000-fighter world is on the order of 40,000 fights, which is 0.4s at 10µs, 3.2s
-at C's 79µs, and 29s at the full model's 733µs. C alone probably makes a _short_ pre-history
-affordable; the design does not commit to `SPORT_SIZE` or pre-history length until B is measured.
+Two cells carry the residual, both a striker against a grappler: **C under-counts the striker's
+knockdowns by about a third**, which shows up as the KO rate reading 13% where the full model reads
+24%. The mechanism is legible — an elite striker's case against a wrestler is what happens in the
+seconds before the takedown, and a round has no seconds in it. It is recorded rather than hidden:
+the test asserts the gap it currently has.
 
 ---
 
-## 10. Definition of done
+## 10. Phase 0, part two — what pre-history actually costs
+
+**C was measured against the wrong thing, and so was option B.** § 9 measured the fight. This
+measures the fifteen years. `tools/prehistory-cost.ts`, three world sizes, both resolvers, real
+`advanceWorld` ticks:
+
+| World                         | Fights | 15 years, full | 15 years, with C |
+| ----------------------------- | -----: | -------------: | ---------------: |
+| 858 fighters, 8 promotions    |  7,684 |          13.6s |             8.4s |
+| 2,778 fighters, 38 promotions | 27,636 |          62.1s |            41.7s |
+| 5,082 fighters, 74 promotions | 32,761 |          99.6s |            66.9s |
+
+§ 7's world-creation budget is **10 seconds**, and these are desktop numbers — a mid-range phone is
+three to five times slower. So the realistic-size world is 20–30× over budget, and **C's 9× fight
+speedup buys 33% of a tick.**
+
+### 10.1 Why the 9× only bought 33%
+
+Because the fight was never the expensive part. Profiled at the Reduced level over four simulated
+years of a 2,778-fighter world:
+
+| Phase                                                     | Share of the tick |
+| --------------------------------------------------------- | ----------------: |
+| Running cards (`buildNight`)                              |             71.4% |
+| — of which one bout (`runCardBout`)                       |             58.3% |
+| — — of which **the fight itself**                         |         **13.2%** |
+| — — the rest: ranking, development, purses, news, records |              ~45% |
+| Matchmaking (`offerOpponents`)                            |              2.8% |
+| Ageing everybody who did not fight                        |              5.1% |
+| Quarterly intake, free agency, retirements                |              3.7% |
+| Serialising the save                                      |              4.4% |
+
+`rankDivision` runs **once per bout**, over every fighter in the division, to establish the ranks an
+upset is measured against. `develop` runs per bout for both corners. `applyAftermath` computes
+lessons, momentum, freshness and trauma. Every one of those is right for a fight somebody watches,
+and every one is waste for a fight that exists only so a 34-year-old has a plausible record.
+
+**So option B is not the answer either.** Going from C's 79µs to B's 10µs takes 66.9s to roughly
+60s. What pre-history needs is not a cheaper _fight_, it is a cheaper **tick**.
+
+### 10.2 Three things this turned up that were not about cost
+
+**The sport's card rate is a constant.** `MAX_CARDS_PER_STEP` is 3 — three cards a fortnight across
+_every promotion in the world_. That is a schedule for the eight promotions the game ships with.
+Hand it to a 74-promotion pyramid and each promotion runs two cards a **year**: the sport gets
+bigger without anybody fighting more. Doc 26 § 2's pyramid is unreachable until this scales, and it
+is not a performance question — a generated world would look right and be inert. `advanceWorld` now
+takes a `cardsPerStep` override; the default is unchanged.
+
+**Even with the rate scaled, the world does not fight enough.** At 74 promotions and 27 cards a
+fortnight, the 5,082-fighter world produced 2,184 bouts a year — **0.86 per fighter**, against a real
+sport's two to three. A pre-history that ran today would hand a 34-year-old an 11-4 record built
+over fifteen years. Getting the records right needs roughly 2.5× more fights again, which makes
+every number in the table above worse.
+
+**The cost grows as the records do.** Year one of the 5,082-fighter world costs 5.9s and year
+fifteen costs 7.5s, a 27% drift. Availability is decided by `f.record.filter(r => day - r.day < 365)`
+for every fighter on every step, so the check gets slower every year the sport runs.
+
+### 10.3 What to do instead
+
+Not one thing — the gap is 20–30× and nothing on this list is worth 20× alone.
+
+1. **A bulk tick, not a bulk fight.** Skip what nobody will read: per-bout ranking, news, purses,
+   bonuses, scorecards. Batch development annually instead of per bout. This is where the 45% is,
+   and it is the same argument doc 27 § 5.1 makes about Bulk — applied to the tick rather than to
+   the resolver, which is where it should have been applied first.
+2. **Shorten pre-history.** Fifteen years is a choice, not a requirement. Eight still gives a
+   35-year-old a full career behind them, and it halves everything above.
+3. **Do not generate the whole pyramid at depth.** The base tier of a 5,000-fighter world exists so
+   that people can climb out of it. It does not need fifteen years of individually simulated bouts.
+4. **Stop saving during generation.** `db.save()` serialises every collection; at 5,000 fighters
+   that is ~250ms, and during world creation there is nothing to be durable about.
+5. **Only then, B.** It is worth about 10% of a bulk tick, which is worth having once the tick is
+   the right shape and worth nothing before that.
+
+**What this does not change:** C stays. It is the Reduced level for the _running_ world, where it
+was always aimed, and there it is a straight 33% off every tick outside the player's orbit.
+
+---
+
+## 11. Definition of done
 
 - A new game with no seed produces a complete, playable world: promotions across five tiers,
   fighters with coherent records, champions with reigns, gyms, coaches and officials.
@@ -459,15 +534,18 @@ affordable; the design does not commit to `SPORT_SIZE` or pre-history length unt
 - A national promotion's roster is drawn predominantly from its own region.
 - A created fighter's opening offers sit in a 30–70% band in every preset and size.
 - Background and foreground fights are distributionally indistinguishable.
-- World creation completes inside the § 7 budget on a mid-range phone.
+- World creation completes inside the § 7 budget on a mid-range phone. **Currently 20–30× over —
+  § 10.**
+- Every fighter in a generated world averages two to three bouts a year of pre-history, not 0.86.
 
 ---
 
-## 11. Phasing
+## 12. Phasing
 
-0. **The cheap resolvers, measured.** § 9. C first, because Reduced is the level the running world
-   needs; B follows, because it is what sets pre-history's length. Nothing else starts until those
-   two numbers exist.
+0. **The cheap resolvers, measured.** § 9 and § 10. C is built. B is deferred — § 10.1 measured it
+   as worth ~10% of a pre-history tick, which is not where the problem is.
+   0b. **The bulk tick.** § 10.3. The piece that decides whether pre-history is affordable at all, and
+   the thing to build before any of the below.
 1. **Talent map.** Named nations, grouped regions, expanded name pools. Data, incremental, useful
    on its own — the existing seeded worlds get better nationality spread immediately.
 2. **Promotion generation.** The five-tier pyramid from parameters, with `baseCountry` from the map.

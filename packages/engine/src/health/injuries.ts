@@ -18,7 +18,7 @@ import type { Fighter } from '../domain/fighter.js';
 import { traitMul } from '../domain/traits.js';
 import type { AttributeKey, Attributes } from '../ratings/attributes.js';
 import { toRating } from '../ratings/attributes.js';
-import type { Corner, FightResult } from '../fight/types.js';
+import type { Corner, ReducedFightResult } from '../fight/types.js';
 import { isKoMethod, type FinishMethod } from '../domain/fighter.js';
 
 export const INJURY_TYPES = [
@@ -241,7 +241,7 @@ export interface FightExposure {
 }
 
 /** Read one corner's exposure off a finished fight. */
-export function exposureFrom(result: FightResult, corner: Corner): FightExposure {
+export function exposureFrom(result: ReducedFightResult, corner: Corner): FightExposure {
   const damage = result.damage[corner];
   const mine = result.stats[corner];
   const theirs = result.stats[corner === 'red' ? 'blue' : 'red'];

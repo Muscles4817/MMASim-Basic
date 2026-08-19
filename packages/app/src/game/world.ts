@@ -92,7 +92,8 @@ import {
   type Coach,
   type DivisionId,
   type FightNight,
-  type FightResult,
+  type FightConfig,
+  type ReducedFightResult,
   type Fighter,
   type FighterId,
   type PromotionId,
@@ -253,6 +254,27 @@ export interface WorldExclusion {
    * promotion chasing somebody for a fight they have already taken is nonsense.
    */
   playerHasBooking?: boolean;
+  /**
+   * How the world resolves its own bouts. Defaults to `simulateFight`.
+   *
+   * Doc 27 § 5's Reduced level, passed in rather than switched on inside, because *which* fights
+   * deserve the full simulator is a question about the player's orbit and this module has no
+   * opinion about where the player is.
+   */
+  resolve?: BoutResolver;
+  /**
+   * Cards run per fortnight across the whole sport. Defaults to `MAX_CARDS_PER_STEP`.
+   *
+   * A constant is the right shape for the world the game ships with and the wrong shape for a
+   * generated one. Three cards a fortnight is a schedule for eight promotions; hand the same
+   * number to a thirty-eight-promotion pyramid and each of them runs two cards a *year*, so the
+   * sport gets bigger without anybody fighting more — which for doc 27 § 4's pre-history is fatal,
+   * because a record nobody earned is the thing pre-history exists to avoid.
+   *
+   * Passed in rather than derived from the promotion count, because how busy the sport is is a
+   * property of the world being generated and this module has no opinion about it.
+   */
+  cardsPerStep?: number;
 }
 
 export function advanceWorld(
@@ -281,7 +303,9 @@ export function advanceWorld(
    * Scaled to the span, capped by the absolute backstop. See `FIGHTS_PER_STEP_BUDGET`.
    */
   const steps = Math.max(1, Math.ceil((toDay - fromDay) / STEP_DAYS));
-  const fightBudget = Math.min(MAX_FIGHTS_PER_CALL * 12, steps * FIGHTS_PER_STEP_BUDGET);
+  const perStepBudget =
+    FIGHTS_PER_STEP_BUDGET * ((exclusion.cardsPerStep ?? MAX_CARDS_PER_STEP) / MAX_CARDS_PER_STEP);
+  const fightBudget = Math.min(MAX_FIGHTS_PER_CALL * 12 * (perStepBudget / FIGHTS_PER_STEP_BUDGET), steps * perStepBudget);
 
   const rng = createRng(`${world.seed}:world:${fromDay}`);
   const promotions = db.promotions.findAll() as unknown as Promotion[];
@@ -338,7 +362,11 @@ export function advanceWorld(
      * a short call cannot date a card past the day it was asked to stop at.
      */
     const span = Math.min(STEP_DAYS, toDay - day);
-    const cardsThisStep = Math.max(1, Math.min(CARDS_PER_STEP, MAX_CARDS_PER_STEP, span));
+    const cardCeiling = exclusion.cardsPerStep ?? MAX_CARDS_PER_STEP;
+    const cardsThisStep = Math.max(
+      1,
+      Math.min(Math.max(CARDS_PER_STEP, cardCeiling), cardCeiling, span),
+    );
 
     for (let card = 0; card < cardsThisStep; card++) {
       if (available.length < 2) break;
@@ -369,6 +397,7 @@ export function advanceWorld(
         readyOn,
         lastSeen,
         exceptId,
+        resolve: exclusion.resolve,
       });
       if (!built) continue;
       fights += built.fights;
@@ -446,8 +475,10 @@ function buildNight(ctx: {
   readyOn: Map<string, number>;
   lastSeen: Map<string, number>;
   exceptId: FighterId | undefined;
+  /** Defaults to `simulateFight`. See `BoutResolver`. */
+  resolve?: BoutResolver;
 }): { fights: number; news: NewsItem[] } | undefined {
-  const { db, day, rng, promotion, available, readyOn, lastSeen } = ctx;
+  const { db, day, rng, promotion, available, readyOn, lastSeen, resolve } = ctx;
 
   // --- Matchmaking: collect the bouts before deciding where any of them sit ----------------
   const seeds: BoutSeed[] = [];
@@ -680,7 +711,7 @@ function buildNight(ctx: {
 
   // --- Run it ------------------------------------------------------------------------------
   const news: NewsItem[] = [];
-  const results: { boutId: string; result: FightResult }[] = [];
+  const results: { boutId: string; result: ReducedFightResult }[] = [];
   let fights = 0;
 
   for (const bout of card) {
@@ -692,6 +723,7 @@ function buildNight(ctx: {
       bout,
       readyOn,
       lastSeen,
+      resolve,
     });
     if (!outcome) continue;
     fights++;
@@ -781,6 +813,16 @@ function buildNight(ctx: {
  * same consequences as the world does — ranks, belts, ageing, retirement, suspensions and pay.
  * A second implementation would drift within a week and the divergence would be invisible.
  */
+/**
+ * How a bout gets resolved.
+ *
+ * `simulateFight` unless somebody says otherwise. The seam exists because doc 27 § 5 needs it —
+ * the Reduced level of detail resolves a fight nine times faster and produces everything below
+ * except the play-by-play, and nothing in this file reads `result.events`. Measuring the cost of
+ * fifteen years of pre-history needs to be able to swap the resolver without forking the tick.
+ */
+export type BoutResolver = (config: FightConfig) => ReducedFightResult;
+
 export function runCardBout(ctx: {
   db: GameDb;
   day: number;
@@ -789,7 +831,9 @@ export function runCardBout(ctx: {
   bout: CardBout;
   readyOn: Map<string, number>;
   lastSeen: Map<string, number>;
-}): { news: NewsItem[]; result: FightResult } | undefined {
+  /** Defaults to `simulateFight`. See `BoutResolver`. */
+  resolve?: BoutResolver;
+}): { news: NewsItem[]; result: ReducedFightResult } | undefined {
   const { db, day, rng, promotion, bout, readyOn, lastSeen } = ctx;
 
   const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
@@ -815,7 +859,7 @@ export function runCardBout(ctx: {
   const isTitleFight = bout.isTitleFight;
 
   const boutId = bout.boutId;
-  const result = simulateFight({
+  const result = (ctx.resolve ?? simulateFight)({
     boutId,
     // Both corners bring a plan built from who they are and who is in front of them. Every
     // fight the world simulates used to run on the neutral default (docs/19 §11).

@@ -26,7 +26,7 @@ import type { GameDay } from '../core/clock.js';
 import type { DivisionId, EventId, FighterId, PromotionId } from '../core/ids.js';
 import { asId } from '../core/ids.js';
 import type { Rng } from '../core/rng.js';
-import type { FightResult } from '../fight/types.js';
+import type { ReducedFightResult } from '../fight/types.js';
 import type { Promotion } from '../domain/organisations.js';
 import type { CardPosition } from './money.js';
 
@@ -176,7 +176,7 @@ export interface BonusAwards {
  * which is what Fight of the Night means and why it is the mechanism that makes an exciting
  * loss worth something. A fighter who is losing has a reason to keep swinging.
  */
-export function excitement(result: FightResult): number {
+export function excitement(result: ReducedFightResult): number {
   const strikes =
     result.stats.red.significantStrikesLanded + result.stats.blue.significantStrikesLanded;
   const knockdowns = result.stats.red.knockdowns + result.stats.blue.knockdowns;
@@ -195,7 +195,7 @@ export function excitement(result: FightResult): number {
 }
 
 /** How good a finish was, for Performance of the Night. */
-export function performanceScore(result: FightResult): number {
+export function performanceScore(result: ReducedFightResult): number {
   if (result.method === 'ko') return 100 - result.timeSeconds / 10 + (result.round === 1 ? 25 : 0);
   if (result.method === 'tko') return 80 - result.timeSeconds / 12 + (result.round === 1 ? 20 : 0);
   if (result.method === 'submission') return 90 - result.timeSeconds / 12;
@@ -237,7 +237,7 @@ export function bonusPoolFor(promotion: Promotion): number {
 }
 
 export function awardBonuses(
-  results: readonly { boutId: string; result: FightResult }[],
+  results: readonly { boutId: string; result: ReducedFightResult }[],
   pool: number,
 ): BonusAwards {
   if (results.length === 0 || pool <= 0) {
@@ -525,7 +525,7 @@ export const DELIVERY_MEMORY = 6;
  * ended, or it was close** — and refuses to reward the thing that flatters a volume metric
  * without entertaining anybody: a wide, one-sided decision.
  */
-export function deliveryScore(result: FightResult): number {
+export function deliveryScore(result: ReducedFightResult): number {
   const red = result.stats.red;
   const blue = result.stats.blue;
   const strikes = red.significantStrikesLanded + blue.significantStrikesLanded;
@@ -573,7 +573,7 @@ export function settleNight(input: {
   promotion: Promotion;
   revenue: EventRevenue;
   /** Every result on the card, in any order. */
-  results: readonly FightResult[];
+  results: readonly ReducedFightResult[];
   /**
    * Delivery scores of this promotion's recent cards, for the relative baseline.
    *

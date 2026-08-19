@@ -21,9 +21,9 @@ import {
   fightInjuryChance,
   rollInjury,
   type Corner,
-  type FightResult,
   type Fighter,
   type Injury,
+  type ReducedFightResult,
   type Rng,
 } from '@mmasim/engine';
 
@@ -43,7 +43,7 @@ export interface FightInjuryOutcome {
  */
 export function settleFightInjuries(input: {
   fighter: Fighter;
-  result: FightResult;
+  result: ReducedFightResult;
   corner: Corner;
   day: number;
   rng: Rng;

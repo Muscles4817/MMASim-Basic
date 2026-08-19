@@ -43,7 +43,7 @@ import {
   type CardPosition,
   type Fighter,
   type FightNight,
-  type FightResult,
+  type ReducedFightResult,
   type NewsItem,
   type Manager,
   type NightSettlement,
@@ -386,7 +386,7 @@ export function scheduleCard(input: {
  */
 export interface CardOutcome {
   night: FightNight;
-  results: readonly { bout: CardBout; result: FightResult }[];
+  results: readonly { bout: CardBout; result: ReducedFightResult }[];
   settlement: NightSettlement;
   news: readonly NewsItem[];
 }
@@ -405,7 +405,7 @@ export function runScheduledCard(input: {
   const readyOn = new Map<string, number>();
   const lastSeen = new Map<string, number>();
 
-  const results: { bout: CardBout; result: FightResult }[] = [];
+  const results: { bout: CardBout; result: ReducedFightResult }[] = [];
   const news: NewsItem[] = [];
 
   /*

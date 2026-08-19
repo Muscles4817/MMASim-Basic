@@ -234,6 +234,18 @@ export interface FightResult {
   refereeNote?: string;
 }
 
+/**
+ * A fight without its play-by-play.
+ *
+ * What doc 27 § 5's **Reduced** level of detail produces: everything a career, a promotion, a
+ * ranking and a health model read, and nothing a reader would read. A full `FightResult` is
+ * assignable to this and not the reverse, so a screen that renders a transcript cannot silently be
+ * handed a fight that has none — while every system that only ever wanted the *result* can say so
+ * in its own signature. Measured across the engine and the app, that is all of them except
+ * `broadcast.ts` and the fight screen.
+ */
+export type ReducedFightResult = Omit<FightResult, 'events'>;
+
 export function emptyStats(): FightStats {
   return {
     significantStrikesLanded: 0,
