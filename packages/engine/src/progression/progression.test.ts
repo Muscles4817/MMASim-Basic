@@ -607,9 +607,16 @@ describe('creating a fighter', () => {
   });
 
   it('starts below major-promotion level, because the game is the climb', () => {
+    /*
+     * The bar is the seed roster's floor of 51.1 plus room for a good roll, not a round number.
+     * Raised from 52 with the physical arrival rewrite: the five physicals now land on the same
+     * age curve generated fighters use rather than carrying an extra discount, and the skill
+     * baseline came down against it, so the debut moved about a point. Eleven points below the
+     * roster median is still plainly a prospect.
+     */
     const f = createPlayerFighter(spec(), createRng('c3'));
     const mean = ATTRIBUTE_KEYS.reduce((a, k) => a + f.attributes[k], 0) / ATTRIBUTE_KEYS.length;
-    expect(mean).toBeLessThan(52);
+    expect(mean).toBeLessThan(54);
   });
 
   it('gives every created fighter a real hole', () => {

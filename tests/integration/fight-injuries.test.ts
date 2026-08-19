@@ -19,7 +19,13 @@
 
 import { describe, expect, it } from 'vitest';
 import { createMemoryAdapter, createNewGame, getWorld, setWorld } from '@mmasim/data';
-import { weeksUntilFit, type Fighter } from '@mmasim/engine';
+import {
+  INJURY_META,
+  INJURY_TYPES,
+  canFightOn,
+  weeksUntilFit,
+  type Fighter,
+} from '@mmasim/engine';
 import { advanceWorld } from '../../packages/app/src/game/world';
 import {
   bookFight,
@@ -65,6 +71,79 @@ describe('the world gets hurt too', () => {
 
     const after = injuryCount(db.fighters.findAll() as Fighter[]);
     expect(after, 'a year of professional fighting hurt nobody').toBeGreaterThan(0);
+  });
+
+  it('does not accumulate chronic injuries nobody could ever have', () => {
+    /*
+     * The compounding, caught where it happens rather than in the arithmetic.
+     *
+     * `available` gated on `readyOnDay`, which is a *medical suspension* — a function of how the
+     * last fight ended — and knows nothing about injuries. So the world matched fighters with torn
+     * knees, they fought on them, and `settleFightInjuries` ran `aggravate`, which multiplies the
+     * remaining layoff. Once per bout, with nothing stopping the next booking.
+     *
+     * Measured over eight years of generated pre-history before the gate existed: 76% of the
+     * roster carrying something, the worst a knee **995 weeks** — nineteen years — from healed.
+     * A world in that state is not a harsher world, it is a broken one: those fighters take
+     * `injuredAttributes` into the cage and the ones the player is offered withdraw.
+     *
+     * The bound is stated against the model's own worst case rather than as a round number, so it
+     * keeps meaning something if the injury table changes.
+     */
+    const db = createNewGame({ adapter: createMemoryAdapter(), seed: 'world-chronic' });
+    let day = getWorld(db).day;
+    for (let step = 0; step < 78; step++) {
+      advanceWorld(db, day, day + 14, {});
+      day += 14;
+      setWorld(db, { day });
+    }
+
+    const roster = db.fighters.findAll() as Fighter[];
+    const worstNatural = Math.max(...INJURY_TYPES.map((t) => INJURY_META[t].weeks[1]));
+    const spans = roster
+      .flatMap((f) => f.injuries ?? [])
+      .map((i) => (i.healedDay - i.day) / 7);
+
+    expect(spans.length, 'nobody was injured, so this proves nothing').toBeGreaterThan(10);
+    expect(
+      Math.max(...spans),
+      `an injury ran to ${Math.max(...spans).toFixed(0)} weeks against a worst natural case of ${worstNatural}`,
+    ).toBeLessThanOrEqual(worstNatural * 2);
+  });
+
+  it('leaves the roster mostly fit, rather than mostly on the shelf', () => {
+    /*
+     * The population consequence of the same gate, and the one a player actually meets.
+     *
+     * Stated as a share rather than per fighter because the per-fighter version is unmeasurable
+     * after the fact: `aggravate` rewrites `healedDay` and leaves `day` alone, so a fighter who
+     * walked in with six weeks left and walked out with twelve is indistinguishable from one who
+     * should never have been booked. What is measurable is where the sport ends up.
+     *
+     * Measured on this scenario across the three fixes, which is worth recording because each one
+     * is a different defect: **42%** shelved with none of them, 36% once the world stopped booking
+     * fighters who would pull out, and **17%** once the ambient injury roll was charged against
+     * elapsed time rather than once per call. The bound sits above the last of those with room for
+     * seed variance, because it is a claim about the sport rather than a lock on the measurement.
+     *
+     * The pathology it replaces: eight years of generated pre-history left **76%** of the roster
+     * carrying something and only 71 of 824 active fighters bookable at all.
+     */
+    const db = createNewGame({ adapter: createMemoryAdapter(), seed: 'world-gate' });
+    let day = getWorld(db).day;
+    for (let step = 0; step < 52; step++) {
+      advanceWorld(db, day, day + 14, {});
+      day += 14;
+      setWorld(db, { day });
+    }
+
+    const roster = (db.fighters.findAll() as Fighter[]).filter((f) => f.retiredDay === undefined);
+    const shelved = roster.filter((f) => !canFightOn(f.injuries ?? [], day));
+
+    expect(
+      shelved.length / roster.length,
+      `${shelved.length} of ${roster.length} are too hurt to be booked`,
+    ).toBeLessThan(0.25);
   });
 
   it('gives them the kinds of injuries the fights produced', () => {

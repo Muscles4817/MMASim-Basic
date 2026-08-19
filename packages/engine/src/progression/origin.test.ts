@@ -494,20 +494,135 @@ describe('what the player is told', () => {
   });
 });
 
+/**
+ * The body you said you were building.
+ *
+ * The complaint that produced these: a player built a rangy taekwondo fighter, spent discretionary
+ * points on speed, and was shown a speed of 66 against a ceiling of 70 — a fighter the game had
+ * already decided was not going to be quick, built by somebody who had chosen nothing else.
+ *
+ * Three separate things were doing it, and each has an assertion here. Rangy secretly cost four
+ * points of explosiveness, which is the driver of speed. The discipline's bias and the allocated
+ * points were added to the *current* rating and then used to raise the ceiling onto it, so
+ * investing closed the door above you. And every physical carried an 18% discount that no
+ * generated fighter of the same age pays.
+ */
+describe('what a created fighter is physically', () => {
+  const speedOf = (origin: FighterOrigin, extra: Partial<Parameters<typeof createPlayerFighter>[0]> = {}) => {
+    const values: number[] = [];
+    const ceilings: number[] = [];
+    for (let i = 0; i < 150; i++) {
+      const f = createPlayerFighter(
+        {
+          id: `phys_${i}`,
+          firstName: 'Test',
+          lastName: 'Player',
+          nationality: 'USA',
+          sex: 'male',
+          age: 22,
+          divisionId: asDivisionId('mens-lightweight'),
+          origin,
+          day: 0,
+          ...extra,
+        },
+        createRng(`phys:${JSON.stringify(origin)}:${JSON.stringify(extra)}:${i}`),
+      );
+      values.push(f.attributes.speed);
+      ceilings.push(f.potential.speed);
+    }
+    return { speed: mean(values), ceiling: mean(ceilings) };
+  };
+
+  const karate: FighterOrigin = { talent: 'natural', discipline: 'karate', attainment: 'regional' };
+
+  it('debuts a fast fighter fast, rather than at the middle of the scale', () => {
+    /*
+     * The headline number. A natural out of a speed discipline who spent points on speed measured
+     * 66 before this and 77 after it, and the sport agrees with the second one: explosive power is
+     * overwhelmingly heritable and a twenty-two-year-old is as quick as they are ever going to be.
+     * What they have not got is hands, and they still have not got hands.
+     */
+    const { speed } = speedOf(karate, { build: 'rangy', allocation: { speed: 5 } });
+    expect(speed).toBeGreaterThan(73);
+  });
+
+  it('scales it by talent, so a freak reads as one and a grinder does not', () => {
+    const freak = speedOf({ ...karate, talent: 'freak' }, { build: 'rangy', allocation: { speed: 5 } });
+    const grinder = speedOf(
+      { ...karate, talent: 'grinder' },
+      { build: 'rangy', allocation: { speed: 5 } },
+    );
+    // Measured 81 / 77 / 72 across the three tiers. Every one of them is a quick fighter, and
+    // they are quick to visibly different degrees.
+    expect(freak.speed).toBeGreaterThan(79);
+    expect(grinder.speed).toBeLessThan(freak.speed - 5);
+  });
+
+  it('leaves room above the fighter, so investing does not close the door', () => {
+    /*
+     * The reading that made the old behaviour feel like a verdict. Points spent on a physical
+     * used to be added to the rating and then have the ceiling dragged up onto them, so a player
+     * who chose speed was told they were at their limit for the thing they had just chosen.
+     */
+    const { speed, ceiling } = speedOf(karate, { build: 'rangy', allocation: { speed: 8 } });
+    expect(ceiling - speed).toBeGreaterThan(3);
+  });
+
+  it('makes spending points on a physical raise the ceiling, not just the number', () => {
+    const spent = speedOf(karate, { allocation: { speed: 8 } });
+    const unspent = speedOf(karate, { allocation: {} });
+    expect(spent.ceiling).toBeGreaterThan(unspent.ceiling + 2);
+    expect(spent.speed).toBeGreaterThan(unspent.speed + 1);
+  });
+
+  it('does not quietly make a rangy fighter a slow one', () => {
+    // "Long and light for the weight" is not a speed penalty in any sport, and the label never
+    // claimed it was. It used to cost four points of explosiveness.
+    const rangy = speedOf(karate, { build: 'rangy' });
+    const balanced = speedOf(karate, { build: 'balanced' });
+    expect(rangy.speed).toBeGreaterThan(balanced.speed - 1.5);
+  });
+
+  it('arrives near the body and nowhere near the technique', () => {
+    /*
+     * The shape of a debutant, stated as a single claim: the physicals are most of the way to
+     * their ceilings and the skills are not. This is what makes the climb technical, which is
+     * where a career's growth is supposed to come from.
+     */
+    const f = build({ talent: 'natural', discipline: 'wrestling', attainment: 'regional' }, 'shape', 22);
+    const physicalShare = mean(
+      ATTRIBUTES_BY_GROUP.physical.map((k) => f.attributes[k] / f.potential[k]),
+    );
+    const skills = ATTRIBUTE_KEYS.filter((k) => !ATTRIBUTES_BY_GROUP.physical.includes(k));
+    const skillShare = mean(skills.map((k) => f.attributes[k] / f.potential[k]));
+
+    expect(physicalShare).toBeGreaterThan(0.85);
+    expect(skillShare).toBeLessThan(physicalShare);
+  });
+});
+
 describe('a created fighter is still a prospect, whatever the origin', () => {
   it('debuts below the professional roster from every corner of the design', () => {
-    // The strongest corner is a freak who medalled at world level and therefore debuts at
-    // 25 with three extra years of `experience` in the baseline. Measured at 52.9 against a
-    // seed-roster floor of 51.1 and a median of 67.5: marginally better than the worst
-    // professional alive, and fifteen points off the middle of the roster. That is the
-    // right answer — an Olympic medallist is not worse than every pro — and the bound here
-    // is that it stays a debut rather than becoming a head start.
+    /*
+     * The strongest corner is a freak who medalled at world level and therefore debuts at 25 with
+     * three extra years of `experience` in the baseline. Measured at 56.0 against a seed-roster
+     * floor of 51.1 and a median of 67.5: better than the worst professional alive, and eleven
+     * points off the middle of the roster. That is the right answer — an Olympic medallist is not
+     * worse than every pro — and the bound here is that it stays a debut rather than becoming a
+     * head start.
+     *
+     * Re-baselined from 56 with the physical rewrite in `createFighter.ts`. A created fighter's
+     * five physicals now arrive on the same age curve every generated fighter uses instead of
+     * carrying an extra 18% discount nobody else paid, which is worth about three points of
+     * overall; the skill baseline came down two points against it, so the debut moved by one. The
+     * bound moved by two so it is measuring the claim rather than tracking the measurement.
+     */
     for (const talent of TALENT_TIERS) {
       for (const discipline of disciplinesForTalent(talent)) {
         for (const attainment of attainmentsForTalent(talent)) {
           const age = Math.max(25, ATTAINMENT_META[attainment].minDebutAge);
           const s = sample({ talent, discipline, attainment }, 40, age);
-          expect(s.startOverall, `${talent}/${discipline}/${attainment}`).toBeLessThan(56);
+          expect(s.startOverall, `${talent}/${discipline}/${attainment}`).toBeLessThan(58);
         }
       }
     }
@@ -571,12 +686,21 @@ describe('the deprecated flat background still works', () => {
      * **Re-baselined at doc 23.** The first five entries are the physicals and they moved a long
      * way on purpose: they used to be a flat 46 plus an age term and are now derived from this
      * fighter's own body, so a 22-year-old with explosiveness 78 finally debuts with the speed
-     * (66) and chin (63) that implies rather than with 49 and 47. The ten skills are essentially
-     * unchanged, which is the other half of the claim — a debutant has a body and no technique.
+     * and chin that implies rather than with 49 and 47. The ten skills are essentially unchanged,
+     * which is the other half of the claim — a debutant has a body and no technique.
+     *
+     * **Re-baselined again with the physical arrival rewrite.** The physicals moved up a second
+     * time and for the same reason one layer down: a created fighter was paying an 18% discount
+     * on top of the age curve that no generated fighter pays, so an identical body was slower
+     * through the create screen than through the generator. Speed 66 → 80 and durability 63 → 77
+     * on this seed, which is simply what explosiveness 78 and motor learning 86 have always
+     * implied. The skills came down two points with `BASELINE`, which is the deliberate other
+     * half: the debut overall is where it was, and the fighter underneath it is an athlete with
+     * a novice's hands rather than somebody uniformly mediocre.
      */
     const f = legacy();
     expect(ATTRIBUTE_KEYS.map((k) => f.attributes[k])).toEqual([
-      53, 66, 61, 63, 56, 48, 46, 49, 63, 62, 53, 46, 46, 49, 47,
+      62, 80, 65, 77, 57, 46, 44, 47, 61, 60, 51, 44, 44, 47, 45,
     ]);
     expect(f.naturals.explosiveness).toBe(78);
     expect(f.naturals.motorLearning).toBe(86);

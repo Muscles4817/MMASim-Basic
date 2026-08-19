@@ -28,6 +28,7 @@ import {
   applyTraining,
   AMBIENT_BLOCKS_PER_WEEK,
   campInjuryChance,
+  canFightOn,
   rollInjury,
   createRng,
   CARD_SIZE,
@@ -473,6 +474,26 @@ export function advanceWorld(
         // Both the in-call map and the persisted day, because a suspension handed out by the
         // player's own card in a previous session is every bit as binding as one from this loop.
         if (Math.max(readyOn.get(f.id as string) ?? 0, f.readyOnDay ?? 0) > day) return false;
+        /*
+         * And what they are carrying, which nothing here ever asked.
+         *
+         * `readyOnDay` is a *medical suspension* — a function of how the last fight ended — and it
+         * knows nothing about injuries. So the world matched fighters with torn knees, they fought
+         * on them, and `settleFightInjuries` ran `aggravate`, which multiplies the remaining
+         * layoff by 1.6–2.4. Once per bout, with nothing stopping the next booking.
+         *
+         * Measured over eight years of generated pre-history before this line existed: **76% of
+         * the roster was carrying an injury**, the worst of them a knee 995 weeks from healed, and
+         * every one of the worst cases was `foughtThrough`. A world in that state is not a harsher
+         * world, it is a broken one — those fighters take `injuredAttributes` into the cage, and
+         * the ones the player is offered withdraw.
+         *
+         * The rule is the one the player and the player's opponent have always been held to. A
+         * fighter carrying something that will not be gone by fight night does not take the fight;
+         * anything shorter and they fight on it and nobody is told, which is the mechanic worth
+         * keeping.
+         */
+        if (!canFightOn(f.injuries ?? [], day)) return false;
         const inLastYear = f.record.filter((r) => day - r.day < 365).length;
         return inLastYear < MAX_BOUTS_PER_YEAR;
       });
@@ -1804,9 +1825,23 @@ function develop(
    * Effective blocks, when this is ordinary between-bouts work rather than a camp.
    *
    * Left undefined for a fight camp, which is priced by `trainingBlocks(weeks)` as it always has
-   * been. `weeks` is still passed either way because camp injury risk reads it.
+   * been.
    */
   blocks?: number,
+  /**
+   * Weeks of *exposure*, for the injury roll, when that is not the same as the block length.
+   *
+   * The other half of the defect the `blocks` parameter above exists to fix, left behind when it
+   * landed — the comment there even says so: "`weeks` is still passed either way because camp
+   * injury risk reads it". Training was made linear in elapsed time and the injury hazard was not,
+   * so `ageEveryone` charged a flat four-weeks-of-camp worth of risk **once per call**, and how
+   * often the world got hurt depended entirely on how the caller chopped up the clock. At a
+   * fortnight a step that is twenty-six rolls a year against one at a year a step.
+   *
+   * Defaults to `weeks`, so a fight camp — where the block genuinely is the exposure — is
+   * unchanged.
+   */
+  injuryWeeks = weeks,
 ): Fighter {
   const gym = fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined;
   const coach = fighter.headCoachId
@@ -1836,7 +1871,7 @@ function develop(
    */
   const withInjury = ((): Fighter => {
     const injuryRng = rng.fork('campInjury');
-    if (!injuryRng.chance(campInjuryChance(trained, weeks, day))) return trained;
+    if (!injuryRng.chance(campInjuryChance(trained, injuryWeeks, day))) return trained;
     const injury = rollInjury({
       fighter: trained,
       source: 'camp',
@@ -2232,6 +2267,10 @@ function ageEveryone(
       new Map([[fighter.id as string, since]]),
       4,
       elapsedWeeks * AMBIENT_BLOCKS_PER_WEEK,
+      // Risk against the time that actually passed, not against the nominal block. See the
+      // parameter's own note: this is what stops the world's injury rate depending on how
+      // finely the player happens to be advancing the clock.
+      elapsedWeeks,
     );
     if (trained !== fighter) db.fighters.upsert(trained as Fighter & Entity);
   }

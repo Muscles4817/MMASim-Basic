@@ -10,12 +10,17 @@ import {
   aggravationChance,
   campImpairment,
   campInjuryChance,
+  campRiskBreakdown,
+  canFightOn,
+  FIGHT_THROUGH_WEEKS,
   concussionFor,
   describeInjury,
   exposureScore,
   fightInjuryChance,
   injuredAttributes,
   isActiveInjury,
+  fatigueFactor,
+  riskBand,
   rollInjury,
   type FightExposure,
   type Injury,
@@ -529,5 +534,176 @@ describe('describeInjury', () => {
       50,
     );
     expect(text).toMatch(/healed/i);
+  });
+});
+
+/**
+ * The lever.
+ *
+ * Every other term in the hazard is a fact about the fighter that a player cannot move this
+ * month — how old they are, how many miles are on them, how fragile they were born. Freshness is
+ * the one input they can change today, by resting, and until it entered the roll the honest
+ * answer to "how do I avoid these" was *fight less and get younger*.
+ */
+describe('being flat is what gets people hurt', () => {
+  const flat = (value: number) =>
+    makeFighter({ id: 'f', age: 28, condition: { freshness: value } });
+
+  it('makes a rested fighter meaningfully safer in camp than a wrecked one', () => {
+    const fresh = campInjuryChance(flat(100), 8, 0);
+    const wrecked = campInjuryChance(flat(15), 8, 0);
+    // Better than a coin-flip's worth of difference, or the rest button is a rounding error.
+    expect(wrecked).toBeGreaterThan(fresh * 1.8);
+  });
+
+  it('applies the same term on fight night, so a hard camp costs you twice', () => {
+    expect(fightInjuryChance(flat(20), DECISION, 0)).toBeGreaterThan(
+      fightInjuryChance(flat(95), DECISION, 0),
+    );
+  });
+
+  it('is neutral where a fighter between camps actually lives, not at a perfect hundred', () => {
+    /*
+     * Anchoring the multiplier at 100 would have made it a blanket nerf wearing a mechanic's
+     * clothes: nobody is ever at 100, a camp ends in the fifties, so every fighter would sit
+     * permanently on the punitive side of a term that claims to be neutral.
+     */
+    expect(fatigueFactor(70)).toBeGreaterThan(0.95);
+    expect(fatigueFactor(70)).toBeLessThan(1.05);
+  });
+
+  it('never lets the term run away in either direction', () => {
+    expect(fatigueFactor(0)).toBeLessThanOrEqual(1.55);
+    expect(fatigueFactor(100)).toBeGreaterThanOrEqual(0.7);
+  });
+});
+
+describe('a short block is genuinely a short block', () => {
+  it('charges a fortnight far less than a full camp', () => {
+    /*
+     * The old floor was `clamp(weeks / 8, 0.5, 1.6)`, which said one week of drilling carried half
+     * the risk of an eight-week camp — so shortening a block bought almost nothing and "train
+     * less" was not an answer to anything.
+     */
+    const fortnight = campInjuryChance(fighter(), 2, 0);
+    const full = campInjuryChance(fighter(), 8, 0);
+    expect(fortnight).toBeLessThan(full * 0.4);
+  });
+});
+
+describe('the risk breakdown', () => {
+  const flat = makeFighter({ id: 'f', age: 36, condition: { freshness: 20 } });
+
+  it('reports exactly the number the roll uses', () => {
+    // A screen that quotes a different figure from the one the camp rolls is worse than a screen
+    // that quotes nothing.
+    expect(campRiskBreakdown(fighter(), 8, 0, 1.5).chance).toBeCloseTo(
+      campInjuryChance(fighter(), 8, 0, 1.5),
+      10,
+    );
+  });
+
+  it('separates what a player can still decide from what they cannot', () => {
+    const risk = campRiskBreakdown(flat, 12, 0, 2.3);
+    const movable = risk.drivers.filter((d) => d.movable).map((d) => d.label);
+    const fixed = risk.drivers.filter((d) => !d.movable).map((d) => d.label);
+
+    expect(movable).toContain('Freshness');
+    expect(movable).toContain('Block length');
+    // Being 36 is worth knowing and is not advice.
+    expect(fixed).toContain('Age');
+  });
+
+  it('names resting first when being flat is the biggest thing wrong', () => {
+    expect(campRiskBreakdown(flat, 4, 0, 1).advice).toMatch(/rest/i);
+  });
+
+  it('calls an ordinary camp ordinary rather than alarming', () => {
+    // A fresh 28-year-old running a standard eight-week camp is the common case, and a screen
+    // that calls the common case "high" is a screen the player learns to ignore.
+    const ordinary = makeFighter({ id: 'f', age: 28, condition: { freshness: 100 } });
+    expect(riskBand(campInjuryChance(ordinary, 8, 0))).toBe('fair');
+  });
+
+  it('says so plainly when nothing left to decide would help', () => {
+    const careful = makeFighter({ id: 'f', age: 24, condition: { freshness: 100 } });
+    const risk = campRiskBreakdown(careful, 2, 0, 0.5);
+    expect(riskBand(risk.chance)).toBe('low');
+    expect(risk.advice).toMatch(/safe|nothing/i);
+  });
+
+  it('bands the number, so a screen is not left colouring a bare percentage', () => {
+    expect(riskBand(0.02)).toBe('low');
+    expect(riskBand(0.11)).toBe('fair');
+    expect(riskBand(0.17)).toBe('high');
+    expect(riskBand(0.4)).toBe('severe');
+  });
+});
+
+/**
+ * The runaway.
+ *
+ * `aggravate` multiplies the *remaining* layoff by 1.6-2.4, and nothing bounded it. A fighter who
+ * is repeatedly matched while hurt therefore has that layoff doubled once per bout — measured over
+ * eight years of generated pre-history, a torn knee reached **995 weeks** and three quarters of
+ * the roster was carrying something. Every one of the worst cases was `severity: 1` and
+ * `foughtThrough: true`, which is the compounding signature rather than bad luck.
+ */
+describe('an injury made worse is worse, not unbounded', () => {
+  const knee = (healedIn: number): Injury => ({
+    id: 'i' as Injury['id'],
+    type: 'knee',
+    day: 0,
+    healedDay: healedIn * 7,
+    severity: 0.8,
+    source: 'fight',
+  });
+
+  it('still costs a great deal the first time', () => {
+    const before = knee(20);
+    const after = aggravate(before, 0, createRng('agg'));
+    expect(after.healedDay).toBeGreaterThan(before.healedDay * 1.5);
+    expect(after.foughtThrough).toBe(true);
+  });
+
+  it('cannot be driven past twice its own worst natural case, however many times it happens', () => {
+    let injury = knee(30);
+    for (let i = 0; i < 12; i++) injury = aggravate(injury, 0, createRng(`agg${i}`));
+    // A knee's worst natural case is forty weeks, so eighty is the wall. That still ends careers.
+    expect(injury.healedDay / 7).toBeLessThanOrEqual(INJURY_META.knee.weeks[1] * 2);
+  });
+
+  it('holds for every injury type', () => {
+    for (const type of INJURY_TYPES) {
+      let injury: Injury = { ...knee(INJURY_META[type].weeks[1]), type };
+      for (let i = 0; i < 8; i++) injury = aggravate(injury, 0, createRng(`${type}${i}`));
+      expect(injury.healedDay / 7, type).toBeLessThanOrEqual(INJURY_META[type].weeks[1] * 2);
+    }
+  });
+});
+
+describe('who is fit to take a fight', () => {
+  const carrying = (weeks: number): Injury[] => [
+    {
+      id: 'i' as Injury['id'],
+      type: 'knee',
+      day: 0,
+      healedDay: weeks * 7,
+      severity: 0.5,
+      source: 'camp',
+    },
+  ];
+
+  it('lets a fighter take one on something that will be gone by the night', () => {
+    // The mechanic worth keeping: people fight with broken hands, and nobody is told.
+    expect(canFightOn(carrying(FIGHT_THROUGH_WEEKS - 1), 0)).toBe(true);
+  });
+
+  it('does not, once it will still be badly there', () => {
+    expect(canFightOn(carrying(FIGHT_THROUGH_WEEKS + 4), 0)).toBe(false);
+  });
+
+  it('says yes to a fighter carrying nothing', () => {
+    expect(canFightOn([], 0)).toBe(true);
   });
 });

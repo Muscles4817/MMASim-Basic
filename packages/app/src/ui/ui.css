@@ -861,3 +861,31 @@ a.list__item:hover {
   border-inline-start: 3px solid var(--accent);
   line-height: 1.45;
 }
+
+/* --- Freshness track ------------------------------------------------------------------ */
+
+/*
+ * A wider, taller version of the rating bar, for the one resource the player watches move.
+ *
+ * Its own class rather than a reuse of `.rating__track` because the two are read differently:
+ * an attribute bar is scanned against fourteen others in a column, so it is thin on purpose,
+ * while this is a single figure that has to be legible while it is *changing* — the whole
+ * reason the rest card walks a block day by day instead of jumping it.
+ *
+ * The transition is deliberately shorter than the tick interval, so each step lands cleanly
+ * rather than smearing one frame into the next.
+ */
+.freshness-track {
+  height: 10px;
+  margin-top: var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.freshness-track__fill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+  transition: width 40ms linear;
+}
