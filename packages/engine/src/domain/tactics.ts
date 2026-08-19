@@ -44,18 +44,24 @@ import { clamp01 } from '../core/math.js';
 /**
  * The states a fighter can want the fight to be in.
  *
- * `longRange` and `pocket` are both "standing", and separating them is what makes an outside
- * kickboxer a different instruction from a pressure boxer. The simulator carries a matching
- * `range` on its standing state so the two are distinguishable in the fight as well as on the
- * screen — before this, `distance` was one undifferentiated place and the two plans could only
- * have meant the same thing.
+ * Three of them are standing, and that is what makes an outside kickboxer, a pure boxer and a
+ * pressure fighter three instructions rather than one. `FightState.range` carries the matching
+ * state, so these are distinguishable *in the fight* and not only on the screen — before it,
+ * `distance` was one undifferentiated place and every standing plan meant the same thing.
+ *
+ * `boxing` exists because two states could not carry the load. The two-state version of this had
+ * to claim that at long range a fighter may only jab, which is false and was the signal that the
+ * model was being stretched: a rear straight is not a pocket-only weapon, and most conventional
+ * MMA striking happens at a range that is neither the one you enter from nor the one you survive
+ * in.
  *
  * `adaptive` is a real answer and not a cop-out: it means the fighter takes whatever the
  * opponent gives, which is what a well-rounded fighter with no exploitable preference should
  * do, and it is the setting under which `policy.ts` applies no bias at all.
  */
 export const PREFERRED_STATES = [
-  'longRange',
+  'outside',
+  'boxing',
   'pocket',
   'clinch',
   'top',
@@ -73,23 +79,40 @@ export interface PreferredStateMeta {
 }
 
 export const PREFERRED_STATE_META: Readonly<Record<PreferredState, PreferredStateMeta>> = {
-  longRange: {
-    key: 'longRange',
+  outside: {
+    key: 'outside',
     label: 'Outside',
-    blurb: 'Kick and jab at range. Refuse the pocket, the fence and the floor.',
+    blurb: 'Kicking range. Make them come to you, and make coming expensive.',
+    standing: true,
+  },
+  boxing: {
+    key: 'boxing',
+    label: 'Boxing range',
+    blurb: 'Where the hands work and the kicks still reach. Neither hiding nor trading.',
     standing: true,
   },
   pocket: {
     key: 'pocket',
     label: 'Pocket',
-    blurb: 'Box at close range. Accept the exchanges, start none of the grappling.',
+    blurb: 'Chest to chest. Short shots, heavy exchanges, no room to step off.',
     standing: true,
   },
   clinch: {
     key: 'clinch',
     label: 'Clinch',
     blurb: 'Fence and tie-up. Dirty box, knees, trips, control.',
-    standing: true,
+    /*
+     * Grappling for the purposes of *route*, even though the fight is on the feet.
+     *
+     * `standing` decides which entry styles are offered, and "how do I get to the tie-up and what
+     * do I do from it" is a grappling question — you walk them onto the fence, or you throw them
+     * from grips. Listing the clinch as standing gave it Lead / Counter / Pressure / Movement,
+     * so **the judo exemplar came out as `clinch` + `counter`** — a throwing specialist told to
+     * counter-punch — and jiu-jitsu against judo fell to 0.046 on the fingerprint, under the 0.05
+     * floor every pair in the game is held to. `tripsAndThrows` had no preference that could
+     * reach it.
+     */
+    standing: false,
   },
   top: {
     key: 'top',
@@ -309,8 +332,12 @@ export interface TacticalPlan {
 
 /** How committed each preference is by nature. `adaptive` means "no preference", so it is 0. */
 const BASE_CONVICTION: Readonly<Record<PreferredState, number>> = {
-  longRange: 0.85,
-  pocket: 0.7,
+  outside: 0.85,
+  // The most forgiving preference in the list, and the least urgently held: a fighter comfortable
+  // at boxing range can work a step either side of it, which is what makes it the default answer
+  // for a rounded striker rather than a compromise between two better ones.
+  boxing: 0.6,
+  pocket: 0.75,
   clinch: 0.8,
   top: 0.85,
   submission: 0.9,

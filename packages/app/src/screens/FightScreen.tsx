@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  RANGES,
   callFight,
   createRng,
   deliveryScore,
@@ -22,6 +23,7 @@ import {
   type Judge,
   type Referee,
   type RoundTally,
+  type Range,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
@@ -940,6 +942,21 @@ function FightSummary({
             red={result.stats.red.knockdowns}
             blue={result.stats.blue.knockdowns}
           />
+          {/*
+            Where the standing time actually went.
+
+            The one output that says whether a game plan happened. A player whose fighter was
+            told to stay outside and lost can read "Control time" and "Significant strikes" all
+            day without learning the thing that decided it — that he spent two thirds of the fight
+            in the pocket because he could not keep anybody off him. Range is contested every
+            exchange and the play-by-play narrates each change, but nobody diagnoses a plan by
+            scrolling three hundred events.
+
+            Shown as the player's own breakdown rather than a red-vs-blue comparison because both
+            corners are in the same place at the same time: the split is a property of the fight,
+            not of a fighter.
+          */}
+          <RangeBreakdown seconds={result.stats.red.rangeSeconds} />
           <StatComparison
             redName={redName}
             blueName={blueName}
@@ -1248,6 +1265,41 @@ function crowdVerdict(result: FightResult): string {
 
 const clock = (v: number): string =>
   `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, '0')}`;
+
+/**
+ * The standing time, split by how far apart they were.
+ *
+ * `distanceSeconds` answers a judge's question — was this fight standing — and this answers the
+ * player's: *did the plan happen*. Rendered as one bar rather than two because the two fighters
+ * are necessarily at the same range as each other.
+ */
+function RangeBreakdown({ seconds }: { seconds: Record<Range, number> }) {
+  const total = RANGES.reduce((sum, r) => sum + seconds[r], 0);
+  if (total <= 0) return null;
+  const label: Record<Range, string> = {
+    outside: 'Kicking range',
+    boxing: 'Boxing range',
+    pocket: 'The pocket',
+  };
+  return (
+    <div className="fight-stats__row">
+      <span className="fight-stats__label">Standing range</span>
+      <div className="stack" style={{ gap: 'var(--space-1)', width: '100%' }}>
+        {RANGES.map((range) => (
+          <span key={range} className="row" style={{ justifyContent: 'space-between' }}>
+            <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
+              {label[range]}
+            </span>
+            <span className="numeric">
+              {clock(seconds[range])}{' '}
+              <span className="muted">({Math.round((seconds[range] / total) * 100)}%)</span>
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StatComparison({
   label,

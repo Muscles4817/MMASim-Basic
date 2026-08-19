@@ -56,6 +56,7 @@
  */
 
 import { clamp, clamp01, remap } from '../core/math.js';
+import { rangeChangeChance, rangeUrgencyScale, type RangeChange } from './range.js';
 import type {
   BottomIntent,
   PreferredState,
@@ -65,7 +66,7 @@ import type {
 } from '../domain/tactics.js';
 import { traitAdd } from '../domain/traits.js';
 import type { Combatant } from './profile.js';
-import type { Corner, GroundPosition } from './types.js';
+import type { Corner, GroundPosition, Range } from './types.js';
 
 /**
  * How hard a fully-committed, fully-executed plan bends the action weights.
@@ -98,31 +99,87 @@ export type ControllingAction = 'clinchTakedown' | 'clinchStrike' | 'clinchStall
 type Alignment = Readonly<Record<PreferredState, number>>;
 
 const STANDING_ALIGNMENT: Readonly<Record<StandingAction, Alignment>> = {
-  // Hands are the pocket's weapon. An outside fighter still jabs, which is why this is only
-  // mildly positive at long range rather than negative.
-  strike: { longRange: 0.3, pocket: 1, clinch: 0.1, top: -0.25, submission: -0.3, adaptive: 0 },
-  // Kicks need room, and throwing them is how you keep it.
-  kick: { longRange: 1, pocket: -0.15, clinch: -0.45, top: -0.35, submission: -0.35, adaptive: 0 },
-  takedown: { longRange: -0.9, pocket: -0.7, clinch: 0.15, top: 1, submission: 0.9, adaptive: 0 },
-  clinchUp: { longRange: -1, pocket: -0.55, clinch: 1, top: 0.45, submission: 0.25, adaptive: 0 },
+  /*
+   * These are *intent* weights and no longer the whole story about weapons.
+   *
+   * `range.ts` decides which strikes are suitable where, so a fighter at kicking range throws
+   * kicks because he is at kicking range, not because his plan says so. What is left here is the
+   * plan's own lean — what he reaches for when the range gives him a choice — which is why the
+   * hands/feet split is much flatter than it was before range existed. Leaving it steep would
+   * charge for the same preference twice.
+   */
+  strike: {
+    outside: 0.15,
+    boxing: 0.5,
+    pocket: 0.7,
+    clinch: 0.1,
+    top: -0.25,
+    submission: -0.3,
+    adaptive: 0,
+  },
+  kick: {
+    outside: 0.6,
+    boxing: 0.2,
+    pocket: -0.2,
+    clinch: -0.45,
+    top: -0.35,
+    submission: -0.35,
+    adaptive: 0,
+  },
+  takedown: {
+    outside: -0.9,
+    boxing: -0.75,
+    pocket: -0.6,
+    clinch: 0.15,
+    top: 1,
+    submission: 0.9,
+    adaptive: 0,
+  },
+  clinchUp: {
+    outside: -1,
+    boxing: -0.7,
+    pocket: -0.45,
+    clinch: 1,
+    top: 0.45,
+    submission: 0.25,
+    adaptive: 0,
+  },
 };
 
 const HELD_ALIGNMENT: Readonly<Record<HeldAction, Alignment>> = {
-  breakAway: { longRange: 1, pocket: 0.8, clinch: -1, top: -0.1, submission: -0.2, adaptive: 0 },
+  breakAway: {
+    outside: 1,
+    boxing: 0.9,
+    pocket: 0.65,
+    clinch: -1,
+    top: -0.1,
+    submission: -0.2,
+    adaptive: 0,
+  },
   clinchStrike: {
-    longRange: -0.35,
-    pocket: 0.15,
+    outside: -0.35,
+    boxing: -0.1,
+    pocket: 0.25,
     clinch: 0.7,
     top: -0.15,
     submission: -0.2,
     adaptive: 0,
   },
-  reverse: { longRange: -0.4, pocket: -0.15, clinch: 1, top: 0.7, submission: 0.4, adaptive: 0 },
+  reverse: {
+    outside: -0.4,
+    boxing: -0.25,
+    pocket: -0.1,
+    clinch: 1,
+    top: 0.7,
+    submission: 0.4,
+    adaptive: 0,
+  },
 };
 
 const CONTROLLING_ALIGNMENT: Readonly<Record<ControllingAction, Alignment>> = {
   clinchTakedown: {
-    longRange: -0.6,
+    outside: -0.6,
+    boxing: -0.55,
     pocket: -0.5,
     clinch: -0.1,
     top: 1,
@@ -130,7 +187,8 @@ const CONTROLLING_ALIGNMENT: Readonly<Record<ControllingAction, Alignment>> = {
     adaptive: 0,
   },
   clinchStrike: {
-    longRange: -0.3,
+    outside: -0.3,
+    boxing: -0.05,
     pocket: 0.2,
     clinch: 1,
     top: -0.2,
@@ -138,7 +196,8 @@ const CONTROLLING_ALIGNMENT: Readonly<Record<ControllingAction, Alignment>> = {
     adaptive: 0,
   },
   clinchStall: {
-    longRange: -0.5,
+    outside: -0.5,
+    boxing: -0.45,
     pocket: -0.4,
     clinch: 0.55,
     top: -0.1,
@@ -458,6 +517,93 @@ export function finishOpportunity(actor: Combatant, target: Combatant): number {
   }
 }
 
+// --- Range ------------------------------------------------------------------------------------
+
+/**
+ * Which range this fighter's plan is asking for.
+ *
+ * **`entry` is deliberately absent from this function**, and that absence is the whole point.
+ * Walking somebody backwards and closing the gap on them are related and not identical: a
+ * pressure kickboxer wants you retreating *at kicking range*, and a model that reads `pressure`
+ * as "get into the pocket" has quietly rebuilt the conflation that made the old `approach`
+ * control useless — where initiative and desired position were one control and neither could be
+ * stated without the other.
+ *
+ * So the plan's preferred *state* decides the range, and the entry style acts elsewhere: on who
+ * is able to give ground (`groundDenial`). `outside` + `pressure` is a fighter walking you down
+ * while refusing to come in with you, which is a real and common fighter this could not describe
+ * an hour ago.
+ *
+ * The grappling preferences want the pocket, because that is where entries live — but as a route
+ * rather than a destination, which `rangeUrgencyScale` prices.
+ */
+export function desiredRangeOf(c: Combatant): Range {
+  switch (c.plan.tactics.preferredState) {
+    case 'outside':
+      return 'outside';
+    case 'boxing':
+      return 'boxing';
+    case 'pocket':
+    case 'clinch':
+    case 'top':
+    case 'submission':
+      return 'pocket';
+    case 'adaptive':
+      return 'boxing';
+  }
+}
+
+const GRAPPLING_STATES: readonly PreferredState[] = ['clinch', 'top', 'submission'];
+
+/**
+ * How hard this fighter pushes for the range they want, 0–1.
+ *
+ * The same `urgency` every other policy decision reads, so a fighter whose plan has come apart
+ * stops managing range as well as everything else — and scaled by how much the plan is *about*
+ * range, because a wrestler wanting the pocket wants it far less specifically than an outside
+ * fighter wants kicking distance.
+ */
+export function rangeUrgency(c: Combatant, stance: Stance): number {
+  const desired = desiredRangeOf(c);
+  const grappling = GRAPPLING_STATES.includes(c.plan.tactics.preferredState);
+  /*
+   * A floor, because **managing distance is a property of fighting rather than of planning**.
+   *
+   * Every other policy term is zero for an unplanned fighter, and that is right: without a plan
+   * he has no preference about whether the fight goes to the floor. Range is not like that. A
+   * fighter with no instructions still drifts toward where his own skills work, and one who never
+   * moves at all is not neutral — he is a man standing at whatever distance the last reset left
+   * him at, which measured as **63% of every unplanned fight at kicking range** with the range
+   * beat never firing once.
+   *
+   * So the floor is what a fighter does by himself, and the plan is what a corner adds to it.
+   */
+  return clamp(stance.urgency * rangeUrgencyScale(desired, grappling), 0.3, 1);
+}
+
+/**
+ * How hard a fighter is to move away from — the job `entry` actually has.
+ *
+ * `pressure` is space-taking: you are being walked backwards, so stepping off is harder and
+ * closing on you is easier. `movement` is the opposite. Neither says a word about which range
+ * either man wants, which is the separation this whole module is careful about.
+ *
+ * Returned as a multiplier on the *holder's* resistance, so a pressure fighter denies the retreat
+ * whether or not he is the one trying to change anything.
+ */
+export function groundDenial(c: Combatant, against: 'retreat' | 'close'): number {
+  switch (c.plan.tactics.entry) {
+    case 'pressure':
+      return against === 'retreat' ? 1.35 : 0.85;
+    case 'movement':
+      return against === 'retreat' ? 0.8 : 1.3;
+    case 'clinchEntries':
+      return against === 'retreat' ? 1.25 : 0.9;
+    default:
+      return 1;
+  }
+}
+
 // --- The same plan, at round granularity ------------------------------------------------------
 
 /**
@@ -502,6 +648,101 @@ export function controlResistance(c: Combatant): number {
 export function strikingAppetite(c: Combatant): number {
   const stance = neutralStance(c);
   return (standingBias(stance, 'strike') + standingBias(stance, 'kick')) / 2;
+}
+
+/**
+ * The range mix a matchup is expected to settle at, for the round-level resolver.
+ *
+ * `round.ts` resolves a whole round at once, so it cannot ask "where are they *now*" — it needs
+ * the share of the round each range accounts for. Computed from the same `rangeChangeChance`
+ * contest the full simulator runs, at neutral stickiness, so the two levels cannot disagree about
+ * who wins a range: a fighter promoted from Reduced to Full mid-career must not walk into a
+ * different sport, and that has already caught this engine once, when the Reduced resolver
+ * produced 266 seconds of control for every game plan while Full ranged 119 to 349.
+ *
+ * A two-fighter stationary distribution rather than a simulation: each man pulls toward his own
+ * desired range with the strength his contest wins, and the mix is where that tug-of-war sits.
+ */
+export function expectedRangeMix(a: Combatant, d: Combatant): Record<Range, number> {
+  const stanceA = stanceOf(a, undefined, false);
+  const stanceD = stanceOf(d, undefined, false);
+  const pull = (c: Combatant, other: Combatant, stance: Stance): number =>
+    rangeChangeChance({
+      mover: c,
+      holder: other,
+      change: 'close',
+      stickiness: 0,
+      intent: 0.75 + rangeUrgency(c, stance) * 1.15,
+      denial: groundDenial(other, 'close'),
+    });
+
+  const wantA = desiredRangeOf(a);
+  const wantD = desiredRangeOf(d);
+  const strengthA = pull(a, d, stanceA);
+  const strengthD = pull(d, a, stanceD);
+
+  /*
+   * Time nobody chose, before any of the above.
+   *
+   * Every round starts at `outside` and every referee reset returns there, and getting off it
+   * costs a beat — more than a beat, for somebody who cannot win the range contest. Without this
+   * term the model said two fighters who both wanted the boxing range spent *all* of the fight
+   * there, which is not a small error: measured over 400 fights on each of the parity suite's
+   * five matchups, Full spends 0.29–0.41 of its standing time at `outside` in exactly those
+   * matchups, because that is where the fight keeps being put back.
+   *
+   * Sized against how fast the two of them get off it, so a pair who both close well spend less
+   * of the fight walking in than a pair who cannot.
+   */
+  const reset = clamp(0.66 * (1 - (strengthA + strengthD) / 2), 0.1, 0.5);
+  const contested = 1 - reset;
+
+  // Each fighter's share of the *remaining* standing time is spent at the range he wants; the
+  // residual sits in the middle, which is where two fighters who want opposite things meet.
+  const total = strengthA + strengthD;
+  const shareA = total <= 0 ? 0.5 : strengthA / total;
+  const mix: Record<Range, number> = { outside: reset, boxing: 0, pocket: 0 };
+  mix[wantA] += shareA * contested * 0.62;
+  mix[wantD] += (1 - shareA) * contested * 0.62;
+  mix.boxing += contested * 0.38;
+  const sum = mix.outside + mix.boxing + mix.pocket;
+  return { outside: mix.outside / sum, boxing: mix.boxing / sum, pocket: mix.pocket / sum };
+}
+
+/**
+ * How often a fighter's attempt to change range comes up short, per exchange.
+ *
+ * Full hands the *other* man a bigger counter when an entry fails — a fighter who lunged and did
+ * not arrive is mid-stride with his feet crossed, and that is the moment fights turn. Reduced has
+ * no concept of an entry, so without this it cannot see the danger at all.
+ *
+ * It is not an even cost across the sport, which is why it needs saying rather than absorbing
+ * into a constant: it falls almost entirely on matchups where the two men want *opposite* ranges
+ * and spend the fight failing to impose them on each other. Two fighters who both want the pocket
+ * meet there and this term is near zero for both.
+ *
+ * The probability is the product of two things Reduced already knows how to estimate — how often
+ * this fighter is somewhere he does not want to be, and how often he fails to fix it.
+ */
+export function expectedRangeFailure(c: Combatant, other: Combatant): number {
+  const want = desiredRangeOf(c);
+  const away = 1 - expectedRangeMix(c, other)[want];
+  if (away <= 0) return 0;
+
+  const stance = stanceOf(c, undefined, false);
+  const change: RangeChange = want === 'outside' ? 'retreat' : 'close';
+  const chance = rangeChangeChance({
+    mover: c,
+    holder: other,
+    change,
+    // The mid-fight average rather than a clean break: by the time somebody is trying to leave a
+    // range, that range has had time to set.
+    stickiness: 0.35,
+    intent: 0.75 + rangeUrgency(c, stance) * 1.15,
+    denial: groundDenial(other, change === 'close' ? 'close' : 'retreat'),
+  });
+
+  return away * (1 - chance);
 }
 
 /** How much they go looking for the finish once the fight is on the floor. */
@@ -562,9 +803,11 @@ export function isDisplaced(
     case 'distance':
       return stance === 'top' || stance === 'submission' || stance === 'clinch';
     case 'clinch':
-      return stance === 'longRange' || stance === 'pocket';
+      // The pocket is a step from the tie-up, so a pocket fighter dragged into it is less
+      // displaced than an outside fighter who has been walked all the way across the cage.
+      return stance === 'outside' || stance === 'boxing';
     case 'top':
-      return stance === 'longRange' || stance === 'pocket';
+      return stance === 'outside' || stance === 'boxing' || stance === 'pocket';
     case 'bottom':
       return stance !== 'submission';
   }

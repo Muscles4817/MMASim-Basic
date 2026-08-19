@@ -221,7 +221,7 @@ describe('the plan decides where the fight happens', () => {
      * produce the difference. If this ever collapses, the tactical layer has stopped exerting
      * force on the engine and every plan is producing the same fight again.
      */
-    const outside = forRed({ preferredState: 'longRange', entry: 'movement' });
+    const outside = forRed({ preferredState: 'outside', entry: 'movement' });
     const wrestle = forRed({
       preferredState: 'top',
       entry: 'proactiveWrestling',
@@ -236,7 +236,7 @@ describe('the plan decides where the fight happens', () => {
 
   it('separates the clinch from both of them', () => {
     const clinch = forRed({ preferredState: 'clinch', entry: 'clinchEntries' });
-    const outside = forRed({ preferredState: 'longRange', entry: 'movement' });
+    const outside = forRed({ preferredState: 'outside', entry: 'movement' });
     const message = `clinch ${describeProfile(clinch)} | outside ${describeProfile(outside)}`;
 
     expect(clinch.clinchSeconds, message).toBeGreaterThan(outside.clinchSeconds * 2);
@@ -250,7 +250,7 @@ describe('the plan decides where the fight happens', () => {
      * booth. Both were "standing", the engine had one standing position, and so a rangy kicker
      * and a pressure boxer were the same instruction.
      */
-    const outside = forRed({ preferredState: 'longRange', entry: 'movement' });
+    const outside = forRed({ preferredState: 'outside', entry: 'movement' });
     const pocket = forRed({ preferredState: 'pocket', entry: 'pressure' });
     const message = `outside ${describeProfile(outside)} | pocket ${describeProfile(pocket)}`;
 
@@ -298,7 +298,7 @@ describe('the plan decides what happens once it is there', () => {
      * the three bottom actions were drawn from weights that happened to be close together and
      * nothing in the plan was in the room.
      */
-    const standUp = forRed({ preferredState: 'longRange', bottomIntent: 'standUp' });
+    const standUp = forRed({ preferredState: 'outside', bottomIntent: 'standUp' });
     const attack = forRed({ preferredState: 'submission', bottomIntent: 'attack' });
     const message = `standUp ${describeProfile(standUp)} | attack ${describeProfile(attack)}`;
 
@@ -320,13 +320,13 @@ describe('the plan decides what happens once it is there', () => {
     const getUp = profile(
       striker,
       wrestler,
-      planWith({ preferredState: 'longRange', entry: 'counter', bottomIntent: 'standUp' }),
+      planWith({ preferredState: 'outside', entry: 'counter', bottomIntent: 'standUp' }),
       foePlan,
     );
     const guard = profile(
       striker,
       wrestler,
-      planWith({ preferredState: 'longRange', entry: 'counter', bottomIntent: 'playGuard' }),
+      planWith({ preferredState: 'outside', entry: 'counter', bottomIntent: 'playGuard' }),
       foePlan,
     );
     const message = `getUp ${describeProfile(getUp)} | guard ${describeProfile(guard)}`;
@@ -357,7 +357,7 @@ describe('intent is not ability', () => {
     const sensible = profile(
       striker,
       wrestler,
-      planWith({ preferredState: 'longRange', entry: 'counter', bottomIntent: 'standUp' }),
+      planWith({ preferredState: 'outside', entry: 'counter', bottomIntent: 'standUp' }),
       neutralPlan,
     );
     const message = `asked ${describeProfile(asked)} | sensible ${describeProfile(sensible)}`;
@@ -410,7 +410,7 @@ describe('the fighter, not just the plan', () => {
       });
 
     const plan = planWith({
-      preferredState: 'longRange',
+      preferredState: 'outside',
       entry: 'movement',
       bottomIntent: 'standUp',
     });

@@ -407,13 +407,13 @@ export function tacticsFromApproach(approach: Approach | undefined): TacticalPla
     case 'pressure':
       return of('pocket', 'pressure', { bottomIntent: 'standUp' });
     case 'counter':
-      return of('longRange', 'counter', { bottomIntent: 'standUp' });
+      return of('boxing', 'counter', { bottomIntent: 'standUp' });
     case 'wrestle':
       return of('top', 'proactiveWrestling', { topIntent: 'control', bottomIntent: 'scramble' });
     case 'grind':
       return of('clinch', 'pressure', { topIntent: 'control', bottomIntent: 'scramble' });
     case 'pointFight':
-      return of('longRange', 'movement', { bottomIntent: 'standUp' });
+      return of('outside', 'movement', { bottomIntent: 'standUp' });
     case 'submit':
       return of('submission', 'reactiveShot', { topIntent: 'submit', bottomIntent: 'attack' });
     case 'finish':

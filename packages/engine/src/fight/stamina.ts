@@ -13,10 +13,11 @@
 import { clamp, clamp01 } from '../core/math.js';
 import { riskProfile } from '../domain/gameplan.js';
 import { traitMul } from '../domain/traits.js';
+import { RANGE_EXERTION } from './range.js';
 import { effect } from '../ratings/curve.js';
 import { bodyDrag } from './damage.js';
 import { GROUND_BOTTOM_COST, POSITION_COST, type Combatant } from './profile.js';
-import type { GroundPosition, Position } from './types.js';
+import type { GroundPosition, Position, Range } from './types.js';
 
 /** Fatigue added by one second of average-intensity action at distance, for Cardio 50. */
 const BASE_FATIGUE_PER_SECOND = 0.0016;
@@ -26,6 +27,8 @@ const BASE_ROUND_RECOVERY = 0.28;
 
 export interface FatigueContext {
   position: Position;
+  /** Where they are standing, when they are. */
+  range?: Range;
   groundPosition?: GroundPosition;
   /** True when this fighter is the one being controlled on the ground or against the fence. */
   isControlled: boolean;
@@ -39,6 +42,16 @@ export function accrueFatigue(c: Combatant, ctx: FatigueContext): void {
   const cardio = effect(c.attrs.cardio, 1.2);
 
   let positionCost = POSITION_COST[ctx.position];
+  /*
+   * The positional half of what the pocket costs, and small on purpose.
+   *
+   * Fighting inside is exhausting mostly because of what it makes you *do* — throw more, react
+   * more, absorb more — and every one of those is already charged for by the action terms below.
+   * What is left, and all this is, is the part that is genuinely about the position: there is
+   * nowhere to rest. A large multiplier here would double-charge for the same physics and put the
+   * calibration somewhere very strange.
+   */
+  if (ctx.position === 'distance' && ctx.range) positionCost *= RANGE_EXERTION[ctx.range];
   if (ctx.position === 'ground' && ctx.isControlled && ctx.groundPosition) {
     // Being underneath is far more exhausting than being on top. This is the mechanism by
     // which control time wins fights without ever landing a meaningful strike.

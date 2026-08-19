@@ -215,10 +215,10 @@ describe('preparation is worth more than a few rating points', () => {
     ...defaultGamePlan(),
     tactics: {
       ...defaultTactics(),
-      preferredState: 'longRange',
+      preferredState: 'outside',
       entry: 'counter',
       bottomIntent: 'standUp',
-      conviction: convictionFor('longRange'),
+      conviction: convictionFor('outside'),
     },
     campQuality: 0.95,
     preppedReads: [

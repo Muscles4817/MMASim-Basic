@@ -16,9 +16,24 @@ import type { FighterId } from '../core/ids.js';
 import type { Fighter, FinishMethod } from '../domain/fighter.js';
 import type { GamePlan, ReadKey } from '../domain/gameplan.js';
 import { PREP_MAX_BONUS, defaultGamePlan, normaliseGamePlan, prepValue, riskProfile } from '../domain/gameplan.js';
+import { stanceEdge } from './stance.js';
+import {
+  ENTRY_EASE,
+  RANGE_COUNTER,
+  TRANSITION_RANGE,
+  changeToward,
+  decayStickiness,
+  rangeChangeChance,
+  stepRange,
+  strikeSuitability,
+  targetFitness,
+} from './range.js';
 import {
   bottomBias,
   controllingBias,
+  desiredRangeOf,
+  groundDenial,
+  rangeUrgency,
   erodePlanIntegrity,
   finishOpportunity,
   heldBias,
@@ -70,6 +85,7 @@ import {
   STRIKE_TARGETS,
   emptyStats,
   type Corner,
+  type Range,
   type DamageReport,
   type FightEvent,
   type FightEventKind,
@@ -104,6 +120,17 @@ interface FightState {
   /** Corner on top, when on the ground. */
   groundTop?: Corner;
   groundPosition: GroundPosition;
+  /** How far apart they are, while standing. Meaningless in the clinch or on the floor. */
+  range: Range;
+  /**
+   * 0–1. How established the current range is.
+   *
+   * Set to 1 when somebody imposes a range and decayed every exchange. Without it the fight
+   * strobes: A closes, B steps out, A closes, and the state flickers all night while neither man
+   * achieves anything, which is worse than having no state. Taking the pocket off a pressure
+   * fighter who has just walked you into it is an achievement, and this is what makes it one.
+   */
+  rangeSettled: number;
   /** Corner controlling the clinch, if either. */
   clinchControl?: Corner;
   /**
@@ -157,6 +184,10 @@ const SUBMISSION_REPEAT_DECAY = 0.4;
 /** Put the fighters back in the centre, on their feet. Used at the opening bell and each round. */
 function resetToStanding(state: FightState): void {
   state.position = 'distance';
+  // A neutral restart, so both men reset to their own distance. Organic transitions — a clinch
+  // break, a scramble, a stuffed shot — inherit from what just happened; see `TRANSITION_RANGE`.
+  state.range = TRANSITION_RANGE.neutral!;
+  state.rangeSettled = 0;
   state.groundTop = undefined;
   state.groundPosition = 'guard';
   state.clinchControl = undefined;
@@ -187,6 +218,8 @@ export function simulateFight(config: FightConfig): FightResult {
 
   const state: FightState = {
     position: 'distance',
+    range: TRANSITION_RANGE.neutral!,
+    rangeSettled: 0,
     groundPosition: 'guard',
     stalledSeconds: 0,
     unanswered: { red: 0, blue: 0 },
@@ -445,6 +478,7 @@ function resolveExchange(ctx: ExchangeContext): ExchangeOutcome {
   // clock has to say so — see `exchangeStart`.
   const start = exchangeStart;
   start.position = state.position;
+  start.range = state.range;
   start.groundTop = state.groundTop;
   start.groundPosition = state.groundPosition;
   start.clinchControl = state.clinchControl;
@@ -569,6 +603,8 @@ function applyRecovery(c: Combatant, seconds: number): void {
  */
 interface ExchangeStart {
   position: Position;
+  /** The range the exchange was *fought at*, which is not always the one it ended at. */
+  range: Range;
   groundTop?: Corner;
   groundPosition: GroundPosition;
   clinchControl?: Corner;
@@ -585,6 +621,7 @@ interface ExchangeStart {
  */
 const exchangeStart: ExchangeStart = {
   position: 'distance',
+  range: 'outside',
   groundPosition: 'guard',
 };
 
@@ -595,6 +632,15 @@ function applyPassiveEffects(
 ): void {
   const { corners, state, tally } = ctx;
 
+  /*
+   * A range gets less sticky the longer nobody has done anything about it.
+   *
+   * The decay is what keeps `rangeSettled` a *recency* term rather than a permanent lock: a
+   * pressure fighter who walked you into the pocket ninety seconds ago has no more claim on it
+   * than anybody else, and without this a single early success would hold the range all round.
+   */
+  state.rangeSettled = decayStickiness(state.rangeSettled, seconds);
+
   for (const corner of ['red', 'blue'] as const) {
     const c = corners[corner];
     const isControlled =
@@ -603,6 +649,7 @@ function applyPassiveEffects(
 
     accrueFatigue(c, {
       position: start.position,
+      range: start.range,
       groundPosition: start.groundPosition,
       isControlled,
       intensity: start.position === 'distance' ? 1 : 1.15,
@@ -623,6 +670,8 @@ function applyPassiveEffects(
 
     if (start.position === 'distance') {
       c.stats.distanceSeconds += seconds;
+      // The breakdown that makes a failed game plan diagnosable without reading the play-by-play.
+      c.stats.rangeSeconds[start.range] += seconds;
     } else if (
       (start.position === 'ground' && start.groundTop === corner) ||
       (start.position === 'clinch' && start.clinchControl === corner)
@@ -812,6 +861,75 @@ function isCounterFighter(c: Combatant): boolean {
   return c.plan.tactics.entry === 'counter' || c.plan.tactics.entry === 'reactiveShot';
 }
 
+// --- Range --------------------------------------------------------------------------------
+
+/**
+ * The range beat: before anybody throws anything, does the gap change?
+ *
+ * A modifier on the exchange rather than an exchange of its own, because footwork that consumed
+ * its own slice of the clock would push the striking out of a fight to pay for the movement
+ * between it. The actor gets the say — they won initiative, and initiative is exactly "who is
+ * dictating" — and both fighters get plenty of turns.
+ *
+ * **A failed attempt is not free**, which is the difference between a range contest and a range
+ * coin-flip. Getting caught coming in is how the sport punishes a bad entry, and stepping off
+ * badly is how it punishes a bad exit; without a cost, a fighter with the wrong plan and no feet
+ * would simply retry every exchange until the dice obliged, and a poor range manager would be
+ * indistinguishable from a good one on everything except the count of attempts.
+ *
+ * Returns the exposure the *other* man earns from a failure — a multiplier on their next burst.
+ */
+function resolveRangeBeat(ctx: ExchangeContext, actor: Combatant, target: Combatant): number {
+  const { rng, state, emit } = ctx;
+
+  const desired = desiredRangeOf(actor);
+  const change = changeToward(state.range, desired);
+  const stance = stanceOfActor(ctx, actor, 'distance');
+  const urgency = rangeUrgency(actor, stance);
+
+  // Already where he wants to be, or too far gone to care where that is.
+  if (!change || urgency <= 0.02) return 1;
+
+  const chance = rangeChangeChance({
+    mover: actor,
+    holder: target,
+    change,
+    stickiness: state.rangeSettled,
+    /*
+     * Urgency buys *commitment*, not frequency.
+     *
+     * A first cut gated the attempt itself on `rng.chance(urgency)`, so a fighter with a modest
+     * plan simply did not manage distance three exchanges in four — and since every reset puts
+     * the fight at kicking range, the whole population sat there. Footwork is continuous; what
+     * varies between a committed outside fighter and a vaguely-interested one is how hard they
+     * work at it, not whether they bother.
+     */
+    intent: 0.75 + urgency * 1.15,
+    denial: groundDenial(target, change === 'close' ? 'close' : 'retreat'),
+  });
+
+  if (rng.chance(chance)) {
+    const next = stepRange(state.range, change);
+    state.range = next;
+    state.rangeSettled = 1;
+    emit('range', say.rangeChangeText(rng, actor, target, change, next), actor.corner);
+    return 1;
+  }
+
+  /*
+   * Caught doing it. A failed close walks you onto something; a failed exit hands them the
+   * combination you were trying to leave. Both are the same shape — the other man gets a better
+   * look at you — and both are why trying to fight at a range you cannot hold is expensive rather
+   * than merely futile.
+   */
+  state.rangeSettled = clamp01(state.rangeSettled + 0.25);
+  emit('range', say.rangeFailText(rng, actor, target, change), target.corner);
+  // A counter is thrown at 0.55 of a full burst, so a caught entry takes it to most of one.
+  // Coming forward costs more than backing out badly, because a man walking onto a shot brings
+  // his own weight to it.
+  return change === 'close' ? 1.45 : 1.3;
+}
+
 // --- Distance -----------------------------------------------------------------------------
 
 function resolveDistance(
@@ -820,6 +938,10 @@ function resolveDistance(
   target: Combatant,
 ): ExchangeOutcome {
   const { rng, state, emit } = ctx;
+
+  // Footwork first: where this exchange happens is decided before what happens in it.
+  const punished = resolveRangeBeat(ctx, actor, target);
+  const range = state.range;
 
   /*
    * Three things decide what a fighter reaches for at range, and the order matters.
@@ -854,11 +976,15 @@ function resolveDistance(
     // hook had a reader and no writer for as long as it has existed (docs/19 §9a).
     traitMul(actor.fighter.traits, 'takedownRate') *
     entryWeight(actor, 'takedown') *
+    // You have to be close enough to shoot. The engine had no concept of that, so a wrestler's
+    // entry cost the same from two metres away as from somebody's chest.
+    ENTRY_EASE[range] *
     exploitFactor(actor, actor.attrs.wrestling, target.attrs.takedownDefence);
   const clinchW =
     fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) *
     standingBias(stance, 'clinchUp') *
     entryWeight(actor, 'clinch') *
+    ENTRY_EASE[range] *
     exploitFactor(actor, actor.derived.clinchOffence, target.derived.clinchDefence);
 
   const intent = rng.pickWeighted(
@@ -870,7 +996,7 @@ function resolveDistance(
   switch (intent) {
     case 'strike':
     case 'kick':
-      return resolveStrikeExchange(ctx, actor, target, intent === 'kick');
+      return resolveStrikeExchange(ctx, actor, target, intent === 'kick', punished);
     case 'takedown':
       return resolveTakedown(ctx, actor, target, 'distance');
     case 'clinchUp': {
@@ -910,45 +1036,6 @@ function exploitFactor(actor: Combatant, ownAttack: number, opponentDefence: num
   return clamp(1 + awareness * clamp(gap, -0.6, 1.2), 0.5, 2.1);
 }
 
-/**
- * The open-stance edge, as a multiplier on the landing contest.
- *
- * `Fighter.stance` was stored, hand-authored on the real fighters in both seed rosters, rendered
- * on the fighter screen — and read by nothing at all (docs/19 §9c). A southpaw across from an
- * orthodox fighter is the one genuinely *discrete* physical matchup the data already carries, and
- * it is why §4 D6 refused `reachInches` the same treatment: reach has no contest to win until a
- * range concept exists, and a stance mismatch is a contest today.
- *
- * Three claims, and each is why the shape is what it is:
- *
- *  - **The edge is the southpaw's**, because the mechanism is unfamiliarity rather than geometry —
- *    roughly one fighter in seven leads with the other foot and has spent their whole life
- *    training against the other six, while the other six rarely train against them.
- *  - **A smart opponent solves it.** It is scaled down by the orthodox fighter's `fightIq`, from
- *    its full value at 40 to about a third at 90. An elite fighter adjusts inside a round; a dull
- *    one never does.
- *  - **A switch-stance fighter neither takes it nor gives it.** They are comfortable in both, and
- *    that comfort *is* the trait — it costs them the edge as well as sparing them it, which is
- *    what stops `switch` from being strictly the best stance to be generated with.
- *
- * `STANCE_EDGE` is the magnitude docs/19 §3 called "the variable", and it was set by measurement
- * rather than by argument. 10% on the offence term is worth **1.5 points of win rate against a
- * dull orthodox opponent, 1.1 against an average one and 0.5 against a smart one** over paired
- * seeds. 6% was tried first and read 0.90 / 0.63 / 0.30, which is inside the noise of anything
- * cheaper than six thousand fights — an edge nobody can measure is a field that is still dead.
- *
- * It cannot move the population's outcome distribution, whatever the value: a stance mismatch is
- * symmetric across the roster, so it decides *who* wins rather than how fights end. That is the
- * property that makes this safe to tune and the reason it is allowed a number this size at all.
- */
-const STANCE_EDGE = 0.1;
-
-function stanceEdge(actor: Combatant, target: Combatant): number {
-  if (actor.fighter.stance !== 'southpaw') return 1;
-  if (target.fighter.stance !== 'orthodox') return 1;
-  const solved = clamp01(remap(target.attrs.fightIq, 40, 90, 0, 0.68));
-  return 1 + STANCE_EDGE * (1 - solved);
-}
 
 /**
  * How much this fighter reaches for their feet rather than their hands, 0–1.
@@ -974,9 +1061,20 @@ function pickShot(
   rng: Rng,
   actor: Combatant,
   prefersKick: boolean,
+  range: Range,
 ): { target: StrikeTarget; weapon: Weapon } {
+  /*
+   * Where they are decides what is available, before what they want decides what they reach for.
+   *
+   * `targetMix` is the corner's instruction bent by the fighter's habits; `strikeSuitability` is
+   * the geometry, and it goes on top of both. A head kick from somebody's chest and a low kick
+   * from the same place are not the same proposition, and until range existed the engine had no
+   * way to say so — which is most of why a kickboxer and a karateka produced the same fight.
+   */
   const mix = targetMix(actor);
-  const target = rng.pickWeighted(STRIKE_TARGETS, (k) => mix[k]);
+  // `targetFitness` is shape-only — mean 1 across the three targets at every range — so a range
+  // decides where a fighter aims without deciding how much danger the fight carries.
+  const target = rng.pickWeighted(STRIKE_TARGETS, (k) => mix[k] * targetFitness(k, range));
   const lean = kickLean(actor);
 
   /*
@@ -989,7 +1087,12 @@ function pickShot(
 
   // Above the waist the exchange's lean decides, nudged by what this fighter actually owns, with
   // the odd shot from the other toolbox — a burst is a combination, not four copies of one strike.
-  const kickChance = prefersKick ? 0.55 + lean * 0.4 : lean * 0.3;
+  // Then the range arbitrates between the two, which is what stops head kicks landing in a phone
+  // booth and hands reaching from two metres.
+  const base = prefersKick ? 0.55 + lean * 0.4 : lean * 0.3;
+  const kickFit = strikeSuitability('kick', target, range);
+  const punchFit = strikeSuitability('punch', target, range);
+  const kickChance = clamp01((base * kickFit) / Math.max(1e-6, base * kickFit + (1 - base) * punchFit));
   return { target, weapon: rng.chance(kickChance) ? 'kick' : 'punch' };
 }
 
@@ -1008,6 +1111,8 @@ function resolveStrikeExchange(
   actor: Combatant,
   target: Combatant,
   prefersKick: boolean,
+  /** What the target earned from the actor's failed range change, as a scale on their counter. */
+  punished = 1,
 ): ExchangeOutcome {
   const { rng } = ctx;
   const seconds = rng.int(6, 14);
@@ -1021,8 +1126,21 @@ function resolveStrikeExchange(
     // The other half of `riskLevel`: how open the *leading* fighter left themselves. A
     // fighter sitting down on their shots is stationary at the exact moment the counter
     // comes back, which is where fights turn.
+    /*
+     * Range enters the fight on the counter rather than as a global multiplier on damage, which
+     * is what keeps the pocket dangerous *because of what happens in it* instead of by decree.
+     * `RANGE_COUNTER` is shape-only, so trading in the pocket does not raise the counter rate of
+     * the sport as a whole — it moves it out of the outside range and into the phone booth.
+     *
+     * `punished` arrives from the same beat's failed range change. A fighter who lunged in and
+     * did not get there is mid-stride with their feet crossed, and this is the moment that costs
+     * them: not a penalty applied to them, but a free look handed to the man in front.
+     */
     const counterScale =
-      (isCounterFighter(target) ? 0.9 : 0.55) * riskProfile(actor.plan.riskLevel).exposure;
+      (isCounterFighter(target) ? 0.9 : 0.55) *
+      riskProfile(actor.plan.riskLevel).exposure *
+      RANGE_COUNTER[ctx.state.range] *
+      punished;
     /*
      * The counter is thrown with the counter-fighter's own weapons.
      *
@@ -1070,7 +1188,7 @@ function throwBurst(
   let landedAny = false;
 
   for (let i = 0; i < burst; i++) {
-    const { target: strikeTarget, weapon } = pickShot(rng, actor, prefersKick);
+    const { target: strikeTarget, weapon } = pickShot(rng, actor, prefersKick, ctx.state.range);
     const isKick = weapon === 'kick';
     const reads: ReadKey[] = isKick
       ? strikeTarget === 'legs'
@@ -1120,7 +1238,7 @@ function throwBurst(
     actor.stats.significantStrikesLanded++;
     tally[actor.corner].significantStrikes++;
 
-    const result = applyStrike(rng, actor, target, strikeTarget, weapon);
+    const result = applyStrike(rng, actor, target, strikeTarget, weapon, state.range);
     tally[actor.corner].damageDealt += result.damage;
 
     // Cuts end fights via the doctor, not the referee. Which weapon opened it is decided in
@@ -1297,16 +1415,30 @@ function pickTakedownEntry(
   const a = actor.attrs;
 
   if (from === 'clinch') {
+    /*
+     * The plan finally reaches the entry it names.
+     *
+     * `tripsAndThrows` and `clinchEntries` were separated by nothing but two decimal places in
+     * `entryWeight` — 0.5/1.95 against 0.6/1.85 — so a corner that said *throw them* and one that
+     * said *walk them onto the fence and take them down* produced the same fight, and jiu-jitsu
+     * against judo sat at 0.046 on the styles fingerprint, under the floor every pair is held to.
+     *
+     * The distinction is real and the engine could already express it: `landingPosition` puts a
+     * trip in side control and a shot in guard. What was missing was the plan being allowed to
+     * say which one it wants, so a judoka's throws now actually land him past the hips.
+     */
+    const wantsThrows = actor.plan.tactics.entry === 'tripsAndThrows';
     return rng.pickWeighted(['bodyLock', 'trip', 'singleLeg'] as const, (entry) =>
       entry === 'bodyLock'
-        ? t.bodyLock * clamp01(remap(a.strength, 40, 90, 0.5, 1.2))
+        ? t.bodyLock * clamp01(remap(a.strength, 40, 90, 0.5, 1.2)) * (wantsThrows ? 0.6 : 1)
         : entry === 'trip'
           ? // A throw is a grip and a hip, not a level change. This read `doubleLeg` — which is
             // `p(wrestling) × f(strength)` — so the one entry that is supposed to be judo's was
             // gated on the *shot* attributes, and a judoka tripped less often than a wrestler did.
             clamp01(remap(a.scrambling, 40, 90, 0.2, 1.15)) *
-            clamp01(remap(a.submissions, 40, 90, 0.35, 1.35))
-          : t.singleLeg * 0.5,
+            clamp01(remap(a.submissions, 40, 90, 0.35, 1.35)) *
+            (wantsThrows ? 3.2 : 1)
+          : t.singleLeg * 0.5 * (wantsThrows ? 0.4 : 1),
     );
   }
 
@@ -1378,6 +1510,9 @@ function resolveTakedown(
     state.position = 'distance';
     state.clinchControl = undefined;
     state.placedBy = target.corner;
+    // A stuffed shot that ends up back on the feet leaves them right on top of each other.
+    state.range = TRANSITION_RANGE.stuffedTakedown!;
+    state.rangeSettled = 0.25;
   }
   return { seconds: rng.int(6, 12) };
 }
@@ -1524,6 +1659,9 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
       state.clinchControl = undefined;
       state.placedBy = actor.corner;
       state.stalledSeconds = 0;
+      // A clean break out of a tie-up puts two people at hands range, not at kicking range.
+      state.range = TRANSITION_RANGE.clinchBreak!;
+      state.rangeSettled = 0.35;
       emit('clinchBreak', say.clinchBreakText(rng, actor), actor.corner);
       return { seconds: rng.int(6, 14) };
     }
@@ -1571,6 +1709,9 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
     state.position = 'distance';
     state.clinchControl = undefined;
     state.placedBy = undefined;
+    // The referee steps between them and waves them on: that *is* a neutral reset.
+    state.range = TRANSITION_RANGE.refSeparation!;
+    state.rangeSettled = 0;
     state.stalledSeconds = 0;
     emit('refStandUp', say.clinchSeparationText());
   }
@@ -1645,6 +1786,9 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
       state.groundTop = undefined;
       state.groundPosition = 'guard';
       state.placedBy = actor.corner;
+      // Wall-walked back up with the other man disengaging. Nobody is at kicking range yet.
+      state.range = TRANSITION_RANGE.standUp!;
+      state.rangeSettled = 0.2;
       shiftMomentum(actor, target, 0.15);
       emit('standUp', say.standUpText(rng, actor), actor.corner);
     }
@@ -1863,6 +2007,9 @@ function maybeRefStandUp(ctx: ExchangeContext, seconds: number): ExchangeOutcome
   state.placedBy = undefined;
   state.groundPosition = 'guard';
   state.stalledSeconds = 0;
+  // The referee's decision, so a neutral restart like the bell.
+  state.range = TRANSITION_RANGE.neutral!;
+  state.rangeSettled = 0;
   emit('refStandUp', say.refStandUpText());
   return { seconds };
 }

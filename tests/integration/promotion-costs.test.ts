@@ -127,21 +127,31 @@ describe('the sport can still afford itself', () => {
      * the phase. What must not happen is them being comfortable, which would mean the costs are
      * not doing anything at all.
      *
-     * Measured as *relative* growth rather than as absolute decline. The original bound asked
-     * that the smallest promotion end poorer than it started, which was a workable proxy only
-     * while the bottom of the sport was quietly collapsing — measured across three seeds, every
-     * promotion below the top three fell to near zero within a decade, and the single-seed
-     * solvency test above passed only because that one draw happened to leave Cage Warriors a
-     * few thousand above the line. Promotions now earn sponsorship, so the bottom survives, and
-     * "marginal" has to mean what it actually means: not keeping pace with the top.
+     * Measured as growth over the starting position across the regional *tier*, in proportional
+     * terms, so a promotion that shrinks scores negative and one that merely holds station
+     * scores zero.
+     *
+     * The bound is absolute rather than relative to the leader, and that is the second rewrite
+     * of this assertion. The original asked that the smallest promotion end poorer than it
+     * started, which was a workable proxy only while the bottom of the sport was quietly
+     * collapsing; promotions now earn sponsorship, so the bottom survives. The replacement asked
+     * that the tier grow slower than half the leader's growth — but the leader shrinks on two
+     * decades in six, and a *fraction of a negative number is a stricter bound than zero*, so
+     * that phrasing silently demanded the regionals shrink faster than the top whenever the top
+     * had a bad decade. Measured over six start days the assertion held on two of six on master
+     * and four of six here: it was never testing what it claimed, it was testing the draw.
+     *
+     * What the tier actually does is hover. Over the same six decades regional growth ran
+     * -0.173, -0.033, +0.021, +0.061, +0.137, +0.213 — flat, with noise either side. Zeroing
+     * `periodCosts` and re-running the identical six gives +0.737, +0.855, +0.956, +0.999,
+     * +1.074, +1.210: without a cost base the tier roughly doubles in a decade, on every single
+     * draw. Those two regimes do not overlap anywhere near 0.4, which is what makes this a real
+     * bound and not a curve fitted to one seed — it is the gap between a tier that compounds and
+     * one that does not.
+     *
+     * The other half of the old claim, that the ladder survives, is the test below.
      */
     const all = ranked(db);
-    const leader = all[0]!;
-
-    // Growth *over* the starting position, in proportional terms, so a promotion that shrinks
-    // scores negative and one that merely holds station scores zero. Comparing the multiples
-    // directly would demand the bottom shrink whenever the top grows, which is the absolute
-    // bound this replaced.
     const growth = (p: (typeof all)[number]) => p.budget / start.get(p.id as string)! - 1;
 
     /*
@@ -150,20 +160,16 @@ describe('the sport can still afford itself', () => {
      * One promotion is too small a sample to carry the claim, and it started mattering once
      * promotions ran their own schedules rather than sharing a global quota: card volume at the
      * bottom of the sport now varies with each promotion's roster, so which of five regionals
-     * happens to finish poorest is largely a draw. Measured across a decade, three of the five
-     * shrink and two grow slightly — that *is* a marginal tier — but the poorest-by-final-budget
-     * happened to be one that grew.
-     *
-     * The design claim was never about one promotion. It is that the bottom of the sport does not
-     * keep pace with the top, and the tier's mean is how to say that.
+     * happens to finish poorest is largely a draw.
      */
     const regionals = all.filter((p) => p.tier === 'regional' || p.tier === 'developmental');
     const meanRegionalGrowth =
       regionals.reduce((total, p) => total + growth(p), 0) / Math.max(1, regionals.length);
 
-    expect(meanRegionalGrowth, `${summary} — the bottom kept pace with the top`).toBeLessThan(
-      growth(leader) * 0.5,
-    );
+    expect(
+      meanRegionalGrowth,
+      `${summary} — the bottom of the sport compounded instead of hovering`,
+    ).toBeLessThan(0.4);
   });
 
   it('keeps the leader clearly ahead, so the ladder survives', () => {

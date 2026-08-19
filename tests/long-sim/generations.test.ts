@@ -75,7 +75,7 @@ describe('the sport replaces its own people', () => {
     }
   });
 
-  it('starts debutants at the bottom of the sport rather than the top', () => {
+  it('starts debutants at the bottom of the sport rather than the top', async () => {
     /*
      * Uniform `rng.pick` made a 21-year-old with four amateur fights as likely to début at the
      * biggest promotion in the sport as at a regional one — which fills the top with people who
@@ -114,11 +114,17 @@ describe('the sport replaces its own people', () => {
      * the engine that reshuffled the decade's fights had an even chance of tripping it — which is
      * a tripwire attached to the seed rather than to the sport.
      *
-     * Four decades pooled gives 100-odd debutants, which is enough to separate weighted placement
-     * from uniform and not much more. Measured: 11/105 = 0.105 against a uniform rate of 0.125.
-     * That margin is thin, and stating it is more useful than hiding it behind a rounder number —
-     * placement is weighted, it is not weighted *hard*, and `arrival.ts` is where that would be
-     * changed if the sport wants debutants further from the top than they currently land.
+     * **Eight decades**, and the count went up because four was not enough either. Four pooled
+     * gave 11/105 = 0.105 against a uniform 0.125 — a pass, but by a margin thinner than the
+     * quantity it was measuring, and the failure mode showed up the first time an engine change
+     * reshuffled the decades: the same 11 fighters against a denominator that had dropped to 89,
+     * which reads 0.124 and breaches. The numerator never moved. A ratio whose verdict turns on
+     * how many debutants a draw happened to produce is not measuring placement.
+     *
+     * Eight gives 191 debutants and a real signal: 13/191 = 0.068, against 0.125 for uniform.
+     * Placement is weighted to roughly half the uniform rate, which is a claim worth asserting and
+     * was invisible at either smaller pool. `arrival.ts` is where the weighting lives if the sport
+     * ever wants debutants further from the top than they currently land.
      */
     const leaderPrestige = Math.max(...promotions.values());
     const atTheTop = (fighters: readonly Fighter[]) =>
@@ -126,7 +132,11 @@ describe('the sport replaces its own people', () => {
 
     let top = atTheTop(debutants).length;
     let total = debutants.length;
-    for (const start of [START + 1, START + 2, START + 3]) {
+    for (const start of [START + 1, START + 2, START + 3, START + 4, START + 5, START + 6, START + 7]) {
+      // Eight decades is over a minute of solid synchronous work, and a worker that never yields
+      // starves Vitest's own reporter heartbeat — which surfaces as an unhandled `onTaskUpdate`
+      // timeout and a run that says it caught an error while every assertion passed.
+      await new Promise((resolve) => setImmediate(resolve));
       const run = decade(start);
       const more = run.after.filter(
         (f) => (f.id as string).startsWith('gen_') && f.record.length === 0 && f.promotionId,

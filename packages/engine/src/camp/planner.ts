@@ -129,6 +129,18 @@ function pickPreferredState(fighter: Fighter, opponent: Fighter): PreferredState
    * to hunt off his back — and jiu-jitsu against judo read 0.049 on the styles fingerprint,
    * under the 0.05 floor every pair in the game is held to.
    */
+  /*
+   * **Every grappling branch has to beat the striking one by a margin, and that margin is the
+   * whole correction.** With bare `>=` comparisons, ties and near-ties all fell into the
+   * grappling arms and the shipped roster came out **65.7% clinch fighters** — two thirds of the
+   * sport wanting to fight on the fence, which is not a sport anybody has watched. The cause is
+   * that `clinchOffence` is derived from strength and wrestling, so it sits near a generic
+   * fighter's own average and wins ties by default, while striking is the only phase the
+   * opponent's defence reliably *denies*.
+   *
+   * Standing is the default a fighter has to be argued out of, because that is where MMA starts
+   * and where most of it is spent.
+   */
   const best = Math.max(score.striking, score.clinch, score.top);
   if (score.submission >= best + 1.5 && ground > 66) return 'submission';
 
@@ -141,21 +153,31 @@ function pickPreferredState(fighter: Fighter, opponent: Fighter): PreferredState
    * stops at the fence is a Muay Thai clinch fighter, and that is what the `groundControl` gate
    * separates — take the tie-up as an end only when there is nothing to do after it.
    */
-  if (score.top >= best - 2 && score.top >= score.striking && a.groundControl > 60) return 'top';
-  if (score.clinch >= Math.max(score.striking, score.top)) return 'clinch';
+  if (score.top >= score.striking - 1 && score.top >= score.clinch - 3 && a.groundControl > 55) {
+    return 'top';
+  }
+  if (score.clinch >= score.striking + 5) return 'clinch';
   // A fighter whose game says floor but who cannot hold anybody there has picked the wrong plan;
   // the fence is the version of the same intent that does not require holding somebody down.
-  if (score.top >= score.striking) return 'clinch';
+  if (score.top >= score.striking + 7) return 'clinch';
 
   /*
    * The standing split, which `approach` could not make at all: a rangy kicker and a pressure
    * boxer were both `pressure` or both `counter`, and the engine had one standing position, so
    * the two were the same fighter.
+   *
+   * Three answers now rather than two, and `boxing` is the honest middle rather than a fudge: a
+   * fighter with good hands, no reach edge and nothing to hide from belongs where the hands work.
+   * Reading `reachInches` here is the second place in the engine that field has ever been read —
+   * `range.ts` is the first, and the one that gives it a contest.
    */
-  if (a.durability < o.power - 6) return 'longRange';
-  const rangy =
-    a.kicking >= a.strikingOffence - 2 || fighter.reachInches >= opponent.reachInches + 2;
-  return rangy ? 'longRange' : 'pocket';
+  const reachEdge = fighter.reachInches - opponent.reachInches;
+  // Somebody who cannot afford to be hit stays where being hit is hardest, whatever else is true.
+  if (a.durability < o.power - 6) return 'outside';
+  if (a.kicking >= a.strikingOffence + 6 || reachEdge >= 4) return 'outside';
+  // The pocket is for fighters built to be there: heavy hands, a chin, and the engine to hold it.
+  if (a.power >= 66 && a.durability >= 62 && reachEdge <= 1) return 'pocket';
+  return 'boxing';
 }
 
 /** Their route in. For a striker this is initiative; for a grappler it is space against grips. */
@@ -177,7 +199,16 @@ function pickEntry(fighter: Fighter, opponent: Fighter, state: PreferredState): 
      * as from space throws; needing to be six points better was an invented threshold that only
      * ever excluded the one art it was written for.
      */
-    if (derived.clinchOffence >= derived.chainWrestling) {
+    /*
+     * The tie-up is a route for a wrestler and a judoka, and not for a guard player.
+     *
+     * `clinchOffence` is derived from strength and wrestling, so it reads high on plenty of
+     * fighters whose game has nothing to do with grips — including the jiu-jitsu exemplar, which
+     * was routed through `clinchEntries` and came out doing *more* fence work than the judoka.
+     * That put jiu-jitsu against judo at 0.046 on the fingerprint, under the floor, with the two
+     * arts separated by the wrong sign on the one axis that should tell them apart.
+     */
+    if (state !== 'submission' && derived.clinchOffence >= derived.chainWrestling) {
       /*
        * The throw is a wrestler's tool used from grips, not a submission player's. Gated on real
        * wrestling for that reason: without it the jiu-jitsu exemplar — whose clinch rating is

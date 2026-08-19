@@ -133,12 +133,19 @@ what makes the engine obey it.
 
 | | |
 | --- | --- |
-| **Outside** | Kick and jab at range. Refuse the pocket, the fence and the floor. |
-| **Pocket** | Box at close range. Accept the exchanges, start none of the grappling. |
+| **Outside** | Kicking range. Make them come to you, and make coming expensive. |
+| **Boxing range** | Where the hands work and the kicks still reach. Neither hiding nor trading. |
+| **Pocket** | Chest to chest. Short shots, heavy exchanges, no room to step off. |
 | **Clinch** | Fence and tie-up. Dirty box, knees, trips, control. |
 | **Ground — Top** | Take them down and stay on top of them. |
 | **Ground — Submission** | Get it to the floor and go hunting, from either position. |
 | **Adaptive** | Take what the opponent gives you. Applies no bias at all. |
+
+Three of the seven are standing, and that is deliberate. Two were tried first — long and pocket —
+and they could not carry a boxer: a rear straight is not a pocket-only weapon, and asking a
+conventional boxer to choose between "kicking range" and "chest to chest" makes him pick the wrong
+one either way. `boxing` is where most fights actually happen, which is also what makes it the
+most forgiving state to be told to hold.
 
 ### 2. How do you get it there?
 
@@ -199,6 +206,76 @@ Two rules keep it from becoming a straitjacket:
 - **Intent is not ability.** Nothing here makes anybody better at anything. A 25-wrestling fighter
   told to take it to the floor shoots constantly, misses, gets countered and empties his tank.
   That is a *failed game plan*, and it is the outcome the old model could not produce.
+
+## Range is a fight state, not a label
+
+`FightState` carries a `range` — `outside | boxing | pocket` — and it is *contested*, once per
+exchange, by whoever wants it moved. This is the piece the plan needed underneath it. Before it
+existed, "where do you want the fight" could only be answered on the floor, because standing up
+the engine had exactly one place to stand.
+
+**The plan decides what range you want. Skills decide whether you get it.** `rangeChangeChance`
+is a push-versus-resist contest: the mover's range control against the holder's, scaled by the
+mover's intent, the holder's ability to deny ground, and how established the current range is.
+Reach tilts it — a 12% swing across a six-inch difference — but is deliberately not a term in
+range control itself, so a long fighter with no feet is still a long fighter with no feet.
+
+Range control today reads `speed × 0.5 + fightIq × 0.3 + cardio × 0.2`. That expression is a seam:
+it is what a **Footwork** attribute would replace if the attribute model ever gains one, and it is
+written in one function so that change is one function.
+
+Measured over 900 fights on two identical 70-across fighters, by what each corner was told:
+
+| plans | outside | boxing | pocket | kick share | takedowns |
+| --- | --- | --- | --- | --- | --- |
+| Outside vs outside | 91% | 8% | 1% | 52% | 2.50 |
+| Boxing vs boxing | 19% | 79% | 2% | 34% | 3.84 |
+| Pocket vs pocket | 20% | 29% | 50% | 23% | 4.41 |
+| Outside vs pocket | 52% | 33% | 15% | 44% | 2.85 |
+
+Two things in that table are the point. The **kick share halves** from 52% to 23% without a word
+about kicks in any plan — a head kick from someone's chest is a bad idea and the engine now knows
+it, which is most of why a kickboxer and a karateka used to produce the same fight. And the
+contested row sits between the two agreed ones rather than at either: two fighters who want
+opposite things get a fight neither of them asked for.
+
+### Getting there is a skill, and failing costs
+
+The same instruction given to two different fighters:
+
+| | outside | boxing | pocket | kick share |
+| --- | --- | --- | --- | --- |
+| 88-speed, 86-IQ, told to stay outside | 68% | 26% | 7% | 51% |
+| 40-speed, 40-IQ, told to stay outside | 38% | 36% | 26% | 39% |
+
+Both are trying equally hard — urgency comes from the plan, not from the attributes — and one of
+them spends a quarter of the fight in a phone booth he was told to avoid. A failed entry is not
+free either: a fighter who lunges and does not arrive hands the other man a counter at 1.45× the
+usual scale, because getting caught coming in is how the sport charges for a bad entry.
+
+### What range does not do
+
+Pocket danger is *emergent*. There is no global "the pocket is 40% more dangerous" multiplier: the
+positional hazard table runs 0.92 to 1.08 and is mean-1 under a reference mix, so it says which
+range is dangerous and never how dangerous the sport is. The pocket hurts because of what is
+available there — hands over kicks, more counters, more exertion — which is a fight explaining
+itself rather than a constant asserting something.
+
+Range also **persists**. `rangeSettled` decays on a 22-second half-life, so a range that was just
+imposed resists being changed back on the very next exchange, and the fight stops flickering. And
+it distinguishes a referee reset, which returns everybody to `outside`, from an organic one: a
+scramble to the feet lands in the pocket, a clean break from the clinch lands at boxing range. A
+fighter who scrambles up with the other man attached is not magically at kicking range.
+
+### Both fidelity levels
+
+`resolveFightByRound` had to learn all of this in the same pass, because fighters are promoted
+from the Reduced resolver to the Full one and a promotion must not change how somebody fights. It
+estimates the range mix the same way — including the share of a round nobody chose, which is the
+walk back in from every reset — and reads the weapon mix a fighter *realises* where he is standing
+rather than the one his attributes suggest in the abstract. `tests/statistical/reduced-fidelity.test.ts`
+holds the two levels to 12 points on every axis, and names the one cell where range
+outran what a round-granularity model can see.
 
 ## What proves it
 

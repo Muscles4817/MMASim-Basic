@@ -43,14 +43,17 @@ import type { FinishMethod } from '../domain/fighter.js';
 import { defaultGamePlan, normaliseGamePlan, riskProfile } from '../domain/gameplan.js';
 import {
   controlResistance,
+  expectedRangeFailure,
+  expectedRangeMix,
   grapplingAppetite,
   strikingAppetite,
   submissionAppetite,
 } from './policy.js';
+import { ENTRY_EASE, RANGE_HAZARD, REFERENCE_MIX, expectedKickShare } from './range.js';
 import { defaultJudges, defaultReferee } from '../domain/officials.js';
 import { traitMul } from '../domain/traits.js';
 import { effect, fatiguedEffect } from '../ratings/curve.js';
-import { knockdownHazard, legImpairment, strikeDamage } from './damage.js';
+import { WEAPON_PROFILE, knockdownHazard, legImpairment, strikeDamage } from './damage.js';
 import {
   createCombatant,
   effectiveComposure,
@@ -72,6 +75,13 @@ import {
 } from './types.js';
 
 const ROUND_SECONDS = 300;
+
+/** Local alias so `controlShare` can fold a range table without importing the whole type surface. */
+const RANGES_FOR_MIX = ['outside', 'boxing', 'pocket'] as const;
+
+/** The roster's typical `kickLean`, so the weapon-hazard blend below is level-free. */
+const REFERENCE_KICK_LEAN = 0.38;
+
 
 /* --------------------------------------------------------------------------------------------
  * Calibration constants. Every one is a column of `tools/round-profile.ts`.
@@ -280,8 +290,19 @@ function controlShare(a: Combatant, d: Combatant): number {
       grapplingAppetite(a),
   );
 
+  /*
+   * You still have to be close enough to shoot, at this level of detail too.
+   *
+   * `expectedRangeMix` is the same contest `simulate.ts` runs, collapsed to the share of the round
+   * each range accounts for, so a rangy striker denies a wrestler entry in a bulk-simulated world
+   * exactly as he does in one the player watches. Without it the two paths quietly produce
+   * different sports — which this engine has already been caught doing once.
+   */
+  const mix = expectedRangeMix(a, d);
+  const entryEase = RANGES_FOR_MIX.reduce((total, r) => total + ENTRY_EASE[r] * mix[r], 0);
+
   const push =
-    fatiguedEffect(a.derived.chainWrestling, 'wrestling', a.fatigue) /
+    (fatiguedEffect(a.derived.chainWrestling, 'wrestling', a.fatigue) * entryEase) /
     (fatiguedEffect(d.attrs.takedownDefence, 'takedownDefence', d.fatigue) * legImpairment(d));
 
   const hold =
@@ -397,6 +418,91 @@ function accuracyFor(
  * expectation is all this level needs, and it must feed both or an accurate fighter hits harder
  * without being any more dangerous.
  */
+/**
+ * The round's hazard multiplier, from where it was fought and what was thrown there.
+ *
+ * Two corrections in one function, and the second is older than range.
+ *
+ * `knockdownHazard` is called at this level with `'punch'` hardcoded, so **a kicker's extra
+ * danger has never reached the Reduced resolver at all** — the weapon table makes a kick 1.5×
+ * as hazardous as a punch and the round model always asked about a punch. That was a small gap
+ * while every fighter threw roughly the same mix; range widened it, because a rangy kicker now
+ * spends the fight where kicks are the suitable weapon. Measured, the striker against the
+ * smotherer came out at 24.7% knockouts at Full and 12.3% at Reduced, past the 12-point
+ * agreement the parity suite allows.
+ *
+ * So the hazard is blended by `kickLean` — the same function `simulate.ts` draws each shot's
+ * weapon from — and then by the range mix, which is mean-1 by construction and therefore only
+ * says *which* range is dangerous, never how dangerous the sport is.
+ */
+/**
+ * How much a fighter's failed entries are worth to the man in front of him, *relative to how
+ * often anybody fails*.
+ *
+ * Shape-only, and the sixth time in this change a table of multipliers had to be turned from a
+ * level into a shape. Nearly every pairing in the game fails an entry at about the same rate —
+ * the fight keeps being reset to `outside` and roughly half of the walks back in do not come off
+ * — so an absolute term reads 1.10 for everybody, which is not a differentiator, it is a hazard
+ * rise for the whole sport. It showed up as the bomber finishing a round and a half early at
+ * Reduced against a Full that took two.
+ *
+ * Referenced against `REFERENCE_ENTRY_FAILURE` it says only what it should: this pairing is one
+ * where somebody spends the fight failing to impose a range, and the other man is eating him
+ * alive on the way in.
+ */
+const FAILED_ENTRY_HAZARD = 0.6;
+
+/** What a pairing with no particular range disagreement fails at. Measured, not chosen. */
+const REFERENCE_ENTRY_FAILURE = 0.16;
+
+function rangeHazardFor(a: Combatant, d: Combatant): number {
+  const mix = expectedRangeMix(a, d);
+  const positional = RANGES_FOR_MIX.reduce((total, r) => total + RANGE_HAZARD[r] * mix[r], 0);
+  /*
+   * The third correction, and the one range added: `a` is more dangerous in proportion to how
+   * often `d` fails to get the range he wants, because in Full a failed entry is what buys the
+   * counter that hurts people.
+   *
+   * The weight is measured rather than derived. Full punishes a failed entry by 1.30–1.45 on the
+   * counter, but only that counter, in only that exchange — deriving the round-level equivalent
+   * would mean modelling what share of a round's hazard-bearing volume is counters, which Reduced
+   * deliberately does not track. `smotherer-v-striker` is the parity suite's worst case for this,
+   * two men wanting opposite ranges for fifteen minutes, and it read 25.2% knockouts at Full
+   * against 12.9% at Reduced before this term existed. It is near zero wherever the two men want
+   * the same range, which is most of the roster and the whole reason it can be sized on the worst
+   * case without moving everything else.
+   */
+  const punished =
+    1 + (expectedRangeFailure(d, a) - REFERENCE_ENTRY_FAILURE) * FAILED_ENTRY_HAZARD;
+  /*
+   * Divided through by the same blend at the roster's typical lean, so this says *who* is more
+   * dangerous and not *how dangerous the sport is* — the third time in this change that a table
+   * of multipliers had to be turned from a level into a shape, and the same failure each time:
+   * a bare blend of 1.0 and 1.5 hands every fighter in the game a hazard bonus.
+   */
+  /*
+   * The weapon mix a fighter *realises* where he is actually standing, not the one his attributes
+   * would suggest in the abstract. `kickLean` answers "what does this man reach for"; the fight
+   * asks "and what is available when he reaches", and only the second one lands.
+   *
+   * Divided through by the same fighter's shot selection thrown by a roster-typical leaner at a
+   * roster-typical range mix — a *per-fighter* reference rather than one constant for everybody.
+   * A single constant cannot be right here, and getting it wrong is the level-versus-shape trap
+   * this change fell into four separate times: a fighter who works the legs kicks more than one
+   * who works the head no matter what his lean is, because nobody punches a leg, so a global
+   * reference computed at an even target mix sat at 0.563 and quietly taxed every head-hunter in
+   * the game. Holding the target mix fixed across numerator and denominator cancels it, and
+   * leaves exactly the two things this term is for: who prefers his feet, and where he is
+   * standing.
+   */
+  const targets = targetMix(a);
+  const blend = (lean: number) =>
+    (1 - lean) * WEAPON_PROFILE.punch.hazard + lean * WEAPON_PROFILE.kick.hazard;
+  const feet = expectedKickShare(kickLean(a), targets, mix);
+  const reference = expectedKickShare(REFERENCE_KICK_LEAN, targets, REFERENCE_MIX);
+  return positional * punished * (blend(feet) / blend(reference));
+}
+
 function expectedFlush(a: Combatant, d: Combatant, weapon: 'punch' | 'kick'): number {
   const attribute = weapon === 'kick' ? 'kicking' : 'strikingOffence';
   const accuracy = fatiguedEffect(a.attrs[attribute], attribute, a.fatigue);
@@ -675,7 +781,8 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
        */
       const half = w.byRegion.head * MID_ROUND_ACCUMULATION;
       d.damage.head = clamp(d.damage.head + half, 0, 100);
-      const hazard = knockdownHazard(a, d, 'head', expectedFlush(a, d, 'punch'), 'punch');
+      const hazard =
+        knockdownHazard(a, d, 'head', expectedFlush(a, d, 'punch'), 'punch') * rangeHazardFor(a, d);
       d.damage.head -= Math.min(half, d.damage.head);
       w.knockdowns = poisson(roundRng, w.headLanded * hazard);
 
@@ -808,6 +915,7 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
           roundRng,
           burstHead *
             knockdownHazard(a, d, 'head', expectedFlush(a, d, 'punch'), 'punch') *
+            rangeHazardFor(a, d) *
             ALREADY_HURT,
         );
       }
