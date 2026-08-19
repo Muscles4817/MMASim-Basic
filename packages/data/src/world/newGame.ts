@@ -71,16 +71,23 @@ export function createNewGame(options: NewGameOptions = {}): GameDb {
    * a custom world could differ by more again.
    */
   const divisionTargets: Record<string, number> = {};
+  const rosterTargets: Record<string, number> = {};
   for (const row of db.fighters.findAll()) {
-    const fighter = row as { divisionId?: string; retiredDay?: number };
-    if (!fighter.divisionId || fighter.retiredDay !== undefined) continue;
-    divisionTargets[fighter.divisionId] = (divisionTargets[fighter.divisionId] ?? 0) + 1;
+    const fighter = row as { divisionId?: string; promotionId?: string; retiredDay?: number };
+    if (fighter.retiredDay !== undefined) continue;
+    if (fighter.divisionId) {
+      divisionTargets[fighter.divisionId] = (divisionTargets[fighter.divisionId] ?? 0) + 1;
+    }
+    if (fighter.promotionId) {
+      rosterTargets[fighter.promotionId] = (rosterTargets[fighter.promotionId] ?? 0) + 1;
+    }
   }
 
   setWorld(db, {
     day: seed.day,
     startedDay: seed.day,
     divisionTargets,
+    rosterTargets,
     seed: options.seed ?? `mmasim-${era}`,
     era,
     playerRole: options.playerRole,

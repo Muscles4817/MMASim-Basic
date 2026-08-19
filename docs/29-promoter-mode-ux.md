@@ -260,3 +260,43 @@ type, mobile bottom nav, desktop rail. This was never an art-direction problem.
   scheduling against one is not yet a decision with consequences.
 - **Marketing spend and the bonus pool** are still not player levers, so a card's commercial
   outcome is decided entirely by who is on it.
+
+## Blocked on a defect that is not this rework's
+
+**Promoter mode cannot book anybody on a _generated_ world**, which since doc 27 is the default a
+new player gets. This is not caused by anything here — it is the same on `master`, where the old
+card builder fills **0 of 9 slots** on a generated world — but the planning screens surface it
+starkly instead of quietly, so it is recorded here.
+
+`generateWorld` runs eight years of pre-history _forward_ from the world's start day and then winds
+the clock back, which is a deliberate and well-argued choice: the records, reigns and rankings stay
+and the calendar reads as the era says it should. What winds back with the clock, though, is only
+the clock. Everything pre-history stamped in absolute game days stays where it was written, and two
+of those matter. Measured on a Small generated world, 824 active fighters:
+
+|                                        |                              |
+| -------------------------------------- | ---------------------------- |
+| Last fight dated _after_ the start day | 745 (90%)                    |
+| Consequently medically suspended       | 745, by up to **3,063 days** |
+| Fighters under 18                      | 99 (minimum age 13)          |
+
+`readyOnDay` is an absolute day stamped by `readinessDelay` during pre-history, so winding the
+clock back leaves nine fighters in ten serving a suspension that ends years after the game begins —
+and every matchmaking path in the game, the world's own included, filters on it. That is why
+advancing a fresh generated world 120 days produces two cards across the entire sport. The ages
+are the same root cause seen from the other end: a fighter generated at 13 who debuted at 19
+during pre-history is 13 again afterwards, holding a professional record.
+
+The fix is one step in the same function that already winds the clock back — rebase what
+pre-history stamped forward, rather than only the clock. Which of the two readings is right is a
+question for doc 27 rather than for this document:
+
+- **Clear the suspensions and shift the birthdays**, so the roster is fit on day one and everybody
+  is the age they fought at. Cheapest, and it keeps the design comment's promise that the eight
+  years are history.
+- **Shift every stamped day back by the pre-history span** — records, `readyOnDay`, reigns and
+  birthdays together — so the history genuinely sits _before_ the start date. More faithful, and a
+  larger change.
+
+Deliberately not fixed here: it is world generation rather than promoter UX, it is somebody else's
+current work, and the choice above changes what a generated world _is_.

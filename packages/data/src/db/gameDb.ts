@@ -99,6 +99,28 @@ export interface WorldMeta extends Entity {
    * Absent on saves made before this existed, which fall back to a conservative constant.
    */
   divisionTargets?: Record<string, number>;
+  /**
+   * How many active fighters each promotion held when the save was created.
+   *
+   * The same argument as `divisionTargets`, one level down, and it exists for a defect the
+   * division shape could not see. `replenish` holds the *sport's* headcount but puts every
+   * debutant at the bottom of the pyramid, which is right; nothing pulled anybody back up, so the
+   * population held steady while draining from the top. Measured over five simulated years of the
+   * 2026 era, the leader went 204 -> 57 while the two smallest promotions went 64 -> 190 and
+   * 64 -> 209: the right number of fighters in the wrong sport.
+   *
+   * Recorded rather than derived, because a promotion's size is a designed property of the world —
+   * the 2026 seed puts 204 on the leader and 64 on a regional, and that ratio *is* the pyramid.
+   */
+  rosterTargets?: Record<string, number>;
+  /**
+   * Which size this world was generated at, when it was generated rather than seeded.
+   *
+   * Absent on a seeded save, which is how the two are told apart — the eras become what doc 27
+   * § 1.2 says they already effectively are, a testing artifact and later the shape the mod space
+   * fills, and a generated world is the default a new player gets.
+   */
+  generatedSize?: string;
   schemaVersion: number;
 }
 

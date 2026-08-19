@@ -24,6 +24,15 @@ export interface SaveSummary {
   /** What the player calls it. Defaults to the fighter's name, editable later. */
   name: string;
   era: '2020' | '2026';
+  /**
+   * Set when this world was **generated** rather than seeded, at the size it was generated to.
+   *
+   * The two are genuinely different kinds of save. A seeded one loads; a generated one has to be
+   * built, which is seconds of simulated sport before anybody can play it — so the menu needs to
+   * know which it is before the storage is even open, and it is what the progress screen keys on.
+   * Doc 27 § 1.2: the eras become a testing artifact and generation becomes the default.
+   */
+  size?: 'small' | 'medium' | 'large';
   /** ISO. Set by the caller — the data layer owns no clock. */
   createdAtIso: string;
   lastPlayedIso: string;

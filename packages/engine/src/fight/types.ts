@@ -29,7 +29,8 @@ export const GROUND_DOMINANCE: Readonly<Record<GroundPosition, number>> = {
   back: 1.0,
 };
 
-export type StrikeTarget = 'head' | 'body' | 'legs';
+export const STRIKE_TARGETS = ['head', 'body', 'legs'] as const;
+export type StrikeTarget = (typeof STRIKE_TARGETS)[number];
 
 export type DamageRegion = StrikeTarget;
 
@@ -276,6 +277,18 @@ export interface FightResult {
   /** Set when the referee's tendencies materially changed the result. Used by commentary. */
   refereeNote?: string;
 }
+
+/**
+ * A fight without its play-by-play.
+ *
+ * What doc 27 § 5's **Reduced** level of detail produces: everything a career, a promotion, a
+ * ranking and a health model read, and nothing a reader would read. A full `FightResult` is
+ * assignable to this and not the reverse, so a screen that renders a transcript cannot silently be
+ * handed a fight that has none — while every system that only ever wanted the *result* can say so
+ * in its own signature. Measured across the engine and the app, that is all of them except
+ * `broadcast.ts` and the fight screen.
+ */
+export type ReducedFightResult = Omit<FightResult, 'events'>;
 
 export function emptyStats(): FightStats {
   return {
