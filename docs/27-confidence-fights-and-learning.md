@@ -1013,9 +1013,39 @@ durability than their profile shows. That is a real thing the player cannot see.
 _meant_ to be hidden — the chin going is something you discover — but it is a candidate for the
 fight preview rather than the profile.
 
-**Mileage has no UI at all.** §12 made a fighter's body older than their birthday, and nothing shows
-it. The player cannot tell a worn 30-year-old from a fresh one, which is precisely the distinction
-the mechanic exists to draw.
+**Mileage had no UI at all.** _(Fixed — §13.4.)_
 
 **The editor still shows a ceiling for every attribute**, and that is correct: it is a data editor
 and `potential` is a real stored field. The label is the only thing that overstates it.
+
+### 13.4 Body age, on the screen
+
+§12 made a fighter's body older than their birthday and nothing showed it, so a worn thirty-year-old
+and a fresh one looked identical — the one distinction the mechanic exists to draw.
+
+`mileageBreakdown` itemises the four sources, and `bodyAge` adds the total to the fighter's age.
+Both live in the engine for the reason §13.1 exists: a screen that restated the weights would drift
+from the model the moment either changed. `ui/mileage.ts` decides only the words, and it is shared
+between the profile and the hub so the two cannot describe the same fighter differently — which is
+exactly what the trauma thresholds were doing in §13.2.
+
+What it reads:
+
+| Fighter                            | Age |   Body |      |
+| ---------------------------------- | --: | -----: | ---- |
+| Debutant                           |  22 |     22 | —    |
+| Fresh 30 — pro at 28, 4 bouts      |  30 |     31 | —    |
+| Typical 30 — pro at 21, 16 bouts   |  30 |     34 | warn |
+| **Worn 30 — pro at 18, 35 bouts**  |  30 | **37** | bad  |
+| **Clean 34 — pro at 25, 12 bouts** |  34 | **36** | warn |
+| Veteran 38 — pro at 20, 44 bouts   |  38 |     47 | bad  |
+
+The case §12 is written around is now visible rather than only true: the worn thirty-year-old reads
+as older than the well-kept thirty-four-year-old.
+
+It also names the cause, because "worn out" is not actionable and "thirty-five professional bouts"
+is: _"30 years old, but the body is nearer 37 — mostly 35 professional bouts. Decline runs on this
+number rather than on the birthday."_
+
+The copy carries no pronouns, and there is a test for that. The sport in this game has women's
+divisions, and an earlier draft said "not on his age".

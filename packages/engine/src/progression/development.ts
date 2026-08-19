@@ -1166,13 +1166,46 @@ const TRAUMA_DECLINE_CURVE = 1.2;
  * fight IQ barely quicker at all, because those are the rates that were already there.
  */
 export function mileageYears(fighter: Fighter, onDay: GameDay): number {
+  return mileageBreakdown(fighter, onDay).years;
+}
+
+/**
+ * The same number, itemised, so a screen can say *why* a body is older than its birthday.
+ *
+ * Split out rather than recomputed in the UI: the weights below are the model's, and a screen that
+ * restated them would drift from it the moment either changed. That is the exact failure docs/27
+ * §13 is about.
+ */
+export interface MileageBreakdown {
+  /** Total years of body beyond the birthday. */
+  years: number;
+  /** Years contributed by time served as a professional. */
+  career: number;
+  /** Years contributed by the number of professional bouts. */
+  bouts: number;
+  /** Years contributed by accumulated body wear. */
+  wear: number;
+  /** Years contributed by accumulated head trauma. */
+  trauma: number;
+}
+
+export function mileageBreakdown(fighter: Fighter, onDay: GameDay): MileageBreakdown {
   const proYears = Math.max(0, (onDay - fighter.proDebutDay) / 365);
-  return (
-    proYears * MILEAGE_PER_PRO_YEAR +
-    fighter.record.length * MILEAGE_PER_BOUT +
-    fighter.condition.bodyWear * MILEAGE_PER_WEAR +
-    fighter.condition.headTrauma * MILEAGE_PER_TRAUMA
-  );
+  const career = proYears * MILEAGE_PER_PRO_YEAR;
+  const bouts = fighter.record.length * MILEAGE_PER_BOUT;
+  const wear = fighter.condition.bodyWear * MILEAGE_PER_WEAR;
+  const trauma = fighter.condition.headTrauma * MILEAGE_PER_TRAUMA;
+  return { years: career + bouts + wear + trauma, career, bouts, wear, trauma };
+}
+
+/**
+ * How old this fighter's body is, which is the number the sport actually reacts to.
+ *
+ * Their age plus what the years in it cost. Doc 27 §12 has the model; this exists so the screens
+ * do not have to add two things together and hope they got the same answer as `applyAgeing`.
+ */
+export function bodyAge(fighter: Fighter, onDay: GameDay): number {
+  return ageOn(fighter.birthDay, onDay) + mileageYears(fighter, onDay);
 }
 
 /** Years of body added per year spent as a professional. */

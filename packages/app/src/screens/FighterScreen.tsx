@@ -24,6 +24,7 @@ import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Flag, RatingRow } from '../ui';
 import { Alert, Fact, FighterRead, ICON, Icon, KeyStat, OverallRating } from '../ui/signals';
 import { FightRecordList, RecordSummaryBar } from '../ui/FightRecord';
+import { readMileage } from '../ui/mileage';
 import { getLadderStatus } from '../game/progression';
 import { rivalriesFor } from '../game/rivalries';
 import { GROUP_LABELS } from '../game/labels';
@@ -53,6 +54,7 @@ export function FighterScreen({ id }: { id: string }) {
   const isPlayer = playerFighter?.id === fighter.id;
   const division = getDivision(fighter.divisionId);
   const derived = deriveRatings(fighter.attributes);
+  const mileage = readMileage(fighter, world.day);
   const gym = fighter.gymId ? db.gyms.findById(fighter.gymId) : undefined;
   const promotion = fighter.promotionId ? db.promotions.findById(fighter.promotionId) : undefined;
 
@@ -284,6 +286,21 @@ export function FighterScreen({ id }: { id: string }) {
       </Card>
 
       <Card title="Condition">
+        {/*
+          What the career has cost, before any of the individual numbers below.
+          
+          Decline runs on this rather than on the birthday (docs/27 §12), so it is the first thing
+          the card should say: two fighters the same age with different histories are not the same
+          fighter, and until now nothing on any screen said so.
+        */}
+        <Fact
+          label="Body age"
+          value={mileage.body}
+          emphasis={mileage.heavy ? 'primary' : 'secondary'}
+          tone={mileage.heavy ? 'bad' : mileage.notable ? 'warn' : undefined}
+          hint={mileage.because}
+        />
+
         {fighter.condition.headTrauma >= TRAUMA_CONCERN && (
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <Alert

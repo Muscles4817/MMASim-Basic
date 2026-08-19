@@ -29,6 +29,7 @@ import {
   TRAUMA_MEDICAL,
   WEAR_CONCERN,
 } from '@mmasim/engine';
+import { readMileage } from '../ui/mileage';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Flag } from '../ui';
@@ -104,6 +105,7 @@ export function HubScreen() {
 
   const fighter = playerFighter;
   const division = getDivision(fighter.divisionId);
+  const mileage = readMileage(fighter, world.day);
   // Purses scale with the promotion's prestige, so a fighter with no contract is quoted
   // against a nominal regional shop rather than crashing or quoting a global figure.
   // Read against an eight-week camp at the room they are actually in, which is the decision
@@ -261,6 +263,18 @@ export function HubScreen() {
             }
             hint="How recovered you are. Camps and hard fights spend it; time gives it back, and more slowly the more miles you have on you."
           />
+          {/*
+          Decline runs on this, not on the birthday — docs/27 §12. Beside the damage rather than
+          beside the age, because it is a fact about the body rather than about the calendar.
+        */}
+          <Fact
+            label="Body age"
+            value={mileage.body}
+            emphasis={mileage.heavy ? 'primary' : 'tertiary'}
+            tone={mileage.heavy ? 'bad' : mileage.notable ? 'warn' : undefined}
+            hint={mileage.because}
+          />
+
           <Fact
             label="Body wear"
             value={`${Math.round(fighter.condition.bodyWear)} / 100`}
