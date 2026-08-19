@@ -1,8 +1,21 @@
 # 31 — The physical ladder
 
-**Status:** design, v2. Not implemented. This document defines what the five physical ratings _mean_
-before any code changes. Nothing below has been built; the measurements of the current system are
-real and were taken against this repository.
+**Status:** **provisionally signed off, v2.1.** The scale below is agreed and implementation may
+proceed against it. Three groups of parameters are marked **calibration-sensitive** (§8.4) — they are
+hypotheses to be tested, not settled truth. The measurements of the current system are real and were
+taken against this repository.
+
+> **Sequencing rule — read before touching any constant.** **No fight-engine constant is to be
+> recalibrated until body geometry lands.** `BASE_KD_HAZARD`, the weapon table, `DECLINE_RATE` and
+> every bound in `roster-profile.test.ts` stay exactly where they are through steps 2, 3 and 4 of
+> §12.
+>
+> The ladder says what a rating should mean. It cannot be exercised until the generator is feeding
+> it realistic humans, and today it is not: heights are three to four inches short below
+> heavyweight, ape index is zero, and frame is a proxy for division. Calibrating the engine against
+> an intermediate body model means calibrating it twice and believing the first answer in between.
+> Step 7 is where the questions "does heavyweight knock out too much" and "have submissions
+> collapsed at 205" become askable. Not before.
 
 > **The short version.** Each physical rating is a **logarithmic scale over a measurable quantity**.
 > Two numbers per attribute define it: `D`, points per doubling of that quantity, and `β`, its
@@ -772,12 +785,29 @@ and which are choices.
 | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | **β_durability = +0.10**            | Very little direct evidence exists. Chosen small-and-positive because head/neck mass resists acceleration. §9 gives it a dedicated falsifier. |
 | **D_durability = 45**               | Set to make the observable spectrum span 38 to 91, which is a design requirement rather than a measurement.                                   |
-| **D_strength = 46**                 | Set by the top-of-scale constraint, not by a measured range. The 27-point divisional spread is the most contested number here.                |
+| **D_strength = 46**                 | Set by the top-of-scale constraint, not by a measured range. The 28-point divisional spread is the most contested number here.                |
 | Pivot masses (180 / 140 lb)         | Estimates of the median professional's walking weight.                                                                                        |
 | UFC selection lift (+6 to +9)       | Derived from a plausible ρ ≈ 0.3 and selection intensity 2.2, neither of which is measured.                                                   |
 | CV values behind σ                  | Sports-science ranges, applied to a population they were not measured on.                                                                     |
 | Sex ratios for Speed and Durability | Small effects with thin evidence; §2.3 pivots them for coherence rather than on evidence.                                                     |
 
+### 8.4 Calibration-sensitive parameters
+
+Three groups carry an explicit marker in the code and in every test that depends on them. They are
+**held at their stated values and treated as hypotheses**, to be moved by controlled simulation in
+step 7 — never by comparison against the pre-existing seeded roster, which was authored on a
+division-relative reading of the scale and cannot adjudicate an absolute one.
+
+| Group                                                                                  | Held at                | Falsified by                                                                           | If it moves                                                                                                     |
+| -------------------------------------------------------------------------------------- | ---------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **β_strength = +0.67, D_strength = 46** — the 28-point flyweight-to-heavyweight spread | as stated              | §9 tests **S1–S5**, which are controlled experiments rather than population statistics | most likely downward, to a 22–25 point spread. Only on the weight of S1–S5 together, never on one of them alone |
+| **β_durability = +0.10, D_durability = 45**                                            | as stated              | §9 tests **1** and **D1**                                                              | either direction; there is almost no prior here                                                                 |
+| **Female Speed and Durability pivots** (§2.3, 0.8σ each)                               | pivoted, for coherence | nothing in-game — this is an evidence question, not a simulation one                   | revisit only if better matched-mass data appears                                                                |
+
+**The 28-point strength spread is not to be reduced because it looks large.** It looks large against
+the hand-authored roster's 11, and that roster is the thing being replaced. Discovering through
+controlled simulation that it should be 23 is a good outcome; shrinking it pre-emptively because 28
+feels enormous next to a relative-scale artefact is the exact circular calibration §0 forbids.
 ---
 
 ## 9. What would falsify this ladder
@@ -786,27 +816,54 @@ Every entry is a measurement the simulation can produce that the ladder makes a 
 and which the real sport independently answers. Where possible each isolates one parameter, because
 a test that can only fail the whole model tells you nothing about what to change.
 
-|   # | Measurement                                                         | Real sport                                      | Isolates                                                                                               |
-| --: | ------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-|   1 | **Knockdowns per 100 significant head strikes landed, by division** | rises steeply with weight                       | β_power − β_durability, isolated from pace and volume. **The cleanest single test.**                   |
-|   2 | KO/TKO rate ratio, HW : FLW                                         | ~2.6×                                           | the same pair, plus D_power                                                                            |
-|   3 | Decision rate by division                                           | FLW/BW ~55–60%, HW ~30–35%                      | the same pair, through a different channel                                                             |
-|   4 | **Submission rate by division**                                     | roughly flat, slight decline with weight        | **β_strength.** If it is too high, large men dominate position and submissions collapse at heavyweight |
-|   5 | Takedown success rate by division                                   | roughly flat to slightly rising                 | β_strength against β_speed                                                                             |
-|   6 | **Strike volume, round 1 versus round 3, by division**              | heavier divisions fade harder                   | **β_cardio**, directly and with nothing else in the way                                                |
-|   7 | Share of finishes occurring in round 3+, by division                | higher in heavier divisions                     | β_cardio again, as a cross-check on 6                                                                  |
-|   8 | Mean fight duration by division                                     | falls with weight                               | the ladder as a whole                                                                                  |
-|   9 | Best-in-division minus division median, per attribute               | should be ≈ 2σ ≈ 21 points                      | the CV assumptions behind σ                                                                            |
-|  10 | Overlap: light-division p95 versus heavy-division p50               | must overlap on every attribute                 | the β magnitudes collectively                                                                          |
-|  11 | **The same fighter simulated at two divisions**                     | physicals move 2–5 points; win rate moves a lot | the lean/total mass split and §6                                                                       |
-|  12 | Rate of "physically ordinary elite" fighters                        | roughly a third of champions                    | that the technical half still decides fights                                                           |
+|   # | Measurement                                                         | Real sport                                      | Isolates                                                                             |
+| --: | ------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------ |
+|   1 | **Knockdowns per 100 significant head strikes landed, by division** | rises steeply with weight                       | β_power − β_durability, isolated from pace and volume. **The cleanest single test.** |
+|   2 | KO/TKO rate ratio, HW : FLW                                         | ~2.6×                                           | the same pair, plus D_power                                                          |
+|   3 | Decision rate by division                                           | FLW/BW ~55–60%, HW ~30–35%                      | the same pair, through a different channel                                           |
+|   4 | **Strike volume, round 1 versus round 3, by division**              | heavier divisions fade harder                   | **β_cardio**, directly and with nothing else in the way                              |
+|   5 | Share of finishes occurring in round 3+, by division                | higher in heavier divisions                     | β_cardio again, as a cross-check on 4                                                |
+|   6 | Mean fight duration by division                                     | falls with weight                               | the ladder as a whole                                                                |
+|   7 | Best-in-division minus division median, per attribute               | should be ≈ 2σ ≈ 21 points                      | the CV assumptions behind σ                                                          |
+|   8 | Overlap: light-division p95 versus heavy-division p50               | must overlap on every attribute                 | the β magnitudes collectively                                                        |
+|   9 | **The same fighter simulated at two divisions**                     | physicals move 2–5 points; win rate moves a lot | the lean/total mass split and §6                                                     |
+|  10 | Rate of "physically ordinary elite" fighters                        | roughly a third of champions                    | that the technical half still decides fights                                         |
 
-Tests 1, 4 and 6 are the valuable ones because each isolates a single β. If 1 says heavyweight is
-only 1.4× more dangerous, β_power is too low or β_durability too high. If 4 says submissions vanish
-above 205, β_strength is too high — which is the failure §3.2 explicitly expects.
+Test 1 is the cleanest single measurement in the list. If it says heavyweight is only 1.4× more
+dangerous, β_power is too low or β_durability too high.
 
-Test 12 is the guard on the whole exercise. If the ladder is right and the game still produces only
+Test 10 is the guard on the whole exercise. If the ladder is right and the game still produces only
 physical freaks at the top, the problem is not the ladder.
+
+### 9.1 Strength falsifiers, isolated
+
+Strength gets its own group because it is the most calibration-sensitive parameter in the document
+(§8.4) and because the obvious population statistic — "submissions collapse at heavyweight" — is a
+**bad** sole diagnostic. Heavyweight submission rate is confounded by at least four things the
+ladder also moves: fights end early to knockouts before the grappling develops (β_power), heavyweight
+cardio is low so scrambles are shorter (β_cardio), takedown entries differ, and the real-sport
+baseline for heavyweight submissions is itself noisy on small samples. A single number that four
+parameters push on cannot tell you which one is wrong.
+
+So the strength tests are **controlled experiments** — synthetic pairings where everything except
+mass is held equal — plus population statistics only as corroboration.
+
+| #      | Test                                                  | Design                                                                                                                                                                   | Predicted                                                                                              | Fails if                                                                                                                                   |
+| ------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| **S1** | **Matched-technique cross-mass grappling**            | Two fighters with _identical_ technical and mental ratings and identical non-strength physicals, differing only in competing mass by one division. Simulate 2,000 bouts. | The heavier man wins grappling exchanges clearly but not overwhelmingly — control time ratio ≈ 1.3–1.7 | ratio > 2.2 (β_strength too high) or < 1.15 (too low). **The primary Strength falsifier.**                                                 |
+| **S2** | **Strength swing curve**                              | Hold a `contender` fixture fixed; sweep only Strength 38 → 98 against an unchanged opponent; measure win rate.                                                           | Monotone, smooth, worth roughly the same win-rate swing per point as an equivalent swing in Wrestling  | a step change, saturation below 80, or a swing more than 1.5× Wrestling's — Strength has become the master grappling stat                  |
+| **S3** | **Clinch and top-control time by division**           | Population statistic, but on the grappling phase only, normalised per grappling exchange entered                                                                         | roughly flat across divisions                                                                          | rises steeply with weight — big men are winning position on mass rather than on wrestling                                                  |
+| **S4** | **Escape and reversal rate from bottom, by division** | Per bottom-position minute, so it is independent of how often fights go to the ground                                                                                    | roughly flat, mild decline with weight                                                                 | collapses above middleweight — the same failure S1 detects, seen from underneath                                                           |
+| **S5** | Submission rate by division                           | Population statistic                                                                                                                                                     | roughly flat, slight decline with weight                                                               | collapses at heavyweight — **corroborating only.** Never act on S5 alone; check S1 and S4 first, because three other parameters push on it |
+
+The rule §8.4 states, restated as a procedure: **move `D_strength` only on the weight of S1, S2 and
+S4 together.** S5 alone is not evidence, and the hand-authored roster is not evidence at all.
+
+A parallel note for Durability, which is equally under-evidenced:
+
+| #      | Test                              | Design                                                                                                                                    | Predicted                                                                  | Fails if                                                                                                     |
+| ------ | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **D1** | **Matched-power cross-mass chin** | Identical fighters differing only in mass, each struck by an _identical absolute_ Power value, measuring knockdowns per clean head strike | the heavier man is only slightly harder to drop — a few per cent, not tens | the heavier man is materially harder to drop, which would mean β_durability is carrying weight it should not |
 
 ---
 
@@ -890,6 +947,40 @@ p05 / p50 / p95 / max / share above 80. Asserting:
 The last row is the cheap one that would have caught today's three-inch height defect on the day it
 shipped.
 
+### 10.4 Every reported value carries both readings
+
+A diagnostic that prints only the absolute rating cannot show the ladder working, and one that
+prints only the percentile cannot show it drifting. **Every physical figure the diagnostics report
+is printed twice: the absolute rating, and its percentile within the fighter's own sex and
+division.**
+
+```
+LW   power   abs 55  (div p50)     HW   power   abs 70  (div p50)
+     speed   abs 59  (div p50)          speed   abs 51  (div p50)
+```
+
+The absolute column is the domain truth and the thing the ladder is a claim about. The percentile
+column is what tells you whether a fighter is good _at his own weight_, which is the only question
+matchmaking, the AI and the player ever actually ask. Both readings, always, on the same line — the
+whole design rests on their not being the same number, and a report that shows one of them lets that
+distinction quietly rot.
+
+### 10.5 The percentile tables are generated, not typed
+
+The tables in §4.1 and §4.3 are **output**. They are produced by
+`tests/statistical/ladder-tables.test.ts`, which computes them from §3.6's parameters and prints
+them by sex and division, for both the professional and UFC-level populations, on every run.
+
+Two reasons this matters more than it looks. A hand-typed table drifts from the parameters the
+moment one of them moves, and then the document lies — which is exactly how a scale ends up
+justified by a table that was justified by the scale. And when a calibration-sensitive parameter
+(§8.4) does move, the tables move with it in the same commit, so the reviewer sees the consequence
+of the change rather than the change alone.
+
+The test asserts only structural properties — every division overlaps every other on every
+attribute, σ stays in band, no value exceeds the scale — so it fails when the ladder becomes
+incoherent and not merely when it is retuned.
+
 ---
 
 ## 11. Test and constant classification
@@ -944,10 +1035,18 @@ shipped.
 
 ## 12. Implementation plan
 
+Steps 2 to 6 are **body work only**. The rule from the header restated where it will actually be
+disobeyed: **no fight-engine constant moves until step 7.** Not `BASE_KD_HAZARD`, not the weapon
+table, not a `roster-profile.test.ts` bound. Those tests will start failing somewhere around step 6
+and the correct response is to let them fail loudly with the measured value in the message, not to
+edit the constant they defend. The ladder cannot be judged against a half-built body model, and an
+engine tuned against one has to be tuned again.
+
 1. **Ladder** — this document. Agreement on §3.6, the pivots, and §13.
-2. **Body geometry.** `progression/body.ts`: height distributions per sex, ape index, and
-   `walkingWeight = f(height, frame, composition)`. Replaces the remaps. The §10.3 diagnostics land
-   with it, so the next nine steps are measured rather than asserted.
+2. **Body geometry.** `progression/body.ts`: height distributions per sex, ape index, frame, lean
+   mass, body composition, and `walkingWeight` derived from all of them. Replaces the remaps and the
+   `limit × 1.04–1.15` walking weight. The §10.3–10.5 diagnostics and the generated ladder tables
+   land with it, so every step after this one is measured rather than asserted.
 3. **Split the talent axes.** `tier` becomes an athletic axis and a skill-learning axis, weakly
    correlated (ρ ≈ 0.3). `replenish` and `depth.ts` select on the skill axis, because a promotion
    signs fighters, not genotypes.
@@ -958,8 +1057,9 @@ shipped.
    newgen and creator provably cannot diverge.
 5. **Calibration roster** (§10 Phase B).
 6. **Mass effects.** `ceilingsFromNaturals` gains §2.4's law with the lean/total split for all five.
-7. **Simulate, play, iterate** (§9, §10). `roster-profile.test.ts` rewritten; `BASE_KD_HAZARD`
-   re-anchored globally.
+7. **Simulate, play, iterate** (§9, §10) — **the first step allowed to touch an engine constant.**
+   Run §9's twelve measurements plus S1–S5 and D1. `roster-profile.test.ts` rewritten per division;
+   `BASE_KD_HAZARD` re-anchored globally, once, against a finished body model.
 8. **Lock the scale.** `docs/02` rewritten to match.
 9. **Backgrounds → priors and realisation.** `arrivalFactor(key, age)` becomes
    `arrivalFactor(key, age, history)`. Split `trackAndField` into sprint/jumps and throws;
@@ -985,8 +1085,11 @@ Cardio clear the one-sigma bar on evidence; Speed and Durability do not, and get
 coherence. The alternative — three sex-anchored attributes beside two that are not — seems worse, but
 it is a judgement.
 
-**13.2 `D_strength` and the 28-point spread.** The derived figure against the hand-authored roster's 11. §3.2 argues the roster is wrong. Falsifier 4 in §9 is the test; if submissions collapse at
-heavyweight, this is the parameter.
+**13.2 `D_strength` and the 28-point spread.** Provisionally signed off and held (§8.4). The derived
+figure against the hand-authored roster's 11; §3.2 argues the roster is wrong and §8.4 forbids using
+it to adjudicate. §9.1's S1–S5 are the test, and S1 — matched-technique
+cross-mass grappling — is the one that decides it. Heavyweight submission rate alone (S5) is
+corroborating evidence and nothing more; four parameters push on it.
 
 **13.3 The mean-physical tilt.** §4.4: heavyweights end up 6.1 points of mean physical above
 flyweights. The recommendation is to accept it and fix `overallRating` (§7.1) rather than bend the
