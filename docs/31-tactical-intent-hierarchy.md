@@ -1,6 +1,11 @@
 # 31 — The tactical intent hierarchy
 
-**Status: audit. Nothing in this document is built yet.**
+**Status: audit. F4's refactor has landed; everything else is still a finding.**
+
+| | |
+| --- | --- |
+| F4 | **representation done.** Every decision surface now goes through `fight/decide.ts`, and `intentAuthority` makes the gap measurable — 0.32 to 10.28 across the engine. Choosing the baselines is a behaviour change and has not happened. |
+| F1–F3, F5–F8 | untouched, and worth re-auditing against the new architecture before implementing |
 
 The range split (doc 05, doc 01 § invariants) fixed the standing half of a problem that is larger
 than standing. This document is the audit of what is left, and it deliberately stops before the
@@ -124,6 +129,13 @@ Five names over three actions is a menu that promises more than the engine can d
 defect class as the seven `approach` buttons, one layer down.
 
 ### F4 — The weights are not commensurable, so the plan's authority varies by decision
+
+> **Since audited.** The representation half is built. All five lists go through `chooseAction`,
+> every term is declared as `capability`, `intent` or `opportunity`, and `intentAuthority` turns the
+> finding below into a number. Measured at full conviction across seven decision surfaces it runs
+> **0.32 to 10.28**, and the same bottom instruction is worth **7.33 in guard against 0.71 in side
+> control**. The refactor changed nothing: 7,500 fights across five matchups, 223 counters, every
+> one bit-identical. The numbers themselves are unchanged and still wrong.
 
 `capability` is sometimes an attribute on the 25–95 scale and sometimes a hand-tuned constant:
 

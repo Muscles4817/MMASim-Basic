@@ -76,8 +76,9 @@ needs an RNG.
 
 ## Fight-engine invariants
 
-Six rules the fight engine is built on. Each is enforced somewhere, and the enforcement is named,
-because an invariant nothing checks is a preference.
+Eight rules the fight engine is built on. Each names where it is enforced, because an invariant
+nothing checks is a preference — and the last two name that they are *not* yet enforced, which is
+the honest version of the same thing.
 
 ### 1. A plan decides what a fighter *tries*. Attributes decide whether it works.
 
@@ -149,6 +150,45 @@ the parity cell fit. The gap that remains is documented as a per-cell allowance 
 general mechanism rather than add a third.
 
 *Enforced by* `tests/statistical/reduced-fidelity.test.ts`.
+
+### 7. Intent authority must be comparable across decision surfaces.
+
+A given conviction should not become dominant or irrelevant merely because one action list happens
+to be expressed in 0.05 constants and another in 25–95 capability weights.
+
+Every choice in a fight is a weighted draw, which is a softmax over
+`ln(capability × opportunity) + alignment × strength × urgency`. The two terms are directly
+comparable in that space, so **the plan's authority over a decision is the ratio of their spans** —
+above 1 and a convinced corner can reorder the list, near 0 and the instruction is decorative
+whatever it says. `intentAuthority` in `fight/decide.ts` computes it.
+
+The rule exists because that ratio was set per list by whichever coefficients happened to be
+written there, and nothing measured it. Measured now, at full conviction, it runs from 0.32 to
+10.28 across the engine's seven decision surfaces — and the same bottom instruction is worth ten
+times more in guard than in side control, purely because the submission candidate is
+`submissions × 0.8` in one and the literal `0.05` in the other.
+
+*Enforced by* `tests/statistical/intent-authority.test.ts`, which currently records the gap as
+bounded, named debt rather than asserting the rule outright — closing it means choosing the
+baselines, which is a behaviour change and its own piece of work.
+
+### 8. Transition and in-state behaviour are separate decisions.
+
+*State-transition intent and in-state behaviour are separate decisions unless the actions genuinely
+compete for the same moment.*
+
+Today they are drawn from one flat weighted list at every position, so wanting to leave more
+*arithmetically* means doing less while you are there: a fighter told to stand up manages 1.96
+get-ups against 0.63 and pays for it with 2.17 submission attempts against 4.96. That trade is
+plausible, which is what makes it hard to see, and nothing in the model chose it — a desperate
+wrestler and a busy guard player are different people and one list cannot hold both.
+
+The exception in the rule is real and load-bearing: two actions that genuinely occupy the same
+moment — you cannot throw a hand and shoot a double at the same instant — belong in one draw. What
+does not belong is *how hard am I trying to get out of here* competing with *what am I doing while
+I am here*, which are different questions asked on different clocks.
+
+*Not yet enforced.* Doc 31 § F1 is the audit; this rule is what it is fixed against.
 
 ## State shape & mutation
 

@@ -17,6 +17,7 @@ import type { Fighter, FinishMethod } from '../domain/fighter.js';
 import type { GamePlan, ReadKey } from '../domain/gameplan.js';
 import { PREP_MAX_BONUS, defaultGamePlan, normaliseGamePlan, prepValue, riskProfile } from '../domain/gameplan.js';
 import { stanceEdge } from './stance.js';
+import { chooseAction, type Candidate } from './decide.js';
 import {
   ENTRY_EASE,
   RANGE_COUNTER,
@@ -933,6 +934,218 @@ function resolveRangeBeat(ctx: ExchangeContext, actor: Combatant, target: Combat
   return change === 'close' ? 1.45 : 1.3;
 }
 
+/**
+ * What a fighter could do from his feet, and how much of the choice is his corner's.
+ *
+ * Extracted so the list can be inspected without running a fight. `intentAuthority` needs the
+ * candidates, and a decision nobody can measure is one nobody can hold to a rule.
+ */
+export function distanceCandidates(
+  actor: Combatant,
+  target: Combatant,
+  range: Range,
+  stance: Stance,
+): Candidate<'strike' | 'kick' | 'takedown' | 'clinchUp'>[] {
+  return [
+    {
+      key: 'strike',
+      capability: fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue),
+      intent: standingBias(stance, 'strike', finishOpportunity(actor, target)),
+      opportunity: exploitFactor(actor, actor.attrs.strikingOffence, target.attrs.strikingDefence),
+    },
+    {
+      key: 'kick',
+      capability:
+        fatiguedEffect(actor.attrs.kicking, 'kicking', actor.fatigue) * legImpairment(actor),
+      intent: standingBias(stance, 'kick'),
+      opportunity: exploitFactor(actor, actor.attrs.kicking, target.attrs.strikingDefence),
+    },
+    {
+      key: 'takedown',
+      capability: fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue),
+      intent: standingBias(stance, 'takedown'),
+      /*
+       * `takedownRate` is how often they shoot, which is what the trait means. It was on the
+       * takedown *contest* instead — better shots rather than more of them — and no trait in the
+       * game set it, so the hook had a reader and no writer for as long as it existed (docs/19
+       * §9a). `ENTRY_EASE` is the other half: you have to be close enough to shoot, and the engine
+       * had no concept of that until range existed.
+       */
+      opportunity:
+        traitMul(actor.fighter.traits, 'takedownRate') *
+        entryWeight(actor, 'takedown') *
+        ENTRY_EASE[range] *
+        exploitFactor(actor, actor.attrs.wrestling, target.attrs.takedownDefence),
+    },
+    {
+      key: 'clinchUp',
+      capability: fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue),
+      intent: standingBias(stance, 'clinchUp'),
+      opportunity:
+        entryWeight(actor, 'clinch') *
+        ENTRY_EASE[range] *
+        exploitFactor(actor, actor.derived.clinchOffence, target.derived.clinchDefence),
+    },
+  ];
+}
+
+/**
+ * Three ways out of a tie-up you did not ask to be in, and one of them is the door.
+ *
+ * Weighted toward leaving, because that is what the sport does: a fighter with his back to the
+ * fence is mostly trying to get off it, and the short shots and the reversal are what he does when
+ * leaving is not working. The first cut had these coefficients at 0.55 and 0.8 and the clinch ate
+ * enough distance time to drag `kicking`'s win-rate swing from 8.2 points to 5.9.
+ *
+ * The two coefficients are *baselines* rather than anything a fighter has, which is what makes
+ * them worth naming as `opportunity` — they say what the position offers, not what he brings.
+ */
+export function heldCandidates(
+  actor: Combatant,
+  target: Combatant,
+  stance: Stance,
+): Candidate<'breakAway' | 'clinchStrike' | 'reverse'>[] {
+  return [
+    {
+      key: 'breakAway',
+      capability: fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue),
+      intent: heldBias(stance, 'breakAway'),
+    },
+    {
+      key: 'clinchStrike',
+      capability: fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) * 0.32,
+      intent: heldBias(stance, 'clinchStrike', finishOpportunity(actor, target)),
+    },
+    {
+      key: 'reverse',
+      capability: fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * 0.45,
+      intent: heldBias(stance, 'reverse'),
+    },
+  ];
+}
+
+/**
+ * What the man doing the holding does with it.
+ *
+ * `BASE_CLINCH_STALL` is the one candidate here with no attribute behind it — holding somebody on
+ * the fence and doing nothing is not a skill — and a bare constant competing against the 25–95
+ * scale is exactly the kind of baseline doc 31 § F4 is about. Naming it as `capability` does not
+ * fix that; it makes it visible, and `intentAuthority` makes it measurable.
+ */
+export function controllingCandidates(
+  actor: Combatant,
+  target: Combatant,
+  stance: Stance,
+): Candidate<'takedown' | 'clinchStrike' | 'stall'>[] {
+  return [
+    {
+      key: 'takedown',
+      capability:
+        fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
+        traitMul(actor.fighter.traits, 'takedownRate') *
+        1.2,
+      intent: controllingBias(stance, 'clinchTakedown'),
+      // Trips and throws are *this* takedown — the one that comes out of a tie-up — so the entry
+      // style that had no route at range gets its route here.
+      opportunity: actor.plan.tactics.entry === 'tripsAndThrows' ? 1.6 : 1,
+    },
+    {
+      key: 'clinchStrike',
+      capability: fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) * 0.8,
+      intent: controllingBias(stance, 'clinchStrike', finishOpportunity(actor, target)),
+    },
+    {
+      key: 'stall',
+      capability: BASE_CLINCH_STALL,
+      intent: controllingBias(stance, 'clinchStall'),
+    },
+  ];
+}
+
+/**
+ * Three locally reasonable things to do off your back.
+ *
+ * The submission row is the sharpest instance of doc 31 § F4 in the engine: `submissions × 0.8` in
+ * guard and the literal `0.05` everywhere else, which is roughly 900:1 against getting up before
+ * the plan says anything, against a plan whose whole range is 6.7:1. A submission specialist told
+ * to attack from underneath side control is arithmetically incapable of being obeyed, and
+ * `submissionOpportunity` cannot rescue him because it feeds the intent and not the constant.
+ *
+ * It stays exactly as it was here. Writing it down where `intentAuthority` can see it is the
+ * point of this pass; changing it is a behaviour change and belongs to its own.
+ */
+export function bottomCandidates(
+  actor: Combatant,
+  stance: Stance,
+  groundPosition: GroundPosition,
+  subChance: number,
+): Candidate<'standUp' | 'sweep' | 'submission'>[] {
+  return [
+    {
+      key: 'standUp',
+      capability:
+        fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * legImpairment(actor),
+      intent: bottomBias(actor, stance, 'standUp'),
+      opportunity: 1 - GROUND_DOMINANCE[groundPosition] * 0.7,
+    },
+    {
+      key: 'sweep',
+      capability: fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * 0.6,
+      intent: bottomBias(actor, stance, 'sweep'),
+    },
+    {
+      key: 'submission',
+      capability:
+        groundPosition === 'guard'
+          ? fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) * 0.8
+          : 0.05,
+      intent: bottomBias(actor, stance, 'submission', subChance),
+    },
+  ];
+}
+
+/**
+ * What a fighter does having got on top, where `topIntent` governs rather than `preferredState`.
+ *
+ * The dominance terms are `opportunity` in the strict sense: the same fighter with the same plan
+ * has different things available in guard and on somebody's back. `BASE_GROUND_STALL` is the
+ * other bare constant, and the same caveat applies as in the clinch.
+ */
+export function topCandidates(
+  actor: Combatant,
+  target: Combatant,
+  stance: Stance,
+  dominance: number,
+  subChance: number,
+): Candidate<'advancePosition' | 'groundStrike' | 'submission' | 'stall'>[] {
+  return [
+    {
+      key: 'advancePosition',
+      capability:
+        fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue) * (1 - dominance),
+      intent: topBias(actor, stance, 'advancePosition'),
+    },
+    {
+      key: 'groundStrike',
+      capability:
+        fatiguedEffect(actor.derived.groundAndPound, 'groundControl', actor.fatigue) *
+        (0.4 + dominance),
+      intent: topBias(actor, stance, 'groundStrike', finishOpportunity(actor, target)),
+    },
+    {
+      key: 'submission',
+      capability:
+        fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) * (0.3 + dominance),
+      intent: topBias(actor, stance, 'submission', subChance),
+    },
+    {
+      key: 'stall',
+      capability: BASE_GROUND_STALL,
+      intent: topBias(actor, stance, 'groundStall'),
+    },
+  ];
+}
+
 // --- Distance -----------------------------------------------------------------------------
 
 function resolveDistance(
@@ -962,39 +1175,7 @@ function resolveDistance(
    */
   const stance = stanceOfActor(ctx, actor, 'distance');
 
-  const strikeW =
-    fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) *
-    standingBias(stance, 'strike', finishOpportunity(actor, target)) *
-    exploitFactor(actor, actor.attrs.strikingOffence, target.attrs.strikingDefence);
-  const kickW =
-    fatiguedEffect(actor.attrs.kicking, 'kicking', actor.fatigue) *
-    legImpairment(actor) *
-    standingBias(stance, 'kick') *
-    exploitFactor(actor, actor.attrs.kicking, target.attrs.strikingDefence);
-  const takedownW =
-    fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
-    standingBias(stance, 'takedown') *
-    // How often they shoot, which is what `takedownRate` means. It was on the takedown contest
-    // instead — better shots rather than more of them — and no trait in the game set it, so the
-    // hook had a reader and no writer for as long as it has existed (docs/19 §9a).
-    traitMul(actor.fighter.traits, 'takedownRate') *
-    entryWeight(actor, 'takedown') *
-    // You have to be close enough to shoot. The engine had no concept of that, so a wrestler's
-    // entry cost the same from two metres away as from somebody's chest.
-    ENTRY_EASE[range] *
-    exploitFactor(actor, actor.attrs.wrestling, target.attrs.takedownDefence);
-  const clinchW =
-    fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) *
-    standingBias(stance, 'clinchUp') *
-    entryWeight(actor, 'clinch') *
-    ENTRY_EASE[range] *
-    exploitFactor(actor, actor.derived.clinchOffence, target.derived.clinchDefence);
-
-  const intent = rng.pickWeighted(
-    ['strike', 'kick', 'takedown', 'clinchUp'] as const,
-    (i) =>
-      i === 'strike' ? strikeW : i === 'kick' ? kickW : i === 'takedown' ? takedownW : clinchW,
-  );
+  const intent = chooseAction(rng, distanceCandidates(actor, target, range, stance));
 
   switch (intent) {
     case 'strike':
@@ -1609,29 +1790,7 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
      * did not choose this, and `heldBias` reads that through `placedBy`.
      */
     const stance = stanceOfActor(ctx, actor, 'clinch');
-    const breakW =
-      fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) *
-      heldBias(stance, 'breakAway');
-    /*
-     * Weighted toward the door, because that is what the sport does: a fighter with their back to
-     * the fence is mostly trying to get off it, and the short shots and the reversal are what they
-     * do when leaving is not working. The first cut had these at 0.55 and 0.8 and the clinch ate
-     * enough distance time to drag `kicking`'s win-rate swing from 8.2 points to 5.9 — a two-sided
-     * clinch is worth having and it is not worth having at the cost of a goal that is already met.
-     */
-    const strikeW =
-      fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) *
-      0.32 *
-      heldBias(stance, 'clinchStrike', finishOpportunity(actor, target));
-    const reverseW =
-      fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
-      0.45 *
-      heldBias(stance, 'reverse');
-
-    const intent = rng.pickWeighted(
-      ['breakAway', 'clinchStrike', 'reverse'] as const,
-      (i) => (i === 'breakAway' ? breakW : i === 'clinchStrike' ? strikeW : reverseW),
-    );
+    const intent = chooseAction(rng, heldCandidates(actor, target, stance));
 
     if (intent === 'clinchStrike') {
       // 0.75: a short shot from underneath is a real weapon and a worse one.
@@ -1673,26 +1832,7 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
   }
 
   const stance = stanceOfActor(ctx, actor, 'clinch');
-  const takedownW =
-    fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
-    traitMul(actor.fighter.traits, 'takedownRate') *
-    1.2 *
-    controllingBias(stance, 'clinchTakedown') *
-    // Trips and throws are *this* takedown — the one that comes out of a tie-up — so the entry
-    // style that had no route at range gets its route here.
-    (actor.plan.tactics.entry === 'tripsAndThrows' ? 1.6 : 1);
-  const strikeW =
-    fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) *
-    0.8 *
-    controllingBias(stance, 'clinchStrike', finishOpportunity(actor, target));
-  // Holding somebody on the fence and doing nothing is a plan, and now only for the fighter whose
-  // plan it is. It used to be a flat 0.5 for everybody with a bonus for one of seven labels.
-  const stallW = BASE_CLINCH_STALL * controllingBias(stance, 'clinchStall');
-
-  const intent = rng.pickWeighted(
-    ['takedown', 'clinchStrike', 'stall'] as const,
-    (i) => (i === 'takedown' ? takedownW : i === 'clinchStrike' ? strikeW : stallW),
-  );
+  const intent = chooseAction(rng, controllingCandidates(actor, target, stance));
 
   if (intent === 'takedown') return resolveTakedown(ctx, actor, target, 'clinch');
 
@@ -1745,23 +1885,9 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
   const stance = stanceOfActor(ctx, actor, 'bottom');
   const subChance = submissionOpportunity(actor, target, state.groundPosition, false);
 
-  const getUpW =
-    fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
-    legImpairment(actor) *
-    bottomBias(actor, stance, 'standUp') *
-    (1 - GROUND_DOMINANCE[state.groundPosition] * 0.7);
-  const sweepW =
-    fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
-    0.6 *
-    bottomBias(actor, stance, 'sweep');
-  const subW =
-    (state.groundPosition === 'guard'
-      ? fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) * 0.8
-      : 0.05) * bottomBias(actor, stance, 'submission', subChance);
-
-  const intent = rng.pickWeighted(
-    ['standUp', 'sweep', 'submission'] as const,
-    (i) => (i === 'standUp' ? getUpW : i === 'sweep' ? sweepW : subW),
+  const intent = chooseAction(
+    rng,
+    bottomCandidates(actor, stance, state.groundPosition, subChance),
   );
 
   if (intent === 'submission') return resolveSubmission(ctx, actor, target, true);
@@ -1820,31 +1946,7 @@ function resolveGroundTop(
   const stance = stanceOfActor(ctx, actor, 'top');
   const subChance = submissionOpportunity(actor, target, state.groundPosition, true);
 
-  const advanceW =
-    fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue) *
-    (1 - dominance) *
-    topBias(actor, stance, 'advancePosition');
-  const gnpW =
-    fatiguedEffect(actor.derived.groundAndPound, 'groundControl', actor.fatigue) *
-    (0.4 + dominance) *
-    topBias(actor, stance, 'groundStrike', finishOpportunity(actor, target));
-  const subW =
-    fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) *
-    (0.3 + dominance) *
-    topBias(actor, stance, 'submission', subChance);
-  const stallW = BASE_GROUND_STALL * topBias(actor, stance, 'groundStall');
-
-  const intent = rng.pickWeighted(
-    ['advancePosition', 'groundStrike', 'submission', 'stall'] as const,
-    (i) =>
-      i === 'advancePosition'
-        ? advanceW
-        : i === 'groundStrike'
-          ? gnpW
-          : i === 'submission'
-            ? subW
-            : stallW,
-  );
+  const intent = chooseAction(rng, topCandidates(actor, target, stance, dominance, subChance));
 
   if (intent === 'submission') return resolveSubmission(ctx, actor, target, false);
 
