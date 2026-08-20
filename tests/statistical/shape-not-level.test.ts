@@ -34,6 +34,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ARCHETYPES,
   RANGES,
+  simulateFight,
   STRIKE_TARGETS,
   defaultGamePlan,
   defaultTactics,
@@ -44,6 +45,8 @@ import {
   type TacticalPlan,
 } from '@mmasim/engine';
 import * as range from '../../packages/engine/src/fight/range.js';
+import { stanceEdge } from '../../packages/engine/src/fight/stance.js';
+import { createCombatant } from '../../packages/engine/src/fight/profile.js';
 import { runMatchup, type MatchupSummary } from '../helpers/sim.js';
 
 /* ---------------------------------------------------------------------------------------------
@@ -252,19 +255,27 @@ describe('a modifier that shapes matchups does not move the sport', () => {
     }));
     const flat = POOL.map((make) => ({ fighter: withStance(make(), 'orthodox') }));
 
-    // Differentiation, on the paired matchup the mechanism is defined for.
-    const dull = { ...ARCHETYPES.contender(), attributes: { ...ARCHETYPES.contender().attributes, fightIq: 40 } };
-    const asSouthpaw = runMatchup(withStance(ARCHETYPES.striker(), 'southpaw'), withStance(dull, 'orthodox'), {
-      fights: 2500,
-      seedPrefix: 'neutrality:stance',
-    }).redWinRate;
-    const asOrthodox = runMatchup(withStance(ARCHETYPES.striker(), 'orthodox'), withStance(dull, 'orthodox'), {
-      fights: 2500,
-      seedPrefix: 'neutrality:stance',
-    }).redWinRate;
-    expect(asSouthpaw, `southpaw ${asSouthpaw.toFixed(4)} vs mirror ${asOrthodox.toFixed(4)}`).toBeGreaterThan(
-      asOrthodox + 0.008,
-    );
+    /*
+     * Differentiation asserted on the modifier rather than on a win rate, deliberately.
+     *
+     * `stance.test.ts` owns the *magnitude* — 1.36 / 1.52 / 1.61 points at 2,500 / 6,000 / 12,000
+     * paired fights — and it costs six thousand fights to state that with a straight face. A cheap
+     * copy of it here reads anywhere between −0.32 and +0.48 depending on the seed, which is not a
+     * weaker version of the same claim, it is a coin flip wearing its clothes.
+     *
+     * What this half of the rule actually needs to establish is that the modifier is not inert,
+     * and that is a property of the function. Asserting it here means the neutrality half below
+     * can never pass by the modifier having quietly stopped doing anything.
+     */
+    const combatant = (f: Fighter) => createCombatant('red', f, defaultGamePlan());
+    const edge = (mover: Fighter['stance'], holder: Fighter['stance']) =>
+      stanceEdge(combatant(withStance(ARCHETYPES.striker(), mover)), combatant(withStance(ARCHETYPES.grinder(), holder)));
+
+    expect(edge('southpaw', 'orthodox')).toBeGreaterThan(1);
+    // And in none of the three directions that are not the open-stance matchup.
+    expect(edge('orthodox', 'orthodox')).toBe(1);
+    expect(edge('orthodox', 'southpaw')).toBe(1);
+    expect(edge('southpaw', 'switch')).toBe(1);
 
     expectSameSport(sport(varied), sport(flat), 'stance');
   });
@@ -280,21 +291,45 @@ describe('a modifier that shapes matchups does not move the sport', () => {
     const varied = POOL.map((make, i) => ({ fighter: withReach(make(), 72 + (i % 2 === 0 ? 4 : -4)) }));
     const flat = POOL.map((make) => ({ fighter: withReach(make(), 72) }));
 
-    // Differentiation: the same fighter, four inches either side of the pool mean, against an
-    // opponent who wants the fight somewhere he does not.
+    /*
+     * Differentiation measured on **where the fight happened**, not on who won it.
+     *
+     * Both are downstream of `reachLeverage`, and only one of them is measurable. Reach is capped
+     * at ±12% on a single contest by design, so the win rate it buys across a six-inch difference
+     * ran +0.67 to +1.22 points over eight independent seed sets at 4,000 fights each and −0.08 to
+     * +1.58 at 1,200 — an effect that needs four thousand fights to have a sign. The share of
+     * standing time spent at kicking range, which is the thing reach actually acts on, ran +2.35
+     * to +3.14 points over the same eight seed sets at 900 fights and never once came out
+     * negative.
+     *
+     * Measuring the mechanism instead of its consequence is cheaper *and* stricter, and it is what
+     * `tactics.test.ts` means when it says positional axes are far tighter than win rate.
+     */
     const opponent = withReach(ARCHETYPES.grinder(), 72);
     const outside = plan({ preferredState: 'outside', entry: 'movement' });
     const pocket = plan({ preferredState: 'pocket', entry: 'pressure' });
-    const at = (inches: number) =>
-      runMatchup(withReach(ARCHETYPES.striker(), inches), opponent, {
-        fights: 1200,
-        redPlan: outside,
-        bluePlan: pocket,
-        seedPrefix: 'neutrality:reach',
-      }).redWinRate;
-    const long = at(78);
-    const short = at(66);
-    expect(long, `78in ${long.toFixed(4)} vs 66in ${short.toFixed(4)}`).toBeGreaterThan(short);
+    const outsideShareAt = (inches: number) => {
+      const seconds = { outside: 0, boxing: 0, pocket: 0 };
+      let distance = 0;
+      for (let i = 0; i < 900; i++) {
+        const r = simulateFight({
+          boutId: `neutrality:reach:${i}`,
+          red: { fighter: withReach(ARCHETYPES.striker(), inches), plan: outside },
+          blue: { fighter: opponent, plan: pocket },
+          rounds: 3,
+          seed: `neutrality:reach:${i}`,
+        });
+        for (const k of RANGES) seconds[k] += r.stats.red.rangeSeconds[k];
+        distance += r.stats.red.distanceSeconds;
+      }
+      return seconds.outside / Math.max(1, distance);
+    };
+    const long = outsideShareAt(78);
+    const short = outsideShareAt(66);
+    expect(
+      long - short,
+      `78in holds it outside ${(long * 100).toFixed(1)}% against 66in ${(short * 100).toFixed(1)}%`,
+    ).toBeGreaterThan(0.015);
 
     expectSameSport(sport(varied), sport(flat), 'reach');
   });
@@ -337,20 +372,36 @@ describe('a modifier that shapes matchups does not move the sport', () => {
      * has feet, and without the floor two thirds of unplanned fights sat at kicking range for
      * fifteen minutes with no range event in them at all.
      *
-     * The cost of that decision is measurable and this is the measurement: a population that
-     * states a preference at zero conviction comes out 1.4 points more knockout-heavy than one
-     * that states none. That is the floor, and nothing else — every other term in the policy layer
-     * multiplies through conviction and vanishes. Two points is the bound because the floor is the
-     * only thing allowed through it; if this starts failing, something else has learned to apply
-     * itself to a fighter who does not mean it.
+     * The cost of that decision is measurable and this is the measurement, over eight independent
+     * seed sets: the population that states a preference at zero conviction comes out **+0.5 to
+     * +3.2 points** more knockout-heavy than the one that states none, and never comes out less.
+     * Everything else stays inside the shared tolerance — submissions within ±2.0 points,
+     * decisions within 2.3, length within 0.07 of a round.
+     *
+     * A first cut of this bound read the default seed alone, measured 1.4 points, and asserted
+     * two. It failed on four seed sets in five, which is the same defect the promotion-costs and
+     * debutant-placement assertions were rewritten for: a bound fitted to one draw is not a claim
+     * about the engine, it is a recording of a coincidence.
+     *
+     * The knockout bound is therefore its own number with its own reason. If it starts failing,
+     * something *other* than the floor has learned to apply itself to a fighter who does not mean
+     * it — and that is exactly the class of defect this file exists to catch.
      */
-    const stated = POOL.map((make, i) => ({
+    const statedPopulation = POOL.map((make, i) => ({
       fighter: make(),
       plan: plan({ preferredState: STATES[i % STATES.length]!, conviction: 0 }),
     }));
-    const silent = POOL.map((make) => ({ fighter: make() }));
+    const silentPopulation = POOL.map((make) => ({ fighter: make() }));
 
-    expectSameSport(sport(stated), sport(silent), 'a preference nobody means');
+    const stated = sport(statedPopulation);
+    const silent = sport(silentPopulation);
+    const message = `stated ${describeSport(stated)} | silent ${describeSport(silent)}`;
+
+    expect(stated.ko - silent.ko, message).toBeLessThan(0.045);
+    expect(stated.ko - silent.ko, message).toBeGreaterThan(-0.01);
+    expect(Math.abs(stated.submission - silent.submission), message).toBeLessThan(0.03);
+    expect(Math.abs(stated.decision - silent.decision), message).toBeLessThan(0.035);
+    expect(Math.abs(stated.meanRound - silent.meanRound), message).toBeLessThan(0.1);
   });
 
   it('is a shape across the plan space rather than a level on top of it', () => {

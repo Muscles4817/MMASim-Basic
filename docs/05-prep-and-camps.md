@@ -127,7 +127,11 @@ which meant "the plan failed" and "the plan did not matter" were indistinguishab
 one was always the truth.
 
 A plan now answers five questions. `domain/tactics.ts` is the vocabulary; `fight/policy.ts` is
-what makes the engine obey it.
+what makes the engine obey it. Two of doc 01's fight-engine invariants govern the whole layer and
+are worth stating before the list rather than after it: **a plan decides what a fighter tries, not
+whether it works**, and **initiative is not a destination** — how you take space is a separate
+question from where you want the fight, and the old control's inability to separate them is most
+of why it failed.
 
 ### 1. Where do you want the fight?
 

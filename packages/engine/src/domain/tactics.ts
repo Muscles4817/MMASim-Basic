@@ -367,12 +367,43 @@ export function defaultTactics(): TacticalPlan {
   };
 }
 
+/**
+ * Make a plan safe to run, wherever it came from.
+ *
+ * The type says `TacticalPlan` and the value may not be one. Plans arrive from the editor, from a
+ * booking written by an older build, and from `tacticsFromApproach` migrating a save that predates
+ * the whole layer — and TypeScript checks none of those, because all three cross a `JSON.parse`.
+ * This is the one funnel every entry point goes through, so it is where a value that is no longer
+ * part of the vocabulary has to become one that is.
+ *
+ * `preferredState` is checked first and matters most: `entriesFor` reaches straight into
+ * `PREFERRED_STATE_META`, so a state this build has never heard of is not a wrong fight plan, it
+ * is a `TypeError` on the way into the cage. Nothing persisted today carries a stale one — the two
+ * standing states that existed before the range split, `outside` and `pocket`, are both still in
+ * the list — but "nothing does yet" is not the same as "nothing can", and the cost of being wrong
+ * here is a crash rather than a bad fight.
+ *
+ * Everything unrecognised falls back to the neutral plan's answer rather than to a guess, because
+ * a plan that has lost a field should apply no bias on that axis. Guessing would silently give a
+ * fighter an instruction nobody chose.
+ */
 export function normaliseTactics(plan: TacticalPlan): TacticalPlan {
-  const entries = entriesFor(plan.preferredState);
+  const fallback = defaultTactics();
+  const oneOf = <T,>(allowed: readonly T[], value: T, whenUnknown: T): T =>
+    allowed.includes(value) ? value : whenUnknown;
+
+  const preferredState = oneOf(PREFERRED_STATES, plan.preferredState, fallback.preferredState);
+  const entries = entriesFor(preferredState);
+
   return {
     ...plan,
+    preferredState,
     // An entry style left over from a previous preference is not a plan, it is a stale control.
     entry: entries.includes(plan.entry) ? plan.entry : entries[0]!,
-    conviction: clamp01(plan.conviction),
+    topIntent: oneOf(TOP_INTENTS, plan.topIntent, fallback.topIntent),
+    bottomIntent: oneOf(BOTTOM_INTENTS, plan.bottomIntent, fallback.bottomIntent),
+    finishing: oneOf(FINISHING_URGENCIES, plan.finishing, fallback.finishing),
+    situational: plan.situational ?? {},
+    conviction: Number.isFinite(plan.conviction) ? clamp01(plan.conviction) : 0,
   };
 }
