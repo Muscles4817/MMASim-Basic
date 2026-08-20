@@ -45,10 +45,10 @@ import {
   StreakBadge,
 } from '../ui/signals';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
-import { getLadderStatus, type LadderStatus } from '../game/progression';
+import { getLadderStatus, restDays, type LadderStatus } from '../game/progression';
 import { playerCardPosition } from '../game/night';
 import { getRivalry, previousMeetings } from '../game/rivalries';
-import { advanceWorld, readNews } from '../game/world';
+import { readNews } from '../game/world';
 import { NewsFeed } from '../ui/NewsFeed';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 import { campCostFor, currentPurse, solvencyOf } from '../game/money';
@@ -62,6 +62,7 @@ import {
   requestRelease,
 } from '../game/contracts';
 import { formatGameDay } from '../shell/Shell';
+import { InjuryStatus, RestCard } from './Recovery';
 
 /**
  * Career hub: who you are, what is next, and the one decision you can make right now.
@@ -71,7 +72,7 @@ import { formatGameDay } from '../shell/Shell';
  * element on the screen and there is never more than one of it.
  */
 export function HubScreen() {
-  const { db, world, playerFighter, commit, updateWorld } = useGame();
+  const { db, world, playerFighter, commit } = useGame();
   const { navigate } = useRouter();
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [releaseWord, setReleaseWord] = useState<string | undefined>();
@@ -79,6 +80,15 @@ export function HubScreen() {
   const [signedRepaper, setSignedRepaper] = useState<RepaperOffer | undefined>();
   const [pendingOffer, setPendingOffer] = useState<MatchupAppraisal | undefined>();
   const [booking, setBooking] = useState(() => getBooking(playerFighter?.id as string | undefined));
+  /*
+   * Open on demand while a fight is booked.
+   *
+   * Between fights the rest card is simply always there — it is one of the two things the hub is
+   * for. With a fight booked it is a smaller decision than the fight itself, so it stays folded
+   * away until the injury alert offers it, which is the one situation in camp where sitting out
+   * is the right call.
+   */
+  const [restOpen, setRestOpen] = useState(false);
 
   const news = useMemo(() => readNews(db), [db, world.day]);
 
@@ -156,13 +166,16 @@ export function HubScreen() {
    * Fighting was originally the only thing that advanced time, which meant a fighter in a
    * thin division with nobody left to face had a permanently locked career — the rematch
    * cooldown could never expire.
+   *
+   * Through `restDays` rather than `advanceWorld` since the health pass. The direct call moved
+   * the world and the date and left the player themselves untouched: no ageing, no decay, no
+   * contract tolling and no freshness recovery, so the most obvious way to deal with being flat
+   * was the one route in the game that did nothing about it. It also could not be interrupted,
+   * so an offer that arrived in week two of an eight-week wait was not seen until week eight.
    */
   const waitWeeks = (weeks: number) => {
-    // Waiting has to move the *world*, not just the calendar. Skipping eight weeks with a
-    // frozen roster was how a stuck division stayed stuck forever.
-    const to = world.day + weeks * 7;
-    advanceWorld(db, world.day, to, fighter.id);
-    updateWorld({ day: to });
+    restDays(db, fighter, weeks * 7);
+    commit();
   };
 
   return (
@@ -344,6 +357,20 @@ export function HubScreen() {
           </div>
         )}
       </Card>
+
+      {/*
+        Two facts that decide when to take a fight, on the screen where fights are taken.
+
+        The injury alert used to live only on the training screen, behind "Go to training" and
+        below a form — so a player could be booked, camped and beaten while carrying a knee they
+        were told about once, on a screen they had no reason to open. It leads here because a
+        carried injury outranks everything else on this page, including the offers.
+      */}
+      <InjuryStatus fighter={fighter} day={world.day} onRest={() => setRestOpen(true)} />
+
+      {(restOpen || !booking) && (
+        <RestCard fighter={fighter} fightDay={booking?.bout.day} />
+      )}
 
       {ladder && (
         <LadderCard

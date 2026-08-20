@@ -164,6 +164,37 @@ export function activeInjuries(injuries: readonly Injury[], day: GameDay): Injur
  * happen, which is the opposite of most players' intuition and worth the system saying.
  */
 const BASE_CAMP_HAZARD = 0.1;
+
+/**
+ * How recovered a fighter is, read here rather than imported.
+ *
+ * `freshness.ts` imports this module for `exposureScore`, so importing `freshnessOf` back would be
+ * a cycle. The read is two lines and the default is the same one `freshnessOf` documents: a save
+ * written before freshness existed means *fresh*, not *empty*.
+ */
+const freshness = (fighter: Fighter): number => clamp(fighter.condition.freshness ?? 100, 0, 100);
+
+/**
+ * What being flat does to a body.
+ *
+ * The missing lever, and the reason the injury system read as weather. Age, wear, proneness and
+ * traits are all facts about the fighter that the player cannot change this month; intensity was
+ * the only dial, and it is buried inside a camp they have already decided to run. So the honest
+ * answer to "how am I meant to avoid these" was *fight less and get younger*.
+ *
+ * Fatigue is the one input a player can move today, by resting, and it is also the one the sport
+ * agrees with: injuries cluster at the end of hard camps and in fighters who came back too soon,
+ * not uniformly across the calendar. Tying the hazard to `freshness` makes the rest button a
+ * genuine piece of injury management rather than a slow way to lose sharpness.
+ *
+ * Neutral is deliberately *not* at 100. A fighter is almost never at 100 — a camp ends in the
+ * fifties — so anchoring the multiplier there would have been a blanket nerf wearing a mechanic's
+ * clothes. It sits at 1 around 70, which is where a rested fighter between camps actually lives,
+ * so the median career's injury rate is roughly unchanged and the *spread* is what grew.
+ */
+export function fatigueFactor(value: number): number {
+  return clamp(remap(value, 100, 25, 0.72, 1.5), 0.7, 1.55);
+}
 /*
  * Raised from 0.07 alongside the exposure model, which is a recalibration rather than a nerf.
  * The old `1 + damage/120` term sat at 1.0-2.0 and averaged around 1.4 across real fights;
@@ -190,7 +221,14 @@ export function campInjuryChance(
   const proneness = remap(fighter.naturals.injuryProneness, 10, 92, 0.5, 1.9);
   const ageFactor = clamp(remap(age, 22, 40, 0.8, 1.7), 0.75, 1.8);
   const wear = 1 + fighter.condition.bodyWear / 130;
-  const load = clamp(weeks / 8, 0.5, 1.6);
+  /*
+   * Proportional to the block, with a floor low enough to be worth reaching for.
+   *
+   * The floor used to be 0.5, which said a single week of drilling carried half the risk of a full
+   * eight-week camp — so shortening a block bought almost nothing and "train less" was not a real
+   * answer to anything. At 0.15 a short sharpener is genuinely a short sharpener.
+   */
+  const load = clamp(weeks / 8, 0.15, 1.6);
 
   return clamp01(
     BASE_CAMP_HAZARD *
@@ -199,8 +237,101 @@ export function campInjuryChance(
       wear *
       load *
       intensity *
+      fatigueFactor(freshness(fighter)) *
       traitMul(fighter.traits, 'campInjuryRisk'),
   );
+}
+
+/**
+ * The same number, taken apart.
+ *
+ * A percentage on its own answers "how likely" and none of "what do I do about it", which is
+ * precisely the complaint this exists to answer. Every term is returned with the direction it
+ * pushes, so a screen can say *why* this camp is dangerous and which of the reasons the player
+ * still has a say over.
+ *
+ * `movable` is the whole point of the split: age, wear and a fighter's own fragility are facts
+ * about them, and rest, intensity and length are decisions. A driver that cannot be moved is
+ * still worth naming — it is the difference between "you are unlucky" and "you are 37" — but it
+ * must not be offered as advice.
+ */
+export interface RiskDriver {
+  label: string;
+  /** Multiplier on the base hazard. Above 1 raises the risk, below 1 lowers it. */
+  factor: number;
+  /** True when this is something the player can still decide about. */
+  movable: boolean;
+}
+
+export interface CampRisk {
+  /** 0–1. The chance this block ends with an injury. */
+  chance: number;
+  /** Sorted worst-first. */
+  drivers: readonly RiskDriver[];
+  /** One sentence naming the biggest thing the player could still do about it. */
+  advice: string;
+}
+
+/**
+ * Plain-language band for a hazard, so a screen is not left colouring a bare percentage.
+ *
+ * Calibrated against what the model actually produces rather than against round numbers. The
+ * range a player can reach runs from about 3% — rested, light, a fortnight — to about 46% —
+ * flat, overreaching, twelve weeks. A standard eight-week camp on a fresh 28-year-old sits at
+ * 11%, and that is the ordinary case: a first pass at these boundaries called it "high", which
+ * would have had the screen shouting at the player for doing the normal thing.
+ */
+export function riskBand(chance: number): 'low' | 'fair' | 'high' | 'severe' {
+  if (chance < 0.06) return 'low';
+  if (chance < 0.12) return 'fair';
+  if (chance < 0.22) return 'high';
+  return 'severe';
+}
+
+export function campRiskBreakdown(
+  fighter: Fighter,
+  weeks: number,
+  day: GameDay,
+  intensity = 1,
+  intensityLabel = 'Training intensity',
+): CampRisk {
+  const age = ageOn(fighter.birthDay, day);
+  const fresh = freshness(fighter);
+
+  const drivers: RiskDriver[] = [
+    { label: 'Freshness', factor: fatigueFactor(fresh), movable: true },
+    { label: intensityLabel, factor: intensity, movable: true },
+    { label: 'Block length', factor: clamp(weeks / 8, 0.15, 1.6), movable: true },
+    { label: 'Age', factor: clamp(remap(age, 22, 40, 0.8, 1.7), 0.75, 1.8), movable: false },
+    { label: 'Body wear', factor: 1 + fighter.condition.bodyWear / 130, movable: false },
+    {
+      label: 'How you are built',
+      factor: remap(fighter.naturals.injuryProneness, 10, 92, 0.5, 1.9),
+      movable: false,
+    },
+    {
+      label: 'Traits',
+      factor: traitMul(fighter.traits, 'campInjuryRisk'),
+      movable: false,
+    },
+  ]
+    .filter((d) => Math.abs(d.factor - 1) > 0.02)
+    .sort((a, b) => b.factor - a.factor);
+
+  const chance = campInjuryChance(fighter, weeks, day, intensity);
+  const worstMovable = drivers.find((d) => d.movable && d.factor > 1.05);
+
+  const advice = worstMovable
+    ? worstMovable.label === 'Freshness'
+      ? `You are running this flat, and a tired body is the thing that breaks. Resting first is worth more here than anything else on this screen.`
+      : worstMovable.label === 'Block length'
+        ? 'A shorter block carries proportionally less risk. Two short camps are not safer than one long one, but one short camp is.'
+        : 'Backing the intensity off is the cheapest way to bring this down — a light block is half the risk of a standard one.'
+    : riskBand(chance) === 'low'
+      ? 'About as safe as training gets. Nothing here is worth changing.'
+      : 'Nothing you can still decide is making this worse. What is left is age, mileage and the body you were born with.';
+
+  return { chance, drivers, advice };
 }
 
 /**
@@ -326,11 +457,19 @@ export function fightInjuryChance(
   const proneness = remap(fighter.naturals.injuryProneness, 10, 92, 0.6, 1.7);
   const ageFactor = clamp(remap(age, 22, 40, 0.85, 1.5), 0.8, 1.6);
 
+  /*
+   * The same fatigue term the camp roll uses, and for the same reason it belongs in both: a
+   * fighter who walks to the cage flat is the one whose knee goes in a scramble he would
+   * otherwise have won. It also closes the loop on intensity — an overreached camp now costs you
+   * twice, once in the gym and once on the night, which is what makes periodisation a decision
+   * rather than a slider with one consequence.
+   */
   return clamp01(
     BASE_FIGHT_HAZARD *
       proneness *
       ageFactor *
       exposureScore(exposure) *
+      fatigueFactor(freshness(fighter)) *
       traitMul(fighter.traits, 'fightInjuryRisk'),
   );
 }
@@ -472,6 +611,37 @@ export function injuredAttributes(
 }
 
 /**
+ * How much healing left a fighter will still go through with it.
+ *
+ * Eight weeks sounds generous until you remember what the sport actually looks like: people fight
+ * with broken hands, torn labrums and knees that need surgery afterwards, and the game models what
+ * that costs them — `injuredAttributes` gives them their real numbers rather than their card,
+ * `aggravationChance` can turn it into something far worse on the night, and nobody is told.
+ * Setting this low does not make the game more realistic, it deletes that entire mechanic by
+ * cancelling every fight it would have applied to.
+ *
+ * The number is swept rather than chosen, against the sport's own withdrawal rate of roughly one
+ * booked bout in eight; `withdrawals.ts` records the sweep.
+ *
+ * It lives here, in `health`, because it is a fact about what a body will take rather than about
+ * the player's booking — and because the *world* has to hold its own fighters to it too. It was
+ * previously an app-layer constant that only the player's bout consulted, which is how eight
+ * hundred professionals ended up being matched while carrying knees that would not heal for a
+ * year. See `canFightOn`.
+ */
+export const FIGHT_THROUGH_WEEKS = 8;
+
+/**
+ * Whether this fighter would take a bout on the given day, given what they are carrying.
+ *
+ * The rule both corners are held to. A fighter carrying something that will still be badly there
+ * on the night pulls out; anything shorter than that, they fight on and nobody is told.
+ */
+export function canFightOn(injuries: readonly Injury[], day: GameDay): boolean {
+  return weeksUntilFit(injuries, day) <= FIGHT_THROUGH_WEEKS;
+}
+
+/**
  * The chance that competing on an injury makes it materially worse.
  *
  * High enough that fighting hurt is a genuine gamble rather than a free choice with a small
@@ -481,12 +651,33 @@ export function aggravationChance(injury: Injury, damageTaken: number): number {
   return clamp01(0.28 + injury.severity * 0.3 + clamp01(damageTaken / 200));
 }
 
+/**
+ * How far past its own worst natural case an injury can be driven by competing on it.
+ *
+ * The bound was missing, and the compounding it allowed was the single worst number in the health
+ * model. `aggravate` multiplies the *remaining* layoff by 1.6–2.4, so a fighter who is repeatedly
+ * matched while hurt has that layoff doubled once per bout: measured across eight years of
+ * generated pre-history, a torn knee reached **995 weeks** — nineteen years — and 76% of the
+ * roster was carrying something at any moment. Every one of the worst cases was `severity: 1` and
+ * `foughtThrough: true`, which is the compounding signature.
+ *
+ * Two things fix it and both are needed. The world now refuses to book a fighter who would pull
+ * out (`canFightOn`), which stops the loop being entered over and over. And an aggravated injury
+ * is bounded here, because "worse" has to mean worse rather than unbounded: at 2, a torn knee's
+ * absolute worst case is eighty weeks, which ends careers and is a thing that happens, against
+ * nineteen years, which is not.
+ */
+const AGGRAVATION_CEILING = 2;
+
 export function aggravate(injury: Injury, day: GameDay, rng: Rng): Injury {
   const remaining = Math.max(7, injury.healedDay - day);
+  const worsened = remaining * rng.range(1.6, 2.4);
+  const ceiling = INJURY_META[injury.type].weeks[1] * 7 * AGGRAVATION_CEILING;
+
   return {
     ...injury,
     severity: clamp01(injury.severity + rng.range(0.1, 0.3)),
-    healedDay: day + Math.round(remaining * rng.range(1.6, 2.4)),
+    healedDay: day + Math.round(Math.min(worsened, ceiling)),
     foughtThrough: true,
   };
 }

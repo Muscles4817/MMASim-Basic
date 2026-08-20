@@ -15,6 +15,7 @@ import { emptyRecordSummary, freshCondition } from '../domain/fighter.js';
 import type { Personality } from '../domain/personality.js';
 import { uniformPersonality } from '../domain/personality.js';
 import type { TraitId } from '../domain/traits.js';
+import type { Condition } from '../domain/fighter.js';
 import type { Attributes, Naturals } from '../ratings/attributes.js';
 import { uniformAttributes } from '../ratings/attributes.js';
 
@@ -41,6 +42,14 @@ export interface FighterOverrides {
    */
   reachInches?: number;
   headTrauma?: number;
+  /**
+   * Anything else about the body's current state.
+   *
+   * `headTrauma` keeps its own shortcut because half the suite already uses it. This is here
+   * because `freshness` became a real input — it moves both hazard rolls and fight-night output —
+   * and a test about it had no way to set it short of building a `Fighter` by hand.
+   */
+  condition?: Partial<Condition>;
   starPower?: number;
   reputation?: number;
   sex?: 'male' | 'female';
@@ -92,7 +101,7 @@ export function makeFighter(o: FighterOverrides = {}): Fighter {
     personality: { ...uniformPersonality(50), ...o.personality },
     traits: o.traits ?? [],
 
-    condition: { ...freshCondition(), headTrauma: o.headTrauma ?? 0 },
+    condition: { ...freshCondition(), headTrauma: o.headTrauma ?? 0, ...o.condition },
     record: [],
     summary: emptyRecordSummary(),
 

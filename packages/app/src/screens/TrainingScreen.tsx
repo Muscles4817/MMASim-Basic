@@ -10,7 +10,6 @@ import {
   TRAINING_META,
   activeInjuries,
   campImpairment,
-  describeInjury,
   fighterAge,
   forecastTraining,
   attributeRoom,
@@ -47,12 +46,21 @@ import { Alert, FighterRead, KeyStat } from '../ui/signals';
 import { getBooking } from '../game/career';
 import { formatGameDay } from '../shell/Shell';
 import { campCostFor, solvencyOf } from '../game/money';
+import { InjuryRisk, InjuryStatus } from './Recovery';
 
 const WEEK_OPTIONS = [
   // The labels name what each length is *for*, because the arithmetic has a genuine sweet
   // spot at eight weeks and nothing on the screen said so. See `CAMP_RAMP_WEEKS`: a camp has
   // a fixed cost at the front and diminishing returns at the back, so per-week value rises,
   // peaks at eight and falls. Four weeks sharpens; it does not develop.
+  //
+  // Two weeks was added underneath them, and it is not a fourth camp length — it is the
+  // smallest amount of time the screen is willing to consume. The shortest block used to be
+  // four weeks, so *every* control that moved the clock moved it by a month or more, which is
+  // what made freshness look like a number the game was inventing between presses rather than
+  // one it was keeping. It also does real work now that camp injury risk is proportional to
+  // block length rather than floored at half a camp.
+  { value: '2', label: '2 weeks', hint: 'Tick over' },
   { value: '4', label: '4 weeks', hint: 'Sharpen up' },
   { value: '8', label: '8 weeks', hint: 'Full camp' },
   { value: '12', label: '12 weeks', hint: 'Long build' },
@@ -89,7 +97,7 @@ export function TrainingScreen() {
   const { db, world, playerFighter, commit } = useGame();
   const { navigate } = useRouter();
   const [focuses, setFocuses] = useState<TrainingFocus[]>(['boxing']);
-  const [weeks, setWeeks] = useState<'4' | '8' | '12'>('8');
+  const [weeks, setWeeks] = useState<'2' | '4' | '8' | '12'>('8');
   const [intensity, setIntensity] = useState<TrainingIntensity>(DEFAULT_INTENSITY);
   const [outcome, setOutcome] = useState<TrainingOutcome | undefined>();
 
@@ -340,23 +348,23 @@ export function TrainingScreen() {
         </Alert>
       )}
 
+      {/*
+        One injury panel, shared with the hub.
+
+        This screen and the hub were saying different things about the same knee — this one knew
+        what it cost the camp and the hub did not mention it at all. `InjuryStatus` is the version
+        that also names which attributes are suppressed, and the camp cost is stated underneath it
+        because that part genuinely is specific to being on the training screen.
+      */}
       {carrying.length > 0 && (
-        <Alert
-          tone={impairment < 0.6 ? 'danger' : 'warn'}
-          title={
-            carrying.length === 1
-              ? `You are carrying an injury — about ${fitInWeeks} week${fitInWeeks === 1 ? '' : 's'} until you are fit`
-              : `You are carrying injuries — about ${fitInWeeks} week${fitInWeeks === 1 ? '' : 's'} until you are fit`
-          }
-        >
-          {/*
-            The timeline is the addition. The old alert said training cost X% of the camp and
-            never said how long to wait, so "should I rest?" had no answerable form and the
-            player was left guessing at a number the game already knew.
-          */}
-          {carrying.map((injury) => describeInjury(injury, world.day)).join(' ')} Training through
-          it costs you roughly {Math.round((1 - impairment) * 100)}% of the camp.
-        </Alert>
+        <div className="stack" style={{ gap: 'var(--space-2)' }}>
+          <InjuryStatus fighter={fighter} day={world.day} />
+          <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
+            Training through it costs you roughly {Math.round((1 - impairment) * 100)}% of the
+            camp, and about {fitInWeeks} week{fitInWeeks === 1 ? '' : 's'} of patience would cost
+            you none of it.
+          </p>
+        </div>
       )}
 
       <Card title="What to work on">
@@ -486,7 +494,30 @@ export function TrainingScreen() {
               : `You will finish at about ${Math.round(freshnessAfter)} of 100 — ${describeFreshness(freshnessAfter).toLowerCase()}.`}
           </p>
 
-          <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
+          {/*
+            The other price of the camp, and the one that was never quoted.
+
+            Money is stated to the penny here and injury risk — which can cost four months — was
+            not stated at all, so the player's only evidence about it was the injuries themselves.
+            That is the difference between a system and weather.
+          */}
+          <div
+            style={{
+              marginTop: 'var(--space-3)',
+              paddingTop: 'var(--space-3)',
+              borderTop: '1px solid var(--border)',
+            }}
+          >
+            <InjuryRisk
+              fighter={fighter}
+              day={world.day}
+              weeks={Number(weeks)}
+              intensity={intensity}
+              intensityLabel="Training intensity"
+            />
+          </div>
+
+          <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
             {weeks} weeks at {gym?.name ?? 'no gym'} costs <strong>{money(cost)}</strong>.{' '}
             {canPay
               ? spendLine({ cost, balance: fighter.bank })

@@ -219,6 +219,24 @@ export interface GenerateOptions {
   playerRole?: 'fighter' | 'coach' | 'promoter';
   adapter?: StorageAdapter;
   createdAtIso?: string;
+  /**
+   * The day to build the population on. Defaults to the era's start date.
+   *
+   * `generateWorld` passes the start date **minus the pre-history span**, because doc 27 § 4.2's
+   * whole method is "build the population at start-date minus N years, then run the sport at low
+   * fidelity up to the start date". Building at the start date and simulating *past* it leaves
+   * every date the run stamps — every record entry, every medical suspension, every reign — in the
+   * player's future.
+   */
+  day?: number;
+  /**
+   * Years of simulation the population will be aged through before the player sees it.
+   *
+   * `generateWorld` passes the pre-history span. See `DepthOptions.ageForwardYears`: a roster
+   * built with the ages the player should end up seeing arrives that many years too old, because
+   * ageing is the one thing the run does to everybody.
+   */
+  ageForwardYears?: number;
 }
 
 export type GenerationPhase = 'pyramid' | 'history' | 'settling';
@@ -254,7 +272,7 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
   db.commentators.upsertMany(scaffolding.commentators as unknown as (Commentator & Entity)[]);
   db.managers.upsertMany(scaffolding.managers as unknown as (Manager & Entity)[]);
 
-  const day = scaffolding.day;
+  const day = options.day ?? scaffolding.day;
   const template = scaffolding.promotions[0]!;
 
   const natural = PYRAMID.filter((t) => t.label !== 'local').reduce(
@@ -324,9 +342,13 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
   }
   db.championships.upsertMany(titles as unknown as (Championship & Entity)[]);
 
-  const fighters = buildDepthFighters({ targets, existing: [], day, seed: `${seed}:depth` }).map(
-    (f, i) => ({ ...f, id: asFighterId(`${f.id}_${i}`) }),
-  );
+  const fighters = buildDepthFighters({
+    targets,
+    existing: [],
+    day,
+    seed: `${seed}:depth`,
+    ageForwardYears: options.ageForwardYears,
+  }).map((f, i) => ({ ...f, id: asFighterId(`${f.id}_${i}`) }));
   db.fighters.upsertMany(fighters as (Fighter & Entity)[]);
 
   const divisionTargets: Record<string, number> = {};
@@ -341,11 +363,11 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
     /*
      * Where the player's involvement begins.
      *
-     * A generated world does not stop here — `generateWorld` runs eight years of pre-history on
-     * top and winds the clock back — so this is a floor rather than the final answer, and that
-     * function corrects it. It is set here anyway so a world built without pre-history still has
-     * an anchor: without one, "days since this fighter was last booked" falls back to today and
-     * a fighter nobody has touched in a year reads as freshly signed.
+     * The same day the world is built on, here. `generateWorld` then simulates *forward* to the
+     * era's start date and moves both, which is the point: the player arrives when pre-history
+     * ends, not when the generator ran. Without an anchor at all, "days since this fighter was
+     * last booked" falls back to today and somebody nobody has touched in a year reads as freshly
+     * signed.
      */
     startedDay: day,
     divisionTargets,
