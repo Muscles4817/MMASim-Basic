@@ -230,6 +230,24 @@ export interface FightStats {
    */
   rangeChangesAttempted: number;
   rangeChangesLanded: number;
+  /**
+   * Attempts to get out from underneath, and the ones that worked.
+   *
+   * The same pair as the range counters and for the same reason: the plan sets how often a fighter
+   * goes for the exit, his attributes and the other man's decide whether it opens, and only both
+   * numbers together can tell "he was told to stand up and could not" from "he was never trying".
+   */
+  escapesAttempted: number;
+  escapesLanded: number;
+  /**
+   * Beats spent doing something useful while still underneath — attacking, framing, hand-fighting.
+   *
+   * The counter that makes the transition invariant checkable. Wanting out of a position must not
+   * suppress the work done in it, and the only way to see that is to count the work: a fighter told
+   * to stand up who never does anything but fail to stand up is the defect, and he looks identical
+   * on every other statistic to one who is busy.
+   */
+  bottomWorkBeats: number;
   /** Cumulative damage dealt, in the same units as the opponent's damage meters. */
   damageDealt: number;
 }
@@ -355,6 +373,9 @@ export function emptyStats(): FightStats {
     rangeSeconds: { outside: 0, boxing: 0, pocket: 0 },
     rangeChangesAttempted: 0,
     rangeChangesLanded: 0,
+    escapesAttempted: 0,
+    escapesLanded: 0,
+    bottomWorkBeats: 0,
     damageDealt: 0,
   };
 }

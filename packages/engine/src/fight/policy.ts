@@ -57,6 +57,7 @@
 
 import { clamp, clamp01, remap } from '../core/math.js';
 import { rangeChangeChance, rangeUrgencyScale, type RangeChange } from './range.js';
+import { exitUrgency } from './decide.js';
 import type {
   BottomIntent,
   PreferredState,
@@ -93,7 +94,7 @@ const STRENGTH = 1.9;
  * Read a row as: *if this is the fight I want, how well does this action serve it?*
  */
 export type StandingAction = 'strike' | 'kick' | 'takedown' | 'clinchUp';
-export type HeldAction = 'breakAway' | 'clinchStrike' | 'reverse';
+export type HeldAction = 'breakAway' | 'clinchStrike' | 'reverse' | 'pummel';
 export type ControllingAction = 'clinchTakedown' | 'clinchStrike' | 'clinchStall';
 
 type Alignment = Readonly<Record<PreferredState, number>>;
@@ -174,6 +175,27 @@ const HELD_ALIGNMENT: Readonly<Record<HeldAction, Alignment>> = {
     submission: 0.4,
     adaptive: 0,
   },
+  /*
+   * Hand-fighting: the work a fighter does in a tie-up he wants no part of.
+   *
+   * Added with the transition split, and for the same reason `defend` was added underneath. Once
+   * `breakAway` stopped competing for the same draw, the only things left in the held fighter's
+   * in-state list were a short strike and a reversal — so an outside fighter whose break failed
+   * *took over the clinch* 59% of the time, which is the opposite of what he was told and cost the
+   * striking swing 1.6 points of win rate.
+   *
+   * Reversing a tie-up is a grappler's answer to being held. A striker's answer is to fight the
+   * hands and force the referee to look at it, which is what this row says.
+   */
+  pummel: {
+    outside: 0.9,
+    boxing: 0.8,
+    pocket: 0.5,
+    clinch: -0.2,
+    top: -0.15,
+    submission: -0.2,
+    adaptive: 0,
+  },
 };
 
 const CONTROLLING_ALIGNMENT: Readonly<Record<ControllingAction, Alignment>> = {
@@ -215,7 +237,7 @@ const CONTROLLING_ALIGNMENT: Readonly<Record<ControllingAction, Alignment>> = {
  * from it, or to sit on it, without those being different game plans.
  */
 export type TopAction = 'advancePosition' | 'groundStrike' | 'submission' | 'groundStall';
-export type BottomAction = 'standUp' | 'sweep' | 'submission';
+export type BottomAction = 'standUp' | 'sweep' | 'submission' | 'defend';
 
 const TOP_ALIGNMENT: Readonly<Record<TopAction, Readonly<Record<TopIntent, number>>>> = {
   advancePosition: { control: 0.15, groundAndPound: -0.2, advance: 1, submit: 0.5 },
@@ -229,6 +251,16 @@ const BOTTOM_ALIGNMENT: Readonly<Record<BottomAction, Readonly<Record<BottomInte
   sweep: { standUp: -0.1, scramble: 1, playGuard: 0.2, recover: -0.35, attack: 0.2 },
   // The row this module exists for: a striker told to get up does not hunt a guillotine.
   submission: { standUp: -1, scramble: -0.2, playGuard: 0.7, recover: -0.8, attack: 1 },
+  /*
+   * Framing, hand-fighting, denying the pass — the in-state work that was missing entirely, and
+   * without which "get up" had nothing to mean but "attempt an escape or do nothing".
+   *
+   * `recover` is its natural home and reads highest. `standUp` is positive because a fighter
+   * working for the exit stays busy while he does it — that is the whole invariant. `attack` is
+   * the only strongly negative column: a fighter hunting a finish off his back is not the one
+   * playing it safe.
+   */
+  defend: { standUp: 0.35, scramble: 0.1, playGuard: 0.5, recover: 1, attack: -0.6 },
 };
 
 /**
@@ -747,6 +779,64 @@ export function expectedRangeFailure(c: Combatant, other: Combatant): number {
   });
 
   return away * (1 - chance);
+}
+
+/**
+ * How much a plan wants *out* of a state it is in, in −1…+1, before conviction scales it.
+ *
+ * The `B` axis of the tactical hierarchy, kept as its own table rather than inferred from the
+ * action lists. Inferring it was tried and does not work: the urgency to leave a position cannot
+ * depend on how many things the vocabulary happens to offer while you are in it (see
+ * `exitUrgency`).
+ *
+ * The clinch row is the `breakAway` alignment, which was already exactly this quantity wearing a
+ * different hat. The bottom row is new and is the honest reading of the five bottom instructions
+ * as a single question: how much does this fighter want to be somewhere else?
+ */
+const CLINCH_EXIT: Alignment = {
+  outside: 1,
+  boxing: 0.9,
+  pocket: 0.65,
+  clinch: -1,
+  top: -0.1,
+  submission: -0.2,
+  adaptive: 0,
+};
+
+const BOTTOM_EXIT: Readonly<Record<BottomIntent, number>> = {
+  standUp: 1,
+  scramble: 0.7,
+  recover: 0.15,
+  /*
+   * The two "stay" rows read close to the full negative on purpose.
+   *
+   * Anchoring the scale at what an unplanned fighter does costs the plan some of its reach in the
+   * downward direction — the neutral is 0.8, so a mild negative barely moves it. Measured, -0.6
+   * for `playGuard` left a guard player attempting the exit on 52% of beats against a stand-up
+   * plan's 94%, and the difference in time spent underneath came out at 7%, where it needs to be
+   * the difference between two recognisable fighters. At -0.9 it reads 38% against 92%.
+   */
+  playGuard: -0.9,
+  attack: -1,
+};
+
+/*
+ * The neutral rates, measured from what the engine did before the transition split rather than
+ * chosen. With the exits and the in-state work drawn from one list, an unplanned fighter went for
+ * the door on about 85% of bottom beats and 56% of held-clinch beats — those are the rates the
+ * sport is calibrated around, and a fighter with no instructions has to keep producing them.
+ */
+const BOTTOM_EXIT_RATE = { neutral: 0.8, floor: 0.25, ceiling: 0.94 };
+const CLINCH_EXIT_RATE = { neutral: 0.56, floor: 0.18, ceiling: 0.92 };
+
+/** How hard this fighter is working to get out from underneath, as a probability per beat. */
+export function bottomExitUrgency(c: Combatant, stance: Stance): number {
+  return exitUrgency(BOTTOM_EXIT[c.plan.tactics.bottomIntent], stance.urgency, BOTTOM_EXIT_RATE);
+}
+
+/** The same, for a fighter being held in a tie-up he may or may not want. */
+export function clinchExitUrgency(stance: Stance): number {
+  return exitUrgency(CLINCH_EXIT[stance.desired], stance.urgency, CLINCH_EXIT_RATE);
 }
 
 /** How much they go looking for the finish once the fight is on the floor. */

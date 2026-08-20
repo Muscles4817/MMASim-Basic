@@ -1,11 +1,13 @@
 # 31 — The tactical intent hierarchy
 
-**Status: audit. F4's refactor has landed; everything else is still a finding.**
+**Status: F4 and F1 landed. The rest are still findings and should be re-audited against the new
+architecture before they are implemented — some may have changed shape.**
 
 | | |
 | --- | --- |
-| F4 | **representation done.** Every decision surface now goes through `fight/decide.ts`, and `intentAuthority` makes the gap measurable — 0.32 to 10.28 across the engine. Choosing the baselines is a behaviour change and has not happened. |
-| F1–F3, F5–F8 | untouched, and worth re-auditing against the new architecture before implementing |
+| F4 | **representation done.** Every decision surface goes through `fight/decide.ts` and `intentAuthority` makes the gap measurable. Choosing the baselines is a behaviour change and has not happened. |
+| F1 | **done** for the two positions that needed it — bottom and the held clinch. Distance already had the architecture; holding-clinch and top do not need it. See the audit below. |
+| F2, F3, F5–F8 | untouched |
 
 The range split (doc 05, doc 01 § invariants) fixed the standing half of a problem that is larger
 than standing. This document is the audit of what is left, and it deliberately stops before the
@@ -85,6 +87,114 @@ desperate wrestler and a busy guard player are different people and this list ca
 This is the missing **layer 2**: transition intent has to be a separate question from in-state
 behaviour, resolved before it rather than beside it.
 
+#### F1 audit — which actions are in-state, which are exits, and what each costs
+
+Done before touching the resolver, because the answer is not the same in every state and a generic
+two-roll solution applied everywhere would break the ones that are already right.
+
+| state | action | kind | what it consumes |
+| --- | --- | --- | --- |
+| **distance** | `strike`, `kick` | in-state | the beat |
+| | `takedown`, `clinchUp` | **exit** | the beat — a level change *is* the moment |
+| | *(range change)* | **exit, already separated** | nothing — a pre-beat |
+| **clinch, held** | `clinchStrike` | in-state | the beat |
+| | `reverse` | in-state | the beat — control changes, the *state* does not |
+| | `breakAway` | **exit** | the beat, and produces nothing when it fails |
+| **clinch, holding** | `clinchStrike` | in-state | the beat |
+| | `stall` | see below | the beat |
+| | `clinchTakedown` | **exit** | the beat — again a committed level change |
+| **ground, top** | `advancePosition`, `groundStrike`, `submission` | in-state | the beat |
+| | `stall` | see below | the beat |
+| | — | **no exit exists** | a fighter on top cannot choose to disengage |
+| **ground, bottom** | `submission` | in-state | the beat |
+| | `standUp`, `sweep` | **exit** | the beat, and produces nothing when it fails |
+
+Three conclusions, and they are different from each other:
+
+**Distance is already right, and is the template.** `resolveRangeBeat` runs *before* the action
+list every exchange, changes the state on its own, consumes no time of its own, and a failure costs
+something concrete — the other man gets a counter at 1.45×. That is exactly the architecture F1
+needs, built once already, working. And the exits that *remain* in the flat list belong there: you
+cannot throw a jab and shoot a double in the same instant, so `takedown` and `clinchUp` genuinely
+consume the same decision opportunity as striking does. **Distance needs no change.**
+
+**Bottom and held-clinch are the two that are wrong**, and they are wrong in the same way. In both,
+the exit is drawn against the in-state work, so wanting out suppresses everything else — and worse,
+a *failed* exit produces nothing at all. A fighter who tried to stand and did not spent the entire
+beat achieving zero. That is where the invariant breaks:
+
+> **Wanting to leave a state must not automatically suppress all useful behaviour within it.**
+
+Bottom has a second problem that makes the first one acute: **its only in-state action is
+`submission`.** There is nothing to frame with, nothing to defend with, nothing to deny the pass
+with. So a striker underneath has a choice between attempting an escape and hunting a choke he
+cannot finish, and nothing else exists.
+
+**Holding-clinch and top need no split.** Their only exit is a committed takedown, which does
+consume the moment. Top has no exit at all, which is a real gap — a fighter on top cannot elect to
+stand back up — but it is a missing action rather than a mis-structured decision, and it belongs
+with the vocabulary work in F2/F3.
+
+#### The stall constants, determined
+
+The question was whether `stall` is an action candidate at the same conceptual level as
+strike/takedown/submission, or the absence of one. Measured rather than argued:
+
+| | capability | weight | share of the decision |
+| --- | --- | --- | --- |
+| `groundStall`, control plan, top in guard | 0.35 | 1.54 | **32%** |
+| `clinchStall`, outside plan, holding | 0.50 | 0.30 | 13% |
+
+It is not marginal, so this is a conceptual question and not a scaling one. The answer is **both,
+and that is the defect**: `stall` bundles two different things.
+
+1. **Deliberate positional riding** — holding somebody down and running clock. That is a real
+   in-state action and a real game plan; Khabib rode position for entire rounds. Its capability is
+   *not* a constant, though: holding a man down is `groundControl`, and pinning him on the fence is
+   `clinchOffence`.
+2. **The residual** — what happens when nothing productive comes off. This one is **already
+   modelled twice over**: a failed `advancePosition` adds 15 stalled seconds and checks for a
+   referee stand-up, a failed escape adds 20, a failed `breakAway` adds 8. The engine already
+   reaches stalling through every other action's failure branch.
+
+So the residual half should not be a candidate at all — it is double-counting a state the engine
+arrives at anyway — and the productive half is misnamed and mis-based. The honest version is a
+`ride` action whose capability is control.
+
+**Not changed in F1.** Rebasing it from 0.35 to `groundControl` is a four-fold change to a
+candidate holding a third of the top-position decision, which is a calibration exercise with its
+own evidence, not a side effect of restructuring the bottom. It is recorded here as the next
+behaviour change to make deliberately.
+
+#### What F1 built
+
+The exit became a **pre-beat** at the two positions that needed it, mirroring `resolveRangeBeat`:
+resolved first, consuming no time of its own, and on failure the beat carries on into the in-state
+work rather than ending in nothing.
+
+- **`exitUrgency`** takes an alignment and the fighter's conviction and nothing else. A first cut
+  derived it from the *ratio of intents* across the two lists and that was wrong in an instructive
+  way: adding `pummel` to the held clinch — an action that helps a striker *leave* — dropped his
+  break attempts from 91% of beats to 51%, because the new candidate landed on the "staying" side
+  of a ratio it had no business being in. How much you want out cannot be a function of how many
+  things there are to do while you are in.
+- **The neutral is what an unplanned fighter does**, measured from the old engine at 0.80 on the
+  bottom and 0.56 in the clinch — not 0.5. Centring it at a half made every unplanned fighter in
+  the game stop trying to stand, and cost the striking attributes two points of win-rate swing.
+- **Two new in-state actions**, because the invariant cannot hold without them. Underneath there
+  was *nothing* to do but hunt a submission; `defend` is framing and hand-fighting, resolved as
+  pressure toward the referee's stand-up. In the held clinch, removing `breakAway` from the draw
+  left only a short strike and a reversal, so an outside fighter whose break failed *took over the
+  tie-up* 59% of the time; `pummel` is a striker's answer instead of a grappler's.
+- **Stalled time is charged once.** Booking it on both the failed exit and the in-state work made a
+  bottom beat accrue 20–32 seconds where it used to accrue 20, which raised referee restarts across
+  the whole sport and compressed the gap between a striking plan and a wrestling one.
+
+Measured: a striker told to stand up goes for the exit **1.51 times a minute against 0.98** for one
+told to work from his back, does in-state work on **nearly every beat either way**, and the two
+plans differ by under six points on *success* rate — which 40 scrambling against 82 ground control
+decides, not the corner.
+
 ### F2 — The clinch has no behaviour layer at all
 
 `HELD_ALIGNMENT` and `CONTROLLING_ALIGNMENT` are keyed on `PreferredState`. There is no
@@ -137,17 +247,33 @@ defect class as the seven `approach` buttons, one layer down.
 > control**. The refactor changed nothing: 7,500 fights across five matchups, 223 counters, every
 > one bit-identical. The numbers themselves are unchanged and still wrong.
 
-`capability` is sometimes an attribute on the 25–95 scale and sometimes a hand-tuned constant:
+> **Correction, made during F1.** The first version of this section said capability was "on the
+> 25–95 scale" and put the bottom-submission gap at 900:1. **Both are wrong.** `fatiguedEffect`
+> does not return a rating — it returns `effect()`, which is `exp(convexity × (rating − 50) / 50)`,
+> a multiplier of roughly **0.5 to 2.0**. A 70-rated attribute reads about 1.5, not 70.
+>
+> Everything downstream of the *measurement* was right, because `intentAuthority` reads the actual
+> values; it was the prose arithmetic that was invented. The corrected numbers are below, and they
+> change the character of the finding: the bare constants are not negligible next to the attribute
+> terms, they are the same order of magnitude. `stall` is 32% of a top-position decision, not a
+> rounding error. What is wrong with them is that they are *arbitrary* — unrelated to anything
+> about the fighter — not that they are small.
 
-- `BASE_GROUND_STALL` and `BASE_CLINCH_STALL` are bare constants competing against `groundControl`
-  and `clinchOffence`.
-- Bottom submissions are `submissions × 0.8` **in guard** and the literal `0.05` everywhere else.
+`capability` is sometimes an attribute effect and sometimes a hand-tuned constant, and the two are
+closer together than they look:
 
-The second one is the sharpest case. Off guard, `subW` is `0.05 × bias` against a `getUpW` of
-roughly `scrambling × 0.65 × bias` — about **900:1** before the plan says anything, and the plan's
-whole range is `exp(±1.9)`, about 6.7:1. A submission specialist told to attack from underneath
-side control is arithmetically incapable of being obeyed, and the exceptional-opportunity override
-cannot rescue him either, because `submissionOpportunity` feeds the bias and not the 0.05.
+| candidate | capability | against |
+| --- | --- | --- |
+| `groundStall` | `BASE_GROUND_STALL` = 0.35 | `advancePosition` at 1.42 — **4:1** |
+| `clinchStall` | `BASE_CLINCH_STALL` = 0.5 | `clinchTakedown` at 1.99 — **4:1** |
+| bottom `submission`, in guard | `submissions × 0.8` = 1.29 | `standUp` at 1.28 — **even** |
+| bottom `submission`, elsewhere | the literal `0.05` | `standUp` at 0.82 — **16:1** |
+
+The last row is still the sharpest case, and 16:1 is still past what the plan can argue with: the
+whole intent range is `exp(±1.9)`, about 6.7:1 end to end. A submission specialist told to attack
+from underneath side control still cannot be fully obeyed, and `submissionOpportunity` still cannot
+rescue him, because it feeds the intent and not the constant. The effect is a tenth of what this
+document originally claimed and it is real.
 
 In practice this rarely bites — bottom time is mostly guard time, and an attempt to demonstrate it
 behaviourally moved submission attempts only from 5.55 to 4.77 — so it is a **latent** override

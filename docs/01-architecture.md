@@ -77,8 +77,8 @@ needs an RNG.
 ## Fight-engine invariants
 
 Eight rules the fight engine is built on. Each names where it is enforced, because an invariant
-nothing checks is a preference — and the last two name that they are *not* yet enforced, which is
-the honest version of the same thing.
+nothing checks is a preference — and where one is *not* yet enforced it says so, which is the
+honest version of the same thing.
 
 ### 1. A plan decides what a fighter *tries*. Attributes decide whether it works.
 
@@ -177,18 +177,31 @@ baselines, which is a behaviour change and its own piece of work.
 *State-transition intent and in-state behaviour are separate decisions unless the actions genuinely
 compete for the same moment.*
 
-Today they are drawn from one flat weighted list at every position, so wanting to leave more
-*arithmetically* means doing less while you are there: a fighter told to stand up manages 1.96
-get-ups against 0.63 and pays for it with 2.17 submission attempts against 4.96. That trade is
-plausible, which is what makes it hard to see, and nothing in the model chose it — a desperate
-wrestler and a busy guard player are different people and one list cannot hold both.
+They used to be drawn from one flat weighted list at every position, so wanting to leave more
+*arithmetically* meant doing less while you were there: a fighter told to stand up managed 1.96
+get-ups against 0.63 and paid for it with 2.17 submission attempts against 4.96. That trade was
+plausible, which is what made it hard to see, and nothing in the model chose it — a desperate
+wrestler and a busy guard player are different people and one list cannot hold both. Worse, a
+*failed* exit produced nothing at all: a fighter who tried to stand and did not spent the whole
+beat achieving zero.
 
-The exception in the rule is real and load-bearing: two actions that genuinely occupy the same
-moment — you cannot throw a hand and shoot a double at the same instant — belong in one draw. What
-does not belong is *how hard am I trying to get out of here* competing with *what am I doing while
-I am here*, which are different questions asked on different clocks.
+**The exception in the rule is real and load-bearing**, and it is why this was not applied
+uniformly. Two actions that genuinely occupy the same moment — you cannot throw a hand and shoot a
+double at the same instant — belong in one draw, so `takedown` and `clinchUp` stay in the standing
+list and the clinch takedown stays in the holding one. What does not belong is *how hard am I
+trying to get out of here* competing with *what am I doing while I am here*.
 
-*Not yet enforced.* Doc 31 § F1 is the audit; this rule is what it is fixed against.
+Where they are split, the exit is a **pre-beat**: resolved first, consuming no time of its own,
+and on failure the beat continues into the in-state work. That is the shape `resolveRangeBeat`
+already had standing; the bottom position and the held clinch now have it too.
+
+The urgency to leave is built from the plan and the fighter's conviction and **nothing about his
+capability** — the corner decides how often he goes for the door, the two fighters decide whether
+it opens. Its neutral is what an unplanned fighter does, not one half: getting up off your back is
+a property of fighting rather than of planning, the same lesson `rangeUrgency` records about its
+floor.
+
+*Enforced by* `tests/statistical/transition-intent.test.ts`. Doc 31 § F1 is the audit.
 
 ## State shape & mutation
 

@@ -123,3 +123,51 @@ export function intentAuthority<K extends string>(candidates: readonly Candidate
   if (capabilitySpan <= 0) return intentSpan > 0 ? Number.POSITIVE_INFINITY : 0;
   return intentSpan / capabilitySpan;
 }
+
+/**
+ * How hard a fighter is trying to leave, as a probability that this beat is spent on the exit.
+ *
+ * The other half of the tactical hierarchy, and the reason it is a separate function rather than
+ * two more entries in one list: *what am I doing while I am here* and *how urgently am I trying to
+ * stop being here* are different questions on different clocks, and drawing them together makes
+ * the second one crowd out the first (docs/01 § 8, doc 31 § F1).
+ *
+ * It takes an **alignment** — how much this plan wants out of this state, in −1…+1 — and the
+ * fighter's own conviction, and nothing else. Capability does not appear, which is the point: the
+ * plan decides how often a fighter goes for the door, and his attributes against the other man's
+ * decide whether it opens. That is the same division range already draws.
+ *
+ * **`neutral` is what a fighter with no instructions does**, and it is not 0.5. This is the same
+ * lesson `rangeUrgency` records about its floor: getting up off your back is a property of
+ * fighting, not of planning, and a man told nothing still wants out from underneath. A first cut
+ * centred the scale at a half and every unplanned fighter in the game stopped trying to stand —
+ * bottom exits fell from about 85% of beats to 50%, the sport spent longer on the floor, and the
+ * striking attributes lost two points of win-rate swing. The neutral is measured from what the
+ * engine did before the split, and the plan moves it from there.
+ *
+ * A first cut derived the urgency from the *sum of intents* over the exit actions against the sum
+ * over the in-state actions, and it was wrong in a way worth recording: adding a third in-state
+ * action diluted it. Introducing `pummel` to the held clinch — an action that helps a striker
+ * leave — dropped his break attempts from 91% of beats to 51%, because the new candidate landed on
+ * the "staying" side of a ratio it had no business being in. **How much you want out cannot be a
+ * function of how many things there are to do while you are in.**
+ *
+ * Floored and capped, because both ends have to remain possible:
+ *
+ *  - the floor is what stops "stay and work" meaning a fighter who *cannot* leave a position that
+ *    has become untenable;
+ *  - the cap is what stops "get up" meaning a fighter who does nothing else while failing to.
+ *
+ * Neither bound is a tuning knob for how much the plan is worth. They are the two ways the
+ * invariant fails.
+ */
+export function exitUrgency(
+  alignment: number,
+  conviction: number,
+  bounds: { neutral: number; floor: number; ceiling: number },
+): number {
+  const a = Math.max(-1, Math.min(1, alignment));
+  const c = Math.max(0, Math.min(1, conviction));
+  const span = a >= 0 ? bounds.ceiling - bounds.neutral : bounds.neutral - bounds.floor;
+  return Math.min(bounds.ceiling, Math.max(bounds.floor, bounds.neutral + a * c * span));
+}

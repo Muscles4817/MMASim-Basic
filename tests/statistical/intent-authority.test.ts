@@ -36,10 +36,11 @@ import { createCombatant } from '../../packages/engine/src/fight/profile.js';
 import { stanceOf } from '../../packages/engine/src/fight/policy.js';
 import { actionShares, intentAuthority } from '../../packages/engine/src/fight/decide.js';
 import {
-  bottomCandidates,
+  bottomExits,
+  bottomWork,
   controllingCandidates,
   distanceCandidates,
-  heldCandidates,
+  heldWork,
   topCandidates,
 } from '../../packages/engine/src/fight/simulate.js';
 
@@ -73,10 +74,11 @@ function surfaces(p: GamePlan): { name: string; authority: number; shares: strin
 
   const lists = [
     ['distance', distanceCandidates(actor, foe, 'boxing', stance)],
-    ['clinch (held)', heldCandidates(actor, foe, stance)],
+    ['clinch (held, work)', heldWork(actor, foe, stance, false)],
     ['clinch (controlling)', controllingCandidates(actor, foe, stance)],
-    ['bottom (guard)', bottomCandidates(actor, stance, 'guard', 0)],
-    ['bottom (side control)', bottomCandidates(actor, stance, 'sideControl', 0)],
+    ['bottom (guard, work)', bottomWork(actor, stance, 'guard', 0, false)],
+    ['bottom (side control, work)', bottomWork(actor, stance, 'sideControl', 0, false)],
+    ['bottom (exits)', bottomExits(actor, stance, 'guard')],
     ['top (guard)', topCandidates(actor, foe, stance, 0.2, 0)],
     ['top (mount)', topCandidates(actor, foe, stance, 0.8, 0)],
   ] as const;
@@ -112,22 +114,25 @@ describe('what a fully convinced corner can buy, by decision', () => {
     /*
      * **The measurement, and the debt.**
      *
-     * Measured at full conviction, the ceiling runs from **0.32** to **10.28** — a thirty-two-fold
-     * spread in what the same instruction is worth depending only on which decision it lands on.
+     * Measured at full conviction across the engine's decision surfaces, the finite readings run
+     * from **0.11 to 5.94** — a fifty-fold spread in what the same conviction is worth depending
+     * only on which decision it lands on. Several lists read `Infinity`, which is a real answer and
+     * means the candidates carry identical capability so the plan decides the whole thing.
+     *
      * The two ends:
      *
-     *  - **0.32, an outside striker holding the clinch.** He has almost no say in what he does
-     *    there: takedown 43%, strike 45%, stall 13%, near enough whatever he was told. The
-     *    capability terms are `chainWrestling`, `strikingOffence` and the bare constant
-     *    `BASE_CLINCH_STALL = 0.5`, and a 0.5 against a 70 is a spread the plan cannot cross.
-     *  - **10.28, a fighter told to stand up, in guard.** The instruction is nearly the whole
-     *    decision — 83% get-ups — because the three actions all read `scrambling` and so barely
-     *    differ on capability at all.
+     *  - **0.11, a fighter's in-state work under side control.** The list is a submission at the
+     *    literal `0.05` beside a frame at 1.29 — twenty-six to one, against an intent range of
+     *    about seven to one end to end. Whatever he was told, he frames.
+     *  - **5.94, an outside striker at range.** Strike, kick, takedown and clinch are all things he
+     *    can do, so nothing but the instruction separates them and the instruction decides.
      *
-     * And the sharpest single case, because it is the same instruction twice: **bottom submissions
-     * are worth 4.94–7.33 of authority in guard and 0.48–0.71 in side control.** The only thing
-     * that changed is that the man on top passed. That is the literal `0.05` from doc 31 § F4,
-     * visible now that the capability term has a name.
+     * **The transition split moved this landscape and did not try to fix it**, which was the plan:
+     * before it the spread was 0.32 to 10.28. Both ends moved for the same structural reason — the
+     * lists got shorter. Bottom in-state work is now two candidates rather than three, so the 0.05
+     * sits beside a larger companion and the ratio widens; the bottom exits are two rather than
+     * three, so their internal spread narrows. Neither is a judgement about the constants, which
+     * are untouched.
      *
      * The bound is the measurement plus headroom, not a target. It fails if the spread *widens*,
      * which is the regression worth catching while the fix is pending; narrowing it is the work,
@@ -137,10 +142,10 @@ describe('what a fully convinced corner can buy, by decision', () => {
     const lo = Math.min(...finite.map((m) => m.authority));
     const hi = Math.max(...finite.map((m) => m.authority));
 
-    expect(lo, report()).toBeGreaterThan(0.25);
-    expect(hi, report()).toBeLessThan(12);
+    expect(lo, report()).toBeGreaterThan(0.08);
+    expect(hi, report()).toBeLessThan(7);
     // The spread itself, which is the quantity the rule is actually about.
-    expect(hi / lo, report()).toBeLessThan(40);
+    expect(hi / lo, report()).toBeLessThan(80);
   });
 
   it('gives the same instruction the same authority regardless of where the opponent put them', () => {
@@ -155,11 +160,14 @@ describe('what a fully convinced corner can buy, by decision', () => {
      * the bottom baselines are chosen deliberately. Until then it records the size of the gap.
      */
     const hunt = plan({ preferredState: 'submission', bottomIntent: 'attack' });
-    const actor = createCombatant('red', ARCHETYPES.contender(), hunt);
+    // A guard player rather than the all-rounder: the contender's `submissions` and `scrambling`
+    // are the same rating, so both in-state candidates carry identical capability and the metric
+    // correctly reads infinite authority — true, and useless for measuring a gap.
+    const actor = createCombatant('red', ARCHETYPES.guardPlayer(), hunt);
     const stance = stanceOf(actor, undefined, false);
 
-    const inGuard = intentAuthority(bottomCandidates(actor, stance, 'guard', 0));
-    const passed = intentAuthority(bottomCandidates(actor, stance, 'sideControl', 0));
+    const inGuard = intentAuthority(bottomWork(actor, stance, 'guard', 0, false));
+    const passed = intentAuthority(bottomWork(actor, stance, 'sideControl', 0, false));
     const message = `guard ${inGuard.toFixed(2)} against side control ${passed.toFixed(2)}`;
 
     // Recorded, not endorsed: 7.33 against 0.71.
@@ -213,25 +221,32 @@ interface Fingerprint {
  *
  * A tactical change that moves these on purpose *should* fail this test and rewrite the numbers
  * with its own measurement. That is the guard working, not the guard being in the way.
+ *
+ * **Re-recorded once so far**, by the transition split. It failed on all three matchups, which is
+ * what it is for, and the numbers below are that change's own measurement. What moved is small and
+ * in the direction the change intended: a little more standing time and a few more takedowns as
+ * fighters who used to do nothing after a failed escape now frame and hand-fight their way to a
+ * referee restart. What did not move is the sport's shape — knockouts within 2 points, submissions
+ * within 2, mean round within 0.03 on every matchup.
  */
 const BASELINE: Readonly<Record<string, Fingerprint>> = {
   'striker-v-grinder': {
-    punches: 20.788, kicks: 7.417, takedowns: 5.373, submissions: 8.08,
-    clinchEntries: 1.793, getUps: 1.38, advances: 4.248, sweeps: 1.227,
-    distanceSeconds: 279.3, clinchSeconds: 38.323, groundSeconds: 453.19,
-    koRate: 0.248, submissionRate: 0.2, meanRound: 2.352,
+    punches: 20.63, kicks: 7.583, takedowns: 5.59, submissions: 7.43,
+    clinchEntries: 1.9, getUps: 1.322, advances: 4.267, sweeps: 1.19,
+    distanceSeconds: 282.26, clinchSeconds: 38.205, groundSeconds: 457.41,
+    koRate: 0.235, submissionRate: 0.21, meanRound: 2.368,
   },
   'contender-v-canFodder': {
-    punches: 12.265, kicks: 2.92, takedowns: 2.223, submissions: 4.753,
-    clinchEntries: 0.86, getUps: 0.235, advances: 1.86, sweeps: 0.192,
-    distanceSeconds: 112.787, clinchSeconds: 19.693, groundSeconds: 207.133,
-    koRate: 0.577, submissionRate: 0.373, meanRound: 1.472,
+    punches: 12.343, kicks: 3.073, takedowns: 2.307, submissions: 4.813,
+    clinchEntries: 0.888, getUps: 0.278, advances: 1.88, sweeps: 0.232,
+    distanceSeconds: 118.62, clinchSeconds: 20.7, groundSeconds: 214.728,
+    koRate: 0.573, submissionRate: 0.358, meanRound: 1.493,
   },
   'guardPlayer-v-smotherer': {
-    punches: 16.752, kicks: 2.863, takedowns: 6.963, submissions: 12.727,
-    clinchEntries: 2.985, getUps: 1.543, advances: 5.047, sweeps: 1.565,
-    distanceSeconds: 260.4, clinchSeconds: 63.512, groundSeconds: 563.602,
-    koRate: 0.063, submissionRate: 0.227, meanRound: 2.642,
+    punches: 17.183, kicks: 2.95, takedowns: 7.092, submissions: 12.022,
+    clinchEntries: 3.035, getUps: 1.433, advances: 5.128, sweeps: 1.42,
+    distanceSeconds: 265.953, clinchSeconds: 62.813, groundSeconds: 569.415,
+    koRate: 0.052, submissionRate: 0.223, meanRound: 2.668,
   },
 };
 
