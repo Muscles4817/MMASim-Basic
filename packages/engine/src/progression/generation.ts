@@ -126,19 +126,106 @@ const NATURALS_CURVE = 1.5;
 const naturalsCentre = (tier: number): number =>
   NATURALS_FLOOR + (clamp(tier, 1, 100) / 100) ** NATURALS_CURVE * (NATURALS_TOP - NATURALS_FLOOR);
 
+/**
+ * How much a fighter's place in the sport says about the body they were born with.
+ *
+ * Doc 31 § 12 step 3, and the measurement that motivates it. Over 12,000 debutants drawn the way
+ * `depth.ts` draws them, the old single-`tier` model produced:
+ *
+ * ```
+ *   rho(tier, athletic naturals)  0.846
+ *   rho(tier, current overall)    0.708
+ * ```
+ *
+ * **A fighter's promotion predicted his genetics better than it predicted his fighting ability**,
+ * which is the master-scalar defect stated as plainly as it can be. One number made somebody
+ * simultaneously explosive, durable, coachable and worthy of a bigger show, so the four fighters the
+ * sport is actually full of — the freak who cannot fight, the technician in an ordinary body, the
+ * gifted learner with no engine, the ordinary athlete who has trained for twenty years — were all
+ * close to impossible to generate. Measured at the bottom of the sport, **0.8%** of local-level
+ * fighters had any physical ceiling at 80 or better.
+ *
+ * A promotion signs fighters, not genotypes. So `tier` now drives the **learning** axis, which is
+ * what current fighting ability is mostly made of, and reaches the body only through this loading.
+ *
+ * Above zero because the correlation is real — winning fights does select for athleticism, just far
+ * more weakly than it selects for skill — and well below one because the whole point is that a
+ * regional card is full of people who are quick, strong or hard to hurt and cannot fight.
+ *
+ * 0.45 was chosen by sweep rather than by taste. Measured over the same 12,000:
+ *
+ * ```
+ *   loading   rho(tier, ability)   rho(tier, body)   rho(body, learning)   local elite bodies
+ *   0.00                   ~0.47             ~0.05                 ~0.03                ~9%
+ *   0.35                    0.497             0.223                 0.126                8.1%
+ *   0.45                    0.518             0.281                 0.157                6.8%
+ *   0.60                    0.542             0.361                 0.209                4.9%
+ * ```
+ *
+ * Every column trades against every other. 0.45 keeps promotion level saying roughly twice as much
+ * about a fighter's ability as about their body, leaves a weak-but-real link between athleticism and
+ * coachability — which is true of people — and still puts an elite physical ceiling on one local
+ * fighter in fifteen, against **one in a hundred and twenty-five** before this change.
+ */
+export const ATHLETIC_TIER_LOADING = 0.45;
+
+/**
+ * Where the athletic axis sits for the sport as a whole, on the same 1–100 tier scale.
+ *
+ * The mean of the tier draw `generateFighter` defaults to, so a fighter of unremarkable competitive
+ * standing has an unremarkable body and the loading above measures deviation from *that* rather than
+ * from an arbitrary zero.
+ */
+const POPULATION_TIER = 45;
+
+/**
+ * Spread of the athletic axis around where the loading puts it.
+ *
+ * Wide, and deliberately wider than the per-natural spreads it sits on top of. This is the number
+ * that decides whether a regional card can contain a genuine physical freak, and doc 31 § 15 asks
+ * for exactly that: extreme athletes rare but real, at every level of the sport.
+ */
+const ATHLETIC_TIER_SPREAD = 22;
+
+/**
+ * The athletic axis, drawn from the competitive one.
+ *
+ * Exported for the diagnostics rather than for callers: `talent-axes.test.ts` needs to be able to
+ * state the loading it is asserting against rather than hard-coding a second copy of it.
+ */
+export function athleticTier(rng: Rng, tier: number): number {
+  const centre = POPULATION_TIER + ATHLETIC_TIER_LOADING * (clamp(tier, 1, 100) - POPULATION_TIER);
+  return rng.normalClamped(centre, ATHLETIC_TIER_SPREAD, 1, 100);
+}
+
+/**
+ * Roll the hidden physiology, on two axes rather than one.
+ *
+ * `tier` is a statement about where this fighter belongs in the sport, so it centres **motor
+ * learning** — the number that decides how much of any ceiling ever gets reached, and therefore most
+ * of what a promotion is actually looking at. The four body naturals are centred on a separate,
+ * weakly-correlated draw.
+ *
+ * What this does **not** do is decouple the physicals from each other. Power and Strength remain
+ * near-identical linear combinations of `explosiveness` and `frame` (rho = 0.85, doc 31 § 13.1), and
+ * that is step 6's work, kept out of this change so the two can be measured independently.
+ */
 export function generateNaturals(rng: Rng, tier: number, walkingWeightLbs: number): Naturals {
-  const centre = naturalsCentre(tier);
-  const roll = (sd = 12) => toRating(rng.normalClamped(centre, sd, 12, 97));
+  // Forked so that adding the second axis does not reshuffle every draw made after it, and so the
+  // athletic roll stays put if the learning side is ever retuned.
+  const athletic = naturalsCentre(athleticTier(rng.fork('athletic'), tier));
+  const learning = naturalsCentre(tier);
+  const body = (sd: number) => toRating(rng.normalClamped(athletic, sd, 12, 97));
 
   return {
     frame: toRating(clamp((walkingWeightLbs / 300) * 100, 5, 99)),
-    explosiveness: roll(14),
-    engine: roll(14),
-    constitution: roll(13),
-    recovery: roll(12),
+    explosiveness: body(14),
+    engine: body(14),
+    constitution: body(13),
+    recovery: body(12),
     // Motor learning gets the widest spread: it is the single biggest driver of who
     // actually reaches their ceiling, and it should be the thing scouts get wrong most.
-    motorLearning: roll(16),
+    motorLearning: toRating(rng.normalClamped(learning, 16, 12, 97)),
     injuryProneness: toRating(rng.normalClamped(48, 16, 10, 92)),
     ageCurve: rng.pickWeighted(AGE_CURVES, (c) =>
       c === 'standard' ? 5 : c === 'longPeak' ? 2 : c === 'lateBloomer' ? 2 : 1.5,

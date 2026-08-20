@@ -337,15 +337,50 @@ const REJECTION_ATTEMPTS = 60;
  * become the generator.
  */
 export function sampleBodyForDivision(rng: Rng, sex: Sex, divisionId: DivisionId): Body {
+  return sampleBodyForDivisionWithStats(rng, sex, divisionId).body;
+}
+
+/** A sampled body, with what it cost to get one. */
+export interface BodySample {
+  body: Body;
+  /** How many forward draws were made. 1 means the first person rolled belonged here. */
+  attempts: number;
+  /** Whether rejection gave up and `forceIntoDivision` built the body instead. */
+  fellBack: boolean;
+}
+
+/**
+ * The same sampling, reporting what it cost.
+ *
+ * Split out for the permanent diagnostic rather than for callers. The fallback narrows the
+ * distribution it replaces — it draws height from a tight normal around the division's implied
+ * height instead of from the population — so a division where it fires often has quietly stopped
+ * being sampled from the forward model at all, and that is invisible from the outside. Doc 31 § 10.3
+ * asks for the rate to be reported by sex and division; `generation-profile.test.ts` prints it.
+ *
+ * It costs nothing on the hot path: `sampleBodyForDivision` is a thin wrapper and the counters are
+ * two integers on the stack.
+ */
+export function sampleBodyForDivisionWithStats(
+  rng: Rng,
+  sex: Sex,
+  divisionId: DivisionId,
+): BodySample {
   const target = getDivision(divisionId);
 
-  for (let attempt = 0; attempt < REJECTION_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= REJECTION_ATTEMPTS; attempt++) {
     const body = sampleBody(rng, sex);
     const tolerance = sampleCutTolerance(rng);
-    if (chosenDivision(body, sex, tolerance)?.id === target.id) return body;
+    if (chosenDivision(body, sex, tolerance)?.id === target.id) {
+      return { body, attempts: attempt, fellBack: false };
+    }
   }
 
-  return forceIntoDivision(rng, sex, target);
+  return {
+    body: forceIntoDivision(rng, sex, target),
+    attempts: REJECTION_ATTEMPTS,
+    fellBack: true,
+  };
 }
 
 /**

@@ -35,6 +35,7 @@ import {
   createRng,
   divisionsFor,
   generateFighter,
+  sampleBodyForDivisionWithStats,
   type AttributeKey,
   type Fighter,
   type Sex,
@@ -314,10 +315,19 @@ describe('the physical attributes generated', () => {
      * Doc 31 § 12 step 3 splits the talent axes and step 6 gives each attribute its own mass basis,
      * and together they should bring this to roughly 0.6.
      *
-     * The bound below is therefore set where the code *is*, not where it should be. A test that fails
-     * on an untouched checkout is a broken test, so this one guards against the correlation getting
-     * worse and the comment carries the target. **Tighten the upper bound to 0.7 at step 6**; if it
-     * passes at that point, the split worked.
+     * **The 0.7 target is a provisional marker rather than a specification.** What the design
+     * requires is that distinct plausible physical archetypes exist — the explosive fighter who is
+     * not especially strong, the strong one who is not explosive. Whether the coefficient that
+     * produces that is 0.7 or 0.55 is a calibration question for step 7, once the ladder is being
+     * exercised against real fights.
+     *
+     * The bound below is therefore set where the code *is*, not where it should be. A test that
+     * fails on an untouched checkout is a broken test, so this one guards against the correlation
+     * getting worse and the comment carries the direction of travel.
+     *
+     * **Not touched by step 3.** The talent-axis split decoupled promotion level from the body; it
+     * did nothing about the physicals' relationship to each other, on purpose, so the two changes
+     * stay independently attributable. Measured after step 3: unchanged at 0.85.
      */
     const all = everyone();
     const of = (k: AttributeKey) => all.map((f) => f.attributes[k]);
@@ -359,6 +369,94 @@ describe('the physical attributes generated', () => {
         return `${k} ${correlation(orders, values).toFixed(2)}`;
       });
       console.log(`${sex.padEnd(7)} ${row.join('   ')}`);
+    }
+  });
+});
+
+describe('the body sampler', () => {
+  /*
+   * `sampleBodyForDivision` rejection-samples the forward model, which is what keeps a division's
+   * population exactly the slice of the general population that belongs in it. When sixty draws all
+   * miss, it gives up and *builds* a body around the division's mass instead — and that fallback
+   * draws height from a tight normal rather than from the population, so it is narrower than the
+   * distribution it replaces.
+   *
+   * A division where it fires often has therefore stopped being sampled from the forward model, and
+   * nothing about the resulting fighter says so. Doc 31 § 10.3 asks for the rate as a permanent
+   * report; this is it.
+   *
+   * **Background is not a dimension yet.** Nothing about a fighter's sporting history reaches the
+   * body until doc 31 § 12 step 9 gives backgrounds a body prior — a rugby forward carrying more
+   * mass for his height than a distance runner. When it does, this report gains a background column
+   * and the rates below will diverge by it, because the thin corners of the ladder are exactly where
+   * a background prior will start fighting the division it is being asked for.
+   */
+  const RATES = (() => {
+    const rng = createRng('rejection');
+    const rows: { sex: Sex; division: string; attempts: number[]; fallbacks: number; n: number }[] =
+      [];
+    for (const sex of ['male', 'female'] as const) {
+      for (const division of divisionsFor(sex)) {
+        const attempts: number[] = [];
+        let fallbacks = 0;
+        const n = 1500;
+        for (let i = 0; i < n; i++) {
+          const sample = sampleBodyForDivisionWithStats(
+            rng,
+            sex,
+            asDivisionId(division.id as string),
+          );
+          attempts.push(sample.attempts);
+          if (sample.fellBack) fallbacks++;
+        }
+        rows.push({ sex, division: division.shortName, attempts, fallbacks, n });
+      }
+    }
+    return rows;
+  })();
+
+  it('reports the rejection and fallback rate by sex and division', () => {
+    console.log('\n=== body sampling cost by sex and division ===');
+    console.log(
+      'sex'.padEnd(8) +
+        'div'.padEnd(7) +
+        'mean draws'.padStart(12) +
+        'p95 draws'.padStart(11) +
+        'fallback'.padStart(11) +
+        'implied share of population'.padStart(29),
+    );
+    for (const row of RATES) {
+      // One accepted draw in `mean` attempts, so the division's share of the forward population is
+      // roughly its reciprocal — a second reading of the same measurement, and the one that says
+      // whether the ladder is lopsided rather than whether the sampler is struggling.
+      console.log(
+        row.sex.padEnd(8) +
+          row.division.padEnd(7) +
+          mean(row.attempts).toFixed(1).padStart(12) +
+          String(pct(row.attempts, 0.95)).padStart(11) +
+          `${((100 * row.fallbacks) / row.n).toFixed(1)}%`.padStart(11) +
+          `${(100 / mean(row.attempts)).toFixed(1)}%`.padStart(29),
+      );
+    }
+  });
+
+  it('keeps the fallback from becoming the generator in any division', () => {
+    for (const row of RATES) {
+      const rate = row.fallbacks / row.n;
+      expect(
+        rate,
+        `${row.sex} ${row.division} falls back ${(rate * 100).toFixed(1)}% of the time, mean ${mean(row.attempts).toFixed(1)} draws`,
+      ).toBeLessThan(0.15);
+    }
+  });
+
+  it('keeps sampling cheap enough to run inside world generation', () => {
+    // `replenish` calls this once per fighter it creates, while somebody waits for a screen.
+    for (const row of RATES) {
+      expect(
+        mean(row.attempts),
+        `${row.sex} ${row.division} needs ${mean(row.attempts).toFixed(1)} draws on average`,
+      ).toBeLessThan(25);
     }
   });
 });

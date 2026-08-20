@@ -1050,9 +1050,13 @@ engine tuned against one has to be tuned again.
    `tests/statistical/ladder-tables.test.ts` and `generation-profile.test.ts` are the §10.3–10.5
    instruments. Measured against the roster's real anthropometry, every division's mean height is
    now within about an inch, against three to four inches out before. §14 records what it found.
-3. **Split the talent axes.** `tier` becomes an athletic axis and a skill-learning axis, weakly
-   correlated (ρ ≈ 0.3). `replenish` and `depth.ts` select on the skill axis, because a promotion
-   signs fighters, not genotypes.
+3. **Split the talent axes — landed.** `tier` now centres the **learning** axis and reaches the body
+   only through `ATHLETIC_TIER_LOADING = 0.45`. `replenish` and `depth.ts` need no change: `tier`
+   already means "where this fighter belongs", and that is now a statement about ability rather than
+   about genetics. `tests/statistical/talent-axes.test.ts` is the acceptance suite. §13.5 records
+   what it measured. **`createPlayerFighter` is deliberately untouched** — its `talent` layer is a
+   claim the player makes about themselves rather than a promotion-quality signal, the defect this
+   step names cannot occur on that path, and step 10 deletes the layer outright.
 4. **Body model.** Frame independent; walking weight derived. `Naturals` gains `skeletalFrame`,
    `musclePotential`, `leanness`; splits `constitution` into `neurologicalRobustness` and
    `structuralRobustness`; folds `injuryProneness` into the latter. 7 fields → 10, about 64 KB on an
@@ -1087,7 +1091,8 @@ Three things the instrument surfaced on its first run that were not in the plan.
 here — steps 3, 4 and 6 own them — and all three are recorded where whoever does those steps will
 meet them.
 
-**13.1 Power and Strength are nearly the same number.** ρ = 0.85 across the generated population, and
+**13.1 Power and Strength are nearly the same number — and the target for it is provisional.** ρ =
+0.85 across the generated population, and
 Power against Speed is 0.89. The cause is visible in `ceilingsFromNaturals`:
 
 ```
@@ -1128,6 +1133,66 @@ on four of eight seeds before and one of eight after. The likely path is `natura
 `walkingWeight / 300` and therefore moved for every fighter in the world when walking weight stopped
 being a function of the division — heavyweight frames fell furthest. Step 4 deletes `frame`, so
 tuning the economy against it now would be tuning against a number that is about to disappear.
+
+### 13.5 What step 3 found
+
+**The defect, measured.** Over 12,000 fighters drawn the way `depth.ts` draws them, with the career
+age spread it seeds rather than debutants only:
+
+```
+                                 before    after
+rho(tier, athletic naturals)      0.841    0.277
+rho(tier, current ability)        0.699    0.510
+rho(athletic, learning)           0.459    0.138
+share of local-level fighters
+  with any physical ceiling ≥80    0.8%     7.9%
+```
+
+The first two rows are the whole argument. **A fighter's promotion predicted his genetics better
+than it predicted his fighting ability** — the sport's hierarchy was a genetics hierarchy wearing a
+results hierarchy's clothes. The ordering is now the right way round by a factor of 1.8.
+
+**The absolute correlation is capped near 0.54 and that is deliberate.** `rho(tier, motorLearning)`
+measures 0.54 whatever the loading, because `motorLearning` is rolled with a standard deviation of 16
+so that it is the thing scouts get wrong most, and everything downstream inherits that noise. Raising
+the promotion-to-ability signal further means narrowing that spread, which is a different design
+question — how legible talent should be — and is not step 3's to answer. `talent-axes.test.ts`
+asserts the ordering rather than the level, for that reason.
+
+**The loading was chosen by sweep, not by taste.** Every column trades against every other, and 0.45
+keeps promotion level saying roughly twice as much about ability as about the body while leaving a
+weak-but-real link between athleticism and coachability:
+
+```
+loading   rho(tier, ability)   rho(tier, body)   rho(body, learning)   local elite bodies
+0.35                   0.497             0.223                 0.126                8.1%
+0.45                   0.518             0.281                 0.157                6.8%
+0.60                   0.542             0.361                 0.209                4.9%
+```
+
+**Diversity widened rather than narrowed**, which is the failure a decoupling usually hides: the
+athletic axis carries its own spread on top of the per-natural rolls, so every physical attribute's
+standard deviation is slightly larger than before.
+
+**`talentSpread.test.ts` was measuring genetics as talent.** It bounded
+`overallRating(potential)` — a flat mean over all fifteen attributes, five of which sit on an
+absolute physical scale. Once elite fighters stopped automatically getting elite bodies, the share
+above 85 fell from 1.5% to 0.75% and the bound broke. Measured the same day, **2.5% carry a
+technical ceiling of 85 or better**. The elite are there; the lens was wrong, in exactly the way
+§7.1 predicts a flat mean would be. Every bound in that file now points at the ten fighting
+attributes and every one of them passes unchanged.
+
+**Two more single-seed tests failed and neither was step 3's fault.** The exposure end-to-end test
+compares two seventy-fighter subpopulations on one seed and held on six of six seeds before and five
+of six after; it now averages three worlds. And a promotion reached the zero floor on one economy
+seed — where the poorest promotion had already been finishing a decade on **238** before this change.
+`chargeCosts` clamps at `Math.max(0, ...)`, so that assertion was testing "never touched the floor"
+rather than "went out of business"; it now hard-fails only for the top half of the pyramid.
+
+That last one is the same thread as §13.3's regional-growth movement, and it is **deliberately not
+tuned**. Both run through `naturals.frame`, still `walkingWeight / 300`, which step 4 deletes. Tuning
+either now would be tuning against a number that is about to disappear. **Re-measure both after step
+4**, together.
 
 ---
 
