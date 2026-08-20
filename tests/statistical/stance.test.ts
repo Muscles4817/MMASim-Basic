@@ -64,10 +64,21 @@ const report = () =>
 
 describe('the open-stance matchup', () => {
   it('is worth something to the southpaw', () => {
-    // Measured at 6,000 fights per cell: +1.90 points against a 40-`fightIq` opponent, +1.20
-    // against a 66 and +0.20 against a 90. The same fighter with the same ratings, standing the
-    // other way round. Asserted against the dull opponent because that is where the mechanism is
-    // unsolved and therefore where it is largest and cleanest.
+    /*
+     * The same fighter with the same ratings, standing the other way round. Asserted against the
+     * dull opponent because that is where the mechanism is unsolved and therefore where it is
+     * largest and cleanest.
+     *
+     * Re-measured when range landed, because range moved it. A landing-contest edge is worth less
+     * once part of the fight is decided somewhere else, and this read +1.33 points before range
+     * and +0.82 after over 12,000 paired fights — a real dilution rather than a drift, and the
+     * exact level `stance.ts` records as too small to measure below six thousand fights. It is
+     * back at +1.36 / +1.52 / +1.61 (2,500 / 6,000 / 12,000) now that `STANCE_EDGE` is spent in
+     * the range contest too and sized against what that leaves.
+     *
+     * The bound stays where it was. It is a floor on the design claim, not a record of the
+     * measurement — the measurement is in the comment precisely so the two do not get confused.
+     */
     expect(SOUTHPAW_DULL, report()).toBeGreaterThan(MIRROR_DULL + 0.008);
   });
 

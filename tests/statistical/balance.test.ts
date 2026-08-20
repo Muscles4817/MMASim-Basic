@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   ARCHETYPES,
   MAX_PREPPED_READS,
+  convictionFor,
   defaultGamePlan,
+  defaultTactics,
   makeFighter,
   type GamePlan,
   planFor,
@@ -199,10 +201,25 @@ describe('style matchups behave the way the sport does', () => {
 });
 
 describe('preparation is worth more than a few rating points', () => {
-  /** A plan that has correctly read the opponent's actual weapons. */
+  /**
+   * A plan that has correctly read the opponent's actual weapons.
+   *
+   * The tactics half is not decoration and was not always here: this fixture used to say
+   * `approach: 'counter'`, and when `approach` became `TacticalPlan` the field stopped being read
+   * — so the "prepared" corner silently lost its counter-striking instruction and kept only its
+   * drills. Preparation measured 1.19× against a 1.25 bound, and the missing quarter was not the
+   * reads at all. A camp is a plan *and* a set of answers; measuring one while accidentally
+   * deleting the other is how a test starts describing something nobody plays.
+   */
   const preparedAgainstWrestler = (): GamePlan => ({
     ...defaultGamePlan(),
-    approach: 'counter',
+    tactics: {
+      ...defaultTactics(),
+      preferredState: 'outside',
+      entry: 'counter',
+      bottomIntent: 'standUp',
+      conviction: convictionFor('outside'),
+    },
     campQuality: 0.95,
     preppedReads: [
       { read: 'doubleLeg', drillQuality: 0.95, confidence: 0.9 },

@@ -97,6 +97,23 @@ export const FINGERPRINT_AXES = [
   'clinchControlShare',
   /** Share of the fight they spent at range. */
   'distanceShare',
+  /**
+   * Of the standing time, the share spent at kicking range and in the pocket.
+   *
+   * **Added because the engine gained a phase, not to move a goalpost**, and the difference
+   * matters. Before `FightState.range` existed, boxing, kickboxing and karate could only differ on
+   * `kickShare` and `legTargetShare` — which are one axis wearing two hats, "do you kick" — and no
+   * pair in the striking family had ever met G1. That was never a measurement problem: the
+   * simulator genuinely had one standing position, so the three arts genuinely fought the same
+   * fight in the same place, and no axis could have seen a difference that did not exist.
+   *
+   * Two of the three shares, not all three, because they sum to one with `boxing` and a redundant
+   * axis lets one difference count twice. The file's rule for adding an axis is met: player-visible
+   * (`FightStats.rangeSeconds` breaks it down and the play-by-play names it), a natural 0–1 share,
+   * and not redundant with `distanceShare`, which answers whether the fight was standing at all.
+   */
+  'outsideShare',
+  'pocketShare',
 ] as const;
 
 export type FingerprintAxis = (typeof FINGERPRINT_AXES)[number];
@@ -224,6 +241,8 @@ export function measureFingerprint(fighter: Fighter, opts: FingerprintOptions = 
   let controlSeconds = 0;
   let clinchControlSeconds = 0;
   let distanceSeconds = 0;
+  let outsideSeconds = 0;
+  let pocketSeconds = 0;
   let seconds = 0;
 
   for (let i = 0; i < fights; i++) {
@@ -251,6 +270,8 @@ export function measureFingerprint(fighter: Fighter, opts: FingerprintOptions = 
     controlSeconds += stats.controlSeconds;
     clinchControlSeconds += stats.clinchControlSeconds;
     distanceSeconds += stats.distanceSeconds;
+    outsideSeconds += stats.rangeSeconds.outside;
+    pocketSeconds += stats.rangeSeconds.pocket;
     seconds += (result.round - 1) * 300 + result.timeSeconds;
   }
 
@@ -266,5 +287,7 @@ export function measureFingerprint(fighter: Fighter, opts: FingerprintOptions = 
     controlShare: safe(controlSeconds, seconds),
     clinchControlShare: safe(clinchControlSeconds, controlSeconds),
     distanceShare: safe(distanceSeconds, seconds),
+    outsideShare: safe(outsideSeconds, distanceSeconds),
+    pocketShare: safe(pocketSeconds, distanceSeconds),
   };
 }

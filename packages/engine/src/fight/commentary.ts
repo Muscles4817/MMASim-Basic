@@ -9,7 +9,7 @@
 import type { Rng } from '../core/rng.js';
 import { displayName } from '../domain/fighter.js';
 import type { Combatant } from './profile.js';
-import type { GroundPosition, StrikeTarget, TakedownEntry, Weapon } from './types.js';
+import type { GroundPosition, Range, StrikeTarget, TakedownEntry, Weapon } from './types.js';
 
 export const surname = (c: Combatant): string => c.fighter.lastName;
 export const fullDisplayName = (c: Combatant): string => displayName(c.fighter);
@@ -240,11 +240,68 @@ export function clinchSeparationText(): string {
   return 'The referee has seen enough of that — they are separated and brought back to the centre.';
 }
 
+/** How each range reads in the play-by-play. */
+const RANGE_NAMES: Readonly<Record<Range, string>> = {
+  outside: 'kicking range',
+  boxing: 'boxing range',
+  pocket: 'the pocket',
+};
+
 export function clinchBreakText(rng: Rng, defender: Combatant): string {
   return rng.pick([
     `${surname(defender)} frames off and circles back out to open space.`,
     `${surname(defender)} gets the underhook and breaks away.`,
     `They separate — back to distance.`,
+  ]);
+}
+
+/**
+ * Somebody has changed the distance, and it is said out loud.
+ *
+ * A mechanic the player cannot see is a number, not a mechanic — and range is the one they most
+ * need to see, because it is how you tell a fighter who *chose* to trade in the pocket from one
+ * who was walked into it and could not get out. The post-fight range breakdown answers the same
+ * question in aggregate; this is what makes the fight itself legible while it happens.
+ */
+export function rangeChangeText(
+  rng: Rng,
+  mover: Combatant,
+  other: Combatant,
+  change: 'close' | 'retreat',
+  to: Range,
+): string {
+  if (change === 'close') {
+    return rng.pick([
+      `${surname(mover)} closes the gap — ${RANGE_NAMES[to]} now.`,
+      `${surname(mover)} walks through the jab and gets inside. ${RANGE_NAMES[to]}.`,
+      `${surname(mover)} steps in on ${surname(other)}, cutting the distance to ${RANGE_NAMES[to]}.`,
+    ]);
+  }
+  return rng.pick([
+    `${surname(mover)} circles off and resets to ${RANGE_NAMES[to]}.`,
+    `${surname(mover)} steps back out — he wants no part of that exchange. ${RANGE_NAMES[to]}.`,
+    `${surname(mover)} pivots away from ${surname(other)} and re-establishes ${RANGE_NAMES[to]}.`,
+  ]);
+}
+
+/** The entry or the exit that did not come off, and what it cost. */
+export function rangeFailText(
+  rng: Rng,
+  mover: Combatant,
+  other: Combatant,
+  change: 'close' | 'retreat',
+): string {
+  if (change === 'close') {
+    return rng.pick([
+      `${surname(mover)} tries to march in and eats a shot on the way.`,
+      `${surname(other)} times ${surname(mover)}'s entry and makes him pay for it.`,
+      `${surname(mover)} can't find a way inside — ${surname(other)} keeps him on the end of it.`,
+    ]);
+  }
+  return rng.pick([
+    `${surname(mover)} wants out and ${surname(other)} will not let him go.`,
+    `${surname(mover)} tries to step off; ${surname(other)} stays glued to him.`,
+    `No escape — ${surname(other)} cuts the angle off and keeps him there.`,
   ]);
 }
 

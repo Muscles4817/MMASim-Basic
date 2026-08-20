@@ -153,26 +153,42 @@ describe('the sport can still afford itself', () => {
      * the phase. What must not happen is them being comfortable, which would mean the costs are
      * not doing anything at all.
      *
-     * Measured as *relative* growth rather than as absolute decline. The original bound asked
-     * that the smallest promotion end poorer than it started, which was a workable proxy only
-     * while the bottom of the sport was quietly collapsing — measured across three seeds, every
-     * promotion below the top three fell to near zero within a decade, and the solvency test
-     * above passed only because that one draw happened to leave Cage Warriors a few thousand
-     * above the line. Promotions now earn sponsorship, so the bottom survives, and "marginal" has
-     * to mean what it actually means: not keeping pace with the top.
+     * **This assertion has now been rewritten three times, and twice by two people who did not
+     * know the other was doing it.** That is worth recording, because all three rewrites were
+     * fixing the same thing from different angles and only the third one is sign-safe.
      *
-     * The regional *tier*, not the single smallest promotion, and now averaged across worlds as
-     * well. Card volume at the bottom of the sport varies with each promotion's roster, so which
-     * of five regionals finishes poorest in any one decade is largely a draw — and so, it turns
-     * out, is whether the leader grows at all. The design claim was never about one promotion in
-     * one world.
+     *  1. *The smallest promotion ends poorer than it started.* A workable proxy only while the
+     *     bottom of the sport was quietly collapsing. Promotions earn sponsorship now, so the
+     *     bottom survives and the proxy stopped meaning anything.
+     *  2. *The tier grows slower than half the leader's growth.* The natural reading of "does not
+     *     keep pace", and it inverts: the leader shrinks on two decades in six, and **a fraction
+     *     of a negative number is a stricter bound than zero**, so on exactly those draws the
+     *     assertion silently demanded the regionals shrink *faster* than the top. Measured on six
+     *     start days it held on two of six against master and four of six here; measured on five
+     *     seeds elsewhere, three of five. It was never testing what it claimed.
+     *  3. What the tier actually does, which is **hover**.
+     *
+     * On the three worlds this file runs, regional growth reads -0.183, +0.093, +0.331 for a mean
+     * of **+0.080** — flat, with noise either side. Zeroing `periodCosts` and re-running the
+     * identical three gives a mean of **+1.049**: without a cost base the tier doubles in a
+     * decade. Those two regimes are a factor of thirteen apart and 0.4 sits between them, which
+     * is what makes this a bound rather than a curve fitted to a draw. (Measured the same way on
+     * six single-world decades before this file pooled: -0.173 to +0.213 with costs, +0.737 to
+     * +1.210 without, on every draw.)
+     *
+     * That gap is the claim — a tier that compounds against one that does not — stated in a form
+     * that cannot invert when the top of the sport has a bad decade.
+     *
+     * The relative phrasing is retired rather than kept alongside, because "not keeping pace with
+     * the top" is only a claim at all while the top is growing, and whether it grows is a draw.
+     * The half of it worth keeping — that the ladder survives — is the test below, which compares
+     * final budgets and is monotone.
      */
-    const leaderGrowth: number[] = [];
     const regionalGrowth: number[] = [];
     for (const world of worlds) {
-      const all = ranked(world.db);
-      leaderGrowth.push(world.growth(all[0]!));
-      const regionals = all.filter((p) => p.tier === 'regional' || p.tier === 'developmental');
+      const regionals = ranked(world.db).filter(
+        (p) => p.tier === 'regional' || p.tier === 'developmental',
+      );
       regionalGrowth.push(
         regionals.reduce((total, p) => total + world.growth(p), 0) / Math.max(1, regionals.length),
       );
@@ -180,8 +196,10 @@ describe('the sport can still afford itself', () => {
 
     expect(
       mean(regionalGrowth),
-      `the bottom kept pace with the top. ${worlds.map((w) => `${w.seed}: ${w.summary}`).join(' || ')}`,
-    ).toBeLessThan(mean(leaderGrowth) * 0.5);
+      `the bottom of the sport compounded instead of hovering. ${worlds
+        .map((w) => `${w.seed}: ${w.summary}`)
+        .join(' || ')}`,
+    ).toBeLessThan(0.4);
   });
 
   it('keeps the leader clearly ahead, so the ladder survives', () => {

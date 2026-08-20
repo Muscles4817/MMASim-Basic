@@ -119,6 +119,16 @@ export interface Combatant {
 
   /** 0–1. How much of the plan they are executing. Fixed at bout start. */
   adherence: number;
+  /**
+   * 0.25–1. How much of the game plan has survived the fight so far.
+   *
+   * `adherence` is who they are; this is what tonight has done to it. It erodes while they are
+   * hurt, carrying head damage or losing badly, recovers partially between rounds, and multiplies
+   * into every policy decision — so a natural brawler told to stay outside holds the instruction
+   * for as long as staying outside is comfortable, and stops the moment it is not. See
+   * `policy.ts`.
+   */
+  planIntegrity: number;
   /** Rating points of effective Power/Strength from rehydrating above the limit. */
   sizeAdvantage: number;
   /** 0–1. Cardio penalty baked in from the weight cut. */
@@ -240,6 +250,7 @@ export function createCombatant(
     adherence: clamp01(
       gamePlanAdherence(fighter.personality) + traitAdd(traits, 'gamePlanAdherence'),
     ),
+    planIntegrity: 1,
     // Cutting hard makes you physically bigger in the cage — a real, earned advantage that
     // the fighter pays for in the cardio penalty below.
     sizeAdvantage: traitAdd(traits, 'sizeAdvantage') + severity * 4,

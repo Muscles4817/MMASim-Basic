@@ -191,6 +191,13 @@ distinct resolution site. Striking has three because the engine models *one* str
 Adding striking attributes to an undifferentiated standing model yields more inputs into the same
 `offence / (offence + defence)` roll. That is exactly what already happened to `kicking`.
 
+> **Since built.** `FightState.range` splits standing into `outside`, `boxing` and `pocket`, and
+> the prediction above held exactly: no attribute was added, and the striking arts separated
+> anyway. The G1 matrix went 3 separated pairs → 6 with the tactical layer → **8 with range**, and
+> the pair this document names as the hardest in the file, boxing against karate, cleared for the
+> first time — on `outsideShare` as much as on `kickShare`, because the two arts stopped fighting
+> in the same place. Doc 05 and `fight/range.ts` carry the mechanism.
+
 ### 4.3 What the engine can and cannot express
 
 | Distinguishable | Not distinguishable |

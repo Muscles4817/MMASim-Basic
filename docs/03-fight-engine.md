@@ -60,12 +60,18 @@ Position is the spine of the whole model. Everything else is conditioned on it.
                   ┌────────┐             │
                   │ GROUND ├─────────────┘
                   └────────┘
-                 guard ▸ half ▸ side ▸ mount ▸ back
+       distance:  outside ◂▸ boxing ◂▸ pocket
+         ground:  guard ▸ half ▸ side ▸ mount ▸ back
 ```
 
-Ground carries a **sub-position ladder** (`guard → halfGuard → sideControl → mount → back`)
-because "he's on top" and "he's on your back" are not the same sentence. Advancing the
-ladder is what Ground Control buys you; the ladder is what makes Submissions dangerous.
+Both ends of the model carry sub-states, and for the same reason: "he's on top" and "he's on your
+back" are not the same sentence, and neither are "he's at kicking range" and "he's in your chest."
+
+Ground's is a **ladder** (`guard → halfGuard → sideControl → mount → back`) — advancing it is what
+Ground Control buys you, and the ladder is what makes Submissions dangerous. Distance's is a
+**line** (`outside ↔ boxing ↔ pocket`), walked one step at a time by whoever wins the range
+contest, which is what decides whether a fighter can reach with a kick, a hand, or a takedown
+entry at all. Doc 05 covers what a game plan does with it; the mechanism is `fight/range.ts`.
 
 **Where a takedown lands depends on how it was entered.** A trip puts the thrower past the legs;
 a single leg does not, because they kept the other one between you. That is the mechanical

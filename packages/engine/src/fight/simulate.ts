@@ -16,6 +16,37 @@ import type { FighterId } from '../core/ids.js';
 import type { Fighter, FinishMethod } from '../domain/fighter.js';
 import type { GamePlan, ReadKey } from '../domain/gameplan.js';
 import { PREP_MAX_BONUS, defaultGamePlan, normaliseGamePlan, prepValue, riskProfile } from '../domain/gameplan.js';
+import { stanceEdge } from './stance.js';
+import {
+  ENTRY_EASE,
+  RANGE_COUNTER,
+  TRANSITION_RANGE,
+  changeToward,
+  decayStickiness,
+  rangeChangeChance,
+  stepRange,
+  strikeSuitability,
+  targetFitness,
+} from './range.js';
+import {
+  bottomBias,
+  controllingBias,
+  desiredRangeOf,
+  groundDenial,
+  rangeUrgency,
+  erodePlanIntegrity,
+  finishOpportunity,
+  heldBias,
+  isDisplaced,
+  restorePlanIntegrity,
+  situationOf,
+  stanceOf,
+  standingBias,
+  submissionOpportunity,
+  topBias,
+  topControlFocus,
+  type Stance,
+} from './policy.js';
 import type { Judge, Referee } from '../domain/officials.js';
 import { defaultJudges, defaultReferee } from '../domain/officials.js';
 import { traitMul } from '../domain/traits.js';
@@ -54,6 +85,7 @@ import {
   STRIKE_TARGETS,
   emptyStats,
   type Corner,
+  type Range,
   type DamageReport,
   type FightEvent,
   type FightEventKind,
@@ -88,8 +120,27 @@ interface FightState {
   /** Corner on top, when on the ground. */
   groundTop?: Corner;
   groundPosition: GroundPosition;
+  /** How far apart they are, while standing. Meaningless in the clinch or on the floor. */
+  range: Range;
+  /**
+   * 0–1. How established the current range is.
+   *
+   * Set to 1 when somebody imposes a range and decayed every exchange. Without it the fight
+   * strobes: A closes, B steps out, A closes, and the state flickers all night while neither man
+   * achieves anything, which is worse than having no state. Taking the pocket off a pressure
+   * fighter who has just walked you into it is an achievement, and this is what makes it one.
+   */
+  rangeSettled: number;
   /** Corner controlling the clinch, if either. */
   clinchControl?: Corner;
+  /**
+   * Who put the fight in its current position.
+   *
+   * `undefined` at the opening bell and after a referee stand-up — nobody chose those. Everything
+   * else has an author, and `policy.ts` reads it: a fighter who is somewhere they did not choose
+   * to be wants out of it harder than one who walked in.
+   */
+  placedBy?: Corner;
   /** Seconds the current ground position has run without meaningful action. */
   stalledSeconds: number;
   /** Unanswered strikes landed on a hurt fighter, per corner (as the *victim*). */
@@ -133,10 +184,17 @@ const SUBMISSION_REPEAT_DECAY = 0.4;
 /** Put the fighters back in the centre, on their feet. Used at the opening bell and each round. */
 function resetToStanding(state: FightState): void {
   state.position = 'distance';
+  // A neutral restart, so both men reset to their own distance. Organic transitions — a clinch
+  // break, a scramble, a stuffed shot — inherit from what just happened; see `TRANSITION_RANGE`.
+  state.range = TRANSITION_RANGE.neutral!;
+  state.rangeSettled = 0;
   state.groundTop = undefined;
   state.groundPosition = 'guard';
   state.clinchControl = undefined;
   state.stalledSeconds = 0;
+  // Nobody put anybody here: a reset is the referee's, and `policy.ts` reads `placedBy` to ask
+  // whether a fighter chose to be where they are.
+  state.placedBy = undefined;
 }
 
 export function simulateFight(config: FightConfig): FightResult {
@@ -160,6 +218,8 @@ export function simulateFight(config: FightConfig): FightResult {
 
   const state: FightState = {
     position: 'distance',
+    range: TRANSITION_RANGE.neutral!,
+    rangeSettled: 0,
     groundPosition: 'guard',
     stalledSeconds: 0,
     unanswered: { red: 0, blue: 0 },
@@ -279,6 +339,9 @@ export function simulateFight(config: FightConfig): FightResult {
     if (round < rounds) {
       recoverBetweenRounds(red);
       recoverBetweenRounds(blue);
+      // Sixty seconds and a corner shouting is worth some of the plan back. Never all of it.
+      restorePlanIntegrity(red);
+      restorePlanIntegrity(blue);
       state.unanswered = { red: 0, blue: 0 };
       // Every round starts standing, in the centre. Carrying position across the bell is a
       // rules violation and a large one: without this, a round that ended in mount *begins*
@@ -415,6 +478,7 @@ function resolveExchange(ctx: ExchangeContext): ExchangeOutcome {
   // clock has to say so — see `exchangeStart`.
   const start = exchangeStart;
   start.position = state.position;
+  start.range = state.range;
   start.groundTop = state.groundTop;
   start.groundPosition = state.groundPosition;
   start.clinchControl = state.clinchControl;
@@ -539,6 +603,8 @@ function applyRecovery(c: Combatant, seconds: number): void {
  */
 interface ExchangeStart {
   position: Position;
+  /** The range the exchange was *fought at*, which is not always the one it ended at. */
+  range: Range;
   groundTop?: Corner;
   groundPosition: GroundPosition;
   clinchControl?: Corner;
@@ -555,6 +621,7 @@ interface ExchangeStart {
  */
 const exchangeStart: ExchangeStart = {
   position: 'distance',
+  range: 'outside',
   groundPosition: 'guard',
 };
 
@@ -565,6 +632,15 @@ function applyPassiveEffects(
 ): void {
   const { corners, state, tally } = ctx;
 
+  /*
+   * A range gets less sticky the longer nobody has done anything about it.
+   *
+   * The decay is what keeps `rangeSettled` a *recency* term rather than a permanent lock: a
+   * pressure fighter who walked you into the pocket ninety seconds ago has no more claim on it
+   * than anybody else, and without this a single early success would hold the range all round.
+   */
+  state.rangeSettled = decayStickiness(state.rangeSettled, seconds);
+
   for (const corner of ['red', 'blue'] as const) {
     const c = corners[corner];
     const isControlled =
@@ -573,11 +649,15 @@ function applyPassiveEffects(
 
     accrueFatigue(c, {
       position: start.position,
+      range: start.range,
       groundPosition: start.groundPosition,
       isControlled,
       intensity: start.position === 'distance' ? 1 : 1.15,
       seconds,
     });
+    // What tonight has done to the game plan, before the hurt state is decayed away — a fighter
+    // who has just been rocked is exactly the one whose plan is coming apart.
+    erodePlanIntegrity(c, seconds);
     const wasHurt = c.hurtSeconds > 0;
     decayHurt(c, seconds);
     // Clearing the hurt state clears the referee's count. Without this, unanswered shots
@@ -590,6 +670,8 @@ function applyPassiveEffects(
 
     if (start.position === 'distance') {
       c.stats.distanceSeconds += seconds;
+      // The breakdown that makes a failed game plan diagnosable without reading the play-by-play.
+      c.stats.rangeSeconds[start.range] += seconds;
     } else if (
       (start.position === 'ground' && start.groundTop === corner) ||
       (start.position === 'clinch' && start.clinchControl === corner)
@@ -664,6 +746,193 @@ function prepBonus(defender: Combatant, actor: Combatant, reads: readonly ReadKe
   return best * PREP_MAX_BONUS;
 }
 
+
+// --- The tactical layer, as the simulator sees it -----------------------------------------
+
+/**
+ * **What the old `approachWeight` table was really doing, recorded because it cost a day to find.**
+ *
+ * Deleting it removed two things that looked like one. The first was the plan's grip on the
+ * weights — intended, and what `policy.ts` replaces. The second was a *baseline nobody knew was
+ * there*: `defaultGamePlan()` set `approach: 'pressure'`, whose row multiplied strikes by 1.25
+ * and takedowns by 0.8, and every "unplanned" fight the statistical tier measures ran on it. So
+ * the calibration baseline was never neutral; it leaned on the hands.
+ *
+ * The obvious fix — fold that row into the engine as a named constant — is wrong, and measuring
+ * it is the only way to see why. World fights do not use the default plan; they use `planFor`,
+ * which handed a wrestler `strike: 0.7`. Making 1.25 the engine's baseline therefore *doubled up*
+ * on every planned fight: the roster's knockouts went from 29.5% to 37.5% and its first-round
+ * finishes from 31.1% to 34.4%, because grapplers were now given a striker's baseline and then a
+ * grappler's plan on top of it.
+ *
+ * So the baseline is genuinely 1.0 and `adaptive` genuinely means no preference. The G4 probes
+ * lose the striking lean they were silently measured with — and still clear their bounds, at 8.9
+ * points for the hands and 4.1 for the feet against floors of 8 and 4, because `topControlFocus`
+ * being anchored at the default top intent gave back what the lean was worth. `BASE_KD_HAZARD`
+ * was deliberately left alone: it absorbs this class of drift and did not need to.
+ */
+
+/** Referee-tolerated inaction, unchanged from the pre-policy engine. */
+const BASE_GROUND_STALL = 0.35;
+const BASE_CLINCH_STALL = 0.5;
+
+/**
+ * How the current round is going for this fighter, on the same arithmetic the judges use.
+ *
+ * Deliberately the *current* round rather than the fight: a corner between rounds talks about
+ * the fight, but a fighter in the middle of one is reacting to the last ninety seconds. The
+ * threshold is generous because this only chooses which contingency is in force, and a rule that
+ * flickers on and off every exchange is a rule the player cannot see working.
+ */
+function roundStanding(ctx: ExchangeContext, c: Combatant): 'ahead' | 'behind' | 'level' {
+  const mine = ctx.tally[c.corner];
+  const theirs = ctx.tally[OTHER_CORNER[c.corner]];
+  const of = (t: RoundTally) => t.damageDealt + t.significantStrikes + t.controlSeconds * 0.15;
+  const my = of(mine);
+  const their = of(theirs);
+  if (my + their < 6) return 'level'; // Too early in the round to be losing it.
+  if (their > my * 1.35) return 'behind';
+  if (my > their * 1.35) return 'ahead';
+  return 'level';
+}
+
+/**
+ * What this fighter is trying to do, right here.
+ *
+ * Recomputed per decision rather than cached per round, because every input to it moves inside a
+ * round — who is hurt, who is ahead, how much of the plan is left, and crucially *whether they
+ * chose to be here*. `state.placedBy` is the last of those: the simulator has always known which
+ * fighter caused the current position and never wrote it down, and "I walked into this clinch"
+ * and "he put me here" are different positions with the same name.
+ */
+function stanceOfActor(
+  ctx: ExchangeContext,
+  actor: Combatant,
+  where: 'distance' | 'clinch' | 'top' | 'bottom',
+): Stance {
+  const target = ctx.corners[OTHER_CORNER[actor.corner]];
+  const standing = roundStanding(ctx, actor);
+  const situation = situationOf({
+    losing: standing === 'behind',
+    winning: standing === 'ahead',
+    secondsRemaining: ctx.secondsRemaining,
+    hurt: actor.hurtSeconds > 0,
+    opponentHurt: target.hurtSeconds > 0,
+  });
+  const forced = ctx.state.placedBy !== undefined && ctx.state.placedBy !== actor.corner;
+  return stanceOf(
+    actor,
+    situation,
+    isDisplaced(actor.plan.tactics.preferredState, where, forced),
+  );
+}
+
+/**
+ * How this fighter intends to *get* to the fight they want, as a weight on the two routes there.
+ *
+ * `preferredState` says a wrestler wants top position; it does not say whether he shoots for it
+ * from range or walks you onto the fence and takes you down from the tie-up. Those are different
+ * fighters who look nothing alike, and before this the plan had no way to tell them apart —
+ * which is half of why judo and wrestling produced identical fingerprints (docs/19 §13.6).
+ *
+ * Returns 1 for a standing preference, where the entry style is about initiative rather than
+ * route and is spent in `resolveStrikeExchange` instead.
+ */
+function entryWeight(actor: Combatant, route: 'takedown' | 'clinch'): number {
+  switch (actor.plan.tactics.entry) {
+    case 'proactiveWrestling':
+      return route === 'takedown' ? 1.5 : 0.75;
+    case 'clinchEntries':
+      return route === 'takedown' ? 0.6 : 1.85;
+    case 'tripsAndThrows':
+      return route === 'takedown' ? 0.5 : 1.95;
+    case 'reactiveShot':
+      // The shot underneath a strike. Its moment is in `reactiveShot` at the striking exchange;
+      // as a standing intent it is deliberately unremarkable, because a fighter waiting for the
+      // level change is not the one initiating it.
+      return route === 'takedown' ? 0.9 : 0.7;
+    default:
+      return 1;
+  }
+}
+
+/** Does this fighter's entry style make them a counter-fighter? Replaces the old approach check. */
+function isCounterFighter(c: Combatant): boolean {
+  return c.plan.tactics.entry === 'counter' || c.plan.tactics.entry === 'reactiveShot';
+}
+
+// --- Range --------------------------------------------------------------------------------
+
+/**
+ * The range beat: before anybody throws anything, does the gap change?
+ *
+ * A modifier on the exchange rather than an exchange of its own, because footwork that consumed
+ * its own slice of the clock would push the striking out of a fight to pay for the movement
+ * between it. The actor gets the say — they won initiative, and initiative is exactly "who is
+ * dictating" — and both fighters get plenty of turns.
+ *
+ * **A failed attempt is not free**, which is the difference between a range contest and a range
+ * coin-flip. Getting caught coming in is how the sport punishes a bad entry, and stepping off
+ * badly is how it punishes a bad exit; without a cost, a fighter with the wrong plan and no feet
+ * would simply retry every exchange until the dice obliged, and a poor range manager would be
+ * indistinguishable from a good one on everything except the count of attempts.
+ *
+ * Returns the exposure the *other* man earns from a failure — a multiplier on their next burst.
+ */
+function resolveRangeBeat(ctx: ExchangeContext, actor: Combatant, target: Combatant): number {
+  const { rng, state, emit } = ctx;
+
+  const desired = desiredRangeOf(actor);
+  const change = changeToward(state.range, desired);
+  const stance = stanceOfActor(ctx, actor, 'distance');
+  const urgency = rangeUrgency(actor, stance);
+
+  // Already where he wants to be, or too far gone to care where that is.
+  if (!change || urgency <= 0.02) return 1;
+
+  actor.stats.rangeChangesAttempted++;
+
+  const chance = rangeChangeChance({
+    mover: actor,
+    holder: target,
+    change,
+    stickiness: state.rangeSettled,
+    /*
+     * Urgency buys *commitment*, not frequency.
+     *
+     * A first cut gated the attempt itself on `rng.chance(urgency)`, so a fighter with a modest
+     * plan simply did not manage distance three exchanges in four — and since every reset puts
+     * the fight at kicking range, the whole population sat there. Footwork is continuous; what
+     * varies between a committed outside fighter and a vaguely-interested one is how hard they
+     * work at it, not whether they bother.
+     */
+    intent: 0.75 + urgency * 1.15,
+    denial: groundDenial(target, change === 'close' ? 'close' : 'retreat'),
+  });
+
+  if (rng.chance(chance)) {
+    const next = stepRange(state.range, change);
+    state.range = next;
+    state.rangeSettled = 1;
+    actor.stats.rangeChangesLanded++;
+    emit('range', say.rangeChangeText(rng, actor, target, change, next), actor.corner);
+    return 1;
+  }
+
+  /*
+   * Caught doing it. A failed close walks you onto something; a failed exit hands them the
+   * combination you were trying to leave. Both are the same shape — the other man gets a better
+   * look at you — and both are why trying to fight at a range you cannot hold is expensive rather
+   * than merely futile.
+   */
+  state.rangeSettled = clamp01(state.rangeSettled + 0.25);
+  emit('range', say.rangeFailText(rng, actor, target, change), target.corner);
+  // A counter is thrown at 0.55 of a full burst, so a caught entry takes it to most of one.
+  // Coming forward costs more than backing out badly, because a man walking onto a shot brings
+  // his own weight to it.
+  return change === 'close' ? 1.45 : 1.3;
+}
+
 // --- Distance -----------------------------------------------------------------------------
 
 function resolveDistance(
@@ -672,30 +941,53 @@ function resolveDistance(
   target: Combatant,
 ): ExchangeOutcome {
   const { rng, state, emit } = ctx;
-  const plan = actor.plan;
 
-  // Intent weights. Approach shifts them; the fighter's own attributes dominate; and a
-  // switched-on fighter leans toward whatever their opponent cannot deal with.
+  // Footwork first: where this exchange happens is decided before what happens in it.
+  const punished = resolveRangeBeat(ctx, actor, target);
+  const range = state.range;
+
+  /*
+   * Three things decide what a fighter reaches for at range, and the order matters.
+   *
+   * The plan says what fight they came for. Their attributes say what they can actually do. And
+   * `exploitFactor` says what the man in front of them cannot deal with — in-cage adaptation,
+   * gated on Fight IQ, which is deliberately weaker than either.
+   *
+   * `standingBias` replaced a table called `approachWeight` whose largest row-to-row ratio was
+   * about 3, applied to one of seven mutually-exclusive labels. Measured, that was not enough
+   * force to change a fight: a striker's time at distance moved between 133 and 143 seconds of
+   * 900 across all seven. The policy layer is exponential in urgency for exactly that reason,
+   * and it is bounded by everything downstream of it — a plan can make a fighter shoot every
+   * exchange and still not put anybody on the floor.
+   */
+  const stance = stanceOfActor(ctx, actor, 'distance');
+
   const strikeW =
     fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) *
-    approachWeight(plan.approach, 'strike') *
+    standingBias(stance, 'strike', finishOpportunity(actor, target)) *
     exploitFactor(actor, actor.attrs.strikingOffence, target.attrs.strikingDefence);
   const kickW =
     fatiguedEffect(actor.attrs.kicking, 'kicking', actor.fatigue) *
     legImpairment(actor) *
-    approachWeight(plan.approach, 'kick') *
+    standingBias(stance, 'kick') *
     exploitFactor(actor, actor.attrs.kicking, target.attrs.strikingDefence);
   const takedownW =
     fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
-    approachWeight(plan.approach, 'takedown') *
+    standingBias(stance, 'takedown') *
     // How often they shoot, which is what `takedownRate` means. It was on the takedown contest
     // instead — better shots rather than more of them — and no trait in the game set it, so the
     // hook had a reader and no writer for as long as it has existed (docs/19 §9a).
     traitMul(actor.fighter.traits, 'takedownRate') *
+    entryWeight(actor, 'takedown') *
+    // You have to be close enough to shoot. The engine had no concept of that, so a wrestler's
+    // entry cost the same from two metres away as from somebody's chest.
+    ENTRY_EASE[range] *
     exploitFactor(actor, actor.attrs.wrestling, target.attrs.takedownDefence);
   const clinchW =
     fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) *
-    approachWeight(plan.approach, 'clinch') *
+    standingBias(stance, 'clinchUp') *
+    entryWeight(actor, 'clinch') *
+    ENTRY_EASE[range] *
     exploitFactor(actor, actor.derived.clinchOffence, target.derived.clinchDefence);
 
   const intent = rng.pickWeighted(
@@ -707,7 +999,7 @@ function resolveDistance(
   switch (intent) {
     case 'strike':
     case 'kick':
-      return resolveStrikeExchange(ctx, actor, target, intent === 'kick');
+      return resolveStrikeExchange(ctx, actor, target, intent === 'kick', punished);
     case 'takedown':
       return resolveTakedown(ctx, actor, target, 'distance');
     case 'clinchUp': {
@@ -718,6 +1010,7 @@ function resolveDistance(
       if (rng.chance(attack / (attack + defend))) {
         state.position = 'clinch';
         state.clinchControl = actor.corner;
+        state.placedBy = actor.corner;
         state.stalledSeconds = 0;
         emit('clinch', say.clinchText(rng, actor), actor.corner);
         return { seconds: rng.int(8, 16) };
@@ -746,73 +1039,6 @@ function exploitFactor(actor: Combatant, ownAttack: number, opponentDefence: num
   return clamp(1 + awareness * clamp(gap, -0.6, 1.2), 0.5, 2.1);
 }
 
-/** How strongly each approach pulls toward each kind of action. */
-function approachWeight(approach: GamePlan['approach'], action: string): number {
-  const table: Record<GamePlan['approach'], Record<string, number>> = {
-    pressure: { strike: 1.25, kick: 0.9, takedown: 0.8, clinch: 1.1, advance: 1.1, submit: 0.9 },
-    counter: { strike: 1.1, kick: 1.1, takedown: 0.7, clinch: 0.6, advance: 0.9, submit: 0.9 },
-    wrestle: { strike: 0.7, kick: 0.5, takedown: 2.0, clinch: 1.3, advance: 1.2, submit: 1.0 },
-    grind: { strike: 0.7, kick: 0.5, takedown: 1.3, clinch: 2.0, advance: 1.4, submit: 0.8 },
-    pointFight: { strike: 1.1, kick: 1.1, takedown: 1.0, clinch: 0.8, advance: 0.8, submit: 0.6 },
-    /*
-     * The submission specialist's row, and the reason it had to exist.
-     *
-     * `pickApproach` cascaded wrestling-edge → clinch-edge → striking, and a fighter whose game is
-     * `submissions` and `scrambling` has neither of the first two — so **the submission art fell
-     * through to the striking arm and was handed `pointFight`, whose `submit: 0.6` is the lowest
-     * value in this table.** The engine was telling its most dangerous grappler to point-fight.
-     * Measured, giving the jiu-jitsu exemplar an approach that lets it submit moved its
-     * `submissionMix` from 0.470 to 0.604 and cleared 0.20 against *both* of the pairs the styles
-     * programme was stuck on (docs/19 §13.8).
-     *
-     * Takedowns above `finish`'s but below `wrestle`'s: this fighter needs the floor and is not
-     * especially good at getting there, which is the honest shape of the art in MMA.
-     */
-    submit: { strike: 0.7, kick: 0.55, takedown: 1.2, clinch: 0.9, advance: 1.6, submit: 2.3 },
-    finish: { strike: 1.4, kick: 1.2, takedown: 0.9, clinch: 0.8, advance: 1.3, submit: 1.5 },
-  };
-  return table[approach][action] ?? 1;
-}
-
-/**
- * The open-stance edge, as a multiplier on the landing contest.
- *
- * `Fighter.stance` was stored, hand-authored on the real fighters in both seed rosters, rendered
- * on the fighter screen — and read by nothing at all (docs/19 §9c). A southpaw across from an
- * orthodox fighter is the one genuinely *discrete* physical matchup the data already carries, and
- * it is why §4 D6 refused `reachInches` the same treatment: reach has no contest to win until a
- * range concept exists, and a stance mismatch is a contest today.
- *
- * Three claims, and each is why the shape is what it is:
- *
- *  - **The edge is the southpaw's**, because the mechanism is unfamiliarity rather than geometry —
- *    roughly one fighter in seven leads with the other foot and has spent their whole life
- *    training against the other six, while the other six rarely train against them.
- *  - **A smart opponent solves it.** It is scaled down by the orthodox fighter's `fightIq`, from
- *    its full value at 40 to about a third at 90. An elite fighter adjusts inside a round; a dull
- *    one never does.
- *  - **A switch-stance fighter neither takes it nor gives it.** They are comfortable in both, and
- *    that comfort *is* the trait — it costs them the edge as well as sparing them it, which is
- *    what stops `switch` from being strictly the best stance to be generated with.
- *
- * `STANCE_EDGE` is the magnitude docs/19 §3 called "the variable", and it was set by measurement
- * rather than by argument. 10% on the offence term is worth **1.5 points of win rate against a
- * dull orthodox opponent, 1.1 against an average one and 0.5 against a smart one** over paired
- * seeds. 6% was tried first and read 0.90 / 0.63 / 0.30, which is inside the noise of anything
- * cheaper than six thousand fights — an edge nobody can measure is a field that is still dead.
- *
- * It cannot move the population's outcome distribution, whatever the value: a stance mismatch is
- * symmetric across the roster, so it decides *who* wins rather than how fights end. That is the
- * property that makes this safe to tune and the reason it is allowed a number this size at all.
- */
-const STANCE_EDGE = 0.1;
-
-function stanceEdge(actor: Combatant, target: Combatant): number {
-  if (actor.fighter.stance !== 'southpaw') return 1;
-  if (target.fighter.stance !== 'orthodox') return 1;
-  const solved = clamp01(remap(target.attrs.fightIq, 40, 90, 0, 0.68));
-  return 1 + STANCE_EDGE * (1 - solved);
-}
 
 /**
  * How much this fighter reaches for their feet rather than their hands, 0–1.
@@ -838,9 +1064,20 @@ function pickShot(
   rng: Rng,
   actor: Combatant,
   prefersKick: boolean,
+  range: Range,
 ): { target: StrikeTarget; weapon: Weapon } {
+  /*
+   * Where they are decides what is available, before what they want decides what they reach for.
+   *
+   * `targetMix` is the corner's instruction bent by the fighter's habits; `strikeSuitability` is
+   * the geometry, and it goes on top of both. A head kick from somebody's chest and a low kick
+   * from the same place are not the same proposition, and until range existed the engine had no
+   * way to say so — which is most of why a kickboxer and a karateka produced the same fight.
+   */
   const mix = targetMix(actor);
-  const target = rng.pickWeighted(STRIKE_TARGETS, (k) => mix[k]);
+  // `targetFitness` is shape-only — mean 1 across the three targets at every range — so a range
+  // decides where a fighter aims without deciding how much danger the fight carries.
+  const target = rng.pickWeighted(STRIKE_TARGETS, (k) => mix[k] * targetFitness(k, range));
   const lean = kickLean(actor);
 
   /*
@@ -853,7 +1090,12 @@ function pickShot(
 
   // Above the waist the exchange's lean decides, nudged by what this fighter actually owns, with
   // the odd shot from the other toolbox — a burst is a combination, not four copies of one strike.
-  const kickChance = prefersKick ? 0.55 + lean * 0.4 : lean * 0.3;
+  // Then the range arbitrates between the two, which is what stops head kicks landing in a phone
+  // booth and hands reaching from two metres.
+  const base = prefersKick ? 0.55 + lean * 0.4 : lean * 0.3;
+  const kickFit = strikeSuitability('kick', target, range);
+  const punchFit = strikeSuitability('punch', target, range);
+  const kickChance = clamp01((base * kickFit) / Math.max(1e-6, base * kickFit + (1 - base) * punchFit));
   return { target, weapon: rng.chance(kickChance) ? 'kick' : 'punch' };
 }
 
@@ -872,6 +1114,8 @@ function resolveStrikeExchange(
   actor: Combatant,
   target: Combatant,
   prefersKick: boolean,
+  /** What the target earned from the actor's failed range change, as a scale on their counter. */
+  punished = 1,
 ): ExchangeOutcome {
   const { rng } = ctx;
   const seconds = rng.int(6, 14);
@@ -885,8 +1129,21 @@ function resolveStrikeExchange(
     // The other half of `riskLevel`: how open the *leading* fighter left themselves. A
     // fighter sitting down on their shots is stationary at the exact moment the counter
     // comes back, which is where fights turn.
+    /*
+     * Range enters the fight on the counter rather than as a global multiplier on damage, which
+     * is what keeps the pocket dangerous *because of what happens in it* instead of by decree.
+     * `RANGE_COUNTER` is shape-only, so trading in the pocket does not raise the counter rate of
+     * the sport as a whole — it moves it out of the outside range and into the phone booth.
+     *
+     * `punished` arrives from the same beat's failed range change. A fighter who lunged in and
+     * did not get there is mid-stride with their feet crossed, and this is the moment that costs
+     * them: not a penalty applied to them, but a free look handed to the man in front.
+     */
     const counterScale =
-      (target.plan.approach === 'counter' ? 0.9 : 0.55) * riskProfile(actor.plan.riskLevel).exposure;
+      (isCounterFighter(target) ? 0.9 : 0.55) *
+      riskProfile(actor.plan.riskLevel).exposure *
+      RANGE_COUNTER[ctx.state.range] *
+      punished;
     /*
      * The counter is thrown with the counter-fighter's own weapons.
      *
@@ -934,7 +1191,7 @@ function throwBurst(
   let landedAny = false;
 
   for (let i = 0; i < burst; i++) {
-    const { target: strikeTarget, weapon } = pickShot(rng, actor, prefersKick);
+    const { target: strikeTarget, weapon } = pickShot(rng, actor, prefersKick, ctx.state.range);
     const isKick = weapon === 'kick';
     const reads: ReadKey[] = isKick
       ? strikeTarget === 'legs'
@@ -984,7 +1241,7 @@ function throwBurst(
     actor.stats.significantStrikesLanded++;
     tally[actor.corner].significantStrikes++;
 
-    const result = applyStrike(rng, actor, target, strikeTarget, weapon);
+    const result = applyStrike(rng, actor, target, strikeTarget, weapon, state.range);
     tally[actor.corner].damageDealt += result.damage;
 
     // Cuts end fights via the doctor, not the referee. Which weapon opened it is decided in
@@ -1161,16 +1418,30 @@ function pickTakedownEntry(
   const a = actor.attrs;
 
   if (from === 'clinch') {
+    /*
+     * The plan finally reaches the entry it names.
+     *
+     * `tripsAndThrows` and `clinchEntries` were separated by nothing but two decimal places in
+     * `entryWeight` — 0.5/1.95 against 0.6/1.85 — so a corner that said *throw them* and one that
+     * said *walk them onto the fence and take them down* produced the same fight, and jiu-jitsu
+     * against judo sat at 0.046 on the styles fingerprint, under the floor every pair is held to.
+     *
+     * The distinction is real and the engine could already express it: `landingPosition` puts a
+     * trip in side control and a shot in guard. What was missing was the plan being allowed to
+     * say which one it wants, so a judoka's throws now actually land him past the hips.
+     */
+    const wantsThrows = actor.plan.tactics.entry === 'tripsAndThrows';
     return rng.pickWeighted(['bodyLock', 'trip', 'singleLeg'] as const, (entry) =>
       entry === 'bodyLock'
-        ? t.bodyLock * clamp01(remap(a.strength, 40, 90, 0.5, 1.2))
+        ? t.bodyLock * clamp01(remap(a.strength, 40, 90, 0.5, 1.2)) * (wantsThrows ? 0.6 : 1)
         : entry === 'trip'
           ? // A throw is a grip and a hip, not a level change. This read `doubleLeg` — which is
             // `p(wrestling) × f(strength)` — so the one entry that is supposed to be judo's was
             // gated on the *shot* attributes, and a judoka tripped less often than a wrestler did.
             clamp01(remap(a.scrambling, 40, 90, 0.2, 1.15)) *
-            clamp01(remap(a.submissions, 40, 90, 0.35, 1.35))
-          : t.singleLeg * 0.5,
+            clamp01(remap(a.submissions, 40, 90, 0.35, 1.35)) *
+            (wantsThrows ? 3.2 : 1)
+          : t.singleLeg * 0.5 * (wantsThrows ? 0.4 : 1),
     );
   }
 
@@ -1180,7 +1451,7 @@ function pickTakedownEntry(
       : entry === 'singleLeg'
         ? t.singleLeg
         : clamp01(remap(a.fightIq, 40, 90, 0.15, 0.7)) *
-          (actor.plan.approach === 'counter' ? 1.8 : 0.7),
+          (isCounterFighter(actor) ? 1.8 : 0.7),
   );
 }
 
@@ -1215,6 +1486,7 @@ function resolveTakedown(
     tally[actor.corner].takedowns++;
     state.position = 'ground';
     state.groundTop = actor.corner;
+    state.placedBy = actor.corner;
     state.groundPosition = landingPosition(rng, actor, entry);
     state.stalledSeconds = 0;
     shiftMomentum(actor, target, 0.25);
@@ -1240,6 +1512,10 @@ function resolveTakedown(
   if (from === 'clinch' && rng.chance(0.5)) {
     state.position = 'distance';
     state.clinchControl = undefined;
+    state.placedBy = target.corner;
+    // A stuffed shot that ends up back on the feet leaves them right on top of each other.
+    state.range = TRANSITION_RANGE.stuffedTakedown!;
+    state.rangeSettled = 0.25;
   }
   return { seconds: rng.int(6, 12) };
 }
@@ -1326,13 +1602,16 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
      *
      * The reversal reads `scrambling` against the holder's `clinchOffence` — hand-fighting and hip
      * position rather than raw strength, which is what separates a fighter who is *comfortable* in
-     * a tie-up from one who is merely strong in it. And a fighter whose plan wants the clinch is in
-     * no hurry to leave it, which is why the break weight is divided by the approach's appetite for
-     * the position rather than multiplied by it.
+     * a tie-up from one who is merely strong in it.
+     *
+     * The stance decides which of the three a fighter reaches for, and this is one of the two
+     * places where being *put* somewhere matters most: an outside fighter walked onto the fence
+     * did not choose this, and `heldBias` reads that through `placedBy`.
      */
-    const clinchAppetite = approachWeight(actor.plan.approach, 'clinch');
+    const stance = stanceOfActor(ctx, actor, 'clinch');
     const breakW =
-      fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) / clinchAppetite;
+      fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) *
+      heldBias(stance, 'breakAway');
     /*
      * Weighted toward the door, because that is what the sport does: a fighter with their back to
      * the fence is mostly trying to get off it, and the short shots and the reversal are what they
@@ -1340,9 +1619,14 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
      * enough distance time to drag `kicking`'s win-rate swing from 8.2 points to 5.9 — a two-sided
      * clinch is worth having and it is not worth having at the cost of a goal that is already met.
      */
-    const strikeW = fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) * 0.32;
+    const strikeW =
+      fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) *
+      0.32 *
+      heldBias(stance, 'clinchStrike', finishOpportunity(actor, target));
     const reverseW =
-      fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * clinchAppetite * 0.45;
+      fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
+      0.45 *
+      heldBias(stance, 'reverse');
 
     const intent = rng.pickWeighted(
       ['breakAway', 'clinchStrike', 'reverse'] as const,
@@ -1361,6 +1645,7 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
       const hold = fatiguedEffect(target.derived.clinchOffence, 'strength', target.fatigue);
       if (rng.chance(attack / (attack + hold))) {
         state.clinchControl = actor.corner;
+        state.placedBy = actor.corner;
         state.stalledSeconds = 0;
         shiftMomentum(actor, target, 0.2);
         emit('clinch', say.clinchReversalText(rng, actor, target), actor.corner);
@@ -1375,7 +1660,11 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
     if (rng.chance(escape / (escape + hold))) {
       state.position = 'distance';
       state.clinchControl = undefined;
+      state.placedBy = actor.corner;
       state.stalledSeconds = 0;
+      // A clean break out of a tie-up puts two people at hands range, not at kicking range.
+      state.range = TRANSITION_RANGE.clinchBreak!;
+      state.rangeSettled = 0.35;
       emit('clinchBreak', say.clinchBreakText(rng, actor), actor.corner);
       return { seconds: rng.int(6, 14) };
     }
@@ -1383,12 +1672,22 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
     return { seconds: rng.int(6, 14) };
   }
 
+  const stance = stanceOfActor(ctx, actor, 'clinch');
   const takedownW =
     fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
     traitMul(actor.fighter.traits, 'takedownRate') *
-    1.2;
-  const strikeW = fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) * 0.8;
-  const stallW = actor.plan.approach === 'grind' ? 1.6 : 0.5;
+    1.2 *
+    controllingBias(stance, 'clinchTakedown') *
+    // Trips and throws are *this* takedown — the one that comes out of a tie-up — so the entry
+    // style that had no route at range gets its route here.
+    (actor.plan.tactics.entry === 'tripsAndThrows' ? 1.6 : 1);
+  const strikeW =
+    fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) *
+    0.8 *
+    controllingBias(stance, 'clinchStrike', finishOpportunity(actor, target));
+  // Holding somebody on the fence and doing nothing is a plan, and now only for the fighter whose
+  // plan it is. It used to be a flat 0.5 for everybody with a bonus for one of seven labels.
+  const stallW = BASE_CLINCH_STALL * controllingBias(stance, 'clinchStall');
 
   const intent = rng.pickWeighted(
     ['takedown', 'clinchStrike', 'stall'] as const,
@@ -1412,6 +1711,10 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
   if (state.stalledSeconds >= clinchBreakThreshold(ctx)) {
     state.position = 'distance';
     state.clinchControl = undefined;
+    state.placedBy = undefined;
+    // The referee steps between them and waves them on: that *is* a neutral reset.
+    state.range = TRANSITION_RANGE.refSeparation!;
+    state.rangeSettled = 0;
     state.stalledSeconds = 0;
     emit('refStandUp', say.clinchSeparationText());
   }
@@ -1426,16 +1729,35 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
 
   if (onTop) return resolveGroundTop(ctx, actor, target);
 
-  // Bottom: get up, sweep, or attack a submission off the back foot.
+  /*
+   * **The decision this whole layer was built for.**
+   *
+   * Three locally reasonable things to do off your back, and until `bottomBias` existed the only
+   * thing choosing between them was which numbers happened to come out larger. A striker with 32
+   * submissions rolled the guillotine a fair share of the time — not a bad decision, a fighter
+   * with *no decision*, while the player's game plan sat on the camp screen saying counter-strike.
+   *
+   * `bottomIntent` is the instruction, and the submission's opportunity term is the exception
+   * that keeps it sane: told to get up, this fighter gets up — unless what is actually available
+   * is a fight-ending choke, which he takes, because a policy that cannot say that has replaced
+   * one kind of stupid with a worse one.
+   */
+  const stance = stanceOfActor(ctx, actor, 'bottom');
+  const subChance = submissionOpportunity(actor, target, state.groundPosition, false);
+
   const getUpW =
     fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
     legImpairment(actor) *
+    bottomBias(actor, stance, 'standUp') *
     (1 - GROUND_DOMINANCE[state.groundPosition] * 0.7);
-  const sweepW = fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * 0.6;
+  const sweepW =
+    fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
+    0.6 *
+    bottomBias(actor, stance, 'sweep');
   const subW =
-    state.groundPosition === 'guard'
+    (state.groundPosition === 'guard'
       ? fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) * 0.8
-      : 0.05;
+      : 0.05) * bottomBias(actor, stance, 'submission', subChance);
 
   const intent = rng.pickWeighted(
     ['standUp', 'sweep', 'submission'] as const,
@@ -1450,18 +1772,26 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
     legImpairment(actor) *
     (1 - GROUND_DOMINANCE[state.groundPosition] * 0.5);
   const hold =
-    fatiguedEffect(target.attrs.groundControl, 'groundControl', target.fatigue) * (1 + bonus);
+    fatiguedEffect(target.attrs.groundControl, 'groundControl', target.fatigue) *
+    (1 + bonus) *
+    // What the man on top is doing with his weight. Hitting you is not holding you.
+    topControlFocus(target);
 
   if (rng.chance(escape / (escape + hold))) {
     if (intent === 'sweep') {
       state.groundTop = actor.corner;
       state.groundPosition = 'guard';
+      state.placedBy = actor.corner;
       shiftMomentum(actor, target, 0.3);
       emit('sweep', say.sweepText(rng, actor), actor.corner, 'major');
     } else {
       state.position = 'distance';
       state.groundTop = undefined;
       state.groundPosition = 'guard';
+      state.placedBy = actor.corner;
+      // Wall-walked back up with the other man disengaging. Nobody is at kicking range yet.
+      state.range = TRANSITION_RANGE.standUp!;
+      state.rangeSettled = 0.2;
       shiftMomentum(actor, target, 0.15);
       emit('standUp', say.standUpText(rng, actor), actor.corner);
     }
@@ -1481,17 +1811,28 @@ function resolveGroundTop(
   const { rng, state, tally, emit } = ctx;
   const dominance = GROUND_DOMINANCE[state.groundPosition];
 
+  /*
+   * On top, `topIntent` governs rather than `preferredState` — the fight is already where it is,
+   * and what remains is what you do having arrived. Keeping the two apart is what lets a wrestler
+   * who wants top position also be told to sit on it, or to hunt from it, without those being
+   * three different game plans.
+   */
+  const stance = stanceOfActor(ctx, actor, 'top');
+  const subChance = submissionOpportunity(actor, target, state.groundPosition, true);
+
   const advanceW =
     fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue) *
     (1 - dominance) *
-    approachWeight(actor.plan.approach, 'advance');
+    topBias(actor, stance, 'advancePosition');
   const gnpW =
-    fatiguedEffect(actor.derived.groundAndPound, 'groundControl', actor.fatigue) * (0.4 + dominance);
+    fatiguedEffect(actor.derived.groundAndPound, 'groundControl', actor.fatigue) *
+    (0.4 + dominance) *
+    topBias(actor, stance, 'groundStrike', finishOpportunity(actor, target));
   const subW =
     fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) *
     (0.3 + dominance) *
-    approachWeight(actor.plan.approach, 'submit');
-  const stallW = actor.plan.approach === 'grind' || actor.plan.approach === 'pointFight' ? 1.2 : 0.35;
+    topBias(actor, stance, 'submission', subChance);
+  const stallW = BASE_GROUND_STALL * topBias(actor, stance, 'groundStall');
 
   const intent = rng.pickWeighted(
     ['advancePosition', 'groundStrike', 'submission', 'stall'] as const,
@@ -1512,6 +1853,7 @@ function resolveGroundTop(
     const pass = fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue);
     const retain =
       fatiguedEffect(target.attrs.scrambling, 'scrambling', target.fatigue) * (1 + bonus);
+
     if (rng.chance(pass / (pass + retain))) {
       const idx = GROUND_POSITIONS.indexOf(state.groundPosition);
       const next = GROUND_POSITIONS[Math.min(idx + 1, GROUND_POSITIONS.length - 1)]!;
@@ -1665,8 +2007,12 @@ function maybeRefStandUp(ctx: ExchangeContext, seconds: number): ExchangeOutcome
 
   state.position = 'distance';
   state.groundTop = undefined;
+  state.placedBy = undefined;
   state.groundPosition = 'guard';
   state.stalledSeconds = 0;
+  // The referee's decision, so a neutral restart like the bell.
+  state.range = TRANSITION_RANGE.neutral!;
+  state.rangeSettled = 0;
   emit('refStandUp', say.refStandUpText());
   return { seconds };
 }

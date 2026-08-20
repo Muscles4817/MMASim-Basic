@@ -32,6 +32,15 @@ export interface FighterOverrides {
   traits?: readonly TraitId[];
   divisionId?: string;
   walkingWeightLbs?: number;
+  /**
+   * Overridable since range landed.
+   *
+   * It was hardcoded at 72 for every fixture in the repo, which was harmless while nothing read
+   * the field and became the reason `range.test.ts` could not test the one thing it exists to
+   * test: two fighters six inches apart came back identical to twelve decimal places, because
+   * they were not six inches apart.
+   */
+  reachInches?: number;
   headTrauma?: number;
   /**
    * Anything else about the body's current state.
@@ -80,7 +89,7 @@ export function makeFighter(o: FighterOverrides = {}): Fighter {
     birthDay: birthDayForAge(age, TEST_DAY, 6, 15),
     walkingWeightLbs: o.walkingWeightLbs ?? 170,
     heightInches: 70,
-    reachInches: 72,
+    reachInches: o.reachInches ?? 72,
     stance: o.stance ?? 'orthodox',
 
     divisionId,

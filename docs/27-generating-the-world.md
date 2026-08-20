@@ -243,6 +243,47 @@ every boundary is the **distribution** of outcomes, not the mechanism. A fighter
 player's orbit with a 14-3 record built at Bulk must have a record that could have been built at
 Full. That is testable, and § 9 is where it gets tested.
 
+### 5.1a The one thing Reduced is structurally bad at
+
+Worth naming as a *class* rather than discovering one cell at a time, because it will keep coming
+back.
+
+A round has no seconds in it. Everything Reduced computes, it computes once per round from the
+state the round opened in, and that is exactly right for anything additive — strikes landed,
+control time, damage — and progressively wrong for anything where **tonight's outcome depends on
+the order things happened in**. The engine's knockdown hazard compounds twice within a burst: once
+on accumulated head damage, once on the opponent already being hurt. Full walks that compounding
+shot by shot. Reduced evaluates it at the round's average and books the result.
+
+Measured, on the parity suite's worst cell: `smotherer-v-striker` produces 0.89 knockdowns a fight
+at Full and 0.60 at Reduced, and 25.2% knockouts against 12.4% — while head damage (69.9 against
+67.9), landed strikes (14.9 a round against 14.0) and control time (229 seconds against 216) all
+agree closely. The divergence is *entirely* in the path-dependent term. The two matchups that
+diverge both contain a high-volume striker who does not finish on the first clean shot, which is
+precisely the fighter that compounding rewards and an average cannot see; the bomber, who finishes
+on the first, agrees to within four points.
+
+Two mitigations already exist and both are partial: the round's hazard is evaluated at half the
+round's damage rather than at zero, and a finishing burst is charged after a stoppage. Both are
+corrections to a *mean*, which is the shape of the limitation.
+
+**This is not a range problem, and it will not stay confined to one cell.** Every mechanic on the
+roadmap that accumulates within a fight has the same structure — escalating body damage, repeated
+leg damage that compounds into a movement loss, cardio collapse, a submission chain that tightens
+across attempts, cuts and swelling worsening with each shot to the same spot, repeated knockdowns.
+Each will diverge at Reduced in the same direction and for the same reason, and each will be
+tempting to paper over with another per-matchup allowance.
+
+The correct answer is a general one: **Reduced needs a way to approximate path-dependent
+accumulation** — carrying a within-round distribution rather than a within-round mean for the terms
+that compound, so that the convexity is modelled once instead of apologised for repeatedly. Until
+that exists, `reduced-fidelity.test.ts` names each exception explicitly and states its cause. A
+second entry in that list is a signal to build the general mechanism, not to add a third.
+
+What must never happen is the fix that was tried first and reverted: softening the Full engine
+until the approximation matches it. Full is the reference implementation. An approximation that
+disagrees with it is the thing that is wrong.
+
 ### 5.2 What "orbit" means
 
 Orbit is a **relationship**, not a geography. A fighter is in it if any of:
