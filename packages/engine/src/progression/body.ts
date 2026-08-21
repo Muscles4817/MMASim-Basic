@@ -166,26 +166,78 @@ export function campWeightLbs(body: Body): number {
 }
 
 /**
- * Share of camp weight that can come off as water and glycogen in fight week.
+ * Gut content, as a share of camp weight.
  *
- * Four to nine per cent. The upper end is a genuinely dangerous cut performed by somebody whose body
- * tolerates it; the lower end is a fighter who simply cannot dehydrate that far without falling
- * apart, and who therefore has a higher division floor than his size alone suggests.
+ * Food residue and fibre, cleared over the last day or two on a low-residue diet. An adult carries
+ * one to two kilograms of it and everybody empties out, so this is a flat fraction rather than an
+ * individual one: it is the least interesting pool physiologically and the one nobody has a talent
+ * for.
  */
-export function waterCutFraction(body: Body): number {
-  return remap(body.waterCutIndex, 1, 100, 0.04, 0.09);
+const GUT_CONTENT_FRACTION = 0.012;
+
+/**
+ * Glycogen and the water bound to it, as a share of **lean** mass.
+ *
+ * Trained muscle holds roughly four hundred grams of glycogen with another hundred in the liver, and
+ * every gram of it binds about three grams of water — so carbohydrate depletion takes off two
+ * kilograms of a sixty-kilogram lean mass before a drop of deliberate dehydration.
+ *
+ * It reads lean mass rather than camp weight, and that is the point of separating it out. This pool
+ * lives in muscle, so **the more muscle a fighter carries the more of it he has** — which is the
+ * mechanism the single undifferentiated water term was missing, and the reason the old model was
+ * hardest on exactly the lean, dense bodies that in reality cut best.
+ */
+const GLYCOGEN_FRACTION_OF_LEAN = 0.04;
+
+/**
+ * Share of camp weight lost to deliberate dehydration in the last day, three to eight per cent.
+ *
+ * The dangerous pool, and the only one that is an individual trait: the upper end is a cut that
+ * sends people to hospital and is performed anyway by bodies that tolerate it, the lower end a
+ * fighter who cannot sweat that far down without falling apart and who therefore has a higher
+ * division floor than his size alone suggests.
+ */
+export function dehydrationFraction(body: Body): number {
+  return remap(body.waterCutIndex, 1, 100, 0.03, 0.08);
+}
+
+/**
+ * Everything fight week takes off, in pounds — gut, glycogen and water together.
+ *
+ * **Why three pools rather than one.** This used to be a single term, "water and glycogen", at four
+ * to nine per cent of camp weight. The number was never wrong so much as never decomposed: it stood
+ * in for three separate physiological processes and had been calibrated as though it covered one, so
+ * it came out roughly the size of the largest of them. Doc 31 § 14.6 has the measurement — a male
+ * fighter at eight per cent body fat could not lose more than **ten per cent** of his walking weight
+ * under any setting the model contained, against a hand-authored roster whose ninetieth-percentile
+ * cut is 13.8% and whose maximum is 20.7%. The model was telling the leanest fighters in the sport
+ * that they could not do what the sport demonstrably does.
+ *
+ * Naming the pools separately fixes the magnitude and, more importantly, the **shape**. Glycogen
+ * scales with lean mass while the other two scale with total mass, so a muscular fighter now gains
+ * more from the split than a fat one does — which is exactly where the evidence said the model was
+ * wrong. Pereira, Romero and Chandler were each rejected by under a pound.
+ */
+export function fightWeekLossLbs(body: Body): number {
+  const camp = campWeightLbs(body);
+  return (
+    camp * GUT_CONTENT_FRACTION +
+    leanMassLbs(body) * GLYCOGEN_FRACTION_OF_LEAN +
+    camp * dehydrationFraction(body)
+  );
 }
 
 /**
  * The lightest weight this body could conceivably hit on a scale, in pounds.
  *
  * A hard physiological floor rather than a comfortable target: a fighter at this number has dieted
- * to seven per cent body fat and taken off every pound of water he has. Nobody does this twice a
- * year. It exists so the creator can say *no* to a body that cannot make a division at all —
- * doc 31 § 12 step 10's "not viable" verdict — without a hard-coded height cap per class.
+ * to essential fat, emptied his gut, stripped every gram of glycogen and dehydrated as far as his
+ * body will go. Nobody does this twice a year. It exists so the creator can say *no* to a body that
+ * cannot make a division at all — doc 31 § 12 step 10's "not viable" verdict — without a hard-coded
+ * height cap per class.
  */
 export function weighInFloorLbs(body: Body): number {
-  return campWeightLbs(body) * (1 - waterCutFraction(body));
+  return campWeightLbs(body) - fightWeekLossLbs(body);
 }
 
 /**
@@ -257,9 +309,16 @@ export interface CutChain {
   campWeightLbs: number;
   /** Fat the model insists on keeping. Essential, and the reason a cut has a floor at all. */
   retainedFatLbs: number;
-  /** Water and glycogen shed in fight week. The model's only transient pool. */
-  transientLbs: number;
-  transientFraction: number;
+  /** What fight week takes off, itemised. */
+  transient: {
+    /** Food residue, cleared in the last forty-eight hours. */
+    gutContentLbs: number;
+    /** Muscle and liver glycogen with the water bound to it. Scales with lean mass. */
+    glycogenLbs: number;
+    /** Deliberate dehydration. The dangerous pool and the only individual one. */
+    dehydrationLbs: number;
+    totalLbs: number;
+  };
   /** Everything the model will not remove under any circumstances. */
   protectedMassLbs: number;
   /** The lightest number this body could put on a scale. */
@@ -272,7 +331,10 @@ export function cutChain(body: Body): CutChain {
   const fatFraction = bodyFatFraction(body);
   const lean = leanMassLbs(body);
   const camp = campWeightLbs(body);
-  const transient = camp * waterCutFraction(body);
+  const gut = camp * GUT_CONTENT_FRACTION;
+  const glycogen = lean * GLYCOGEN_FRACTION_OF_LEAN;
+  const dehydration = camp * dehydrationFraction(body);
+  const transient = gut + glycogen + dehydration;
   return {
     walkingWeightLbs: walking,
     bodyFatFraction: fatFraction,
@@ -281,8 +343,12 @@ export function cutChain(body: Body): CutChain {
     dietableFatLbs: walking - camp,
     campWeightLbs: camp,
     retainedFatLbs: camp - lean,
-    transientLbs: transient,
-    transientFraction: waterCutFraction(body),
+    transient: {
+      gutContentLbs: gut,
+      glycogenLbs: glycogen,
+      dehydrationLbs: dehydration,
+      totalLbs: transient,
+    },
     protectedMassLbs: camp - transient,
     weighInFloorLbs: weighInFloorLbs(body),
   };
@@ -291,23 +357,24 @@ export function cutChain(body: Body): CutChain {
 /**
  * What each assumption would have to become for this body to make this limit.
  *
- * The point of the exercise, and the reason it is a separate function from `cutChain`. When the
- * model rejects somebody, four different numbers could be at fault and the floor alone cannot say
- * which. This asks each in turn: *hold everything else, and what would you have to be?* An answer
- * inside the range the sport actually contains indicts that term; an answer outside it exonerates
- * it. A required camp body fat of 4% is a real number that lean fighters hit; a required walking
- * weight 15 lb below the estimate is an accusation against the estimate.
+ * The point of the exercise, and a separate function from `cutChain` for a reason. When the model
+ * rejects somebody, four different numbers could be at fault and the floor alone cannot say which.
+ * This asks each in turn: *hold everything else, and what would you have to be?* An answer inside
+ * the range the sport actually contains indicts that term; an answer outside it exonerates it. A
+ * required camp body fat of 4% is a real number that lean fighters hit; a required walking weight
+ * sixteen pounds below the estimate is an accusation against the estimate.
  *
- * All four are returned rather than a verdict, because reading them together is what identifies
- * interaction — the case where no single term is implausible but their product is.
+ * All four are returned rather than a verdict, because reading them together is what identifies the
+ * case doc 31 § 14.6 actually found — no single term implausible, and the product of them all still
+ * short.
  */
 export interface CutRequirement {
   /** Pounds the floor sits above the limit. Zero or negative means the body already makes it. */
   shortfallLbs: number;
   /** Camp body fat this body would need to reach, holding everything else. */
   campBodyFat: number;
-  /** Fight-week transient loss it would need, as a fraction of camp weight. */
-  transientFraction: number;
+  /** Dehydration it would need, as a fraction of camp weight. */
+  dehydrationFraction: number;
   /** Walking weight the estimate would have to be, in pounds. */
   walkingWeightLbs: number;
   /** Out-of-camp body fat it would need to carry, as a fraction. */
@@ -318,19 +385,29 @@ export function cutRequirement(body: Body, limitLbs: number): CutRequirement {
   const chain = cutChain(body);
   const lean = chain.leanMassLbs;
   const campFat = CAMP_BODY_FAT[body.sex];
-  const water = chain.transientFraction;
-  const fat = chain.bodyFatFraction;
+  const walking = chain.walkingWeightLbs;
+  const camp = chain.campWeightLbs;
+  // Everything fight week removes that does not depend on the camp-fat or dehydration term.
+  const fixedPools = chain.transient.gutContentLbs + chain.transient.glycogenLbs;
+  const dehydration = dehydrationFraction(body);
 
   return {
     shortfallLbs: chain.weighInFloorLbs - limitLbs,
-    // limit = lean / (1 - campFat') * (1 - water)
-    campBodyFat: 1 - (lean * (1 - water)) / limitLbs,
-    // limit = camp * (1 - water')
-    transientFraction: 1 - limitLbs / chain.campWeightLbs,
-    // limit = W' * (1 - fat) / (1 - campFat) * (1 - water)
-    walkingWeightLbs: (limitLbs * (1 - campFat)) / ((1 - fat) * (1 - water)),
-    // limit = W * (1 - fat') / (1 - campFat) * (1 - water)
-    bodyFatFraction: 1 - (limitLbs * (1 - campFat)) / (chain.walkingWeightLbs * (1 - water)),
+    // limit = lean / (1 - campFat') - lean/(1 - campFat') * (gut + dehydration) - glycogen
+    campBodyFat:
+      1 -
+      (lean * (1 - GUT_CONTENT_FRACTION - dehydration)) /
+        (limitLbs + lean * GLYCOGEN_FRACTION_OF_LEAN),
+    // limit = camp - camp*gut - glycogen - camp*dehydration'
+    dehydrationFraction: (camp - fixedPools - limitLbs) / camp,
+    // Scale the whole body: every pool is linear in W at fixed composition.
+    walkingWeightLbs: (walking * limitLbs) / chain.weighInFloorLbs,
+    // limit = W(1-fat')/(1-campFat) * (1 - gut - dehydration) - W(1-fat')*glycogen
+    bodyFatFraction:
+      1 -
+      limitLbs /
+        (walking *
+          ((1 - GUT_CONTENT_FRACTION - dehydration) / (1 - campFat) - GLYCOGEN_FRACTION_OF_LEAN)),
   };
 }
 
@@ -733,9 +810,25 @@ export function physiqueOf(body: Body): Physique {
  * This inverts the composition chain: pick a body-fat level, work out the lean mass that implies, and
  * split what the base coefficient does not cover between frame and muscle.
  *
- * The split is deliberately even. Nothing in a tale of the tape says whether a 205 lb man is
- * big-boned or heavily muscled, so inventing a lean either way would be putting a number where there
- * is no information.
+ * The split is deliberately neutral: both indices come out **equal**, which says this man is at the
+ * same percentile of the population for skeleton as for muscle. Nothing in a tale of the tape says
+ * whether a 205 lb man is big-boned or heavily muscled, so leaning either way would be putting a
+ * number where there is no information.
+ *
+ * It used to split the *coefficient* evenly instead, which sounds like the same thing and is not.
+ * Muscle contributes more coefficient per index point than frame does (3.2 against 2.6), so half the
+ * coefficient each meant `frameIndex` saturated at 100 while `muscleIndex` was still at 91 — and the
+ * body silently stopped growing a fifth of the way short of the range the model can actually
+ * express. Equal indices saturate together and reach the true ceiling.
+ *
+ * **The ceiling is still real, and it is not big enough.** Even at the top of the range a body can
+ * only be `base + fromFrame + fromMuscle` lean kilograms per cubic metre, and the sport contains men
+ * outside it: Mark Hunt at 5'10" and 265 lb needs a coefficient of 17.5 against a ceiling of 15.3,
+ * so the model reconstructs him as a 223 lb man and there is no split that fixes it. Callers who
+ * hand this function real measurements have to check that what comes back is the body they asked
+ * for — `reconstructionErrorLbs` is for exactly that — and doc 31 § 14.6 records the ceiling as step
+ * 6's problem, since step 6 owns these coefficients and moving them now would shift the whole
+ * generated population against a baseline taken to measure precisely that.
  */
 export function physiqueForMeasurements(
   sex: Sex,
@@ -751,11 +844,38 @@ export function physiqueForMeasurements(
   const needed = clamp(leanKg / heightM ** 3, c.base, c.base + c.fromFrame + c.fromMuscle);
   const above = needed - c.base;
 
-  // Half each, in coefficient units, then converted back to the index each one is expressed in.
-  return {
-    frameIndex: toRating(((above * 0.5) / c.fromFrame) * 100),
-    muscleIndex: toRating(((above * 0.5) / c.fromMuscle) * 100),
+  // Equal indices: both terms fill at the same rate and saturate together.
+  const index = toRating((above / (c.fromFrame + c.fromMuscle)) * 100);
+  return { frameIndex: index, muscleIndex: index, bodyFatIndex, waterCutIndex };
+}
+
+/**
+ * How far the reconstructed body misses the walking weight it was asked for, in pounds.
+ *
+ * Zero for almost everybody and the only honest answer for the rest. `physiqueForMeasurements`
+ * clamps, so handing it a body outside the model's range returns a *different, smaller* person
+ * without saying so — and every number computed downstream, walking weight and physical ratings
+ * alike, then describes that person instead of the one whose measurements were transcribed. Three of
+ * the hundred and fifteen calibration entries still miss once the split is fixed: Velasquez by 7 lb,
+ * Andrade by 6, and Mark Hunt by 39.
+ *
+ * Positive means the model built somebody heavier than asked; negative, lighter.
+ */
+export function reconstructionErrorLbs(
+  sex: Sex,
+  heightInches: number,
+  walkingWeight: number,
+  bodyFatIndex: Rating,
+  waterCutIndex: Rating,
+): number {
+  const physique = physiqueForMeasurements(
+    sex,
+    heightInches,
+    walkingWeight,
     bodyFatIndex,
     waterCutIndex,
-  };
+  );
+  return (
+    walkingWeightLbs({ sex, heightInches, reachInches: heightInches, ...physique }) - walkingWeight
+  );
 }

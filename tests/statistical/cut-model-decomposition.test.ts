@@ -82,8 +82,10 @@ function chainBlock(c: Case): string[] {
     `    − dietable fat   ${chain.dietableFatLbs.toFixed(1).padStart(6)} lb   (down to camp fat)`,
     `    = camp           ${chain.campWeightLbs.toFixed(1).padStart(6)} lb` +
       `   retaining ${chain.retainedFatLbs.toFixed(1)} lb of fat`,
-    `    − transient      ${chain.transientLbs.toFixed(1).padStart(6)} lb` +
-      `   (${(100 * chain.transientFraction).toFixed(1)}% of camp, the model's only fight-week pool)`,
+    `    − gut content    ${chain.transient.gutContentLbs.toFixed(1).padStart(6)} lb`,
+    `    − glycogen       ${chain.transient.glycogenLbs.toFixed(1).padStart(6)} lb   (and the water bound to it, off lean mass)`,
+    `    − dehydration    ${chain.transient.dehydrationLbs.toFixed(1).padStart(6)} lb   (${(100 * (chain.transient.dehydrationLbs / chain.campWeightLbs)).toFixed(1)}% of camp)`,
+    `      fight week     ${chain.transient.totalLbs.toFixed(1).padStart(6)} lb   total`,
     `    = floor          ${chain.weighInFloorLbs.toFixed(1).padStart(6)} lb` +
       `   against a ${c.limitLbs} lb limit  →  ${need.shortfallLbs > 0 ? `SHORT BY ${need.shortfallLbs.toFixed(1)} lb` : `${(-need.shortfallLbs).toFixed(1)} lb of headroom`}`,
   ];
@@ -92,8 +94,8 @@ function chainBlock(c: Case): string[] {
       `    to pass, holding everything else:`,
       `      camp body fat  ${(100 * need.campBodyFat).toFixed(1).padStart(6)}%` +
         `   (model says ${c.sex === 'male' ? '7.0' : '13.0'}%)`,
-      `      transient      ${(100 * need.transientFraction).toFixed(1).padStart(6)}%` +
-        `   (model ceiling 9.0%)`,
+      `      dehydration    ${(100 * need.dehydrationFraction).toFixed(1).padStart(6)}%` +
+        `   (model ceiling 8.0%)`,
       `      walking        ${need.walkingWeightLbs.toFixed(1).padStart(6)} lb` +
         `   (estimated ${chain.walkingWeightLbs.toFixed(0)} lb, ${(chain.walkingWeightLbs - need.walkingWeightLbs).toFixed(1)} lb lighter)`,
       `      body fat       ${(100 * need.bodyFatFraction).toFixed(1).padStart(6)}%` +
@@ -237,7 +239,7 @@ describe('the cut model, taken apart', () => {
         '  until the examples pass.\n',
     );
     say(
-      '  fighter                 short   needs camp fat   needs transient   needs walking      filed as',
+      '  fighter                 short   needs camp fat   needs dehydration   needs walking      filed as',
     );
     for (const c of rejected) {
       const need = cutRequirement(c.body, c.limitLbs);
@@ -245,7 +247,7 @@ describe('the cut model, taken apart', () => {
       say(
         `  ${c.name.padEnd(22)}${need.shortfallLbs.toFixed(1).padStart(5)} lb` +
           `${(100 * need.campBodyFat).toFixed(1).padStart(14)}%` +
-          `${(100 * need.transientFraction).toFixed(1).padStart(17)}%` +
+          `${(100 * need.dehydrationFraction).toFixed(1).padStart(17)}%` +
           `${need.walkingWeightLbs.toFixed(0).padStart(15)} lb` +
           `   (−${(chain.walkingWeightLbs - need.walkingWeightLbs).toFixed(0)})` +
           `  ${c.disagreement ?? ''}`,

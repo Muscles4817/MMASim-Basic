@@ -1109,8 +1109,8 @@ Two near-identical linear combinations of the same two naturals, so "explosive b
 strong" and "very strong but not explosive" — two of the most ordinary fighters in the sport — are
 both close to impossible to generate. This is exactly the master-scalar failure step 3 exists to
 prevent, arriving one layer lower than expected. `generation-profile.test.ts` bounds it where the
-code is and carries the target: **tighten to 0.7 at step 6**, once the talent axes are split and each
-attribute reads its own mass basis.
+code is. The target this originally carried — tighten to ρ ≈ 0.7 at step 6 — has been **withdrawn**;
+§ 16 says what replaced it and why a coefficient was the wrong thing to aim at.
 
 **13.2 `chosenDivision` had no answer for a body the ladder cannot hold.** A woman whose weigh-in
 floor is 150 lb is not a lighter-than-usual featherweight — the women's ladder stops at 145 and she
@@ -1498,8 +1498,10 @@ authored placements the same pairs come out at **0.34 and 0.30**, and the larges
 anywhere in the matrix is Power × Cardio at **−0.52** — negative, because heavy hitters carry mass
 and mass costs work capacity, which is the mass law showing up in human judgement before it has been
 implemented in code. Nothing in the authoring was constrained to produce this; each attribute was
-assessed on its own. So the ρ ≈ 0.7 target § 13.1 carries is not merely reachable, it is loose: the
-people the ladder is meant to describe are far less correlated than that.
+assessed on its own. So ρ ≈ 0.7 is not merely reachable, it is loose — the people the ladder is meant
+to describe are far less correlated than that. But the roster is a _selected_ sample and these
+coefficients are not targets either; § 16 replaces the numeric goal with the thing it was standing
+in for.
 
 **13.9.4 The Cardio ceiling wants a fifth attribute more than the others do.** Velasquez at +2.9σ and
 Dvalishvili at +2.9σ are the two highest placements in the file on any attribute, and both are
@@ -1537,13 +1539,10 @@ to the median UFC fighter — is directly observable but would put most of the g
 50 on everything. §4.2's lift exists to bridge the two; if the lift turns out to be doing too much
 work, this is the assumption to revisit.
 
-**14.6 The weigh-in floor for lean bodies and for women.** § 13.9.2. Two separate mis-specifications
-found by the calibration roster, both in `weighInFloorLbs` rather than in the ladder: a sub-10% cut
-resolving to `notViable` for the leanest men, and four of nine strawweights rejected at cuts the
-sport performs routinely. The fix is not obvious — raising the water-cut ceiling, lowering the female
-fat floor, and splitting `physiqueForMeasurements`'s even frame/muscle assumption are three different
-answers with different downstream consequences — so it is recorded rather than guessed at. Step 6
-owns the composition question; step 11 owns what a cut costs.
+**14.6 The weigh-in floor.** § 13.9.2 raised it and it is now **closed**, with the work and the
+findings written up at § 15. In short: one defect rather than the two § 13.9.2 claimed, the female
+half of that diagnosis was wrong, and a third defect turned up that nobody was looking for. The
+coefficient ceiling § 15.4 describes is handed to step 6 and is the only part still open.
 
 **14.7 Whether the calibration roster should ever become shipped data.** It is a measuring instrument
 and § 13.8 says so, but 115 hand-authored fighters with real anthropometry and defended placements is
@@ -1551,3 +1550,246 @@ also the best-documented population in the repository. The temptation to seed a 
 recur. The argument against is that it would put the sport's hundred-odd most memorable athletes into
 every save, which is a different game; the argument for is that step 12 has to rebuild the world from
 something. Decide at step 8, when the scale locks.
+
+---
+
+## 15. What the body-viability correction found
+
+Doc 31 § 14.6's follow-up, done as its own change between steps 5 and 6 and under one rule: **a
+reliably documented fighter successfully making a division is evidence against the model.** No
+fighter was altered to satisfy it, and no rating, `n × σ` placement or fight-engine constant moved.
+
+The method mattered more than usual here, because the obvious fix — raise the ceiling until the ten
+rejected careers pass — produces something worse than the original. A model that agrees with every
+fighter who ever existed has stopped being able to say anything. So the first commit changed nothing
+and only took the chain apart.
+
+### 15.1 The decomposition, and what it ruled out
+
+`cutChain` itemises walking weight → fat → lean → camp → transient → floor. `cutRequirement` asks
+each assumption in turn what it would have to become for a given fighter to make a given limit. Both
+live in `body.ts` as diagnostics; `tests/statistical/cut-model-decomposition.test.ts` prints them.
+
+Three things came out that the § 13.9.2 write-up had not seen.
+
+**Eight of the ten rejections miss by under two and a half pounds, and three by under one.** Pereira
+missed light heavyweight by **0.4 lb** on a 230 lb body — under two parts in a thousand, on a chain
+whose every input is inferred and whose walking weight is explicitly a guess. Declaring a career
+physiologically impossible on that margin is the model claiming a precision it does not have.
+
+**No single term is badly wrong.** The camp body fat those men would need runs 5.9–6.8% against an
+assumed 7.0%; the walking weights they would need sit within two pounds of the estimates. That is the
+shape of a model slightly short everywhere, not one wrong in a single place, and it is why moving one
+constant until the examples pass would have been the wrong repair.
+
+**The binding constraint is the ceiling, and it is too low by a wide margin.** Since
+`floor / walking = (1 − bodyFat) / (1 − campFat) × (1 − transient)`, the largest cut a body can make
+is set by exactly two of its own numbers. A male at 8% body fat could not lose more than **10.0%** of
+his walking weight under any setting the model contained — against a hand-authored roster whose
+ninetieth-percentile cut is 13.8% and whose maximum is 20.7%. The model was telling the leanest
+fighters in the sport that they could not do what the sport demonstrably does, and the men who
+perform the biggest cuts are not the fat ones.
+
+### 15.2 § 13.9.2's second finding was wrong
+
+It read four rejected strawweights as evidence that the female composition constants were harsher
+than the male ones. They are not. At their respective leanest a woman can lose 11.1% of her walking
+weight and a man 10.0%; at mid-band, 16.3% against 14.9%. The female side was never the stricter one.
+
+The pattern is the **division ladder**. Strawweight asks a mean cut of 12.3% across the calibration
+roster where every other division asks 8.5–11.4%, because a ten-pound step at 115 lb is a larger
+share of a smaller body. So WSW was simply the first place a ceiling that was too low for everybody
+showed up, and there was never a separate women's defect to fix.
+
+This is the second time the step 5 instrument produced a correct falsifier attached to a wrong
+explanation — § 13.9.1 was the first. Both times the numbers were right and the story was not, which
+is an argument for decomposing before theorising rather than after.
+
+### 15.3 The fix: three pools where there was one
+
+The fight-week term was a single number — "water and glycogen", 4–9% of camp weight — that stood in
+for three separate physiological processes and had been calibrated as though it covered one, so it
+came out roughly the size of the largest of them. It is now itemised:
+
+| pool                     | size                    | scales with   |
+| ------------------------ | ----------------------- | ------------- |
+| gut content              | 1.2%                    | camp weight   |
+| glycogen and bound water | 4.0%                    | **lean mass** |
+| acute dehydration        | 3–8% on `waterCutIndex` | camp weight   |
+
+Naming them fixes the magnitude and, more importantly, the **shape**. Glycogen lives in muscle, so a
+fighter carrying more muscle has more of it — which is the mechanism the undifferentiated term was
+missing, and the reason the old model was hardest on exactly the lean, dense bodies that in reality
+cut best. Nothing else moved: not the fat floors, not the camp body fat, not the ladder.
+
+Nine of the 115 entries reclassified, every one of them out of `notViable`:
+
+| fighter             |   cut | before    | after       | headroom |
+| ------------------- | ----: | --------- | ----------- | -------: |
+| Alex Pereira        | 10.9% | notViable | typical     |   8.1 lb |
+| Yoel Romero         |  9.9% | notViable | typical     |   6.8 lb |
+| Michael Chandler    | 11.4% | notViable | severe      |   6.2 lb |
+| Merab Dvalishvili   | 12.8% | notViable | severe      |   4.4 lb |
+| Deiveson Figueiredo | 13.8% | notViable | severe      |   4.8 lb |
+| Zhang Weili         | 13.6% | notViable | severe      |   3.1 lb |
+| Tatiana Suarez      | 14.0% | notViable | severe      |   3.2 lb |
+| Joanna Jędrzejczyk  | 15.6% | notViable | severe      |   2.2 lb |
+| Mackenzie Dern      | 18.5% | notViable | **extreme** |   0.4 lb |
+
+The controls held. **Kayla Harrison is still `notViable`** at 21.5%, which is the intended verdict for
+a cut the sport itself treated as beyond the pale. Dern sits at `extreme` with four tenths of a pound
+of margin — the tightest in the file, and the right place for a fighter who repeatedly missed the
+weight. Figueiredo reads `severe` with under five pounds of headroom. Nothing became `comfortable`,
+and nothing above 11% became `typical`.
+
+**The population moved, and it was supposed to.** `chosenDivision` walks the ladder lightest-first
+and skips any division whose limit sits below the body's floor, so a lower floor makes bodies
+eligible for divisions that previously refused them and fighters shift **down** — about a point of
+share per division, three at strawweight, none upward. The women the ladder cannot house at all fall
+from 4.0% to 1.8%, which is a side effect rather than a fix: § 13.2's tail is still there. Male
+heavyweight sampling went 23.5 → 26.2 draws and 9.1% → 13.0% fallback, because a body that can now
+make light heavyweight is no longer a heavyweight. The fallback rate is the number to watch against
+its 15% bound, and step 6 will move it again.
+
+### 15.4 The defect nobody was looking for — and it is step 6's
+
+Found by an acceptance test asserting that no rating had moved, which failed for a reason that had
+nothing to do with the cut model.
+
+`physiqueForMeasurements` inverts the composition chain to solve a physique from a transcribed height
+and walking weight, and it **clamps**. Hand it a body outside the model's range and it returns a
+smaller person without saying so — after which walking weight, lean mass and all five physical
+ratings describe that person instead. **Mark Hunt was sitting in the calibration roster as a 226 lb
+man**, resolving his Power and Strength against a 226 lb heavyweight's divisional median, and nothing
+anywhere said a word about it.
+
+Half of it was cheap and is fixed. The inversion split the _coefficient_ evenly between frame and
+muscle, which sounds neutral and is not: muscle contributes 3.2 coefficient units per index point
+against frame's 2.6, so half each saturated `frameIndex` at 100 while `muscleIndex` was still at 91,
+and the body silently stopped growing a fifth of the way short of the range the model can express.
+Splitting so both **indices** are equal — the more natural reading of "no information either way" —
+lets them saturate together and took five failures down to three.
+
+The rest is the coefficient ceiling itself, and it is genuinely too low:
+
+| fighter         | measurements  | needs | ceiling | reconstructs |
+| --------------- | ------------- | ----: | ------: | -----------: |
+| Mark Hunt       | 5'10", 265 lb | ~18.0 |    15.3 |       −39 lb |
+| Cain Velasquez  | 6'1", 250 lb  |  15.8 |    15.3 |        −7 lb |
+| Jessica Andrade | 5'1", 136 lb  |  13.6 |    13.0 |        −6 lb |
+
+All three are extreme mass-for-height, which is the one dimension the ceiling truncates — and two of
+them are in the roster _because_ they are extreme mass-for-height, so the model fails exactly where
+it is asked the hardest question. They are filed under a new `outsideBodyModelRange` disagreement and
+**are not calibration evidence for the ladder until the ceiling moves**.
+
+That fix belongs to step 6, which owns `COMPOSITION`'s coefficients: raising them here would shift
+the entire generated population's mass against a § 13.7 baseline taken to measure precisely that.
+
+### 15.5 What this leaves for step 6
+
+- The coefficient ceiling above, and Hunt, Velasquez and Andrade with it.
+- Male heavyweight's 13.0% sampler fallback, which the mass law will move again.
+- § 13.9.2's note that lean and carried indices diverge by +3.0 to +4.3 for women.
+
+---
+
+## 16. What step 6 is actually aiming at
+
+Two corrections to how the calibration roster gets read, made before step 6 starts so that step 6 is
+not tuned against a misreading of it.
+
+### 16.1 The roster is not a population sample, and its mean is not a target
+
+§ 13.9.1 corrected the authoring from +8.7 rating points of drift to +5.0, and the roster still
+averages about **+0.51σ** across the five physicals. That residual is correct and must not be read as
+a specification.
+
+A calibration roster is a set of **landmarks**. It is drawn from the fighters people have watched,
+which selects hard for being worth watching, so it sits above the divisional median by construction —
+a roster that averaged 0.0σ would be the suspicious one. The two questions are separate and only one
+of them is answered here:
+
+- **Do recognisable real fighters land in sensible places on the ladder?** — the roster answers this.
+- **What is the population distribution of UFC fighters?** — it does not, and § 4.3's percentile
+  tables are what speak to that.
+
+So "the generator should average +0.51σ" is not a claim this document makes anywhere. Step 7 compares
+the generated population against § 4.3; the roster is for checking that a rating of 88 means what
+somebody thinks it means.
+
+### 16.2 The Power-correlation goal is no longer a coefficient
+
+§ 13.1 recorded ρ = 0.85 for Power × Strength and 0.89 for Power × Speed in the generated population
+and carried "tighten to 0.7 at step 6". That number is withdrawn. It was written down before there
+was any evidence about what the right value is, and keeping it merely because it had been written
+down is how a placeholder becomes a specification.
+
+The roster's own coefficients are the best evidence available and are **not** the replacement target
+either, for the reason § 16.1 gives:
+
+| pair                |    roster | generator today |
+| ------------------- | --------: | --------------: |
+| power × strength    |     +0.34 |            0.85 |
+| power × speed       |     +0.30 |            0.89 |
+| power × cardio      | **−0.52** |               — |
+| cardio × durability |     +0.46 |               — |
+| speed × strength    |     −0.05 |               — |
+
+What they establish is direction rather than destination: the generator is still collapsing distinct
+athletic profiles onto one shared latent, and the gap is far too large to be a sampling artefact.
+
+**The requirement, restated.** Shared physiology should produce sensible correlations, and no
+preselected coefficient is truth. What step 6 has to deliver is that these archetypes are all
+_common_ rather than merely possible:
+
+- powerful but not especially fast
+- fast but not especially powerful
+- strong but not explosive
+- powerful with poor cardio
+- technically elite and physically ordinary
+- physically freakish and uneven
+
+Let the coefficients fall out of the mass law and the physiology, then compare them against the
+roster as evidence. A step-6 test that hits ρ = 0.70 while still making "strong but not explosive"
+rare has failed; one that lands at 0.55 with all six archetypes populated has succeeded.
+
+---
+
+## 17. The extreme placements, and the risk that is left
+
+The calibration roster's architecture is settled. What is left in it is human, and it is one specific
+thing: **reputation leaking into a raw physical attribute.**
+
+Each of the five is supposed to describe physiology — peak strike impulse, limb velocity,
+mass-relative work capacity — and each has a confound that produces an identical highlight reel.
+Technique, timing, accuracy, defence, tactical style, and damage accumulated over a career all make a
+fighter look like a physical outlier without making him one. A fighter who lands first is not
+necessarily faster; one who is never hurt may be hard to hit rather than hard to concuss.
+
+So every placement at **|nσ| ≥ 1.8** now carries its own `defence` field saying which it is, and the
+roster test refuses to pass without one. Fifty qualify. A handful below the threshold are defended
+too, where the risk is specific rather than general — Rousey's Durability at −1.6, Nunes' Cardio at
+−0.3, Arlovski, Garbrandt and Schnell.
+
+**Durability is the one where the confound is structural.** The game already degrades durability
+through accumulated damage, so a calibration entry describes a fighter at a chosen prime point and a
+placement read off a late-career decline would count the same fact twice — once in the rating, again
+in the system that erodes it. Every Durability defence has to say explicitly whether it is a
+prime-point reading, and a regex-backed test enforces it. Ferguson's +2.5 and Holloway's +2.2 both
+say so; so does Arlovski's −1.5, which is the entry where the temptation is strongest and where the
+placement is deliberately not lower for exactly that reason.
+
+### 17.1 The tail that is missing
+
+Reported rather than fixed, because it is the shape a reputation bias leaves behind.
+
+Fifty placements sit at or beyond ±1.8σ. **None of them is negative.** The five lowest in the whole
+file are Rousey's Durability at −1.6, Ngannou's Cardio and Arlovski's Durability at −1.5, and
+Waterson's Power and Strength at −1.5.
+
+The mechanism is obvious once stated: a landmark roster is a roster of people worth watching, and
+nobody is watched for being the slowest man in his division. Inventing a −2.0σ fighter to balance the
+file would be authoring to a shape instead of to evidence, which is the error § 13.9.1 caught once
+already. What it means in practice is that **the bottom of the ladder is calibrated more weakly than
+the top**, and step 7 should not read the roster as bounding it.
