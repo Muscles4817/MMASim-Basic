@@ -22,7 +22,7 @@ import {
   type Injury,
   type Promotion,
 } from '@mmasim/engine';
-import { careerAttention, dominantAction } from '../../packages/app/src/game/careerAttention';
+import { careerAttention, dominantSituation } from '../../packages/app/src/game/careerAttention';
 
 /** A fresh world, and one fighter out of it to push around. */
 function world(): { db: GameDb; fighter: Fighter; day: number } {
@@ -155,22 +155,22 @@ describe('the one dominant action', () => {
     });
 
     const situations = careerAttention(db, damaged);
-    const lead = dominantAction(situations);
+    const lead = dominantSituation(situations);
 
     // The trauma row is near the top and has no action. The dominant action must skip it
     // rather than leave the dashboard with no primary button at all.
     if (lead) {
-      const source = situations.find((s) => s.title === lead.because)!;
-      expect(source.action).toBeTruthy();
-      expect(source.canLead).toBe(true);
+      expect(lead.action).toBeTruthy();
+      expect(lead.canLead).toBe(true);
+      expect(lead.kind).not.toBe('trauma');
     }
   });
 
   it('returns exactly one, which is the whole fix for six competing primaries', () => {
     const { db, fighter } = world();
-    const lead = dominantAction(careerAttention(db, fighter));
+    const lead = dominantSituation(careerAttention(db, fighter));
     // Either one action or none. There is no shape of this function that returns two.
-    expect(lead === undefined || typeof lead.label === 'string').toBe(true);
+    expect(lead === undefined || typeof lead.action?.label === 'string').toBe(true);
   });
 
   it('leads with free agency for a fighter nobody has signed', () => {

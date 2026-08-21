@@ -46,7 +46,7 @@ import { Alert, FighterRead, KeyStat } from '../ui/signals';
 import { getBooking } from '../game/career';
 import { formatGameDay } from '../shell/Shell';
 import { campCostFor, solvencyOf } from '../game/money';
-import { InjuryRisk, InjuryStatus } from './Recovery';
+import { InjuryRisk, InjuryStatus, RestCard } from './Recovery';
 
 const WEEK_OPTIONS = [
   // The labels name what each length is *for*, because the arithmetic has a genuine sweet
@@ -366,6 +366,17 @@ export function TrainingScreen() {
           </p>
         </div>
       )}
+
+      {/*
+        Rest, beside the thing it trades against.
+
+        This lived on the career hub, permanently, as one of the eighteen regions that made the
+        dashboard unreadable. It belongs here: training and resting are the same decision taken
+        from opposite ends — do I spend condition or restore it — and a player weighing an
+        eight-week camp against being flat should be able to see both answers at once. The hub
+        now diagnoses ("Flat — 34") and sends them here to act.
+      */}
+      <RestCard fighter={fighter} fightDay={booking?.bout.day} />
 
       <Card title="What to work on">
         <p

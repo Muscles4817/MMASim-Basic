@@ -1,0 +1,225 @@
+/*
+ * The career dashboard.
+ *
+ * Three things this file does that the old screen could not, and each is a layout decision
+ * rather than a styling one.
+ *
+ * The identity band is a *band*, not a card — a strip that reflows into four regions on a wide
+ * screen and stacks on a phone, so who you are takes one horizontal line of a desktop instead of
+ * a full card of it.
+ *
+ * The pinned action is pinned only where pinning helps. On a phone it floats above the tab bar,
+ * because the old screen's worst property was that the decision sat three screens below the
+ * state. On a desktop the decision is already on screen beside everything else, so a floating bar
+ * over a page with room to spare is noise and it settles into the flow.
+ *
+ * The page itself uses `--gutter`, which steps at 62rem — so the desktop rhythm lives in the
+ * token rather than in a media query here.
+ */
+
+.career {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* --- Identity band ---------------------------------------------------------------------- */
+
+.identity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.identity__name {
+  font-size: var(--text-2xl);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.identity__record {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/*
+ * The record, which is what a career *is*.
+ *
+ * Kept at display size — this is the one number on the page that earns it. Everything else that
+ * used to compete with it at this weight is now either an interpreted state row or on the
+ * profile.
+ */
+.identity__record-value {
+  font-size: var(--text-3xl);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.identity__record-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.identity__standing {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+@media (min-width: 62rem) {
+  .identity {
+    /* Who / record / standing across the top, with the attribute read spanning underneath it.
+       Four regions of one fact rather than three cards about a fighter. */
+    grid-template-columns: minmax(0, 2fr) auto minmax(0, 1.4fr);
+    grid-template-areas:
+      'who record standing'
+      'read read standing';
+    align-items: start;
+    gap: var(--space-4) var(--space-5);
+  }
+
+  .identity__who {
+    grid-area: who;
+  }
+  .identity__record {
+    grid-area: record;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-1);
+  }
+  .identity__standing {
+    grid-area: standing;
+    align-items: flex-end;
+  }
+  .identity__read {
+    grid-area: read;
+  }
+}
+
+/* --- Panel count ------------------------------------------------------------------------- */
+
+/* "3 of 7". Sits inside the panel title, so it inherits the uppercase treatment and only needs
+   to stop being the same weight as the label it follows. */
+.panel__count {
+  font-weight: 600;
+  color: var(--text-faint);
+  letter-spacing: 0;
+}
+
+/* --- The climb bar ----------------------------------------------------------------------- */
+
+.climb {
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--surface-sunken);
+  overflow: hidden;
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.climb__fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width var(--transition);
+}
+
+/* --- The one action ---------------------------------------------------------------------- */
+
+/*
+ * Pinned above the tab bar, on a phone.
+ *
+ * `position: fixed` rather than sticky: the page is short enough now that a sticky element would
+ * spend most of its life in the flow anyway, and the whole point is that the answer is reachable
+ * without scrolling to find it.
+ */
+.career__action {
+  position: fixed;
+  inset-inline: 0;
+  bottom: calc(var(--nav-height) + env(safe-area-inset-bottom));
+  z-index: 25;
+  padding: var(--space-2) var(--space-3);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+}
+
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .career__action {
+    background: var(--surface);
+  }
+}
+
+.career__action-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  max-width: var(--content-max-wide);
+  margin: 0 auto;
+}
+
+/* Why this button is the one on offer. A primary action with no stated reason is a guess the
+   player has to trust; this is the claim the situation model already made. */
+.career__action-why {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/*
+ * Clear the bar, so it never covers the last thing on the page.
+ *
+ * The shell already reserves room for the nav; this is the extra strip on top of it, and the
+ * same class of bug the update prompt's own comment records fixing.
+ */
+.career {
+  padding-bottom: calc(var(--tap-target) + var(--space-4));
+}
+
+@media (min-width: 48rem) {
+  /* The rail replaces the tab bar here, so the bar sits on the bottom edge itself. */
+  .career__action {
+    bottom: 0;
+    padding-inline: var(--space-5);
+  }
+}
+
+@media (min-width: 62rem) {
+  /*
+   * In the flow, not over it.
+   *
+   * At this width the whole decision — situations, the fight table, condition, standing — is on
+   * screen at once, so there is nothing to scroll back to and a floating bar is a permanent
+   * strip of chrome over a page that does not need it.
+   */
+  .career__action {
+    position: static;
+    padding: 0;
+    background: none;
+    backdrop-filter: none;
+    border-top: none;
+  }
+
+  .career__action-inner {
+    justify-content: flex-start;
+    flex-direction: row-reverse;
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border);
+  }
+
+  .career {
+    padding-bottom: 0;
+  }
+}

@@ -31,6 +31,8 @@
  */
 
 import {
+  ATTRIBUTE_META,
+  INJURY_META,
   TRAUMA_CONCERN,
   TRAUMA_MEDICAL,
   WEAR_CONCERN,
@@ -48,6 +50,7 @@ import {
   rustFor,
   rustLabel,
   weeksUntilFit,
+  type AttributeKey,
   type Fighter,
   type Gym,
 } from '@mmasim/engine';
@@ -135,19 +138,21 @@ export function careerAttention(db: GameDb, fighter: Fighter): CareerSituation[]
 }
 
 /**
- * The one thing the dashboard's primary button does.
+ * The one situation the dashboard's primary button acts on.
  *
- * Deliberately a separate function rather than `careerAttention()[0]`: the most urgent situation
- * is often not the most actionable one. Accumulated head trauma outranks nearly everything on
- * the page and there is no button for it — the fighter's options are to keep going or to stop,
- * and neither is a control this screen owns.
+ * Deliberately not `careerAttention()[0]`: the most urgent situation is often not the most
+ * actionable one. Accumulated head trauma outranks nearly everything on the page and there is no
+ * button for it — the fighter's options are to keep going or to stop, and neither is a control
+ * this screen owns.
+ *
+ * Returns the whole situation rather than a label and a route, because a couple of leads are not
+ * navigations at all: taking a title fight books a bout on the screen the player is already on.
+ * The model decides what matters; the screen decides what pressing it does.
  */
-export function dominantAction(situations: readonly CareerSituation[]):
-  | { label: string; route: Route; because: string }
-  | undefined {
-  const lead = situations.find((s) => s.canLead && s.action);
-  if (!lead?.action) return undefined;
-  return { label: lead.action.label, route: lead.action.route, because: lead.title };
+export function dominantSituation(
+  situations: readonly CareerSituation[],
+): CareerSituation | undefined {
+  return situations.find((s) => s.canLead && s.action);
 }
 
 // --- The body ----------------------------------------------------------------------------------
@@ -159,6 +164,23 @@ function bodyIssues(fighter: Fighter, day: number, booked: boolean): CareerSitua
   if (carrying.length > 0) {
     const weeks = weeksUntilFit(carrying, day);
     const worst = carrying.reduce((a, b) => (a.severity >= b.severity ? a : b));
+
+    // Worst first, and only the ones big enough to change a decision. A 2% suppression named
+    // beside an 18% one makes the 18% harder to see, which is the whole failure mode.
+    const suppressed = new Map<AttributeKey, number>();
+    for (const injury of carrying) {
+      for (const [key, fraction] of Object.entries(INJURY_META[injury.type].suppresses) as [
+        AttributeKey,
+        number,
+      ][]) {
+        suppressed.set(key, Math.max(suppressed.get(key) ?? 0, fraction * injury.severity));
+      }
+    }
+    const cost = [...suppressed.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .filter(([, amount]) => amount >= 0.03)
+      .slice(0, 3)
+      .map(([key, amount]) => `${ATTRIBUTE_META[key].label.toLowerCase()} (−${Math.round(amount * 100)}%)`);
     items.push({
       id: 'injury',
       kind: 'injury',
@@ -166,13 +188,36 @@ function bodyIssues(fighter: Fighter, day: number, booked: boolean): CareerSitua
       // Carrying something into a booked fight is worse than carrying it between them, because
       // there is a date attached to it.
       urgency: (worst.severity > 0.55 ? 88 : 72) + (booked ? 6 : 0),
+      /*
+       * Named, not just counted.
+       *
+       * "You are hurt" is a state; "your knee ligament" is the thing the player has to plan
+       * around, and it is what tells them whether eight weeks of wrestling is off the table. The
+       * first rebuilt dashboard dropped it by accident when the injury alert was folded into
+       * this row, and a player could read the whole page without learning what was wrong.
+       */
       title:
         carrying.length === 1
-          ? `You are hurt — ${weeks} week${weeks === 1 ? '' : 's'} until you are fit`
+          ? `You are hurt — ${INJURY_META[worst.type].label.toLowerCase()}, ${weeks} week${weeks === 1 ? '' : 's'} until you are fit`
           : `You are carrying ${carrying.length} injuries — ${weeks} week${weeks === 1 ? '' : 's'} until fit`,
-      detail: booked
-        ? 'You have a fight booked. Fighting hurt costs you the attributes the injury touches, and nobody outside your camp knows.'
-        : 'Resting until you are fit costs weeks. Fighting through it costs the attributes the injury touches, and your opponent will not be told.',
+      /*
+       * What it is actually doing to you, named attribute by attribute.
+       *
+       * `injuredAttributes` applies these silently at fight time and tells nobody, which is the
+       * right design for what an *opponent* knows and the wrong one for what a fighter knows
+       * about their own body. This is the sentence `InjuryStatus` renders, computed here so the
+       * dashboard can carry it in the situation row rather than repeating the same headline in
+       * an alert underneath — which is what the first draft of the rebuilt dashboard did.
+       */
+      detail: `${
+        cost.length > 0
+          ? `Fighting like this costs you ${cost.join(', ')}. Nobody outside your camp knows. `
+          : ''
+      }${
+        booked
+          ? 'You have a fight booked.'
+          : 'Resting until you are fit costs weeks; fighting through it costs the attributes above.'
+      }`,
       action: { label: 'Rest until fit', route: { name: 'training' } },
       canLead: true,
     });
@@ -259,7 +304,11 @@ function activityIssues(
       urgency: 40 + Math.round(rust * 34),
       title: `${months} months inactive — ${rustLabel(rust)}`,
       detail: describeRust(rust),
-      action: booked ? undefined : { label: 'Find a fight', route: { name: 'hub' } },
+      /*
+       * No action. The answer to rust is to take a fight, and the fight table is on the same
+       * screen as this row — a button routing to the page it is already on is a button that
+       * does nothing, which is worse than no button.
+       */
     });
   }
 

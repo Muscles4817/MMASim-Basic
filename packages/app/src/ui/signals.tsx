@@ -400,8 +400,15 @@ export function StateRow({
       {state !== undefined && <span className="state-row__state">{state}</span>}
       {help && (
         <details className="state-row__help">
-          <summary>
-            <span className="visually-hidden">What {label.toLowerCase()} means</span>
+          {/*
+            Named with `aria-label` rather than a visually-hidden span.
+            
+            The span worked — the toggle had an accessible name — but it put a second copy of the
+            row's own label into the DOM as text, so "Freshness" appeared twice inside one row.
+            That is invisible on screen and it makes the row ambiguous to anything reading text:
+            find-in-page, a translation layer, and the playability suite, which found it first.
+          */}
+          <summary aria-label={`What ${label.toLowerCase()} means`}>
             <span aria-hidden="true">?</span>
           </summary>
           <div className="state-row__help-body prose">{help}</div>

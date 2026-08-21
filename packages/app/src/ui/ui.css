@@ -566,43 +566,14 @@ a.list__item:hover {
    screen. Each tile carries an icon, a label and a line saying what is actually behind it,
    because a grid of six icons is a memory test. */
 
-.hub-nav {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
-  gap: var(--space-2);
-}
-
-.hub-nav__item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  align-items: flex-start;
-  text-align: left;
-  min-height: var(--tap-target);
-  padding: var(--space-3);
-  border-radius: var(--radius);
-  border: 1px solid var(--border);
-  background: var(--surface);
-  transition: background var(--transition-fast);
-}
-
-.hub-nav__item:hover {
-  background: var(--surface-sunken);
-}
-
-.hub-nav__icon {
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
-.hub-nav__label {
-  font-weight: 700;
-}
-
-.hub-nav__hint {
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
+/*
+ * `.hub-nav` used to live here — the career hub's seven-tile navigation grid.
+ *
+ * Deleted with the grid. Two of its tiles were tab-bar destinations verbatim, and all seven sat
+ * below a news feed on a page that ran to eight viewport heights, so in practice it was a
+ * navigation control nobody scrolled to. The shell's own nav and the situation feed's actions
+ * are the doors now. See doc 32 § 5.3.
+ */
 
 /* The manager's recorded opinion on an offer. Quoted, because it is a person speaking and
    because it will be held against him — the hub keeps a tally of how often he was right. */
@@ -696,77 +667,13 @@ a.list__item:hover {
 }
 
 /*
-  The division table on the hub.
-
-  Numbers are tabular and the place column is fixed-width so the names form a clean left edge —
-  a ranking that jitters as the digits change reads as a list rather than a standing.
-*/
-.rankings {
-  list-style: none;
-  margin: var(--space-2) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.rankings__row {
-  display: grid;
-  grid-template-columns: 2rem 1fr auto;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  border-radius: var(--radius-sm);
-  border-bottom: 1px solid var(--border);
-}
-
-.rankings__row:last-child {
-  border-bottom: none;
-}
-
-/* Your own row, which is the reason the table is on this screen at all. */
-.rankings__row[data-you='true'] {
-  background: var(--accent-soft);
-  font-weight: 650;
-}
-
-.rankings__place {
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-  font-weight: 650;
-}
-
-.rankings__row[data-you='true'] .rankings__place {
-  color: var(--accent);
-}
-
-.rankings__name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.rankings__badge {
-  font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0 var(--space-1);
-  border-radius: var(--radius-full);
-  background: var(--accent);
-  color: var(--on-accent);
-  flex-shrink: 0;
-}
-
-.rankings__record {
-  font-variant-numeric: tabular-nums;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-}
+ * `.rankings` used to live here — the divisional table the career hub carried inline.
+ *
+ * The argument for it was right ("a rank you cannot see the rest of is a number, not a
+ * standing") and it is the rankings *screen's* argument. Reproducing that screen inside the
+ * dashboard is a large part of how the dashboard reached eight viewport heights, so the
+ * dashboard now states the position and links to the table. See doc 32 § 5.3.
+ */
 
 /*
   A flag beside a country name.

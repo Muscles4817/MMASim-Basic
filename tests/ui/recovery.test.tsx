@@ -101,7 +101,7 @@ function injureThePlayer(weeks = 10, severity = 0.7) {
 }
 
 describe('an injury is on the front page', () => {
-  it('says you are hurt, and how long for, on the hub rather than three taps down', async () => {
+  it('says you are hurt, and how long for, on the dashboard rather than three taps down', async () => {
     const user = userEvent.setup();
     await takeOverAFighter(user);
     injureThePlayer(10);
@@ -132,18 +132,26 @@ describe('an injury is on the front page', () => {
     const user = userEvent.setup();
     await takeOverAFighter(user);
 
-    goTo('#/hub');
+    goTo('#/training');
     await screen.findByText(/Rest and recovery/i);
     expect(screen.queryByText(/You are hurt/i)).toBeNull();
   });
 });
 
-describe('resting is on the front page too', () => {
-  it('offers spans from a few days upward, without leaving the hub', async () => {
+/*
+ * Rest moved from the dashboard to the training screen.
+ *
+ * Doc 32 § 5.2: training and resting are the same decision taken from opposite ends — spend
+ * condition or restore it — and a player weighing an eight-week camp against being flat should
+ * see both answers at once. The dashboard still *diagnoses* it ("Flat — 34" in the condition
+ * strip, and a ranked situation row) and sends them here to act.
+ */
+describe('resting is a decision on the training screen', () => {
+  it('offers spans from a few days upward', async () => {
     const user = userEvent.setup();
     await takeOverAFighter(user);
 
-    goTo('#/hub');
+    goTo('#/training');
     expect(await screen.findByText(/Rest and recovery/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: /^3 days$/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /^1 week$/ })).toBeTruthy();
@@ -154,7 +162,7 @@ describe('resting is on the front page too', () => {
     const user = userEvent.setup();
     await takeOverAFighter(user);
 
-    goTo('#/hub');
+    goTo('#/training');
     await screen.findByText(/Rest and recovery/i);
     const before = getWorld(db!).day;
 
@@ -178,7 +186,7 @@ describe('resting is on the front page too', () => {
     const user = userEvent.setup();
     await takeOverAFighter(user);
 
-    goTo('#/hub');
+    goTo('#/training');
     await screen.findByText(/Rest and recovery/i);
     const before = getWorld(db!).day;
 
@@ -200,13 +208,11 @@ describe('resting is on the front page too', () => {
     await takeOverAFighter(user);
     injureThePlayer(6);
 
-    goTo('#/hub');
-    // Two buttons legitimately offer this: the injury alert's "Rest until fit" hands the player
-    // down to the card, and the card's own is the one that actually runs the block.
+    goTo('#/training');
     const untilFit = await screen.findByRole('button', { name: /^Until fit \(/i });
     await user.click(untilFit);
 
-    // Healed, and the hub stops saying you are hurt.
+    // Healed, and the screen stops saying you are hurt.
     await expect.poll(() => screen.queryByText(/You are hurt/i)).toBeNull();
   });
 });

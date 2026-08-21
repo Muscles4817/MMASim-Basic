@@ -109,7 +109,7 @@ describe('the camp report', () => {
     await user.click(back);
 
     // The hub, not the training screen with a stale report on it.
-    expect(await screen.findByTestId('climb')).toBeTruthy();
+    expect(await screen.findByTestId('standing')).toBeTruthy();
   });
 
   it('lets you go straight into another camp without a round trip', async () => {

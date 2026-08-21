@@ -108,7 +108,10 @@ export function App() {
         );
       case 'hub':
         return (
-          <Shell title="Career">
+          // Wide: the dashboard's argument is the same as the promotion dashboard's — the
+          // decisions are comparative, and a 56rem column forces every comparison across a
+          // scroll. See doc 32 § 1.6 for how much of a 1920px display the old one left empty.
+          <Shell title="Career" wide>
             <HubScreen />
           </Shell>
         );
@@ -238,7 +241,7 @@ export function App() {
         );
       default:
         return (
-          <Shell title="Career">
+          <Shell title="Career" wide>
             <HubScreen />
           </Shell>
         );

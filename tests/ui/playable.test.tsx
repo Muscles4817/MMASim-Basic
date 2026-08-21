@@ -103,9 +103,11 @@ describe('the game is playable', () => {
     expect(await screen.findByTestId('next-fight')).toBeTruthy();
     expectNoCrash();
 
-    // 3. Expand an offer and accept it. Booking is deliberately two steps.
-    const stepChips = await screen.findAllByText(/Step up|Even fight|Favourable/);
-    await user.click(stepChips[0]!.closest('button')!);
+    // 3. Select an opponent and accept. Booking is deliberately two steps: the row opens the
+    // detail, the detail books the fight.
+    const rows = await screen.findAllByRole('button', { name: /Nurmagomedov|Poirier|Gaethje|./ });
+    const opponentRow = rows.find((r) => r.classList.contains('datatable__rowbutton'))!;
+    await user.click(opponentRow);
     const accept = await screen.findByRole('button', { name: /Accept fight/i });
     await user.click(accept);
 
@@ -310,7 +312,9 @@ describe('the career is a career, not a sequence of fights', () => {
     await createFighter(user);
 
     // Unknown, unranked, and on the smallest show in the sport. That is the starting point.
-    const climb = await screen.findByTestId('climb');
+    // The climb is part of "where you stand" now: a rank without a contract beside it was two
+    // full-height cards saying one thing about a career.
+    const climb = await screen.findByTestId('standing');
     expect(within(climb).getAllByText(/Unranked/i).length).toBeGreaterThan(0);
     expect(within(climb).getByText(/developmental/i)).toBeTruthy();
     expectNoCrash();
@@ -345,9 +349,7 @@ describe('the career is a career, not a sequence of fights', () => {
     const user = userEvent.setup();
     await createFighter(user, 'Trainee');
 
-    await user.click(await screen.findByRole('link', { name: /Career/i }));
-    await user.click(await screen.findByRole('button', { name: /Go to training/i }));
-
+    window.location.hash = '#/training';
     expect(await screen.findByText(/What to work on/i)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: /Wrestling/i }));
     await user.click(screen.getByRole('button', { name: /Train for 8 weeks/i }));
@@ -364,8 +366,7 @@ describe('the career is a career, not a sequence of fights', () => {
     await createFighter(user, 'Clockwatcher');
 
     const dateBefore = document.querySelector('.shell__subtitle')?.textContent;
-    await user.click(await screen.findByRole('link', { name: /Career/i }));
-    await user.click(await screen.findByRole('button', { name: /Go to training/i }));
+    window.location.hash = '#/training';
     await user.click(await screen.findByRole('button', { name: /Train for 8 weeks/i }));
 
     await waitFor(() => {
@@ -378,7 +379,7 @@ describe('the career is a career, not a sequence of fights', () => {
     const user = userEvent.setup();
     await createFighter(user, 'Climber');
 
-    const climb = await screen.findByTestId('climb');
+    const climb = await screen.findByTestId('standing');
     expect(within(climb).getByRole('meter', { name: /Career progress/i })).toBeTruthy();
     // Always says what is standing between you and the belt, eligible or not.
     expect(climb.textContent).toMatch(/unranked|ranked|top three|two straight wins|not signed/i);
