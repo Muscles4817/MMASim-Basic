@@ -1,0 +1,55 @@
+# The pre-merge gate.
+#
+# `pages.yml` runs the same checks, but it triggers on `push` to master — which is to say it runs
+# *after* the merge button, on code that is already on the default branch. A gate that can only
+# tell you the branch is broken is a smoke alarm in the garden. This runs the identical checks on
+# the pull request, so a red result is something you can still act on by not merging.
+#
+# It deliberately does not build or deploy: publishing is `pages.yml`'s job and duplicating it here
+# would double the deploy's cost for no extra signal.
+name: CI
+
+on:
+  pull_request:
+  # Also on master, so the branch protection setting has a run to require on the base branch and
+  # so a direct push is not a hole in the gate.
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run per branch. Pushing a fix to a PR should cancel the run for the commit it replaces
+# rather than queue behind it — unlike the deploy, an abandoned check has no half-published state.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Cheapest first, so an obvious break reports in a minute rather than five — but every step
+      # still runs after a failure, because a red test should not hide a lint error you would only
+      # then hit on the next push. `!cancelled()` rather than `continue-on-error`, which would
+      # report the failure and mark the job green anyway.
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        if: ${{ !cancelled() }}
+        run: npm run typecheck
+
+      - name: Test
+        if: ${{ !cancelled() }}
+        run: npm test
