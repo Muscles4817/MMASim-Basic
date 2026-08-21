@@ -193,3 +193,26 @@
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+
+/*
+ * A rank folded into the name.
+ *
+ * The phone composition hides the `#` column — a two-character column is not worth a column on a
+ * 360px screen — so the place rides along inside the primary cell instead. Fixed-width and
+ * tabular so the names form a clean left edge: a ranking whose edge moves as the digits change
+ * reads as a list rather than as a standing.
+ *
+ * Hidden inside the table, where the place has a column of its own and this would be a second
+ * copy of it in the same row.
+ */
+.rank-inline {
+  display: inline-block;
+  min-width: 1.5rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.datatable__table .rank-inline {
+  display: none;
+}

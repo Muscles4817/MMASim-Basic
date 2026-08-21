@@ -227,7 +227,9 @@ export function App() {
         );
       case 'rankings':
         return (
-          <Shell title="Rankings">
+          // Wide: a ranking is a comparison, and the filters belong beside the table rather
+          // than in a band above it.
+          <Shell title="Rankings" wide>
             <RankingsScreen />
           </Shell>
         );

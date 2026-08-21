@@ -31,6 +31,17 @@ Phone (<48rem)                    Tablet / desktop (≥48rem)
 The tab bar becomes a rail at 48rem. It is the same component and the same markup — only the
 CSS changes — so navigation state can never diverge between breakpoints.
 
+**Two breakpoints, two questions.** 48rem is where the tab bar becomes a rail — a navigation
+change on a tablet held in two hands. **62rem** is where a pointer on a large screen becomes the
+likely reader: body copy steps up (`--text-body`), the page gutter widens (`--gutter`), consoles
+go to two columns, `DataTable` swaps its rows for a real table, and `Collapse` opens by default.
+They answer different questions and must not be merged.
+
+Screens with genuinely parallel context pass `wide` to the shell and get `--content-max-wide`
+(82rem) instead of 56rem: the career dashboard, the promotion dashboard, a fighter's page, the
+contract screen, rankings, the card builder and new-game selection. Everything else stays at a
+readable measure, because a column of prose stretched to 1600px is harder to read, not easier.
+
 ### Non-negotiable rules
 
 | Rule                          | Why                                                            |
@@ -39,8 +50,16 @@ CSS changes — so navigation state can never diverge between breakpoints.
 | Safe-area insets on all fixed edges | The tab bar must not sit under the home indicator.        |
 | No horizontal page scroll      | Wide content (tables, play-by-play) scrolls inside `.scroll-x`. |
 | Never block zoom               | `maximum-scale` is an accessibility failure, not a polish item. |
-| One primary action per screen  | If two things are equally emphasised, neither is the answer.    |
+| One dominant action per **decision context** | If two things are equally emphasised, neither is the answer. |
 | Scroll to top on navigation    | Carrying scroll position across screens is disorienting.        |
+| Selection is never a side effect of navigation | Clicking a candidate opens a preview; a named control commits. |
+
+The dominance rule was written as "one primary action per screen" and that was overreach — a
+screen with two genuinely independent decisions may have two. What it must never have is what
+the career hub had: **six primaries competing over one decision, none of which knew the others
+existed.** Where a screen has one decision, the answer is computed rather than authored;
+`careerAttention.dominantSituation` is the reference implementation. It is a rule the dashboard's
+own test enforces, not a lint rule over every screen in the app.
 
 ## Theming
 
@@ -137,11 +156,16 @@ outcome chip carries a word.
 
 | Screen      | The one thing it must do                                                    |
 | ----------- | --------------------------------------------------------------------------- |
-| **Start**   | Make choosing a fighter feel like choosing a *story*, not sorting a table    |
-| **Hub**     | Show who you are and the single next decision. Never more than one primary   |
+| **Menu**    | Say what each world *is*, and what removes a save                            |
+| **Start**   | Ask who you are going to be, before it asks about anybody in particular      |
+| **Start → fighter / promoter** | Let the player browse and inspect without ever committing by accident |
+| **Career**  | What needs you, what you can do about it, where you stand while you decide   |
+| **My fighter** (`#/me`) | The same profile, in the first person                            |
 | **Camp**    | Force a committed choice under genuine uncertainty                           |
 | **Fight**   | Deliver the payoff. Withhold the result until the replay reaches it          |
 | **Fighter** | Make fifteen attributes readable in three seconds via four grouped blocks    |
+| **Your deal** | The deal you are on, everything that could replace it, and every lever between |
+| **Rankings**| A comparison, in columns, with the player's own row marked                   |
 | **Roster**  | Division-first browsing, because that is how the sport is organised          |
 | **Editor**  | Total control, with warnings instead of prohibitions                         |
 | **Settings**| Theme, career, and the one irreversible action — behind two steps            |
@@ -192,19 +216,34 @@ Six of thirteen screens imported nothing from `signals.tsx`. Two of its exports 
 things. A component that exists and is not used is worse than one that does not exist: it
 implies a standard the code does not meet.
 
-### The flat wall can move into the chip layer
+### The flat wall keeps moving one layer down
+
+`Chip` was the app's most-used component with one visual weight carrying eight meanings. That was
+fixed, and the wall reappeared in `Fact`: the career hub's identity card carried nine of them, six
+at `emphasis="tertiary"`, three rendering a bare `n / 100`. The lesson holds at every layer —
+**a component that can express anything expresses nothing** — and the answer this time was a
+narrower component rather than another tone. `StateRow` cannot render a number without an
+interpretation beside it, because that is the only thing it is for.
+
+### The original finding: the flat wall can move into the chip layer
 
 `Chip` was the app's most-used component and had exactly one visual weight carrying eight
 different meanings — championship status beside height and reach at identical emphasis. That
 is the original "everything at one flat weight" complaint, relocated rather than solved. The
 lesson: **a component that can express anything expresses nothing.**
 
-### `title` is not an explanation
+### `title` is not an explanation — and neither is a permanent paragraph
 
 Fourteen call sites explained themselves only through a `title` attribute. A tooltip shows
 nothing on a touch device and is unreliably announced on a role-less `<span>`, so those
 explanations reached desktop-mouse users and nobody else. `ui.css` already stated this rule
 and eleven call sites broke it. Teaching material goes **on the page**.
+
+The fix at the time was to print every hint permanently, and that is right the first time
+somebody meets a mechanic and is a wall of manual by the fiftieth visit — the career hub carried
+seven of them above the fold. So: on the page, in the DOM, reachable by keyboard and screen
+reader, and **closed**. `Help` and `StateRow`'s help affordance are both `<details>`, so the
+browser owns the toggle, the state, the announcement and find-in-page opening it.
 
 ### Colour-alone creeps back in through new code
 

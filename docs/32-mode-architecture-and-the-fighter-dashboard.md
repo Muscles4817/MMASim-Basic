@@ -1,7 +1,8 @@
 # 32 — Mode architecture, the fighter dashboard, and starting a save
 
-> Status: **approved, in implementation.** The audit stands as written; § 14 records the
-> decisions taken on it and the two amendments made before work started.
+> Status: **built.** Phases 0–7 landed; the audit in §§ 1–4 describes the code as it was, and
+> §§ 5–12 describe what was done about it. § 14 records the decisions and the two amendments,
+> and § 15 records what did not survive contact.
 > Read [10 — UX & Design System](./10-ux-and-design-system.md) for the vocabulary this uses and
 > [29 — Promoter Mode UX](./29-promoter-mode-ux.md) for the pattern this generalises.
 
@@ -1003,3 +1004,51 @@ Nothing is linted; unrelated future screens are not constrained.
 table. Build the master/detail selection experience first — browse freely, inspect a full preview,
 explicitly take control. Comparison is not added merely because `DataTable` makes it cheap; it
 lands only if the selection experience turns out to want it.
+
+
+---
+
+## 15. What did not survive contact
+
+Kept because an audit that is only ever right is an audit nobody checks.
+
+**`Injury` is `day`/`healedDay`, not `startDay`/`healsDay`.** The first fixture in the
+`careerAttention` test used the wrong field names and an injury type that does not exist, an
+`as Injury` swallowed all three, and the test asserted against a fighter the model considered
+healthy. Fixtures are built through the brand constructors now.
+
+**Folding the injury alert into the situation feed lost the injury.** The rebuilt dashboard
+ranked "You are hurt — 6 weeks until you are fit" and dropped which body part it was, because
+`describeInjury` had been in the alert that was removed. A player could read the whole page and
+not learn what was wrong. The title names it; the suppressed-attribute sentence moved into the
+detail.
+
+**The pinned action repeated the situation's own sentence.** The audit's complaint about the old
+hub — the same thing said twice at the same weight — reproduced inside the component built to fix
+it. The bar names the *kind* now.
+
+**`StateRow`'s help toggle put a second copy of every label into the DOM.** A visually-hidden
+"What freshness means" gave the toggle an accessible name and made the row ambiguous to anything
+reading text. `aria-label` does the same job without the text node.
+
+**"One primary action per screen" was wrong as a lint rule.** § 14 records the amendment. The
+defect was six primaries over one decision, not two primaries over two decisions.
+
+**A test was passing for the wrong reason.** `menu.test.tsx`'s "builds the world the save actually
+asked for" set the hash to the roster and matched a 2026-only name immediately — and passed
+because the *landing screen at the time* listed the whole roster, so the assertion was satisfied
+before the route changed. It searches now.
+
+**`DataTable` renders both compositions into the DOM** and lets CSS choose at 62rem, which keeps
+the switch free of layout thrash and of a flash on load. jsdom applies no CSS, so every test that
+matches on a name in a table finds it twice. Tests target `.datatable__rowbutton` where they mean
+the wide one.
+
+### Still open
+
+- **Doc 33** — generated promotions have no identity. The promotion picker ships the honest
+  version; the world generator is untouched.
+- **Coach mode** is a slot on the mode picker and nothing behind it. The flow, `FighterView`'s
+  `viewer`, `Shell`'s nav fork and `playerRole` are all shaped for it.
+- **`Help` does not remember being read.** § 10 proposed persisting a per-save "seen" flag so an
+  explanation opens once and stays closed after. The disclosure exists; the memory does not.
