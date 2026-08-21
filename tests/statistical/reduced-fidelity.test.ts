@@ -194,21 +194,62 @@ describe('who wins', () => {
  * holding rather than the one he would have advanced to. Nothing at round granularity knows which
  * position an attempt came from, and that is the piece of work.
  */
-const KO_GAP_ALLOWANCE: Readonly<Record<string, number>> = { 'smotherer-v-striker': 0.13 };
+/**
+ * **D2 widened all three cells and did not create any of them.**
+ *
+ * Giving the man on top a voluntary exit moved Full's clock, not Reduced's: control per round fell
+ * 1.5–5% across the six matchups and the time came back standing. Full's knockout rate rose with it
+ * — `striker-v-grinder` 27.8% to 29.9%, `contender-v-canFodder` 53.2% to 56.3% — while Reduced's did
+ * not move at all, so two knockout cells that had been sitting under their bound went over.
+ *
+ * The reason Reduced could not follow is specific and worth stating, because it rules out the
+ * obvious fix. Reduced's control model already *agrees* with Full on the clock here: 215 seconds a
+ * round against Full's 220 in `striker-v-grinder`. Re-fitting `BASE_CONTROL` against the new
+ * measurement changes nothing, and was tried — these matchups are lopsided enough that
+ * `controlShare` is pinned at `MAX_CONTROL_PER_FIGHTER`, so the constant is not what is deciding
+ * them. The gap is that **Reduced under-produces knockouts from standing time in striker-versus-
+ * grappler matchups**, which is a pre-existing 10.6-point gap that D2 pushed 2 points wider by
+ * handing those fights more standing time. It is not a top-position modelling failure and a
+ * top-position term will not close it.
+ *
+ * A Reduced term for the *plan* half was built and removed, in the pattern D1 established. It
+ * divided the holder's `hold` by his own `TOP_EXIT` bias — the same alignment table `simulate.ts`
+ * weighs `standUpFromTop` with, which is exactly how `controlResistance` reads the man underneath —
+ * and it moved Reduced's control by under 1% because the same clamp swallows it. Deleted: a
+ * modifier that cannot be measured is dead code with a comment.
+ */
+const KO_GAP_ALLOWANCE: Readonly<Record<string, number>> = {
+  'smotherer-v-striker': 0.145,
+  'striker-v-grinder': 0.145,
+};
 
-const SUBMISSION_GAP_ALLOWANCE: Readonly<Record<string, number>> = {};
+/**
+ * The same matchup's submission cell, which the knockout failure had been hiding.
+ *
+ * The loop asserts `ko`, `submission` and `decision` in order and stops at the first failure, so
+ * `smotherer-v-striker` was only ever reporting its knockout gap. Its submission gap was 0.119
+ * against a 0.12 bound before D2 — a tenth of a point of headroom — and the extra standing time took
+ * it to 0.140. Same cause as the knockout cell above and the same non-answer: Reduced's submissions
+ * are driven off a control share that D2 did not change.
+ */
+const SUBMISSION_GAP_ALLOWANCE: Readonly<Record<string, number>> = {
+  'smotherer-v-striker': 0.15,
+};
 
 /**
  * The volume gap, which is the oldest of the two and has its own flavour of the same cause.
  *
  * A fighter pinned underneath in the pocket barely throws, and modelling bottom-position volume at
  * round granularity has been named in the comment on the bound below since before the tactical
- * programme started. Full throws 9.4 significant strikes a round here against Reduced's 13.2. D1
+ * programme started. Full throws 9.0 significant strikes a round here against Reduced's 13.2. D1
  * moved the ratio from about 1.35 to 1.40 for the same reason as the knockout cell: the smotherer
- * rides harder than the old constant let him, so the guard player throws even less.
+ * rides harder than the old constant let him, so the guard player throws even less. D2 moved it
+ * again, to 1.47, and in the same direction for the opposite reason: the smotherer now sometimes
+ * elects to stand off, and the beats he spends doing it are beats the man underneath does not throw
+ * on either. Reduced credits him with those strikes at both ends.
  */
 const VOLUME_GAP_ALLOWANCE: Readonly<Record<string, number>> = {
-  'guardPlayer-v-smotherer': 1.42,
+  'guardPlayer-v-smotherer': 1.52,
 };
 
 describe('how it ends', () => {

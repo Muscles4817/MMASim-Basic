@@ -243,6 +243,7 @@ const CONTROLLING_ALIGNMENT: Readonly<Record<ControllingAction, Alignment>> = {
  * from it, or to sit on it, without those being different game plans.
  */
 export type TopAction = 'advancePosition' | 'groundStrike' | 'submission' | 'maintainPosition';
+
 export type BottomAction = 'standUp' | 'sweep' | 'submission' | 'defend';
 
 const TOP_ALIGNMENT: Readonly<Record<TopAction, Readonly<Record<TopIntent, number>>>> = {
@@ -255,6 +256,29 @@ const TOP_ALIGNMENT: Readonly<Record<TopAction, Readonly<Record<TopIntent, numbe
    * is produced by the failure branches of every other action instead.
    */
   maintainPosition: { control: 1, groundAndPound: -0.4, advance: -0.5, submit: -0.7 },
+};
+
+/**
+ * Standing back up out of somebody's guard, and it is keyed on `preferredState` rather than on
+ * `topIntent` — which is the whole reason it needed a table of its own.
+ *
+ * Everything else a fighter does on top is *in-state behaviour*, and in-state behaviour is what
+ * `topIntent` is for. Getting off the floor is a **transition**, and transitions are answered by
+ * where the fighter wants the fight, exactly as `breakAway` is in the clinch (docs/01 § 8). A
+ * striker who wants the fight at range wants it at range whether he is standing over somebody or
+ * not, and nothing in `topIntent`'s four values can say that.
+ *
+ * The negative rows matter as much as the positive ones. A fighter who came for top position does
+ * not give it back because the option exists, and this is where that is stated.
+ */
+const TOP_EXIT: Alignment = {
+  outside: 1,
+  boxing: 0.85,
+  pocket: 0.5,
+  clinch: -0.35,
+  top: -1,
+  submission: -0.9,
+  adaptive: 0,
 };
 
 const BOTTOM_ALIGNMENT: Readonly<Record<BottomAction, Readonly<Record<BottomIntent, number>>>> = {
@@ -445,6 +469,9 @@ export const controllingBias = (
 
 export const topBias = (c: Combatant, stance: Stance, action: TopAction, opportunity = 0): number =>
   bias(TOP_ALIGNMENT[action][c.plan.tactics.topIntent], stance.urgency, opportunity);
+
+/** How much this plan wants the fight back on the feet, read from the top position. */
+export const topExitBias = (stance: Stance): number => bias(TOP_EXIT[stance.desired], stance.urgency);
 
 /**
  * The bottom of the fight, where the reported defect lived.

@@ -324,6 +324,22 @@ export function standUpText(rng: Rng, defender: Combatant): string {
   ]);
 }
 
+/**
+ * The man on top choosing to be the man standing over him.
+ *
+ * Deliberately *not* the same prose as `standUpText`. Getting up from underneath is an escape and
+ * reads as one; backing out of somebody's guard is a decision, and if both used the same lines a
+ * player watching a striker disengage would be told he had been in trouble. The corner's plan is
+ * the only thing that produced this beat, so the prose says so.
+ */
+export function topDisengageText(rng: Rng, attacker: Combatant): string {
+  return rng.pick([
+    `${surname(attacker)} breaks the grips and stands off — waving them back up.`,
+    `${surname(attacker)} wants no part of the floor — he posts, backs out and lets them up.`,
+    `${surname(attacker)} disengages from the top and resets on his feet.`,
+  ]);
+}
+
 export function refStandUpText(): string {
   return `The referee stands them up — not enough work from the top.`;
 }
