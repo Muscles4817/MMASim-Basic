@@ -22,6 +22,33 @@ const workspaceAliases = {
  */
 export default defineConfig({
   test: {
+    /*
+     * Two workers, not one per core.
+     *
+     * Vitest's default is a worker per available core, and on a four-core runner that starves the
+     * main thread badly enough that its own reporting RPC gives up:
+     *
+     *   Error: [vitest-worker]: Timeout calling "onTaskUpdate"
+     *
+     * Vitest counts that as an unhandled error and exits 1 — with every test passing. That failed
+     * the Pages build on runs 17, 18, 19, 21, 22 and 23 while reporting "1881 passed", which is
+     * the worst failure mode available: a red build that says nothing is wrong.
+     *
+     * `maxWorkers` rather than `poolOptions.forks.maxForks`, because `poolOptions` is a *project*
+     * option — set here, alongside `projects`, it would be read for a root project that does not
+     * exist and silently do nothing. `maxWorkers`/`minWorkers` are in vitest's `NonProjectOptions`
+     * and apply across every project, which is what this needs to be.
+     *
+     * Cheap in wall time, because the machine was already saturated: ~720s of test CPU over a
+     * ~335s wall is about 2.1x parallelism on four cores, so the contention was buying scheduling
+     * overhead rather than throughput.
+     *
+     * This is a ceiling on concurrency, not on the work. Nothing is skipped, and a genuine
+     * unhandled rejection in product code still fails the run.
+     */
+    maxWorkers: 2,
+    minWorkers: 1,
+
     projects: [
       {
         test: {
