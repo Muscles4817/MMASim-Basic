@@ -182,13 +182,7 @@ export const ATTRIBUTE_META: Readonly<Record<AttributeKey, AttributeMeta>> = {
 export const ATTRIBUTES_BY_GROUP: Readonly<Record<AttributeGroup, readonly AttributeKey[]>> = {
   physical: ['power', 'speed', 'cardio', 'durability', 'strength'],
   striking: ['strikingOffence', 'kicking', 'strikingDefence'],
-  grappling: [
-    'wrestling',
-    'takedownDefence',
-    'groundControl',
-    'submissions',
-    'scrambling',
-  ],
+  grappling: ['wrestling', 'takedownDefence', 'groundControl', 'submissions', 'scrambling'],
   mental: ['fightIq', 'composure'],
 };
 
@@ -240,7 +234,6 @@ export function ratingBand(rating: Rating): (typeof RATING_BANDS)[number] {
 // --- Hidden naturals --------------------------------------------------------------------
 
 export const NATURAL_KEYS = [
-  'frame',
   'explosiveness',
   'engine',
   'constitution',
@@ -303,16 +296,21 @@ export type AgeCurve = (typeof AGE_CURVES)[number];
 /**
  * Hidden physiological substrate. Never rendered as numbers — the player infers these from
  * behaviour, scouting reports and years of watching a fighter.
+ *
+ * **`frame` left this block at doc 31 § 12 step 4.** It was `walkingWeight / 300 × 100` — a number
+ * about the body wearing a natural's clothes, and one that was a proxy for the division before the
+ * body model landed. Structural size now lives on `Fighter.physique`, where it is a real primitive
+ * rather than something recomputed from a weight that the division had chosen; the ceilings read it
+ * through `leanMassIndex`, `carriedMassIndex` and `skeletalIndex` in `progression/body.ts`.
+ *
+ * What is left here is what the word was always supposed to mean: things a fighter was born with
+ * that no amount of training or dieting moves.
  */
 export interface Naturals extends Record<NaturalKey, Rating> {
   ageCurve: AgeCurve;
 }
 
 export const NATURAL_META: Readonly<Record<NaturalKey, { label: string; blurb: string }>> = {
-  frame: {
-    label: 'Frame',
-    blurb: 'Natural walking weight and skeletal size. Sets which divisions are viable.',
-  },
   explosiveness: {
     label: 'Explosiveness',
     blurb: 'Fast-twitch ceiling. Caps Power and wrestling burst. First thing age takes.',

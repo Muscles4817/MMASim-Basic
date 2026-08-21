@@ -12,8 +12,14 @@ import { describe, expect, it } from 'vitest';
 import { createRng } from '../core/rng.js';
 import { asDivisionId } from '../core/ids.js';
 import { divisionsFor, type Sex } from '../domain/divisions.js';
+import { generateFighter } from './generation.js';
 import {
+  bodyOf,
   bodyFromChoices,
+  carriedMassIndex,
+  leanMassIndex,
+  physiqueForMeasurements,
+  skeletalIndex,
   campWeightLbs,
   chosenDivision,
   leanMassLbs,
@@ -331,5 +337,127 @@ describe('bodies built from player choices', () => {
     expect(partial.reachInches).toBeGreaterThan(60);
     expect(partial.sex).toBe('female');
     expect(walkingWeightLbs(partial)).toBeGreaterThan(100);
+  });
+});
+
+describe('the indices the rating ceilings read', () => {
+  /*
+   * Doc 31 § 12 step 4. These three replaced `naturals.frame`, which was `walkingWeight / 300 × 100`
+   * and therefore a proxy for the division: every lightweight scored 55 ± 3, so the number feeding
+   * the Power, Strength, Durability and Cardio ceilings knew what weight class somebody fought in and
+   * nothing whatsoever about their body.
+   */
+
+  it('lands where the number it replaced landed, so the ceilings were not silently retuned', () => {
+    /*
+     * The constraint that set `LEAN_INDEX_DIVISOR`. `frame` fed four ceilings with coefficients tuned
+     * against a `walkingWeight / 300` scale, so replacing the variable without preserving the scale
+     * would have retuned all four at once and made the change impossible to attribute.
+     */
+    for (const [height, walking] of [
+      [65, 134],
+      [69, 169],
+      [76, 242],
+    ] as const) {
+      const b = physiqueForMeasurements('male', height, walking, 50, 50);
+      const full = { sex: 'male' as const, heightInches: height, reachInches: height + 2, ...b };
+      const oldFrame = (walking / 300) * 100;
+      expect(
+        leanMassIndex(full),
+        `${walking}lb: lean index ${leanMassIndex(full).toFixed(1)} against old frame ${oldFrame.toFixed(1)}`,
+      ).toBeGreaterThan(oldFrame - 3);
+      expect(leanMassIndex(full)).toBeLessThan(oldFrame + 3);
+    }
+  });
+
+  it('tells a lean fighter from a soft one of the same weight, which frame could not', () => {
+    // The entire reason the body model exists, expressed in the number the ceilings read.
+    const shape = { heightInches: 71, frameIndex: 50, muscleIndex: 50, waterCutIndex: 50 };
+    const lean = body({ ...shape, bodyFatIndex: 5 });
+    const soft = body({ ...shape, bodyFatIndex: 95 });
+
+    // Same skeleton and same muscle, so exactly the same contractile mass...
+    expect(leanMassIndex(lean)).toBeCloseTo(leanMassIndex(soft), 6);
+    /*
+     * ...but the soft one is carrying a lot more of himself around. Measured 58.4 against 64.8 — a
+     * 6.4-point gap, which is what the model's 8%-to-18% body-fat band is worth on this scale and
+     * therefore the whole size of the effect available. Under `naturals.frame` these two fighters
+     * were the same number on every one of the four ceilings it fed.
+     */
+    expect(carriedMassIndex(soft)).toBeGreaterThan(carriedMassIndex(lean) + 5);
+  });
+
+  it('reads skeletal size rather than current muscle, so the interference effect cannot cancel itself', () => {
+    /*
+     * `development.ts:carriedStrength` asks how much muscle a skeleton supports before more of it
+     * starts costing cardio. Feeding it current muscle would move the threshold up every time the
+     * fighter got bigger, which is the one thing it must not do.
+     */
+    const shape = { heightInches: 72, frameIndex: 60, bodyFatIndex: 50, waterCutIndex: 50 };
+    const slight = body({ ...shape, muscleIndex: 15 });
+    const jacked = body({ ...shape, muscleIndex: 95 });
+    expect(skeletalIndex(slight)).toBeCloseTo(skeletalIndex(jacked), 6);
+    // And it is absolute rather than for-height: a big-framed flyweight is not a big-framed
+    // heavyweight, and does not carry a heavyweight's muscle.
+    expect(skeletalIndex(body({ heightInches: 64, frameIndex: 90 }))).toBeLessThan(
+      skeletalIndex(body({ heightInches: 76, frameIndex: 40 })),
+    );
+  });
+
+  it('keeps the stored walking weight equal to the one the body implies', () => {
+    /*
+     * `Fighter.walkingWeightLbs` is derivable from `physique` and `heightInches` and is stored anyway
+     * until doc 31 § 12 step 11, which is when mass starts genuinely moving over a career and a cached
+     * copy could go stale. This is the guard that stops it drifting in the meantime.
+     */
+    const rng = createRng('drift');
+    for (const division of divisionsFor('male')) {
+      for (let i = 0; i < 25; i++) {
+        const f = generateFighter(rng, {
+          id: `drift_${division.id}_${i}`,
+          divisionId: division.id,
+          sex: 'male',
+          day: 0,
+        });
+        const implied = walkingWeightLbs(bodyOf(f));
+        expect(
+          Math.abs(f.walkingWeightLbs - implied),
+          `${division.shortName}: stored ${f.walkingWeightLbs}, body implies ${implied.toFixed(1)}`,
+        ).toBeLessThan(1);
+      }
+    }
+  });
+
+  it('does not make a big frame a generally better athlete', () => {
+    /*
+     * The guard the whole step turns on. Mass genuinely buys Power and Strength — doc 31 § 3 says so
+     * and the ladder is built on it — but it must buy nothing else. If `frameIndex` correlated with
+     * explosiveness, the engine or motor learning, it would have become the master scalar that step 3
+     * just finished removing, wearing a body's clothes.
+     */
+    const rng = createRng('not-a-scalar');
+    const cohort = Array.from({ length: 3000 }, (_, i) =>
+      generateFighter(rng.fork(`f${i}`), {
+        id: `scalar_${i}`,
+        divisionId: asDivisionId('mens-welterweight'),
+        sex: 'male',
+        day: 0,
+      }),
+    );
+
+    const corr = (xs: number[], ys: number[]) => {
+      const m = (v: number[]) => v.reduce((a, b) => a + b, 0) / v.length;
+      const s = (v: number[]) => Math.sqrt(m(v.map((x) => (x - m(v)) ** 2)));
+      return m(xs.map((x, i) => (x - m(xs)) * (ys[i]! - m(ys)))) / (s(xs) * s(ys) || 1);
+    };
+
+    const frames = cohort.map((f) => f.physique.frameIndex);
+    for (const natural of ['explosiveness', 'engine', 'motorLearning', 'recovery'] as const) {
+      const r = corr(
+        frames,
+        cohort.map((f) => f.naturals[natural]),
+      );
+      expect(Math.abs(r), `rho(frameIndex, ${natural}) = ${r.toFixed(3)}`).toBeLessThan(0.15);
+    }
   });
 });

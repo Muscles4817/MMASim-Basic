@@ -12,10 +12,10 @@
 
 import {
   ATTRIBUTE_KEYS,
+  physiqueForMeasurements,
   asDivisionId,
   asFighterId,
   birthDayForAge,
-  clamp,
   emptyRecordSummary,
   freshCondition,
   isoToGameDay,
@@ -97,12 +97,10 @@ function parseRecord(record: string): RecordSummary {
 function deriveNaturals(spec: FighterSpec): Naturals {
   const a = spec.attrs;
   const ageCurve: AgeCurve =
-    spec.naturals?.ageCurve ?? (spec.age >= 34 ? 'longPeak' : spec.age <= 24 ? 'lateBloomer' : 'standard');
+    spec.naturals?.ageCurve ??
+    (spec.age >= 34 ? 'longPeak' : spec.age <= 24 ? 'lateBloomer' : 'standard');
 
   return {
-    // Frame is walking weight expressed on the rating scale, so cut severity and division
-    // viability both fall out of one number.
-    frame: toRating(clamp((spec.walk / 300) * 100, 5, 99)),
     explosiveness: toRating(a.power * 0.55 + a.speed * 0.35 + a.strength * 0.1),
     engine: toRating(a.cardio * 0.85 + a.composure * 0.15),
     constitution: toRating(a.durability * 0.9 + a.strength * 0.1),
@@ -153,6 +151,17 @@ export function buildFighter(spec: FighterSpec, onDay: number = SEED_DAY): Fight
     // Real birthdays are not modelled; a fixed 15 June keeps ages stable and reproducible.
     birthDay: birthDayForAge(spec.age, onDay, 6, 15),
     walkingWeightLbs: spec.walk,
+    /*
+     * Solved from the height and walking weight the spec transcribes, rather than authored.
+     *
+     * Doc 31 § 12 step 4 deleted `naturals.frame`, which this file used to compute as
+     * `walk / 300 × 100`. A seed entry states a real fighter's real height and real walking weight —
+     * measurements, not ratings — and the body model has to accept them and work out what
+     * composition produces them, which is what `physiqueForMeasurements` does. Frame and muscle split
+     * the difference evenly, because a tale of the tape says nothing about which of the two a given
+     * fighter's mass is made of.
+     */
+    physique: physiqueForMeasurements(spec.sex ?? 'male', spec.htIn, spec.walk, 50, 50),
     heightInches: spec.htIn,
     reachInches: spec.reachIn,
     stance: spec.stance ?? 'orthodox',

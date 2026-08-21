@@ -29,6 +29,7 @@ import {
 } from '../health/freshness.js';
 import { clamp, remap, round } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
+import { bodyOf, skeletalIndex } from './body.js';
 import type { Fighter } from '../domain/fighter.js';
 import { campGainMultiplier, idleDecayMultiplier } from '../domain/personality.js';
 import { recoverConfidence } from '../domain/confidence.js';
@@ -542,7 +543,18 @@ function difficulty(fighter: Fighter, key: AttributeKey, current: number): numbe
  * Below this a fighter getting functionally strong pays nothing — a lightweight adding useful
  * strength is free, and should be. Above it the interference effect begins.
  */
-const carriedStrength = (frame: number): number => 45 + (frame - 45) * 0.55;
+/**
+ * How much strength a skeleton carries before more of it starts costing cardio.
+ *
+ * Reads absolute skeletal size — the lean mass this frame would hold at median muscle — rather than
+ * `naturals.frame`, which doc 31 § 12 step 4 deleted for being `walkingWeight / 300` and therefore a
+ * proxy for the division. The scale is unchanged, so the 0.55 slope means what it always meant.
+ *
+ * Skeletal size rather than *current* mass, deliberately: feeding this the fighter's present muscle
+ * would make the interference effect self-cancelling — get bigger, and the threshold for being too
+ * big for your own engine moves up with you.
+ */
+const carriedStrength = (skeletal: number): number => 45 + (skeletal - 45) * 0.55;
 
 /**
  * What strength costs cardio, past the point a frame carries. Doc 23 § 2.4.
@@ -560,7 +572,7 @@ export function strengthCardioCost(
   strength: number,
 ): number {
   if (strengthGain <= 0) return 0;
-  const excess = clamp((strength - carriedStrength(fighter.naturals.frame)) / 25, 0, 1);
+  const excess = clamp((strength - carriedStrength(skeletalIndex(bodyOf(fighter)))) / 25, 0, 1);
   return strengthGain * STRENGTH_CARDIO_INTERFERENCE * excess;
 }
 

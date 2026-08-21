@@ -61,7 +61,9 @@ const build = (origin: FighterOrigin, seed: string, age = 25): Fighter =>
 
 /** Averages over enough rolls that a 11–16 point standard deviation stops being the signal. */
 function sample(origin: FighterOrigin, n = 200, age = 25) {
-  const fighters = Array.from({ length: n }, (_, i) => build(origin, `s:${JSON.stringify(origin)}:${i}`, age));
+  const fighters = Array.from({ length: n }, (_, i) =>
+    build(origin, `s:${JSON.stringify(origin)}:${i}`, age),
+  );
   const avg = (f: (x: Fighter) => number) => fighters.reduce((a, x) => a + f(x), 0) / n;
   return {
     fighters,
@@ -152,7 +154,9 @@ describe('layer 2 — discipline shapes the fighter', () => {
     const totals = COMBAT_DISCIPLINES.map((d) =>
       Object.values(DISCIPLINE_META[d].attributes).reduce((a, v) => a + v, 0),
     );
-    expect(new Set(totals).size, `combat disciplines differ in total: ${totals.join(', ')}`).toBe(1);
+    expect(new Set(totals).size, `combat disciplines differ in total: ${totals.join(', ')}`).toBe(
+      1,
+    );
   });
 
   it('makes each art strongest in the attribute the engine reads it through', () => {
@@ -183,9 +187,15 @@ describe('layer 2 — discipline shapes the fighter', () => {
     // them, so karate is separated from *kickboxing* instead — fast and selective against
     // heavy and constant. If these ever converge the two menu entries stop being a choice.
     const karate = sample({ talent: 'natural', discipline: 'karate', attainment: 'regional' });
-    const kickboxer = sample({ talent: 'natural', discipline: 'kickboxing', attainment: 'regional' });
+    const kickboxer = sample({
+      talent: 'natural',
+      discipline: 'kickboxing',
+      attainment: 'regional',
+    });
     expect(karate.attribute('speed')).toBeGreaterThan(kickboxer.attribute('speed') + 4);
-    expect(kickboxer.attribute('strikingOffence')).toBeGreaterThan(karate.attribute('strikingOffence') + 4);
+    expect(kickboxer.attribute('strikingOffence')).toBeGreaterThan(
+      karate.attribute('strikingOffence') + 4,
+    );
   });
 
   describe('the non-combat branch', () => {
@@ -203,28 +213,49 @@ describe('layer 2 — discipline shapes the fighter', () => {
     it('has the highest ceilings in the game', () => {
       const bestCombat = Math.max(
         ...COMBAT_DISCIPLINES.map(
-          (d) => sample({ talent: 'freak', discipline: d, attainment: 'regional' }, 80).ceilingOverall,
+          (d) =>
+            sample({ talent: 'freak', discipline: d, attainment: 'regional' }, 80).ceilingOverall,
         ),
       );
       for (const athletic of ATHLETIC_ORIGINS) {
-        const athlete = sample({ talent: 'freak', discipline: athletic, attainment: 'regional' }, 80);
-        expect(athlete.ceilingOverall, `${athletic} does not out-ceiling every combat art`).toBeGreaterThan(
-          bestCombat,
+        const athlete = sample(
+          { talent: 'freak', discipline: athletic, attainment: 'regional' },
+          80,
         );
+        expect(
+          athlete.ceilingOverall,
+          `${athletic} does not out-ceiling every combat art`,
+        ).toBeGreaterThan(bestCombat);
       }
     });
 
     it('is a real trade: worse today in exchange for that', () => {
       const boxer = sample({ talent: 'freak', discipline: 'boxing', attainment: 'regional' });
-      const athlete = sample({ talent: 'freak', discipline: 'trackAndField', attainment: 'regional' });
+      const athlete = sample({
+        talent: 'freak',
+        discipline: 'trackAndField',
+        attainment: 'regional',
+      });
       expect(athlete.startOverall).toBeLessThan(boxer.startOverall);
       expect(athlete.ceilingOverall).toBeGreaterThan(boxer.ceilingOverall);
     });
 
     it('specialises in different physical qualities rather than being one option three times', () => {
-      const track = sample({ talent: 'natural', discipline: 'trackAndField', attainment: 'regional' });
-      const contact = sample({ talent: 'natural', discipline: 'contactSport', attainment: 'regional' });
-      const endurance = sample({ talent: 'natural', discipline: 'enduranceSport', attainment: 'regional' });
+      const track = sample({
+        talent: 'natural',
+        discipline: 'trackAndField',
+        attainment: 'regional',
+      });
+      const contact = sample({
+        talent: 'natural',
+        discipline: 'contactSport',
+        attainment: 'regional',
+      });
+      const endurance = sample({
+        talent: 'natural',
+        discipline: 'enduranceSport',
+        attainment: 'regional',
+      });
       expect(track.ceiling('speed')).toBeGreaterThan(endurance.ceiling('speed'));
       expect(endurance.ceiling('cardio')).toBeGreaterThan(track.ceiling('cardio'));
       expect(contact.ceiling('durability')).toBeGreaterThan(track.ceiling('durability'));
@@ -235,7 +266,8 @@ describe('layer 2 — discipline shapes the fighter', () => {
       expect(disciplinesForTalent('freak')).toEqual(DISCIPLINES);
       for (const athletic of ATHLETIC_ORIGINS) {
         expect(
-          validateOrigin({ talent: 'grinder', discipline: athletic, attainment: 'regional' }).length,
+          validateOrigin({ talent: 'grinder', discipline: athletic, attainment: 'regional' })
+            .length,
         ).toBeGreaterThan(0);
       }
     });
@@ -257,10 +289,19 @@ describe('layer 2 — discipline shapes the fighter', () => {
 
     it('is worth roughly a third of the primary', () => {
       const resolved = resolveOrigin(wrestlerWhoBoxes);
-      const pureWrestler = resolveOrigin({ talent: 'natural', discipline: 'wrestling', attainment: 'regional' });
-      const pureBoxer = resolveOrigin({ talent: 'natural', discipline: 'boxing', attainment: 'regional' });
+      const pureWrestler = resolveOrigin({
+        talent: 'natural',
+        discipline: 'wrestling',
+        attainment: 'regional',
+      });
+      const pureBoxer = resolveOrigin({
+        talent: 'natural',
+        discipline: 'boxing',
+        attainment: 'regional',
+      });
 
-      const wrestlingShare = (resolved.attributes.wrestling ?? 0) / (pureWrestler.attributes.wrestling ?? 1);
+      const wrestlingShare =
+        (resolved.attributes.wrestling ?? 0) / (pureWrestler.attributes.wrestling ?? 1);
       const boxingShare =
         (resolved.attributes.strikingOffence ?? 0) / (pureBoxer.attributes.strikingOffence ?? 1);
       expect(boxingShare / wrestlingShare).toBeCloseTo(1 / 3, 5);
@@ -285,12 +326,20 @@ describe('layer 2 — discipline shapes the fighter', () => {
 
     it('sits strictly between the two pure fighters it blends', () => {
       const blend = sample(wrestlerWhoBoxes);
-      const pureWrestler = sample({ talent: 'natural', discipline: 'wrestling', attainment: 'regional' });
+      const pureWrestler = sample({
+        talent: 'natural',
+        discipline: 'wrestling',
+        attainment: 'regional',
+      });
       const pureBoxer = sample({ talent: 'natural', discipline: 'boxing', attainment: 'regional' });
       expect(blend.attribute('wrestling')).toBeLessThan(pureWrestler.attribute('wrestling'));
       expect(blend.attribute('wrestling')).toBeGreaterThan(pureBoxer.attribute('wrestling'));
-      expect(blend.attribute('strikingOffence')).toBeGreaterThan(pureWrestler.attribute('strikingOffence'));
-      expect(blend.attribute('strikingOffence')).toBeLessThan(pureBoxer.attribute('strikingOffence'));
+      expect(blend.attribute('strikingOffence')).toBeGreaterThan(
+        pureWrestler.attribute('strikingOffence'),
+      );
+      expect(blend.attribute('strikingOffence')).toBeLessThan(
+        pureBoxer.attribute('strikingOffence'),
+      );
     });
 
     it('refuses a second art that is the same one, or that is not an art at all', () => {
@@ -388,11 +437,14 @@ describe('layer 3 — attainment is standing, filtered by talent', () => {
 
   it('does not secretly move ceilings, which would put the double-count straight back', () => {
     const centres = ATTAINMENTS.map(
-      (attainment) => resolveOrigin({ talent: 'freak', discipline: 'wrestling', attainment }).naturalsCentre,
+      (attainment) =>
+        resolveOrigin({ talent: 'freak', discipline: 'wrestling', attainment }).naturalsCentre,
     );
     expect(new Set(centres).size).toBe(1);
     for (const attainment of ATTAINMENTS) {
-      expect(resolveOrigin({ talent: 'freak', discipline: 'wrestling', attainment }).naturals).toEqual(
+      expect(
+        resolveOrigin({ talent: 'freak', discipline: 'wrestling', attainment }).naturals,
+      ).toEqual(
         resolveOrigin({ talent: 'freak', discipline: 'wrestling', attainment: 'amateur' }).naturals,
       );
     }
@@ -431,12 +483,20 @@ describe('keeping an origin legal as the layers above it change', () => {
 
   it('drops a secondary that stopped being legal, and keeps one that did not', () => {
     expect(
-      reconcileOrigin({ talent: 'freak', discipline: 'trackAndField', secondary: 'boxing', attainment: 'world' })
-        .secondary,
+      reconcileOrigin({
+        talent: 'freak',
+        discipline: 'trackAndField',
+        secondary: 'boxing',
+        attainment: 'world',
+      }).secondary,
     ).toBeUndefined();
     expect(
-      reconcileOrigin({ talent: 'freak', discipline: 'wrestling', secondary: 'boxing', attainment: 'world' })
-        .secondary,
+      reconcileOrigin({
+        talent: 'freak',
+        discipline: 'wrestling',
+        secondary: 'boxing',
+        attainment: 'world',
+      }).secondary,
     ).toBe('boxing');
   });
 
@@ -475,7 +535,11 @@ describe('what the player is told', () => {
   });
 
   it('says "club level" rather than "amateur boxing" for somebody who played rugby', () => {
-    const line = describeOrigin({ talent: 'freak', discipline: 'contactSport', attainment: 'world' });
+    const line = describeOrigin({
+      talent: 'freak',
+      discipline: 'contactSport',
+      attainment: 'world',
+    });
     expect(line).toMatch(/international/i);
     expect(line).toMatch(/no fighting/i);
   });
@@ -508,7 +572,10 @@ describe('what the player is told', () => {
  * generated fighter of the same age pays.
  */
 describe('what a created fighter is physically', () => {
-  const speedOf = (origin: FighterOrigin, extra: Partial<Parameters<typeof createPlayerFighter>[0]> = {}) => {
+  const speedOf = (
+    origin: FighterOrigin,
+    extra: Partial<Parameters<typeof createPlayerFighter>[0]> = {},
+  ) => {
     const values: number[] = [];
     const ceilings: number[] = [];
     for (let i = 0; i < 150; i++) {
@@ -547,7 +614,10 @@ describe('what a created fighter is physically', () => {
   });
 
   it('scales it by talent, so a freak reads as one and a grinder does not', () => {
-    const freak = speedOf({ ...karate, talent: 'freak' }, { build: 'rangy', allocation: { speed: 5 } });
+    const freak = speedOf(
+      { ...karate, talent: 'freak' },
+      { build: 'rangy', allocation: { speed: 5 } },
+    );
     const grinder = speedOf(
       { ...karate, talent: 'grinder' },
       { build: 'rangy', allocation: { speed: 5 } },
@@ -589,7 +659,11 @@ describe('what a created fighter is physically', () => {
      * their ceilings and the skills are not. This is what makes the climb technical, which is
      * where a career's growth is supposed to come from.
      */
-    const f = build({ talent: 'natural', discipline: 'wrestling', attainment: 'regional' }, 'shape', 22);
+    const f = build(
+      { talent: 'natural', discipline: 'wrestling', attainment: 'regional' },
+      'shape',
+      22,
+    );
     const physicalShare = mean(
       ATTRIBUTES_BY_GROUP.physical.map((k) => f.attributes[k] / f.potential[k]),
     );
@@ -638,7 +712,9 @@ describe('a created fighter is still a prospect, whatever the origin', () => {
       for (let i = 0; i < 40; i++) {
         const f = build(origin, `room:${origin.discipline}:${i}`, 25);
         for (const key of ATTRIBUTE_KEYS) {
-          expect(f.potential[key], `${origin.discipline} ${key}`).toBeGreaterThan(f.attributes[key]);
+          expect(f.potential[key], `${origin.discipline} ${key}`).toBeGreaterThan(
+            f.attributes[key],
+          );
         }
       }
     }
@@ -647,8 +723,13 @@ describe('a created fighter is still a prospect, whatever the origin', () => {
   it('still has a real hole, like everybody else on the roster', () => {
     for (const discipline of DISCIPLINES as readonly Discipline[]) {
       for (let i = 0; i < 10; i++) {
-        const f = build({ talent: 'freak', discipline, attainment: 'regional' }, `hole:${discipline}:${i}`);
-        expect(Math.min(...ATTRIBUTE_KEYS.map((k) => f.attributes[k])), discipline).toBeLessThan(52);
+        const f = build(
+          { talent: 'freak', discipline, attainment: 'regional' },
+          `hole:${discipline}:${i}`,
+        );
+        expect(Math.min(...ATTRIBUTE_KEYS.map((k) => f.attributes[k])), discipline).toBeLessThan(
+          52,
+        );
       }
     }
   });
@@ -708,10 +789,18 @@ describe('the deprecated flat background still works', () => {
      * asserted here. This fighter was 5'6" with a 67" reach, three to four inches shorter than any
      * real lightweight and with no reach advantage at all, because height came from a remap linear
      * in the division limit. He is now 5'9" with a 73" reach.
+     *
+     * **Re-baselined a fourth time at doc 31 § 12 step 4**, and it moved exactly one point: strength
+     * 56 → 57. `naturals.frame` is gone, and the Strength ceiling that read it now reads
+     * `leanMassIndex` — deliberately scaled to land where `frame` landed, so the substitution is of
+     * the variable rather than of the equation. On this seed the fighter carries slightly less body
+     * fat than the median (`bodyFatIndex` 39), so his contractile mass is a shade above what
+     * `walkingWeight / 300` credited him with. That is the change working: the same scale weight now
+     * means different things depending on what it is made of.
      */
     const f = legacy();
     expect(ATTRIBUTE_KEYS.map((k) => f.attributes[k])).toEqual([
-      62, 80, 65, 77, 56, 46, 44, 47, 61, 60, 51, 44, 44, 47, 45,
+      62, 80, 65, 77, 57, 46, 44, 47, 61, 60, 51, 44, 44, 47, 45,
     ]);
     expect(f.naturals.explosiveness).toBe(78);
     expect(f.naturals.motorLearning).toBe(86);
@@ -719,6 +808,14 @@ describe('the deprecated flat background still works', () => {
     expect(f.starPower).toBe(1);
     // The body, pinned for the same reason the ratings are: it is what the change was for.
     expect([f.heightInches, f.reachInches, f.walkingWeightLbs]).toEqual([69, 73, 163]);
+    // And the composition it is made of, which is now a stored primitive rather than a number
+    // recomputed from a weight the division had chosen.
+    expect(f.physique).toEqual({
+      frameIndex: 54,
+      muscleIndex: 38,
+      bodyFatIndex: 39,
+      waterCutIndex: 65,
+    });
   });
 
   it('accepts a spec with no build, which used to be required', () => {

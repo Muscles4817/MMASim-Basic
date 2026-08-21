@@ -1057,11 +1057,12 @@ engine tuned against one has to be tuned again.
    what it measured. **`createPlayerFighter` is deliberately untouched** — its `talent` layer is a
    claim the player makes about themselves rather than a promotion-quality signal, the defect this
    step names cannot occur on that path, and step 10 deletes the layer outright.
-4. **Body model.** Frame independent; walking weight derived. `Naturals` gains `skeletalFrame`,
-   `musclePotential`, `leanness`; splits `constitution` into `neurologicalRobustness` and
-   `structuralRobustness`; folds `injuryProneness` into the latter. 7 fields → 10, about 64 KB on an
-   858-fighter save (≈2%). `sampleBodyForDivision` is rejection sampling on the one forward model, so
-   newgen and creator provably cannot diverge.
+4. **Replace `naturals.frame` — landed.** `Fighter.physique` stores the four composition primitives;
+   `naturals.frame` is deleted; the ceilings read `leanMassIndex`, `carriedMassIndex` and
+   `skeletalIndex`. §13.6 records what it measured. **The `constitution` split into
+   `neurologicalRobustness` and `structuralRobustness` moved out of this step** — it is physiology
+   decoupling, which belongs with the Power/Strength work in step 6, and folding it in here would
+   have made neither measurable on its own.
 5. **Calibration roster** (§10 Phase B).
 6. **Mass effects.** `ceilingsFromNaturals` gains §2.4's law with the lean/total split for all five.
 7. **Simulate, play, iterate** (§9, §10) — **the first step allowed to touch an engine constant.**
@@ -1193,6 +1194,65 @@ That last one is the same thread as §13.3's regional-growth movement, and it is
 tuned**. Both run through `naturals.frame`, still `walkingWeight / 300`, which step 4 deletes. Tuning
 either now would be tuning against a number that is about to disappear. **Re-measure both after step
 4**, together.
+
+### 13.6 What step 4 found
+
+**The substitution was clean, and that was the design goal.** `LEAN_INDEX_DIVISOR` is set so the new
+index lands where `walkingWeight / 300 × 100` landed — within a point across the whole ladder at a
+typical body fat — because `frame` fed four ceilings with coefficients tuned against that scale.
+Replacing the variable without preserving the scale would have retuned Power, Strength, Durability
+and Cardio at once and made the change unattributable.
+
+Measured before and after, on the same base:
+
+- **Physical distributions: unchanged.** Every division's median moved by at most one point, on one
+  attribute, in one direction.
+- **Step 3's axes: byte-identical.** ρ(athletic, learning) 0.138, ρ(tier, ability) 0.510, ρ(tier,
+  body) 0.277 — all four figures the same to three decimals.
+- **Body-sampler rejection and fallback rates: byte-identical**, every row of the sex × division
+  table. Step 4 changed how the ceilings _read_ a body, not how bodies are _sampled_, so viability
+  and division selection are untouched by construction rather than by hope.
+
+What is new is what the number can now see. Two fighters at the same scale weight had identical
+frames; a lean one and a soft one now differ by 6.4 points of carried mass — the full width of the
+model's 8%-to-18% body-fat band — while their contractile mass is identical. That distinction is the
+reason the body model exists and `frame` could not make it.
+
+**Frame is not a "bigger is better" scalar**, and `body.test.ts` now asserts it: |ρ| between
+`frameIndex` and each of explosiveness, engine, motor learning and recovery must stay under 0.15.
+Mass buys Power and Strength, which doc 31 § 3 says it should; it must buy nothing else, or the
+master scalar step 3 removed would be back wearing a body's clothes.
+
+**The deferred economy finding resolved itself.** §13.3 recorded that the body model moved mean
+regional ten-year growth from +2% to +24% and predicted the path ran through `naturals.frame`.
+Measured across eight seeds on the same base with `frame` deleted:
+
+```
+                        before step 4   after step 4
+mean regional growth             +1%            −7%
+mean leader growth              +32%           +10%
+worlds with a promotion
+  at the zero floor              2/8            3/8
+```
+
+The +24% excursion is gone and the tier is back to hovering, which is what
+`promotion-costs.test.ts` asserts. **Not tuned**, per the instruction, and it did not need to be.
+The leader figure moved too, and both sit inside a band this measurement has repeatedly shown is
+seed-dominated — the leader's ten-year growth ranged +7% to +67% across seeds on an untouched
+checkout earlier in this work. The floor count is 2/8 against 3/8, which is the same marginal
+bottom-of-the-sport either way and not a step-4 effect.
+
+**It cost 120.6 KB of save**, 4.0%, about 144 bytes a fighter and almost entirely JSON key names.
+The `save-size.test.ts` ceiling moved 3.0 → 3.2 MB with the number recorded, which is what that
+file's own comment asks the next person to add a field to do. It comes back twice: step 11 makes
+`walkingWeightLbs` derived rather than stored, and doc 20 phases 3 to 5 rebuild the roster from its
+seed and delete 90% of the save outright.
+
+**One thing deliberately left stored.** `Fighter.walkingWeightLbs` is now derivable from `physique`
+and `heightInches`, and is kept anyway until step 11 — which is when mass starts genuinely moving
+over a career and a cached copy could go stale. Deriving it now would force a rewrite of
+`settleWeight`, which is step 11's work. `body.test.ts` asserts the stored value agrees with the one
+the body implies, so it cannot drift in the meantime.
 
 ---
 

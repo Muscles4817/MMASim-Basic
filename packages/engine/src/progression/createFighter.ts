@@ -17,7 +17,6 @@
  */
 
 import { birthDayForAge, type GameDay } from '../core/clock.js';
-import { clamp } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import { asFighterId } from '../core/ids.js';
 import type { DivisionId, PromotionId } from '../core/ids.js';
@@ -48,7 +47,7 @@ import {
   type ResolvedOrigin,
 } from './origin.js';
 import { isPhysical } from './development.js';
-import { sampleBodyForDivision, walkingWeightLbs as walkingWeightOf } from './body.js';
+import { physiqueOf, sampleBodyForDivision, walkingWeightLbs as walkingWeightOf } from './body.js';
 
 /**
  * Where a fighter came from, flat.
@@ -497,7 +496,6 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
    */
   const centre = origin.naturalsCentre;
   const naturals: Naturals = {
-    frame: toRating(clamp((walkingWeightLbs / 300) * 100, 5, 99)),
     explosiveness: toRating(
       rng.normalClamped(
         centre + (origin.naturals.explosiveness ?? 0) + (build.explosiveness ?? 0),
@@ -529,7 +527,7 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
     ),
   };
 
-  const potential = ceilingsFromNaturals(naturals, rng);
+  const potential = ceilingsFromNaturals(naturals, body, rng);
 
   // --- Current attributes ------------------------------------------------------------------
   const allocation = spec.allocation ?? {};
@@ -615,6 +613,7 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
     walkingWeightLbs,
     heightInches: body.heightInches,
     reachInches: body.reachInches,
+    physique: physiqueOf(body),
     stance: spec.stance ?? 'orthodox',
 
     divisionId: spec.divisionId,
