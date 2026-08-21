@@ -25,7 +25,9 @@ import {
   leanMassLbs,
   makeableDivisions,
   massCoefficient,
-  requiredCutFraction,
+  cutRequiredFraction,
+  underLimitLbs,
+  weightMarginFraction,
   sampleBody,
   sampleBodyForDivision,
   walkingWeightLbs,
@@ -137,8 +139,21 @@ describe('making weight', () => {
     // The hand-authored roster's real cuts run a mean of 8.2% and a ninetieth percentile of 13.8%,
     // so a 9% cut has to read as ordinary and a 17% one as extreme.
     const at = (pct: number) => Math.round(walking * (1 - pct));
-    expect(requiredCutFraction(b, at(0.09))).toBeCloseTo(0.09, 2);
-    expect(requiredCutFraction(b, at(0.17))).toBeCloseTo(0.17, 2);
+    expect(cutRequiredFraction(b, at(0.09))).toBeCloseTo(0.09, 2);
+    expect(cutRequiredFraction(b, at(0.17))).toBeCloseTo(0.17, 2);
+
+    /*
+     * And a fighter under the limit is not cutting a negative amount. `weightMarginFraction` keeps
+     * the signed quantity because it is monotone and useful internally; everything a human reads
+     * splits it into the two things it actually means. A diagnostic row saying a 243 lb heavyweight
+     * has a "cut % of −9.3" describes a biologically strange event rather than a man competing
+     * comfortably under a 265 lb ceiling.
+     */
+    const ceiling = Math.round(walking * 1.12);
+    expect(cutRequiredFraction(b, ceiling)).toBe(0);
+    expect(weightMarginFraction(b, ceiling)).toBeLessThan(0);
+    expect(underLimitLbs(b, ceiling)).toBeCloseTo(ceiling - walking, 0);
+    expect(underLimitLbs(b, at(0.09))).toBe(0);
   });
 
   it('gives two identically-sized fighters different floors, because tolerance differs', () => {
@@ -212,7 +227,7 @@ describe('the forward population', () => {
   it('cuts about as hard as the sport does', () => {
     // Real mean 8.2%. Everything except the terminal division, which has no ceiling to cut to.
     const cuts = MEN.filter((f) => f.division.shortName !== 'HW').map(
-      (f) => requiredCutFraction(f.body, f.division.limitLbs) * 100,
+      (f) => cutRequiredFraction(f.body, f.division.limitLbs) * 100,
     );
     expect(mean(cuts)).toBeGreaterThan(5);
     expect(mean(cuts)).toBeLessThan(12);
