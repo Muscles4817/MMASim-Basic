@@ -41,6 +41,28 @@ import {
  * date. Two bookable fighters per division across nine or ten divisions is what fills a card,
  * which means six in the division.
  *
+ * Exported because the generated world has to obey the same arithmetic and did not: it spread a
+ * promotion's roster across a division count fixed by tier, so a national show ran nine divisions
+ * four fighters deep and a local show ran five divisions with **one fighter in each**. A division
+ * of four is not a thin division, it is a division where the same two people fight forever and
+ * `offerOpponents` falls through to its cross-promotional last resort every time. A promotion
+ * that cannot fill six per division runs fewer weight classes, which is also what small
+ * promotions do in life.
+ */
+export const MIN_DIVISION_DEPTH = 6;
+
+/**
+ * The same floor for a women's division.
+ *
+ * Lower, because the real women's divisions are genuinely shallower — `DIVISION_FLOOR` in the
+ * world loop already says six against nine for exactly this reason — but not zero, and that was
+ * the other half of the defect: a generated promotion running nine divisions ran the eight men's
+ * ones plus women's strawweight, and its target for women's divisions was **0**. It advertised a
+ * division it had nobody in.
+ */
+export const MIN_WOMENS_DIVISION_DEPTH = 4;
+
+/**
  * Set higher for the promotion at the top of the sport, because a global promotion's real
  * problem is the opposite one: it has more contenders than dates.
  */
@@ -59,6 +81,17 @@ export interface DepthTarget {
   tier: number;
   /** Spread around `tier`. A promotion with a wide spread has genuine prospects on it. */
   spread: number;
+  /**
+   * The weight classes this promotion actually runs. Defaults to every division in the world.
+   *
+   * The default is what the hand-authored eras want — their promotions run the divisions the seed
+   * says and the leftovers are harmless — and it is wrong for a generated pyramid, where a local
+   * show runs one or two weight classes. Without it, `buildDepthFighters` filled all twelve for
+   * every promotion in the world: a Small world came out at 2,504 fighters against a target of
+   * 850, most of them signed to a promotion that does not stage their division and therefore
+   * unbookable by anybody, forever.
+   */
+  divisions?: readonly DivisionId[];
 }
 
 export interface DepthOptions {
@@ -116,6 +149,8 @@ export function buildDepthFighters(options: DepthOptions): Fighter[] {
     for (const divisionId of divisions) {
       const division = DIVISIONS.find((d) => d.id === divisionId);
       if (!division) continue;
+
+      if (target.divisions && !target.divisions.includes(divisionId)) continue;
 
       const want = division.sex === 'female' ? target.womens : target.mens;
       const have = existing.filter(

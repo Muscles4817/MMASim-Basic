@@ -66,12 +66,9 @@ export interface LadderStatus {
   /** True when the belt is vacant and the top contender can claim it. */
   titleVacant: boolean;
   /*
-   * No `offers` here any more.
-   *
-   * `LadderStatus` used to carry the output of `promotionOffers()`, which is how the career hub
-   * came to render a market the contract screen had never heard of. Who wants to sign this
-   * fighter is a question for `offersOnTheTable`, and asking it in one place is the entire fix.
-   * See doc 32 § 3.1.
+   * No `offers` here. Who wants to sign this fighter is `offersOnTheTable`'s question, asked in
+   * one place — carrying a second answer on `LadderStatus` is how the hub came to advertise a
+   * market the contract screen had never heard of.
    */
   /** 0–1 toward being global champion. Drives the progress bar. */
   progress: number;

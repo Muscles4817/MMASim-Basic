@@ -712,6 +712,24 @@ export function controlResistance(c: Combatant): number {
 }
 
 /**
+ * How much of his time on top the plan wants spent hitting, for the round-level resolver.
+ *
+ * The third of these, and it exists because `topIntent` reached Reduced through exactly one term —
+ * submission attempts — and through nothing else. A fighter told to ride for control and one told
+ * to posture up and hit threw the *same* number of strikes a round at this level of detail, while
+ * at Full detail they threw 2.83 a minute against 1.03. Reduced was not quantitatively looser about
+ * that instruction; it could not see it (doc 31 § D10).
+ *
+ * Read off `TOP_ALIGNMENT` at a neutral situation, which is the same table and the same urgency
+ * `simulate.ts` weighs `groundStrike` with, so an unplanned fighter reads exactly 1 and nothing
+ * about the calibrated round moves.
+ */
+export function groundStrikeAppetite(c: Combatant): number {
+  const stance = neutralStance(c);
+  return topBias(c, stance, 'groundStrike');
+}
+
+/**
  * How much of the round the plan wants spent throwing.
  *
  * `attemptsFor` builds volume from work rate and position, which is right for a fighter with no

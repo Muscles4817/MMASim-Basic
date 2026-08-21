@@ -188,15 +188,11 @@ export function titleShotEligibility(
 /*
  * `PromotionOffer` and `promotionOffers()` used to live here.
  *
- * They were replaced by `business/freeAgency.ts` — whose docstring says so — and the
- * replacement was never wired up on the consumer side, so the game shipped two independent
- * offer markets for eighteen months. The career hub read this one and the offers screen read
- * the other, and they disagreed about who was interested, about how many, and about what the
- * money was: this one hard-filtered `step !== 1`, which from a regional fighter selects every
- * national promotion in the world, and quoted a signing bonus nothing ever paid.
- *
- * Deleted rather than deprecated. A second source of truth that still compiles is a second
- * source of truth. `offersFor` is the market. See doc 32 § 3.1.
+ * Deleted rather than deprecated: a second source of truth that still compiles is a second
+ * source of truth. `business/freeAgency.ts` is the market, and had been since its own docstring
+ * said so — the consumer was simply never migrated, so the game shipped two markets that
+ * disagreed about who was interested and what the money was. Doc 16 records what it cost in
+ * play; doc 32 § 3.1 records the same finding from the interface side.
  */
 
 /**

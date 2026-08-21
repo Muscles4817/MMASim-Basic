@@ -447,3 +447,26 @@ export function careerSummary(f: Pick<Fighter, 'record' | 'priorRecord'>): Recor
   const recent = summariseRecord(f.record);
   return f.priorRecord ? mergeSummaries(f.priorRecord, recent) : recent;
 }
+
+/**
+ * The record as it stood the moment before a given bout.
+ *
+ * Written for fight night. The whole result is computed and settled *before* the fight screen
+ * renders — that is deliberate, it is what makes skipping the playback instant and honest — but
+ * it means the database already knows how tonight went while the player is still being shown the
+ * walkouts. So the tale of the tape read 12-3 and a two-fight losing run for a fight that had not
+ * started yet, which tells the player the result before the first bell and quietly gives away a
+ * finish (a KO shows up in the finish column).
+ *
+ * Nothing is stored to fix that: the record is a list with the bout's own id on it, so the state
+ * before it is a slice. Returns the full career untouched when the bout is not in the record,
+ * which is the right answer for a fight that has genuinely not been settled yet.
+ */
+export function careerSummaryBefore(
+  f: Pick<Fighter, 'record' | 'priorRecord'>,
+  boutId: string,
+): RecordSummary {
+  const at = f.record.findIndex((e) => e.boutId === boutId);
+  if (at < 0) return careerSummary(f);
+  return careerSummary({ record: f.record.slice(0, at), priorRecord: f.priorRecord });
+}

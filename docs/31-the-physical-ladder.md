@@ -1063,7 +1063,11 @@ engine tuned against one has to be tuned again.
    `neurologicalRobustness` and `structuralRobustness` moved out of this step** — it is physiology
    decoupling, which belongs with the Power/Strength work in step 6, and folding it in here would
    have made neither measurable on its own.
-5. **Calibration roster** (§10 Phase B).
+5. **Calibration roster** — §10 Phase B, **restated at §13.8** against the code steps 2–4 left
+   behind. In short: ratings are computed from `physicalScale.ts` at a stated `n × σ` rather than
+   typed, bodies are solved by `physiqueForMeasurements` and checked by `weightFit`, and the roster
+   is validated for coherence against the ladder rather than against the generator — which cannot
+   yet produce what it will state, because the mass law is step 6.
 6. **Mass effects.** `ceilingsFromNaturals` gains §2.4's law with the lean/total split for all five.
 7. **Simulate, play, iterate** (§9, §10) — **the first step allowed to touch an engine constant.**
    Run §9's twelve measurements plus S1–S5 and D1. `roster-profile.test.ts` rewritten per division;
@@ -1254,6 +1258,255 @@ over a career and a cached copy could go stale. Deriving it now would force a re
 `settleWeight`, which is step 11's work. `body.test.ts` asserts the stored value agrees with the one
 the body implies, so it cannot drift in the meantime.
 
+### 13.7 The body-model baseline
+
+Taken after step 4 landed and before step 5 begins. The reason is attribution: the next layers change
+**how the body is fed** rather than what the body model does — step 9 gives sporting backgrounds a
+body prior, step 11 makes mass move over a career — and without a reading taken while nothing else is
+moving there is no way to say which of them moved what.
+
+Regenerate with `tests/statistical/body-baseline.test.ts`. The tables below are a transcription of
+one run; when a later step moves them, re-run it, put the new numbers beside these, and name the
+change that did it.
+
+**Men, 40,000 forward-sampled bodies**
+
+| div | share |       height |        reach |  ape |       walking | lean | camp | floor | cut % |
+| --- | ----: | -----------: | -----------: | ---: | ------------: | ---: | ---: | ----: | ----: |
+| FLW |  4.9% | 64.7 (62–67) | 67.1 (63–71) | +2.4 | 133 (119–143) |  116 |  125 |   117 |   5.8 |
+| BW  |  7.8% | 66.6 (65–69) | 69.1 (65–73) | +2.5 | 148 (140–155) |  129 |  138 |   129 |   8.4 |
+| FW  | 12.4% | 68.0 (66–70) | 70.4 (67–74) | +2.4 | 158 (150–166) |  138 |  148 |   139 |   8.3 |
+| LW  | 16.3% | 69.3 (67–71) | 71.7 (68–76) | +2.4 | 169 (161–178) |  148 |  159 |   148 |   8.4 |
+| WW  | 24.5% | 70.8 (69–73) | 73.2 (69–77) | +2.4 | 183 (172–193) |  159 |  171 |   160 |   6.9 |
+| MW  | 18.3% | 72.5 (70–75) | 74.9 (71–79) | +2.4 | 199 (188–210) |  173 |  186 |   174 |   6.8 |
+| LHW | 11.7% | 74.2 (72–77) | 76.6 (73–81) | +2.4 | 217 (204–231) |  188 |  203 |   189 |   5.3 |
+| HW  |  4.0% | 76.6 (74–79) | 79.1 (75–83) | +2.4 | 243 (226–267) |  211 |  226 |   212 |  −9.3 |
+
+**Women, 40,000**
+
+| div  | share |       height |        reach |       walking | lean | body fat % | cut % |
+| ---- | ----: | -----------: | -----------: | ------------: | ---: | ---------: | ----: |
+| WSW  | 34.3% | 63.7 (61–66) | 66.1 (62–70) | 121 (105–132) |   97 |       19.8 |   4.1 |
+| WFLW | 25.9% | 65.9 (64–68) | 68.3 (64–72) | 136 (129–144) |  109 |       19.9 |   8.1 |
+| WBW  | 21.3% | 67.2 (65–69) | 69.6 (66–73) | 147 (138–156) |  118 |       20.1 |   8.1 |
+| WFW  | 14.1% | 68.5 (67–71) | 71.0 (67–75) | 159 (149–169) |  127 |       20.3 |   8.6 |
+
+**Physique and the three ceiling inputs, men**
+
+| div |      frame |     muscle | body fat | coefficient | lean index | carried index | skeletal index |
+| --- | ---------: | ---------: | -------: | ----------: | ---------: | ------------: | -------------: |
+| FLW | 41 (14–70) | 41 (16–65) |       48 |       11.88 |       44.6 |          44.4 |           45.8 |
+| LW  | 48 (19–76) | 48 (23–73) |       49 |       12.28 |       56.7 |          56.5 |           57.1 |
+| WW  | 50 (22–79) | 50 (26–75) |       50 |       12.42 |       61.2 |          61.0 |           61.2 |
+| HW  | 60 (33–86) | 60 (34–84) |       53 |       12.96 |       81.0 |          81.0 |           79.2 |
+
+**Spread within a division** — the measure step 2 existed to move, since under the old model a
+division held an eleven per cent band of one shape:
+
+| div | height sd | walking sd | lean sd | frame sd | walking p05–p95 |
+| --- | --------: | ---------: | ------: | -------: | --------------: |
+| FLW |      1.48 |        7.3 |     6.2 |     17.0 |           24 lb |
+| LW  |      1.33 |        5.1 |     4.2 |     17.1 |           17 lb |
+| WW  |      1.41 |        6.5 |     5.5 |     17.0 |           21 lb |
+| HW  |      1.64 |       12.8 |    11.1 |     16.4 |           41 lb |
+
+#### Three readings worth recording
+
+**Frame ladders, and that is selection rather than a defect.** `frameIndex` runs 41 to 60 up the
+men's divisions, and `muscleIndex` runs identically. Division is chosen on mass, and mass is height,
+frame and muscle together, so conditioning on division selects on all three — a model where frame did
+not ladder would be one where frame contributed nothing to how heavy somebody is. What says it is
+still a body variable rather than a division label is the spread: **16.4 to 17.1 standard deviation
+against a population 18**, so selection has barely narrowed it, and flyweight frames span 14 to 70
+against heavyweight's 33 to 86. Under `naturals.frame` every lightweight scored 55 ± 3.
+
+The first draft of the baseline test asserted the _gradient_ was small and failed on its first run.
+The assertion was the thing in error; it now bounds the spread and the overlap instead.
+
+**The lean and carried indices agree for men and diverge for women.** Men: `carried − lean` runs −0.3
+to −0.0 across the ladder, by construction — `LEAN_INDEX_DIVISOR` was calibrated so the new index lands where
+`walkingWeight / 300` did. Women: **+3.0 to +4.3**, because they carry about 20% body fat against
+13% while both indices use the same divisors.
+
+That is not a live defect — every woman's carried index sits below 60, which is where the Cardio
+penalty starts, so it currently costs nothing. It will matter at step 6, when the mass law replaces
+these ad-hoc terms and both indices start being read against a sex-specific pivot. **Flagged for step
+6**, not fixed here.
+
+And read the −0.3 correctly: it is the _population mean_ of a difference, not the size of the effect.
+Two individuals at the same scale weight differ by up to 6.4 points of carried index with identical
+lean mass, which is the distinction the split exists for.
+
+**4.3% of rolled female bodies have no division.** Zero male bodies do. The women's ladder stops at
+145 lb, so a woman whose weigh-in floor is 150 is somebody this sport has no home for; the men's runs
+to 265 and almost nobody exceeds it. Inside the 6% bound the baseline asserts, and worth knowing
+before step 9 starts pushing mass around with background priors.
+
+---
+
+### 13.8 Step 5, restated against the code as it now stands
+
+Steps 2 to 4 moved four assumptions Phase B was written on. What follows replaces § 10 Phase B; the
+composition requirements there still hold and are repeated as acceptance criteria at the end.
+
+#### What changed underneath it
+
+**1. The ratings can now be computed instead of typed, and should be.** `ratings/physicalScale.ts`
+did not exist when Phase B was written. It holds the ten parameters, `medianRatingAtMass`,
+`ratingSd` and `ELITE_LIFT`, and § 5 already demonstrates the method on fifteen fighters: state a
+placement as `division median + n × σ` and let the number fall out.
+
+That is the change to the deliverable. **A calibration entry states a body and a set of `n × σ`
+placements; the five physical ratings are computed from them.** Ninety hand-typed rating blocks would
+be ninety opportunities to drift from the scale they are supposed to be calibrating, and worse, they
+would silently stop tracking a calibration-sensitive parameter the moment one moved (§ 8.4). Computed
+placements move with it in the same commit.
+
+The judgement being recorded is `n` — how far above his division this fighter sits — which is exactly
+the thing a human should be authoring and a formula should not.
+
+**2. `FighterSpec` needs a body, and the body model can solve for it.** Entries carry `htIn` and
+`walk` as transcribed measurements; `physiqueForMeasurements` inverts the composition chain to get
+the physique. Nothing new is required of the author — but the author is now constrained: a stated
+height and walking weight must produce a body that can actually make the division, and
+`weightFit(body, division)` will say `notViable` if it cannot. **The roster can no longer contain a
+fighter the body model rejects**, which is a real check Phase B could not have had.
+
+**3. The hand-authored path bypasses the talent axes entirely, and that is correct.**
+`deriveNaturals` reads a spec's _attributes_ and works backwards to naturals; `tier` and
+`ATHLETIC_TIER_LOADING` are never consulted. So step 3's split does not touch the calibration roster,
+and the roster cannot be used to check step 3's work. Those are two separate populations answering
+two separate questions, and conflating them would make both unreadable.
+
+**4. The generator cannot yet produce what the roster will state, and must not be made to.** This is
+the important one. The roster is authored against § 3's ladder; `ceilingsFromNaturals` is still on
+the pre-ladder equations, because the mass law is step 6. So a heavyweight authored at Power 88 is a
+rating the generator currently has no route to.
+
+That gap is the point rather than a problem — **the roster is the target and step 6 moves the
+generator toward it** — but it has a consequence for acceptance: step 5 cannot be validated by "does
+the generator produce this". It can only be validated for internal coherence against the ladder. The
+comparison between authored and generated populations is step 7's, and it is one of the things step 7
+is for.
+
+#### The target
+
+A **UFC-only calibration roster of about 90 fighters** — a dozen per men's division, six per women's
+— every physical rating computed from `physicalScale.ts` at a stated `n × σ`, every body solved from
+a stated height and walking weight, and every entry carrying a `notes` field that justifies its
+placements against § 3's landmarks.
+
+Explicitly not derived from the existing seed ratings, and the existing `attrs()` values are not to
+be consulted while authoring. That is how the old scale would be laundered into the new one, and
+§ 0's second rule forbids it.
+
+#### Acceptance criteria
+
+Structural, and mostly checkable by a test rather than by reading:
+
+1. **Every entry's physicals reproduce from its stated placement.** Recompute
+   `medianRatingAtMass + ELITE_LIFT + n × ratingSd` from the entry's own body and `n` values, and it
+   must equal the stored rating. This is what stops the roster drifting from the scale, and it is what
+   makes a calibration-sensitive parameter's movement visible.
+2. **Every entry is a body the model accepts.** `weightFit` is never `notViable`, and the stated
+   walking weight agrees with the physique the height implies.
+3. **The composition requirements from Phase B are all present**, each as a named assertion rather
+   than a hope: two heavyweight athletic freaks at Speed 68+ and two plodders; a flyweight near Power
+   70; cardio outliers at both ends so § 5's Velasquez–Johnson comparison is testable; at least one
+   physically ordinary elite technician per weight band with all five physicals between 52 and 62; a
+   huge lightweight with a brutal cut and a small welterweight with none; an unusually strong grappler
+   at 145 and an unusually weak one at 205; and at least one fighter per division whose profile
+   contradicts their division's median shape.
+4. **The roster's per-division physical medians land within about 5 points of § 4.3's
+   major-promotion percentile table.** It is a _sample_ of ninety against a distribution, so it will
+   not match exactly; a systematic offset in one direction would mean the authoring drifted.
+5. **No entry exceeds the scale.** Nothing above 99, and the 96–100 band is occupied only by fighters
+   whose `n` is 2.4 or higher — the once-in-a-generation draw § 3 reserves it for.
+6. **Every `notes` field states its placements.** The justification is the deliverable; the numbers
+   are downstream of it, and a note that does not say why `n = 2.2` has not justified anything.
+
+#### What step 5 must not do
+
+No fight-engine constant, per the sequencing rule — step 7 is the first that may. No changes to
+`ceilingsFromNaturals`, which is step 6. No `constitution` split and no Power↔Strength work, which
+remain deferred to the physiology step. And the roster does not replace the shipped seed rosters: it
+is a calibration instrument that lives beside them until the scale is locked at step 8.
+
+---
+
+### 13.9 What step 5 found
+
+The roster landed at **115 fighters** — 88 men across the eight men's divisions, 27 women across the
+four women's — every physical stated as a sigma placement against its division's major-promotion
+median and computed through `physicalScale.ts`. `packages/data/src/calibration/` holds it;
+`tests/statistical/calibration-roster.test.ts` prints the audit and asserts the criteria. Four things
+came out of authoring it that were not in the plan.
+
+**13.9.1 The authoring drifted, exactly the way § 13.8's criterion 4 was built to catch.** The first
+draft ran a mean of **+8.7 rating points above the § 4.3 divisional p50**, with Power sitting at
+**+1.2σ to +1.5σ in every men's division** — the roster's median heavyweight was being placed at his
+own division's 95th percentile for punching force, which ten fighters cannot all be.
+
+The cause was one specific confusion rather than general optimism: _famous finisher_ was being read
+as _hardest hitter_. Knockouts come from timing, accuracy and the opponent's chin at least as much as
+from force, and Power is defined here as peak strike impulse. The pattern in the drift is itself the
+evidence — Power was the most inflated attribute and Durability the least, which is what selecting on
+fame does, because highlight reels are made of knockouts.
+
+Two corrections. Placements were re-authored downward wherever the evidence was a highlight reel
+rather than a physical fact — 187 values in one pass — and **thirteen fighters were added**, because
+part of the problem was the sample rather than the numbers: Volkov, Gane, Tybura and Arlovski at
+heavyweight, Vera, Munhoz and Font at bantamweight, Formiga and Schnell at flyweight, dos Anjos and
+Dariush at lightweight, Nate Diaz and Condit at welterweight. Mean drift now **+5.0 points**, mean
+placement **+0.51σ**.
+
+The residual is correct rather than tolerated, and the reasoning is worth writing down because the
+criterion will be re-run: a calibration roster cannot sit _at_ its divisions' medians, because a
+landmark is by definition somebody worth watching. A few points of positive drift is the right
+answer. Eight is not.
+
+**13.9.2 The body model rejects ten fighters who demonstrably competed where they competed, and the
+pattern is diagnostic.** Per the step 5 amendment these are recorded as classified disagreements
+rather than trimmed away, and they fall into two mechanisms.
+
+_Very lean bodies are penalised twice._ `physiqueForMeasurements` puts everything that is not fat
+into the lean column, camp weight is lean over 0.93, and the weigh-in floor rises with it. So the
+leanest fighters in the file are the ones the model says cannot make weight — **Yoel Romero is
+rejected at a 9.8% cut**, which is barely above the hand-authored roster's 8.2% mean and nowhere near
+anything the sport considers dangerous. Pereira (10.8%) and Chandler (11.4%) fail the same way.
+Whatever else is true, a sub-10% cut must not resolve to `notViable`.
+
+_The women's floor is systematically too high._ **Four of the nine strawweights are rejected**, at
+cuts of 13.4%, 14.2%, 15.4% and 18.5% — Zhang, Suarez, Jędrzejczyk and Dern. That is not four
+authoring errors. `COMPOSITION.female` sets `fatFloor` 0.15 against the male 0.08 and
+`CAMP_BODY_FAT.female` is 0.13, so a female body has proportionally less water to shed than a male
+one of the same relative size, and the lightest women's division is where it surfaces first. The
+model needs to be able to call a cut _dangerous_ without calling it _impossible_, and at strawweight
+it currently cannot.
+
+Two rejections are the model being right and are kept as controls: Figueiredo, who missed 125 lb more
+than once and moved up, and Harrison, whose cut to 135 was described as dangerous at the time by
+people who were not exaggerating.
+
+**None of this is fixed here.** Step 5 does not touch the body model, and the disagreements are the
+deliverable — a calibration set containing only cases the model already agrees with has calibrated
+nothing. They are step 6's and step 11's input.
+
+**13.9.3 The archetype problem is a generator problem, not a conceptual one.** § 13.1 measured
+ρ = 0.85 for Power × Strength and 0.89 for Power × Speed in the generated population. Across the 115
+authored placements the same pairs come out at **0.34 and 0.30**, and the largest correlation
+anywhere in the matrix is Power × Cardio at **−0.52** — negative, because heavy hitters carry mass
+and mass costs work capacity, which is the mass law showing up in human judgement before it has been
+implemented in code. Nothing in the authoring was constrained to produce this; each attribute was
+assessed on its own. So the ρ ≈ 0.7 target § 13.1 carries is not merely reachable, it is loose: the
+people the ladder is meant to describe are far less correlated than that.
+
+**13.9.4 The Cardio ceiling wants a fifth attribute more than the others do.** Velasquez at +2.9σ and
+Dvalishvili at +2.9σ are the two highest placements in the file on any attribute, and both are
+placements about _pace maintained under a specific style_ rather than about aerobic capacity as such.
+§ 14.4 already flags Cardio's equation shape as the one that may not match the other four; the
+roster agrees, from the opposite direction.
+
 ---
 
 ## 14. Open questions
@@ -1283,3 +1536,18 @@ which the game world contains but which is hard to observe in reality. The alter
 to the median UFC fighter — is directly observable but would put most of the game's own world below
 50 on everything. §4.2's lift exists to bridge the two; if the lift turns out to be doing too much
 work, this is the assumption to revisit.
+
+**14.6 The weigh-in floor for lean bodies and for women.** § 13.9.2. Two separate mis-specifications
+found by the calibration roster, both in `weighInFloorLbs` rather than in the ladder: a sub-10% cut
+resolving to `notViable` for the leanest men, and four of nine strawweights rejected at cuts the
+sport performs routinely. The fix is not obvious — raising the water-cut ceiling, lowering the female
+fat floor, and splitting `physiqueForMeasurements`'s even frame/muscle assumption are three different
+answers with different downstream consequences — so it is recorded rather than guessed at. Step 6
+owns the composition question; step 11 owns what a cut costs.
+
+**14.7 Whether the calibration roster should ever become shipped data.** It is a measuring instrument
+and § 13.8 says so, but 115 hand-authored fighters with real anthropometry and defended placements is
+also the best-documented population in the repository. The temptation to seed a world from it will
+recur. The argument against is that it would put the sport's hundred-odd most memorable athletes into
+every save, which is a different game; the argument for is that step 12 has to rebuild the world from
+something. Decide at step 8, when the scale locks.

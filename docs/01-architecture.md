@@ -166,7 +166,37 @@ the parity cell fit. The gap that remains is documented as a per-cell allowance 
 (doc 27 § 5.1a), and the parity suite says a second entry in that list is the signal to build the
 general mechanism rather than add a third.
 
-*Enforced by* `tests/statistical/reduced-fidelity.test.ts`.
+**6a. They may differ about how much. They may not differ about which way.**
+
+> For any tactical instruction with a clearly directional mechanism, Full and Reduced must agree on
+> the sign of its effect under controlled fighters.
+
+The quantitative half of parity is deliberately loose and always will be: Reduced resolves a round
+at a time and gives up path, so it will never reproduce Full's magnitudes and nothing needs it to.
+Causality is a different thing. A quantitative gap makes Reduced a coarser version of the same
+sport; a sign flip makes it a **different sport**, and since a world simulated at Reduced is where
+the player's opponents come from, careers get built there under tactical incentives that do not
+exist in the game the player is shown.
+
+It was broken, and by a clamp. `controlShare` returned a fighter's grappling *pull*, which the round
+loop divides by the sum of both pulls to decide who imposes the round — and it was capped at the
+ceiling belonging to the realised *share*. Every fighter good enough at grappling to exceed the cap
+returned exactly the cap whatever his corner had asked for, while his opponent's pull was not
+saturated and still moved with his plan. So a grinder told to take the fight to the floor got *less*
+control at Reduced detail than the same grinder told to stand and strike: 168 seconds a round against
+152, where Full gave 137 against 217.
+
+The general lesson, and it is worth stating separately because it produced the same bug three times
+in one function: **a clamp on an intermediate quantity destroys information about everything above
+it.** Where a ceiling is real, apply it to the thing it is a ceiling *on* — here the round's own
+capacity, in the round loop, where it always belonged.
+
+Where a Reduced abstraction genuinely cannot carry a magnitude, say so in the allowance table and
+move on. It still has to carry the sign.
+
+*Enforced by* `tests/statistical/reduced-fidelity.test.ts` for magnitude and
+`tests/statistical/reduced-direction.test.ts` for direction; `tools/reduced-direction.ts` is the
+instrument. Doc 31 § D10 is the diagnosis.
 
 ### 7. Intent authority must be comparable across decision surfaces.
 

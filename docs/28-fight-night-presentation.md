@@ -112,6 +112,16 @@ feel" on its own — anticipation is a *pause*, not an animation.
 main event happens after you and you find out how it went. If you *are* the main event,
 nothing follows you — and that silence is the reward for headlining.
 
+**A4b. Built: the pre-fight card cannot know how the fight went.** The whole night is settled
+before `FightScreen` mounts — deliberately, and it is what makes "Skip" instant and honest rather
+than fast-forwarding a running process — which means the database knows tonight's result while the
+player is still looking at the walkouts. The tale of the tape read `fighter.summary` straight, so
+it showed a record with tonight's fight already counted, a form row that had already flipped, and a
+knockout in the finishes column before the first bell. `careerSummaryBefore(fighter, boutId)` slices
+the record at the bout instead. Nothing is stored to make that work: the record is a list with the
+bout's own id on it. This is the one screen in the game where *what the database knows* and *what
+has happened* are different things, and it has to show the second.
+
 **A5. (Later) Any bout, expandable.** Doc 12's fourth row. `FightScreen` already renders a
 stored `FightResult`; today the undercard keeps only `{winnerName, method, round}`. Keep the
 full result for bouts the player has a reason to care about — a rival, or whoever wins the

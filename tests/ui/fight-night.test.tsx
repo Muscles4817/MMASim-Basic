@@ -101,6 +101,31 @@ describe('before the bell', () => {
     expect(text).toMatch(/Record/i);
   });
 
+  it('shows the record as it was, not as it will be', async () => {
+    const user = userEvent.setup();
+    await toFightNight(user);
+
+    /*
+     * The night is settled before this screen mounts, so the database already knows how tonight
+     * went while the player is still looking at the walkouts. The tape was reading straight off
+     * `fighter.summary` and therefore counted the fight nobody had watched yet: the record moved
+     * by one, the form row flipped, and a knockout appeared in the finishes column.
+     */
+    const tape = (await screen.findByText(/Tale of the tape/i)).closest('section') as HTMLElement;
+    const shown = /(\d+)-(\d+)-(\d+)/.exec(tape.textContent ?? '');
+    expect(shown).toBeTruthy();
+    const bouts = (m: RegExpExecArray) => Number(m[1]) + Number(m[2]) + Number(m[3]);
+
+    await watchIt(user);
+    await user.click(await screen.findByRole('button', { name: /Back to career/i }));
+
+    // The hub leads with the record, which by now legitimately includes tonight.
+    const record = await screen.findByText(/Professional record/i);
+    const after = /(\d+)-(\d+)-(\d+)/.exec(record.closest('div')?.textContent ?? '');
+    expect(after).toBeTruthy();
+    expect(bouts(after!)).toBe(bouts(shown!) + 1);
+  });
+
   it('names the night and says how full the building is', async () => {
     const user = userEvent.setup();
     await toFightNight(user);

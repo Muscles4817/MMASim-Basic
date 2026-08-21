@@ -519,6 +519,48 @@ That must change (see Part 4). What replaces it:
 - **The news feed rubs it in both directions.** The man who replaced you gets knocked out. The
   man you beat on the way down wins a title.
 
+#### Built: the fall was still a dead end, one layer down
+
+`promotionOffers()` is gone and `offersFor` replaced it, and being cut was **still** a dead end —
+for a different reason, which had been sitting in the replacement since it shipped.
+
+Every motive is a *step* from the fighter's own tier, and the fighter's own tier came from the
+incumbent: `incumbent ? tierRank(incumbent.tier) : -1`. A cut fighter has no incumbent. So their
+level was −1, below the bottom of the sport, and the smallest promotion in the world read as a
+promotion *above* them while everything else read as a two-tier `reach` — which is gated on star
+power ≥ 70. Measured: a released contender got **one** offer, from a developmental show, and
+waiting did not change it, because nothing about it was going to change.
+
+Three things now hold the floor up:
+
+- **A free agent is priced at the level they last fought at**, from their own promotion, their last
+  agreement, or the last bout on their record, in that order. Somebody who has never fought at all
+  is priced at the bottom rung, which is where a professional debut happens.
+- **The player's contract is real from the first screen.** A fighter taken over from the seed
+  carries a `promotionId` and no agreement — the world models that as an implicit term, which is
+  right for the eight hundred people nobody is looking at and switches the whole contract layer off
+  for the one the player picked. Adopting a fighter now writes the deal down.
+- **An unsigned fighter can still be booked.** `getOffers` resolved the matchmaking promotion as
+  `promotionId ?? 'p_apex'`, and there is no `p_apex` in a generated world, so a released player got
+  an empty opponent list on the screen whose empty state advises waiting a few weeks. It falls back
+  to the smallest promotion that runs their division instead.
+
+#### Built: the market is a shortlist, because the sport got bigger
+
+Doc 16 says two or three callers, and that was true of an eight-promotion era. A generated Medium
+world is over a hundred promotions, and a fighter near the top of it clears the `fall` bar at
+almost all of them: measured, **thirty** offers for a fighter on a national show, thirty-four for
+one on a major. Each renders as a card naming a champion, a projected rank and a level, because an
+offer is a future rather than a number — and thirty futures is a scroll rather than a decision.
+
+`shortlistOffers` takes the best offer at each *level* of the sport first and fills the remaining
+slots by money, capped at four with at most two from any one tier, and returns a count of everybody
+else. Stratified rather than truncated, deliberately: the four biggest purses would be the leader
+and three majors, and the fringe promotion offering points on the revenue the leader cannot match
+is the most interesting row on the screen. The hub shows a subset of the same list — never a
+superset, which is the bug that started this — filtered to offers that are a step up or more money
+than the deal in hand.
+
 ---
 
 ## Part 3 — Managers

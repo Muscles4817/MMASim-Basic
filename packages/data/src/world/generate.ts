@@ -22,7 +22,12 @@ import { CURRENT_SCHEMA_VERSION } from '../db/migrations.js';
 import { createGameDb, setWorld, type GameDb } from '../db/gameDb.js';
 import { createMemoryAdapter } from '../db/adapters.js';
 import type { Entity, StorageAdapter } from '../db/types.js';
-import { buildDepthFighters, type DepthTarget } from '../seed/depth.js';
+import {
+  MIN_DIVISION_DEPTH,
+  MIN_WOMENS_DIVISION_DEPTH,
+  buildDepthFighters,
+  type DepthTarget,
+} from '../seed/depth.js';
 import { buildSeedWorld } from '../seed/index.js';
 import {
   DIVISIONS,
@@ -212,6 +217,57 @@ function scaled(spec: TierSpec, factor: number): { count: number; roster: number
   };
 }
 
+const MENS_DIVISIONS = DIVISIONS.filter((d) => d.sex === 'male');
+
+/**
+ * The weight classes a promotion of this size can actually staff.
+ *
+ * The generator used to hand every promotion in a tier the same fixed list — `DIVISIONS.slice(0,
+ * spec.divisions)` — and then divide its roster across it. Against doc 26's pyramid, where rosters
+ * shrink much faster than division counts, that produced promotions whose divisions were unusable:
+ * measured on a Small world, every national show ran nine divisions **four** fighters deep, every
+ * feeder ran seven with two, and every local show ran five with **one**. A player who signed for
+ * one of them found a division containing three other people, and it read exactly as absurd as it
+ * is.
+ *
+ * The roster is the real constraint, so it decides the division count rather than the other way
+ * round: a promotion runs as many weight classes as it can put `MIN_DIVISION_DEPTH` fighters into,
+ * up to what its tier would like to run. That is also what small promotions do in life — a local
+ * show does not run twelve weight classes, it runs three or four and runs them properly.
+ *
+ * Men's divisions come first because `DIVISIONS` is ordered that way and because a promotion that
+ * can staff exactly one division staffs a men's one; a women's division is only ever added once
+ * there is depth for it, which is the same order the real sport added them in.
+ *
+ * A promotion small enough to run only part of the men's card takes its weight classes from a
+ * window starting at its own index, wrapping. Taking the first N instead would mean every one of
+ * the seventy-odd local shows in a Medium world ran flyweight and nothing else — the entire base
+ * of the sport stacked into one weight class, with no bottom rung under any of the others.
+ */
+function divisionsFor(
+  roster: number,
+  wanted: number,
+  index: number,
+): readonly (typeof DIVISIONS)[number][] {
+  /*
+   * One spare per division, rather than exactly the floor.
+   *
+   * A promotion built to sit exactly on `MIN_DIVISION_DEPTH` is below it the first time anybody
+   * retires, and eight years of pre-history retires a lot of people: built to the bare floor, 55%
+   * of the majors' divisions in a Small world came out under six on the day the player arrived.
+   * The buffer costs a weight class and buys a division that survives its own history.
+   */
+  const affordable = Math.max(1, Math.floor(roster / (MIN_DIVISION_DEPTH + 1)));
+  const count = Math.min(wanted, affordable);
+  if (count >= MENS_DIVISIONS.length) return DIVISIONS.slice(0, count);
+
+  const start = index % MENS_DIVISIONS.length;
+  return Array.from(
+    { length: count },
+    (_, i) => MENS_DIVISIONS[(start + i) % MENS_DIVISIONS.length]!,
+  );
+}
+
 export interface GenerateOptions {
   size?: WorldSize;
   /** Same seed, same world, always. */
@@ -301,6 +357,10 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
       const prestige =
         spec.prestige[0] + (count <= 1 ? span : Math.round((span * i) / (count - 1)));
 
+      const budget = Math.round(shape.roster * prestige * 3);
+      const divisions = divisionsFor(shape.roster, spec.divisions, i);
+      const womensDivisions = divisions.filter((d) => d.sex === 'female').length;
+
       promotions.push({
         ...template,
         id: asPromotionId(id),
@@ -309,18 +369,44 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
         tier: spec.tier,
         prestige,
         // Scaled to the operation, so `solvency` and `chargeCosts` see a plausible business.
-        budget: Math.round(shape.roster * prestige * 3),
-        divisions: DIVISIONS.slice(0, spec.divisions).map((d) => d.id),
+        budget,
+        /*
+         * What a purse floor looks like at this level of the sport.
+         *
+         * Every field not named here comes from `template`, which is the *seed's leader* — and
+         * `minimumPurse` is read by `offersFor` as the floor under every purse it quotes. So
+         * every promotion in a generated world, down to the smallest local show, offered the
+         * leader's minimum: measured, a shortlist of four offers spanning three tiers came back
+         * at £33k, £33k, £30k and £30k. Doc 16's whole market rests on the money being
+         * stratified — "the leader pays 5–20× what the fringe can" — and it was flat.
+         *
+         * The exponent is fitted to the hand-authored 2026 era, whose eight promotions run from
+         * a budget of 62,000 at a floor of 26 down to 1,400 at 2.
+         */
+        minimumPurse: Math.max(1, Math.round(0.09 * Math.sqrt(budget))),
+        /*
+         * Points on the gate are something only a promotion with its own platform can grant, and
+         * `template` said yes for all of them — which quietly deleted the fringe's one unmatchable
+         * term, because a term everybody can offer cannot be the thing the leader cannot match.
+         */
+        revenueShareCapable: spec.tier === 'global' || spec.tier === 'major',
+        divisions: divisions.map((d) => d.id),
         champions: {},
       });
 
-      const mens = Math.max(1, Math.round(shape.roster / Math.max(1, spec.divisions)));
+      // Whatever is left over after the floors, spread across the weight classes they do run.
+      const spare = Math.max(0, shape.roster - divisions.length * MIN_DIVISION_DEPTH);
+      const mens = MIN_DIVISION_DEPTH + Math.round(spare / Math.max(1, divisions.length));
       targets.push({
         promotionId: id,
         mens,
-        womens: spec.divisions >= 10 ? Math.round(mens * 0.55) : 0,
+        womens:
+          womensDivisions === 0
+            ? 0
+            : Math.max(MIN_WOMENS_DIVISION_DEPTH, Math.round(mens * 0.55)),
         tier: spec.quality,
         spread: 11,
+        divisions: divisions.map((d) => d.id),
       });
     }
   }
