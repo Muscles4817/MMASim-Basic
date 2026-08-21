@@ -70,10 +70,9 @@ The screen is doing everything it can with what it has — the preview reads rea
 and asks `attentionFor` what problems are already on the books, which does differentiate them —
 but the table above it is eleven rows of the same promotion at slightly different sizes.
 
-Immediately, in the new-game promotion picker: `national 11 · USA · £3.1m to spend` repeated down
-the screen. Doc 32 § 11.5 ships the honest version of that screen — a table over the axes that
-genuinely vary, plus a preview built from `financialSnapshot`, `attentionFor` and the roster —
-and deliberately does not render `notes` or a matchmaking posture, because doing so would imply
+Doc 32 § 11.5 ships the honest version of that screen — a table over the axes that genuinely
+vary, plus a preview built from `financialSnapshot`, `attentionFor` and the roster — and
+deliberately does not render `notes` or a matchmaking posture, because doing so would imply
 differences that are not there.
 
 It also shows, less visibly, everywhere a promotion is supposed to feel like a *place*: offers
