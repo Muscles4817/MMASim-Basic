@@ -131,7 +131,13 @@ describe('free agency', () => {
     goTo('#/offers');
     renderApp();
 
-    expect(await screen.findByText(/You are under contract/i)).toBeTruthy();
+    /*
+      `findAllBy`, because this file mounts the app twice — `createFighter` renders it and so does
+      the line above — and both roots follow the hash onto this screen. A `findByText` here
+      resolved on whichever root got there first and threw the moment the second one caught up,
+      which made the assertion a race on render timing rather than a statement about contracts.
+    */
+    expect((await screen.findAllByText(/You are under contract/i)).length).toBeGreaterThan(0);
   });
 
   it('explains why nobody is calling rather than showing an empty list', async () => {
@@ -161,6 +167,30 @@ async function hireFirstManager(user: ReturnType<typeof userEvent.setup>) {
   await user.click(buttons[0]!);
   await user.click(await screen.findByRole('button', { name: /^Yes — \d+% of every purse/i }));
 }
+
+describe('the hub and the offers screen agree', () => {
+  /*
+   * The defect: the hub ran `promotionOffers` and the offers screen ran doc 16's free agency, so
+   * the home page would head a section "Offers", list three promotions under it, and the screen
+   * behind its own button said "Nobody is calling". Both now read `offersOnTheTable`, and the
+   * hub's list is a filtered subset of the screen's — never the other way round.
+   */
+  it('never advertises interest the offers screen does not have', async () => {
+    const user = userEvent.setup();
+    await createFighter(user);
+
+    goTo('#/hub');
+    const hubSaysCalling = screen.queryAllByText(/promotions? (are|is) calling/i).length > 0;
+
+    goTo('#/offers');
+    renderApp();
+    // The card is titled either way, so waiting on it means the screen has actually rendered.
+    await screen.findAllByText(/Nobody is calling|on the table|worth reading/i);
+    const nobodyIsCalling = screen.queryAllByText(/Nobody is calling/i).length > 0;
+
+    expect(hubSaysCalling && nobodyIsCalling).toBe(false);
+  });
+});
 
 describe('hiring a manager', () => {
   it('changes who is negotiating, and says what they cost', async () => {

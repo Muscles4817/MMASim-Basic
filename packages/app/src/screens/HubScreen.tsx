@@ -23,6 +23,7 @@ import {
   recordString,
   type Fighter,
   type MatchupAppraisal,
+  type Offer,
   type Gym,
   type Rivalry,
   type CardPosition,
@@ -58,6 +59,7 @@ import {
   boutMerit,
   canSignWith,
   contractStanding,
+  offersOnTheTable,
   repaperOnTheTable,
   requestRelease,
 } from '../game/contracts';
@@ -96,6 +98,49 @@ export function HubScreen() {
     () => (playerFighter && !booking ? getOffers(db, playerFighter) : []),
     [db, playerFighter, booking, world.day],
   );
+
+  /*
+   * Who wants to sign you, read from the one market model there is.
+   *
+   * This card used to call `promotionOffers` — a second, older idea of interest that filtered on
+   * `streak >= 2` and on being exactly one tier up, while the offers screen ran doc 16's free
+   * agency. The two agreed almost never: the hub would list three promotions under a heading that
+   * said "Offers" and the screen behind the button said "Nobody is calling", which is the game
+   * lying to the player about the only thing on the page they can act on. There is now one
+   * function, and both screens read it.
+   */
+  const market = useMemo(
+    () => (playerFighter ? offersOnTheTable(db, playerFighter) : { offers: [], others: 0 }),
+    [db, playerFighter, world.day],
+  );
+
+  /*
+   * Of that shortlist, what is worth a heading on the home screen.
+   *
+   * A fighter under contract is *always* wanted by somebody at their own level — free agency
+   * models that honestly, and a lateral move to an identical promotion for the same money is not
+   * news. It is news when somebody is offering a step up or more than you are on, which is the
+   * whole content of "you are worth more than this deal". A free agent has no deal to compare
+   * against and needs the lot.
+   *
+   * Never a superset of the offers screen, only ever a subset: the hub saying more than the
+   * screen behind it is the bug this card was rebuilt to end.
+   */
+  const interest = useMemo(() => {
+    const held = playerFighter ? contractStanding(db, playerFighter) : undefined;
+    // A deal that has lapsed is not a deal to compare against: once they are free to sign, every
+    // caller is news again.
+    if (!held?.agreement || held.freeAgent || !held.promotion) return market.offers;
+    const current = held.agreement.showPurse + held.agreement.winBonus;
+    const here = held.promotion;
+    return market.offers.filter(
+      (offer) =>
+        offer.motive === 'ascend' ||
+        offer.motive === 'reach' ||
+        offer.terms.showPurse + offer.terms.winBonus > current * 1.15 ||
+        offer.promotion.prestige > here.prestige + 8,
+    );
+  }, [db, playerFighter, market]);
 
   const ladder = useMemo(
     () => (playerFighter ? getLadderStatus(db, playerFighter) : undefined),
@@ -375,14 +420,16 @@ export function HubScreen() {
       {ladder && (
         <LadderCard
           ladder={ladder}
+          offers={interest}
+          otherCallers={market.offers.length - interest.length + market.others}
           fighterId={fighter.id as string}
           divisionName={getDivision(fighter.divisionId).name}
           lock={
             // Interest arrives whatever your contract says — seeing what you are worth is most
             // of the drama of being stuck on a bad deal. Acting on it is what the deal governs.
-            ladder.offers.length > 0 && ladder.offers[0]
+            interest.length > 0 && interest[0]
               ? (() => {
-                  const eligibility = canSignWith(db, fighter, ladder.offers[0]!.promotion);
+                  const eligibility = canSignWith(db, fighter, interest[0]!.promotion);
                   return eligibility.allowed
                     ? undefined
                     : { reason: eligibility.reason, releasable: eligibility.releasable };
@@ -1045,6 +1092,8 @@ function OfferRow({
  */
 function LadderCard({
   ladder,
+  offers,
+  otherCallers,
   fighterId,
   divisionName,
   lock,
@@ -1052,6 +1101,15 @@ function LadderCard({
   onAskRelease,
 }: {
   ladder: LadderStatus;
+  /**
+   * The shortlist from `offersOnTheTable` — the same list the offers screen renders.
+   *
+   * Passed in rather than read here so that there is exactly one call per render of the hub and
+   * exactly one market model in the game. See the comment where it is computed.
+   */
+  offers: readonly Offer[];
+  /** How many further promotions would sign them. A number here, a sentence over there. */
+  otherCallers: number;
   /** So the player's own row can be marked in the table rather than only counted. */
   fighterId: string;
   divisionName: string;
@@ -1068,7 +1126,7 @@ function LadderCard({
   onGoToOffers(): void;
   onAskRelease(): void;
 }) {
-  const { promotion, position, isChampion, titleShot, offers, progress, ranked, champion } = ladder;
+  const { promotion, position, isChampion, titleShot, progress, ranked, champion } = ladder;
 
   const standing = isChampion
     ? 'Champion'
@@ -1172,33 +1230,50 @@ function LadderCard({
 
       {offers.length > 0 && (
         <div style={{ marginTop: 'var(--space-4)' }}>
-          <h3 className="section-title">Offers</h3>
+          <h3 className="section-title">
+            {offers.length === 1 ? 'One promotion is calling' : `${offers.length} promotions are calling`}
+          </h3>
+          {/*
+            A summary, not the offers.
+
+            The whole of each offer lives one tap away and cannot usefully be repeated here: money,
+            route and level are three sentences of world state apiece, and the hub's rule is one
+            decision at a time. What belongs on the home screen is that somebody called, who the
+            best of them is, and what — if anything — is stopping you.
+          */}
           <div className="stack" style={{ gap: 'var(--space-2)' }}>
-            {offers.map((offer) => (
+            {offers.slice(0, 3).map((offer) => (
               <div
-                key={offer.promotion.id}
+                key={offer.promotion.id as string}
+                className="row"
                 style={{
-                  padding: 'var(--space-3)',
+                  justifyContent: 'space-between',
+                  gap: 'var(--space-2)',
+                  padding: 'var(--space-2) var(--space-3)',
                   borderRadius: 'var(--radius)',
                   border: '1px solid var(--accent)',
                   background: 'var(--accent-soft)',
                 }}
               >
-                <p style={{ fontWeight: 700 }}>{offer.promotion.name}</p>
-                <p className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
-                  {offer.pitch}
-                </p>
-                <div className="row" style={{ marginTop: 'var(--space-2)', flexWrap: 'wrap' }}>
-                  {/*
-                    Described as a likely bonus rather than promised as a figure. The old label
-                    said "Signing bonus £Xk" next to a button that never paid it, and the real
-                    number is negotiated on the offers screen.
-                  */}
-                  <Chip tone="positive">Around £{offer.bonus}k to sign</Chip>
-                </div>
+                <span style={{ fontWeight: 700 }}>{offer.promotion.name}</span>
+                <span className="row" style={{ gap: 'var(--space-1)' }}>
+                  {offer.unmatchable.length > 0 && (
+                    <Chip tone="positive" title="Your current promotion cannot replicate this">
+                      Unmatchable
+                    </Chip>
+                  )}
+                  <Chip tone="neutral">
+                    £{Math.round(offer.terms.showPurse + offer.terms.winBonus)}k a fight
+                  </Chip>
+                </span>
               </div>
             ))}
           </div>
+          {(offers.length > 3 || otherCallers > 0) && (
+            <p className="faint" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
+              And {offers.length - Math.min(3, offers.length) + otherCallers} more.
+            </p>
+          )}
 
           {lock ? (
             <div style={{ marginTop: 'var(--space-3)' }}>
@@ -1212,6 +1287,11 @@ function LadderCard({
                   </div>
                 )}
               </Alert>
+              <div className="row" style={{ marginTop: 'var(--space-3)' }}>
+                <Button size="sm" onClick={onGoToOffers}>
+                  See the terms
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="row" style={{ marginTop: 'var(--space-3)' }}>

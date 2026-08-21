@@ -23,7 +23,6 @@ import {
   type TrainingForecast,
   displayName,
   fightNews,
-  asPromotionId,
   createRng,
   defaultGamePlan,
   planFor,
@@ -62,6 +61,7 @@ import {
   type Judge,
   type MatchupAppraisal,
   type Promotion,
+  type PromotionId,
   type Referee,
 } from '@mmasim/engine';
 import { getWorld, setWorld, type Entity, type GameDb } from '@mmasim/data';
@@ -238,6 +238,30 @@ export const getLastResult = (): FightResult | undefined =>
 export const getLastBroadcast = (): StoredResult | undefined => readJson<StoredResult>(RESULT_KEY);
 
 /**
+ * Whose matchmaking is deciding this fighter's options.
+ *
+ * Their own promotion, and for somebody unattached the smallest promotion in the world that runs
+ * their division — which is who would actually put an unsigned fighter on a card.
+ *
+ * This used to be `findById(fighter.promotionId ?? 'p_apex')`. There is no `p_apex` in a generated
+ * world; its promotions are `p_apex_0` and the rest. So a fighter who was released, or who never
+ * signed, got `undefined` here and `getOffers` returned an empty array — **no opponents, ever**,
+ * on the screen whose empty state says to wait a few weeks and try again. Waiting cannot fix a
+ * missing id, so the career simply stopped, which is exactly what being cut felt like from the
+ * outside.
+ */
+function promotionFor(db: GameDb, fighter: Fighter): Promotion | undefined {
+  const own = fighter.promotionId
+    ? (db.promotions.findById(fighter.promotionId as string) as Promotion | undefined)
+    : undefined;
+  if (own) return own;
+
+  return (db.promotions.findAll() as unknown as Promotion[])
+    .filter((p) => p.divisions.includes(fighter.divisionId))
+    .sort((a, b) => a.prestige - b.prestige)[0];
+}
+
+/**
  * Opponent options for the player's next fight.
  *
  * Falls back progressively rather than returning nothing. A thin division — women's
@@ -247,7 +271,7 @@ export const getLastBroadcast = (): StoredResult | undefined => readJson<StoredR
  */
 export function getOffers(db: GameDb, fighter: Fighter): MatchupAppraisal[] {
   const world = getWorld(db);
-  const promotion = db.promotions.findById(fighter.promotionId ?? 'p_apex');
+  const promotion = promotionFor(db, fighter);
   if (!promotion) return [];
 
   /*
@@ -340,7 +364,9 @@ export function bookFight(
     redId: fighter.id,
     blueId: opponent.id,
     divisionId: fighter.divisionId,
-    promotionId: (fighter.promotionId ?? asPromotionId('p_apex')) as string,
+    // The promotion the bout is staged under. For an unsigned fighter that is whoever would put
+    // them on a card, not a hard-coded id from the hand-authored seed — see `promotionFor`.
+    promotionId: (promotionFor(db, fighter)?.id ?? fighter.promotionId) as string,
     day: world.day + weeks * 7,
     /*
      * Five rounds for a main event or a title fight. That is not cosmetic: it is where a gas
@@ -758,9 +784,7 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
   const weighInNotes: string[] = [];
 
   if (missedWeight) {
-    const promotion = db.promotions.findById(
-      (red.promotionId ?? asPromotionId('p_apex')) as string,
-    ) as Promotion | undefined;
+    const promotion = promotionFor(db, red);
     const purse = promotion ? currentPurse(db, red) : undefined;
     const forfeit = purse ? weightMissForfeit(purse.show) : 0;
 
@@ -791,11 +815,14 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
     blue,
     day: booking.bout.day,
     divisionId: booking.bout.divisionId,
-    promotionId: red.promotionId ?? asPromotionId('p_apex'),
+    // Where the bout was staged, agreed at booking, so the record entry and the card cannot
+    // disagree about it — and so an unsigned fighter's win is filed under the show that put it on
+    // rather than under a promotion id from a world this save is not in.
+    promotionId: (booking.bout.promotionId ?? red.promotionId) as PromotionId,
     // Where it happened, so reputation is worth what the room is worth.
     promotionPrestige: (
-      red.promotionId
-        ? (db.promotions.findById(red.promotionId) as Promotion | undefined)
+      booking.bout.promotionId
+        ? (db.promotions.findById(booking.bout.promotionId as string) as Promotion | undefined)
         : undefined
     )?.prestige,
     isTitleFight: booking.bout.isTitleFight,
@@ -925,9 +952,7 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
 
   // The night the fight sat on. Built after the bout because the bonus pool is decided by
   // what happened across the whole card, and the player's fight is part of that comparison.
-  const promotionForNight = db.promotions.findById(
-    (red.promotionId ?? asPromotionId('p_apex')) as string,
-  ) as Promotion | undefined;
+  const promotionForNight = promotionFor(db, red);
 
   const night = promotionForNight
     ? runSupportingCard(db, {

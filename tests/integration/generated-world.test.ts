@@ -64,6 +64,60 @@ describe('it builds a sport', () => {
     expect(bottom.length).toBeGreaterThan(promotions.filter((p) => p.prestige > 60).length);
   });
 
+  /*
+   * Every promotion can put on a card in every division it advertises.
+   *
+   * The generator used to hand each tier a fixed division count and divide the roster across it,
+   * so the divisions got thinner as the promotions got smaller rather than the promotions running
+   * fewer weight classes. Measured on this world before the change: every national show ran nine
+   * divisions **four** fighters deep, every feeder seven with two, and every local show five with
+   * **one** — and each of them advertised a women's division it had generated nobody for. A player
+   * who signed for one found three other people at their weight, which is what
+   * `offerOpponents`'s cross-promotional fallback was quietly papering over.
+   */
+  describe('runs the divisions it can actually staff', () => {
+    const depthOf = (p: Promotion, divisionId: string) =>
+      active.filter((f) => f.promotionId === p.id && f.divisionId === divisionId).length;
+
+    it('never advertises a division it has nobody in', () => {
+      const empty = promotions.flatMap((p) =>
+        p.divisions.filter((d) => depthOf(p, d as string) === 0).map((d) => `${p.shortName} ${d}`),
+      );
+      expect(empty).toEqual([]);
+    });
+
+    it('never signs anybody to a promotion that does not stage their division', () => {
+      // A signing nobody can ever book. The intake weighted by headcount alone and never asked
+      // whether the promotion ran the weight class at all.
+      const stranded = active.filter((f) => {
+        const p = promotions.find((x) => x.id === f.promotionId);
+        return p !== undefined && !p.divisions.includes(f.divisionId);
+      });
+      expect(stranded.map((f) => f.lastName)).toEqual([]);
+    });
+
+    it('keeps most divisions deep enough to make a card', () => {
+      /*
+       * Not all of them: eight years of pre-history retires people, and a division that dips to
+       * five for a while is a living sport rather than a broken generator. A *third* of the sport
+       * sitting below the floor is the generator.
+       */
+      const depths = promotions.flatMap((p) => p.divisions.map((d) => depthOf(p, d as string)));
+      const thin = depths.filter((n) => n < 4);
+      expect(thin.length / depths.length).toBeLessThan(0.2);
+      expect(Math.min(...depths)).toBeGreaterThan(1);
+    });
+
+    it('puts the base of the sport across the weight classes, not all in one', () => {
+      // A small promotion runs a few divisions rather than all of them, and taking "the first
+      // few" every time stacked every local show in the world into flyweight.
+      const base = promotions.filter((p) => p.prestige < 30);
+      const staged = new Set(base.flatMap((p) => p.divisions.map((d) => d as string)));
+      expect(base.length).toBeGreaterThan(4);
+      expect(staged.size).toBeGreaterThan(4);
+    });
+  });
+
   it('names nobody real, which is the constraint the whole design starts from', () => {
     const banned =
       /ufc|ultimate fighting|bellator|\bone championship\b|pfl|rizin|ksw|cage warriors/i;

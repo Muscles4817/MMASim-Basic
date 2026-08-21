@@ -12,6 +12,7 @@ import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Flag, ListItem, Segmented } from '../ui';
 import { Alert, OverallRating } from '../ui/signals';
 import { activeDivisionPeers, clearTransientCareerState } from '../game/career';
+import { formaliseExistingDeal } from '../game/contracts';
 import { money } from '../ui/format';
 
 type Filter = 'contenders' | 'prospects' | 'all';
@@ -89,6 +90,10 @@ export function StartScreen() {
     // Bookings and the last result are keyed to the previous fighter. Left behind, the hub
     // offers to send the new fighter into the old one’s booked bout.
     clearTransientCareerState();
+    // Whatever roster they are on becomes a contract you can read, count down and ask out of.
+    // See `formaliseExistingDeal`: until now this handed the player a fighter the contract layer
+    // considered a free agent while they sat on somebody's roster.
+    formaliseExistingDeal(db, fighter);
     updateWorld({ playerRole: 'fighter', playerFighterId: fighter.id as string });
     navigate({ name: 'hub' });
   };

@@ -380,6 +380,73 @@ finding about the cost model rather than about the schedule.
 
 ---
 
+## 4.7 Built: the generated pyramid could not fill its own divisions
+
+§4.6 fixed the shape of the *rosters*. The shape of the **divisions inside them** was still set the
+other way round: `generatePyramid` gave every promotion in a tier a fixed division count and divided
+its roster across whatever that came to. Rosters shrink faster than counts (`scaled()`, and that is
+correct), so the divisions got thinner instead of the promotions running fewer weight classes.
+
+Measured on a generated **Small** world, before pre-history:
+
+| Tier     | Divisions run | Fighters per division |
+| -------- | ------------: | --------------------: |
+| Apex     |            12 |                 6–11  |
+| Major    |            11 |                  3–6  |
+| National |             9 |               **4** (and 0 in the women's division it advertised) |
+| Feeder   |             7 |                  **2** |
+| Local    |             5 |                  **1** |
+
+Three separate defects behind it, each visible in play:
+
+1. **A division count fixed by tier.** A promotion that cannot put six fighters — `MIN_DIVISION_DEPTH`,
+   derived in `seed/depth.ts` from what it takes to fill a card — into a weight class should run
+   fewer weight classes, which is also what small promotions do in life. It now runs as many as it
+   can staff with one spare each, and no more.
+2. **Divisions advertised and never populated.** `divisions: 9` is the eight men's divisions plus
+   women's strawweight, and the women's target for those promotions was `0`. Every national show in
+   the world listed a division containing nobody.
+3. **The base of the sport stacked into one weight class.** A small promotion took "the first N"
+   divisions, and `DIVISIONS` starts at flyweight — so all seventy-five local shows in a Medium
+   world ran flyweight through welterweight and **no promotion below prestige 30 ran a heavyweight
+   at all**. The window now starts at the promotion's own index and wraps.
+
+Two more, in the world loop, which is what let it erode again over eight years of pre-history:
+
+- **`buildDepthFighters` ignored which divisions a promotion runs**, filling all twelve for every
+  target. With the floors raised that turned a Small world of 850 into 2,504, most of them signed to
+  a promotion that does not stage their division and therefore unbookable by anyone, ever.
+- **The intake and free agency read headcount, never divisional need.** A promotion at its roster
+  target can be two deep at 185, and both `pickStartingPromotion` and `resolveFreeAgency` chose
+  destinations on totals alone — the first of them without even checking that the promotion ran the
+  division, which left seventeen fighters stranded per Small world. Restricting the intake to
+  promotions that stage the division needed the roster-room term floored the way free agency's
+  already was: every women's division in the 2026 world is run by exactly three promotions, and a
+  hard zero for "full" handed all of that division's debutants to whichever one had room. The
+  long-sim caught it — winless fighters on the leader's roster went from half the uniform rate to
+  exactly it.
+
+Medium world, per-division depth on the day the player arrives (after pre-history):
+
+|               | before | after |
+| ------------- | -----: | ----: |
+| Regional under 6 | 56% (min 0) | 28% (min 2) |
+| Developmental under 6 | 87% (min 0) | 29% (min 2) |
+| Stranded signings | 21 | 0 |
+| Men's divisions staged by the base tier | 5 of 8 | 8 of 8 |
+
+One thing found on the way and fixed with it: **every generated promotion was a copy of the seed's
+leader** for every field the pyramid did not name, including `minimumPurse` and
+`revenueShareCapable`. So the smallest local show in the world quoted the leader's purse floor and
+could grant points on the revenue — which flattened free agency's money (a four-offer shortlist
+spanning three tiers came back at £33k, £33k, £30k, £30k) and deleted the fringe's one unmatchable
+term. Both are derived from the promotion's own budget and tier now, and the same shortlist reads
+£24k, £14k, £8k, £4k.
+
+`tests/integration/generated-world.test.ts` holds all of it.
+
+---
+
 ## 5. Numbers to pick
 
 | Constant                   | First guess  | Calibrated against                                         |

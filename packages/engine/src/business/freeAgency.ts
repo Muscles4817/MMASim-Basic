@@ -28,7 +28,7 @@ import type { Rng } from '../core/rng.js';
 import type { Fighter } from '../domain/fighter.js';
 import type { Promotion } from '../domain/organisations.js';
 import { reSignDiscount } from '../domain/personality.js';
-import { tierRank } from './ladder.js';
+import { TIER_ORDER, tierRank } from './ladder.js';
 import { marketValue } from './money.js';
 import { MAX_FIGHTS_OWED, TERM_PRICING, type ChampionshipExtension, type OfferTerms } from './contracts.js';
 import { connectionTo, negotiationMultiplier, type Manager } from './managers.js';
@@ -123,6 +123,22 @@ export interface OfferInput {
   promotions: readonly Promotion[];
   /** Who they are with now, if anybody. Undefined for a free agent or somebody just cut. */
   incumbent?: Promotion;
+  /**
+   * The last promotion they fought for, when nobody has them under contract now.
+   *
+   * **A free agent is not a debutant, and the difference was the whole of free agency.** Every
+   * motive below is a *step* from the fighter's own level, and with no incumbent that level was
+   * `-1` — below the bottom of the sport. So a fighter released by the leader came out with the
+   * bottom rung reading as a promotion *above* them and everything else as a two-tier `reach`,
+   * which is gated on star power: measured, a released contender got exactly one offer, from the
+   * smallest promotion in the world, and it never changed however long they waited. Being cut
+   * was a dead end, which is the very thing the filters this function replaced were removed for.
+   *
+   * Where they last fought is what the sport actually judges them by while they are unattached,
+   * so that is the baseline. Somebody who has never fought at all keeps the bottom of the sport
+   * as theirs, which is where a professional debut happens.
+   */
+  lastPromotion?: Promotion;
   /** Active fighters per division per promotion, for divisional need. */
   depthOf: (promotionId: PromotionId, fighter: Fighter) => number;
   manager?: Manager;
@@ -148,7 +164,10 @@ export interface OfferInput {
  */
 export function offersFor(input: OfferInput): Offer[] {
   const { fighter, promotions, incumbent, depthOf, manager, rng } = input;
-  const currentTier = incumbent ? tierRank(incumbent.tier) : -1;
+  // See `OfferInput.lastPromotion`. The floor is the bottom rung rather than below it, because
+  // "one tier below the bottom of the sport" is not a place anybody has ever fought.
+  const home = incumbent ?? input.lastPromotion;
+  const currentTier = home ? tierRank(home.tier) : 0;
   const streak = fighter.summary.streak;
 
   const offers: Offer[] = [];
@@ -245,9 +264,83 @@ export function offersFor(input: OfferInput): Offer[] {
 
   // Best money first. A monopsony produces few offers, which is what makes naming each
   // future in specifics affordable in the first place.
-  return offers.sort(
-    (a, b) => b.terms.showPurse + b.terms.winBonus - (a.terms.showPurse + a.terms.winBonus),
-  );
+  return offers.sort(byMoney);
+}
+
+const byMoney = (a: Offer, b: Offer): number =>
+  b.terms.showPurse + b.terms.winBonus - (a.terms.showPurse + a.terms.winBonus);
+
+/**
+ * How many offers a fighter is actually shown.
+ *
+ * Doc 16's market is two or three callers. That was true of the hand-authored eras, where the
+ * whole sport was eight promotions, and it stopped being true the moment worlds were generated:
+ * a Medium pyramid is over a hundred promotions, and a fighter at the top of it clears the `fall`
+ * bar of 0.05 at nearly every one of them. Measured on a generated Medium world, a fighter on a
+ * national show was offered **thirty** deals and one on a major thirty-four — each of which the
+ * screen renders as a card naming a champion, a projected rank and a level, because "an offer is
+ * a future, not a number" was written for a market that produced three of them.
+ *
+ * Thirty futures is not thirty decisions. It is one decision buried in a scroll.
+ */
+export const MAX_OFFERS_SHOWN = 4;
+
+/** At most this many from any one tier, so the shortlist is a ladder rather than a price list. */
+const MAX_PER_TIER = 2;
+
+export interface OfferShortlist {
+  /** What to put in front of the player, best money first. */
+  offers: readonly Offer[];
+  /** How many further promotions would sign them. A sentence, not a list. */
+  others: number;
+}
+
+/**
+ * The offers worth putting on a screen, and a count of the rest.
+ *
+ * Stratified rather than truncated, which is the difference between a shortlist and a top-N: the
+ * best offer at each level of the sport comes first, and only then are the remaining slots filled
+ * by money. Taking the four biggest purses instead would hand back four versions of the same
+ * future — and delete the fringe promotion offering revenue points the leader cannot match, which
+ * doc 16 § "the market is a monopsony" makes the single most interesting row on the screen.
+ *
+ * The count that comes back with it is not decoration. "Nine others would sign you" is the fact a
+ * fighter actually wants at the bottom of a free-agency screen, and it is a sentence rather than
+ * nine more cards.
+ */
+export function shortlistOffers(
+  all: readonly Offer[],
+  options: { max?: number; perTier?: number } = {},
+): OfferShortlist {
+  const max = options.max ?? MAX_OFFERS_SHOWN;
+  const perTier = options.perTier ?? MAX_PER_TIER;
+  if (all.length <= max) return { offers: [...all].sort(byMoney), others: 0 };
+
+  const ranked = [...all].sort(byMoney);
+  const taken: Offer[] = [];
+  const perTierCount = new Map<string, number>();
+
+  const take = (offer: Offer): void => {
+    taken.push(offer);
+    perTierCount.set(offer.promotion.tier, (perTierCount.get(offer.promotion.tier) ?? 0) + 1);
+  };
+
+  // One from each level of the sport, richest level first.
+  for (const tier of [...TIER_ORDER].reverse()) {
+    if (taken.length >= max) break;
+    const best = ranked.find((o) => o.promotion.tier === tier);
+    if (best) take(best);
+  }
+
+  // Then the best of the rest, subject to not stacking one tier.
+  for (const offer of ranked) {
+    if (taken.length >= max) break;
+    if (taken.includes(offer)) continue;
+    if ((perTierCount.get(offer.promotion.tier) ?? 0) >= perTier) continue;
+    take(offer);
+  }
+
+  return { offers: taken.sort(byMoney), others: all.length - taken.length };
 }
 
 function describeLevel(motive: OfferMotive, promotion: Promotion): string {

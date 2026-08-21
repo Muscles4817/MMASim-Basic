@@ -21,6 +21,7 @@ import {
   offersFor,
   recordAdvice,
   releaseDecision,
+  shortlistOffers,
   signingEligibility,
   type SigningEligibility,
   acceptRepaper,
@@ -33,7 +34,7 @@ import {
   type Fighter,
   type Gym,
   type Manager,
-  type Offer,
+  type OfferShortlist,
   type OfferTerms,
   type Promotion,
   type PromotionalAgreement,
@@ -273,17 +274,57 @@ export function toll(db: GameDb, fighter: Fighter, days: number): void {
 
 // --- The market ---------------------------------------------------------------------------------
 
-/** What is actually on the table, with each offer's future named from real world state. */
-export function offersOnTheTable(db: GameDb, fighter: Fighter): Offer[] {
+/**
+ * Where the sport last saw this fighter, for a fighter nobody currently has.
+ *
+ * Their own promotion first — a seeded fighter carries a `promotionId` with no paperwork behind
+ * it and is still, plainly, on that roster — and otherwise the promotion they last fought for.
+ * See `OfferInput.lastPromotion`: without it a free agent is priced as somebody who has never
+ * fought, and free agency stops working the moment a career needs it most.
+ */
+function lastPromotionOf(db: GameDb, fighter: Fighter): Promotion | undefined {
+  const find = (promotionId: string | undefined): Promotion | undefined =>
+    promotionId ? (db.promotions.findById(promotionId) as Promotion | undefined) : undefined;
+
+  const here = find(fighter.promotionId as string | undefined);
+  if (here) return here;
+
+  // The deals they have signed, latest first. `requestRelease` clears both `promotionId` and
+  // `agreementId`, so for somebody cut before their first in-sim bout this is the only surviving
+  // record of where they had got to — and being cut is precisely when the answer matters.
+  const deals = (db.agreements.findAll() as StoredAgreement[])
+    .filter((a) => a.fighterId === fighter.id)
+    .sort((a, b) => b.signedDay - a.signedDay);
+  for (const deal of deals) {
+    const promotion = find(deal.promotionId as string);
+    if (promotion) return promotion;
+  }
+
+  for (let i = fighter.record.length - 1; i >= 0; i--) {
+    const promotion = find(fighter.record[i]!.promotionId as string | undefined);
+    if (promotion) return promotion;
+  }
+  return undefined;
+}
+
+/**
+ * What is actually on the table, with each offer's future named from real world state.
+ *
+ * Returns the shortlist rather than the market: see `shortlistOffers`. Every screen that talks
+ * about offers reads this one function, which is the point — the hub and the offers screen used
+ * to run two different market models and disagree about whether anybody had called at all.
+ */
+export function offersOnTheTable(db: GameDb, fighter: Fighter): OfferShortlist {
   const world = getWorld(db);
   const standing = contractStanding(db, fighter);
   const all = db.fighters.findAll() as Fighter[];
   const promotions = db.promotions.findAll() as unknown as Promotion[];
 
-  return offersFor({
+  const offers = offersFor({
     fighter,
     promotions,
     incumbent: standing.promotion,
+    lastPromotion: lastPromotionOf(db, fighter),
     manager: standing.manager,
     day: world.day,
     rng: createRng(`${world.seed}:offers:${fighter.id}:${world.day}`),
@@ -322,6 +363,8 @@ export function offersOnTheTable(db: GameDb, fighter: Fighter): Offer[] {
       return roster.length === 0 ? undefined : above + 1;
     },
   });
+
+  return shortlistOffers(offers);
 }
 
 // --- Managers -----------------------------------------------------------------------------------
@@ -463,6 +506,59 @@ export function settleManagerAdvice(
  * one — but a career needs a first rung, and the bottom of the sport is busy rather than
  * empty. Terms are the promotion's floor, take it or leave it, which is authentic.
  */
+/**
+ * Write down the deal a fighter the player has taken over was already on.
+ *
+ * **No seeded or generated fighter has an agreement.** They carry a `promotionId` and nothing
+ * behind it, and the world treats that as an implicit term expiring on a day derived from their
+ * own id — see `resolveFreeAgency`, which is careful about it precisely because materialising
+ * hundreds of agreements would cost more save than doc 20 § 7 has to spend.
+ *
+ * That bargain works for the eight hundred fighters nobody is looking at. It does not survive the
+ * player picking one of them up, because every contract screen reads the *agreement*: taking over
+ * a fighter on the leader's roster produced a hub that announced "You are a free agent", a fights-
+ * remaining counter with nothing in it, a release button that said you were not under contract,
+ * and a free-agency market priced as though they had never fought anywhere. One fighter's
+ * paperwork is a rounding error in the save; not having it is the whole contract layer switched
+ * off for the only fighter it is written for.
+ *
+ * The term is what they are worth where they already are, part-served — a career in progress
+ * rather than a fresh signing — and there is deliberately no signing bonus, because nobody has
+ * just signed anything.
+ */
+export function formaliseExistingDeal(db: GameDb, fighter: Fighter): Fighter {
+  if (fighter.agreementId || !fighter.promotionId) return fighter;
+  const promotion = db.promotions.findById(fighter.promotionId as string) as Promotion | undefined;
+  if (!promotion) return fighter;
+
+  const base = defaultTerms(fighter, promotion);
+  const world = getWorld(db);
+  const agreement = createAgreement({
+    fighter,
+    promotion,
+    terms: {
+      showPurse: base.showPurse,
+      winBonus: base.winBonus,
+      signingBonus: 0,
+      revenuePoints: 0,
+      fightsOwed: 3,
+      championshipExtension: promotion.tier === 'global' || promotion.tier === 'major'
+        ? 'standard'
+        : 'none',
+      matchingRights: false,
+      exclusive: promotion.tier !== 'regional' && promotion.tier !== 'developmental',
+      outsideBouts: promotion.tier === 'regional' || promotion.tier === 'developmental' ? 2 : 0,
+    },
+    day: world.day,
+  });
+
+  db.agreements.upsert(agreement as StoredAgreement);
+  const updated: Fighter = { ...fighter, agreementId: agreement.id, resentment: 0 };
+  db.fighters.upsert(updated as Fighter & { id: string });
+  db.save();
+  return updated;
+}
+
 export function signFirstDeal(db: GameDb, fighter: Fighter): Fighter | undefined {
   const promotions = (db.promotions.findAll() as unknown as Promotion[])
     .slice()

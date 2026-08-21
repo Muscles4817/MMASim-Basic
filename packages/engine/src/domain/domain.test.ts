@@ -31,7 +31,12 @@ import {
   lightestViableDivision,
 } from './divisions.js';
 import { asDivisionId, asFighterId } from '../core/ids.js';
-import { recordString, summariseRecord, type FightRecordEntry } from './fighter.js';
+import {
+  careerSummaryBefore,
+  recordString,
+  summariseRecord,
+  type FightRecordEntry,
+} from './fighter.js';
 
 describe('personality axes', () => {
   it('documents all eight axes with the systems they drive', () => {
@@ -347,5 +352,48 @@ describe('record summary', () => {
       const s = summariseRecord([entry('win', 'ko'), entry('noContest', 'noContest')]);
       expect(s.streak).toBe(0);
     });
+  });
+});
+
+describe('the record as it stood before a bout', () => {
+  /*
+   * Fight night settles the whole result before the screen renders, which is what makes skipping
+   * the playback instant and honest — and which meant the tale of the tape showed both fighters
+   * carrying tonight's result while they were still walking out.
+   */
+  const bout = (id: string, outcome: FightRecordEntry['outcome']): FightRecordEntry => ({
+    boutId: id,
+    opponentId: asFighterId('f'),
+    promotionId: 'p' as FightRecordEntry['promotionId'],
+    day: 0,
+    outcome,
+    method: outcome === 'win' ? 'ko' : 'decisionUnanimous',
+    round: 1,
+    timeSeconds: 60,
+    divisionId: asDivisionId('mens-lightweight'),
+    wasTitleFight: false,
+  });
+
+  const record = [bout('b1', 'win'), bout('b2', 'win'), bout('b3', 'loss')];
+
+  it('leaves tonight off the record', () => {
+    const before = careerSummaryBefore({ record }, 'b3');
+    expect(recordString(before)).toBe('2-0-0');
+    expect(before.streak).toBe(2);
+  });
+
+  it('does not give away the finish either', () => {
+    // A knockout that has not happened yet showed up in the finishes column.
+    expect(careerSummaryBefore({ record }, 'b1').koWins).toBe(0);
+    expect(careerSummaryBefore({ record }, 'b2').koWins).toBe(1);
+  });
+
+  it('keeps the seeded career behind it', () => {
+    const prior = { ...summariseRecord([]), wins: 15, losses: 1 };
+    expect(recordString(careerSummaryBefore({ record, priorRecord: prior }, 'b2'))).toBe('16-1-0');
+  });
+
+  it('is the whole career when the bout is not on it', () => {
+    expect(recordString(careerSummaryBefore({ record }, 'never'))).toBe('2-1-0');
   });
 });
