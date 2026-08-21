@@ -1,289 +1,162 @@
-import { useMemo, useState } from 'react';
-import {
-  displayName,
-  getDivision,
-  overallRating,
-  recordString,
-  type Fighter,
-  type Promotion,
-} from '@mmasim/engine';
-import { useGame } from '../state/GameProvider';
-import { useRouter } from '../state/router';
-import { Button, Card, Chip, Empty, Flag, ListItem, Segmented } from '../ui';
-import { Alert, OverallRating } from '../ui/signals';
-import { activeDivisionPeers, clearTransientCareerState } from '../game/career';
-import { formaliseExistingDeal } from '../game/contracts';
-import { money } from '../ui/format';
-
-type Filter = 'contenders' | 'prospects' | 'all';
-
 /**
- * Choose who to play as.
+ * Starting a career: who are you going to be.
  *
- * The three filters are the three genuinely different games available: taking a made
- * fighter to a belt, building an unknown from nothing, or browsing. `prospects` is
- * deliberately listed second and described honestly — it is the harder, better run.
+ * The old version of this screen was three `Card`s stacked in one column — create a fighter, or
+ * run one of these promotions, or take over one of these fighters — and the mode was decided by
+ * which list you happened to touch. `playerRole` was set as a side effect of a row click.
+ *
+ * Two things were wrong with that and doc 32 § 11 names both.
+ *
+ * **Browsing was committing.** `takeOver` called `updateWorld` and navigated, with no
+ * confirmation at all. The fighter path had one, but only when `playerFighterId` was already set
+ * — which on a fresh save it never is, so on the flow the screen exists for, one tap on any of
+ * hundreds of rows started the save.
+ *
+ * **There was nowhere for Coach to go.** A third mode would have meant a fourth `Or…` card in the
+ * stack, and the selection experience for a gym is not the selection experience for a fighter.
+ *
+ * So mode is a step. This screen is that step and nothing else; `startFighter.tsx` and
+ * `startPromoter.tsx` are the selection experiences behind it, and they are separate files
+ * precisely because they should not converge.
  */
+
+import { useMemo } from 'react';
+import { type Promotion } from '@mmasim/engine';
+import { useGame } from '../state/GameProvider';
+import { useRouter, type PlayableMode } from '../state/router';
+import { Button, Card } from '../ui';
+import { Help } from '../ui/signals';
+import './MenuScreen.css';
+
+interface ModeSpec {
+  id: PlayableMode;
+  label: string;
+  /** The fantasy, in one line. */
+  pitch: string;
+  /** What the loop actually is. */
+  loop: string;
+  /** What choosing this mode asks you to decide next. */
+  next: string;
+  available: boolean;
+}
+
+const MODES: readonly ModeSpec[] = [
+  {
+    id: 'fighter',
+    label: 'Fighter',
+    pitch: 'One body, fifteen years, and every choice costs something.',
+    loop: 'Train, take fights, climb, and decide when the money is worth the damage.',
+    next: 'Build a fighter, or take over somebody who already exists.',
+    available: true,
+  },
+  {
+    id: 'coach',
+    label: 'Coach',
+    pitch: "You run a gym. Your reputation is built out of other people's careers.",
+    loop: 'Recruit on potential you cannot see, develop it, and watch somebody else fight.',
+    next: 'Start in a garage, inherit a gym, or take over a super-gym.',
+    available: false,
+  },
+  {
+    id: 'promoter',
+    label: 'Promoter',
+    pitch: 'You run a promotion. Make money or make the sport — you will not do both.',
+    loop: 'Plan cards months out, decide who fights whom, and pay for it.',
+    next: 'Take control of a regional promotion.',
+    available: true,
+  },
+];
+
 export function StartScreen() {
-  const { db, world, updateWorld } = useGame();
+  const { db, world } = useGame();
   const { navigate } = useRouter();
-  const [filter, setFilter] = useState<Filter>('contenders');
-  const [search, setSearch] = useState('');
 
-  const fighters = useMemo(() => {
-    const all = db.fighters.findAll() as Fighter[];
-    const term = search.trim().toLowerCase();
-    const matches = (f: Fighter) =>
-      term === '' || `${f.firstName} ${f.lastName} ${f.nickname ?? ''}`.toLowerCase().includes(term);
-
-    const filtered = all.filter((f) => {
-      if (!matches(f)) return false;
-      if (filter === 'contenders') return f.reputation >= 60;
-      if (filter === 'prospects') return f.reputation < 60;
-      return true;
-    });
-
-    return filtered.sort((a, b) => overallRating(b.attributes) - overallRating(a.attributes));
-  }, [db, filter, search]);
-
-  /*
-   * Taking over somebody is career-ending for whoever you were.
-   *
-   * The list reads as browsable — the card above it says "or take over an existing fighter",
-   * and it is reached from a plain button in Settings — but a single tap on any of hundreds
-   * of rows discarded the current booking and reassigned the player, with no confirmation and
-   * no undo. Settings gives its reset a full two-step; this is the same magnitude of action
-   * and had none.
-   *
-   * Only guarded when there *is* a career to lose: confirming this on a fresh save would be
-   * a dialog in front of the only thing the screen is for.
-   */
-  const [pending, setPending] = useState<Fighter | undefined>();
-
-  /*
-   * The promotions a player can start at.
-   *
-   * Regional only. The plan's reasoning, kept here because it is a design decision rather than
-   * a filter: at the top of the sport phases three and four do not bite — a promotion with a
-   * £62m budget does not feel payroll and cannot plausibly lose its broadcaster — so starting
-   * there would mean shipping a mode whose pressure systems are inert.
-   */
   const regionals = useMemo(
     () =>
-      (db.promotions.findAll() as unknown as Promotion[])
-        .filter((p) => p.tier === 'regional')
-        .sort((a, b) => b.prestige - a.prestige),
+      (db.promotions.findAll() as unknown as Promotion[]).filter((p) => p.tier === 'regional')
+        .length,
     [db],
   );
 
-  const takeOver = (promotion: Promotion) => {
-    clearTransientCareerState();
-    updateWorld({
-      playerRole: 'promoter',
-      playerPromotionId: promotion.id as string,
-      playerFighterId: undefined,
-    });
-    navigate({ name: 'promotion' });
-  };
-
-  const commitChoice = (fighter: Fighter) => {
-    // Bookings and the last result are keyed to the previous fighter. Left behind, the hub
-    // offers to send the new fighter into the old one’s booked bout.
-    clearTransientCareerState();
-    // Whatever roster they are on becomes a contract you can read, count down and ask out of.
-    // See `formaliseExistingDeal`: until now this handed the player a fighter the contract layer
-    // considered a free agent while they sat on somebody's roster.
-    formaliseExistingDeal(db, fighter);
-    updateWorld({ playerRole: 'fighter', playerFighterId: fighter.id as string });
-    navigate({ name: 'hub' });
-  };
-
-  const choose = (fighter: Fighter) => {
-    if (world.playerFighterId && world.playerFighterId !== (fighter.id as string)) {
-      setPending(fighter);
-      return;
-    }
-    commitChoice(fighter);
-  };
-
   return (
-    <div className="stack" style={{ gap: 'var(--space-4)' }}>
+    <div className="stack" style={{ gap: 'var(--space-4)' }} data-testid="new-career">
       {/*
-        The primary path, and it was previously unreachable.
+        Which world you are in, said out loud.
 
-        App.tsx redirects the hub to this screen whenever there is no player fighter, and the
-        only link to the creator lived in the hub's empty state — which that redirect
-        guarantees nobody ever sees. Creating your own fighter and climbing with them is the
-        point of the mode, so it is the largest thing on the landing screen.
-      */}
-      <Card raised>
-        <h2 style={{ fontSize: 'var(--text-2xl)', marginBottom: 'var(--space-2)' }}>
-          Start a career
-        </h2>
-        <p className="muted prose" style={{ marginBottom: 'var(--space-4)' }}>
-          Build a fighter from nothing and take them as far as they can go — or take over
-          somebody who already exists and see if you can do better with them.
-        </p>
-        <Button variant="primary" block onClick={() => navigate({ name: 'create' })}>
-          Create your own fighter
-        </Button>
-      </Card>
-
-      {/*
-        The other side of the sport.
-        
-        `playerRole` has existed in the data layer since the beginning and was written twice,
-        always to 'fighter', and read nowhere. This is the first thing that reads it.
-        
-        Regional only, and stated as a choice about which problem you want rather than a
-        difficulty setting: at the top of the sport payroll does not bite and a broadcaster
-        cannot plausibly drop you, so the pressure systems that make the mode a game are inert
-        there.
+        The player chose it on the menu, waited up to half a minute for it to be built, and then
+        arrived here with no confirmation that the thing they chose is the thing they got. Doc 32
+        § 11.1: at every point the player should know which world they selected and which mode
+        they are starting.
       */}
       <Card>
-        <h2 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--space-2)' }}>
-          Or run a promotion
-        </h2>
-        <p className="muted prose" style={{ marginBottom: 'var(--space-3)' }}>
-          You decide who fights whom, who gets pushed and who gets cut. Make money or make the
-          sport — you will not do both.
+        <p className="muted" style={{ fontSize: 'var(--text-sm)' }}>
+          {/* `generatedSize` is present only on a generated world, which is how the two are
+              told apart — a seeded save records its era and nothing else. */}
+          {world.generatedSize !== undefined
+            ? 'A generated world — a sport nobody has played before.'
+            : `The ${world.era ?? '2020'} world.`}{' '}
+          {regionals} regional promotion{regionals === 1 ? '' : 's'}, and the whole sport above
+          them.
         </p>
-        <div className="stack" style={{ gap: 'var(--space-2)' }}>
-          {regionals.map((promotion) => (
-            <button
-              key={promotion.id}
-              type="button"
-              className="bout"
-              onClick={() => takeOver(promotion)}
-            >
-              <span className="bout__names">{promotion.name}</span>
-              <span className="list__secondary" style={{ display: 'block' }}>
-                {promotion.baseCountry} · {money(promotion.budget)} to
-                spend · {promotion.notes}
-              </span>
-            </button>
-          ))}
-        </div>
       </Card>
 
-      <Card>
-        <h2 style={{ fontSize: 'var(--text-xl)', marginBottom: 'var(--space-2)' }}>
-          Or take over an existing fighter
-        </h2>
-        <p className="muted prose" style={{ marginBottom: 'var(--space-4)' }}>
-          January 2020. Every rating here is a judgement call, and every fighter has something
-          an opponent can build a game plan around — including you.
-        </p>
+      <h2 style={{ fontSize: 'var(--text-2xl)' }}>Who are you going to be?</h2>
 
-        <div className="stack">
-          <Segmented
-            label="Filter fighters"
-            value={filter}
-            onChange={setFilter}
-            options={[
-              { value: 'contenders', label: 'Contenders', hint: 'Established names' },
-              { value: 'prospects', label: 'Prospects', hint: 'Harder, and more room to grow' },
-              { value: 'all', label: 'Everyone' },
-            ]}
+      <div className="modes">
+        {MODES.map((mode) => (
+          <ModeCard
+            key={mode.id}
+            mode={mode}
+            onChoose={() => navigate({ name: 'start', mode: mode.id })}
           />
-          <label>
-            <span className="visually-hidden">Search fighters by name</span>
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name…"
-              className="field"
-            />
-          </label>
-        </div>
+        ))}
+      </div>
 
-        <Button
-          variant="ghost"
-          block
-          onClick={() => navigate({ name: 'roster' })}
-          style={{ marginTop: 'var(--space-3)' }}
-        >
-          Just browse the roster instead
-        </Button>
-      </Card>
+      <Help label="Can I change my mind later?">
+        Yes — every mode is reachable from Settings, and picking a different one leaves the
+        fighter or the promotion you were running in the world, carrying on without you. Nothing
+        here is decided until you take control of somebody on the next screen.
+      </Help>
+    </div>
+  );
+}
 
-      {pending && (
-        <Alert tone="warn" title={`Leave your current career for ${displayName(pending)}?`}>
-          <span className="prose" style={{ display: 'block', marginBottom: 'var(--space-3)' }}>
-            Your booked fight and your last result are discarded. The fighter you are leaving
-            stays in the world and carries on without you.
-          </span>
-          <span className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-            <Button variant="primary" onClick={() => commitChoice(pending)}>
-              Yes — take over {displayName(pending)}
-            </Button>
-            <Button variant="ghost" onClick={() => setPending(undefined)}>
-              Stay where I am
-            </Button>
-          </span>
-        </Alert>
-      )}
-
-      {/*
-        The count, announced. It changes as the player types into the search above it, and a
-        list that silently reorders under a filter tells a screen-reader user nothing at all.
-      */}
-      <p className="visually-hidden" aria-live="polite">
-        {fighters.length} fighter{fighters.length === 1 ? '' : 's'} match
+function ModeCard({ mode, onChoose }: { mode: ModeSpec; onChoose(): void }) {
+  return (
+    <Card className="mode" testId={`mode-${mode.id}`}>
+      <h3 className="mode__label">{mode.label}</h3>
+      <p className="mode__pitch">{mode.pitch}</p>
+      <p className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
+        {mode.loop}
+      </p>
+      <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
+        {mode.next}
       </p>
 
-      <Card flush title={`${fighters.length} fighter${fighters.length === 1 ? '' : 's'}`}>
-        {fighters.length === 0 ? (
-          <Empty title="Nobody matches that">Try a different filter or clear the search.</Empty>
+      <div className="mode__action">
+        {mode.available ? (
+          <Button variant="primary" block onClick={onChoose}>
+            Play as a {mode.label.toLowerCase()}
+          </Button>
         ) : (
-          <div className="list">
-            {fighters.map((f) => (
-              <ListItem
-                key={f.id}
-                onClick={() => choose(f)}
-                primary={displayName(f)}
-                secondary={
-                  <>
-                    {getDivision(f.divisionId).shortName} · {recordString(f.summary)} ·{' '}
-                    <Flag nationality={f.nationality} />
-                  </>
-                }
-                trailing={
-                  // Wrapping and non-shrinking: three nowrap chips need ~190px of the 264px
-                  // available at 320px, which left the name about sixty pixels and pushed it
-                  // out of the row entirely.
-                  <span
-                    className="row"
-                    style={{
-                      gap: 'var(--space-2)',
-                      flexWrap: 'wrap',
-                      justifyContent: 'flex-end',
-                      flex: '0 0 auto',
-                    }}
-                  >
-                    {activeDivisionPeers(db, f) < 3 && (
-                      <Chip tone="warning">Thin division</Chip>
-                    )}
-                    <Chip tone={f.starPower >= 65 ? 'accent' : 'neutral'}>
-                      <span className="visually-hidden">Star power </span>★ {f.starPower}
-                    </Chip>
-                    {/*
-                      `OverallRating`, not a bare number. A sighted player saw "81" with no
-                      scale, no band word and no legend anywhere on the screen — and the
-                      visually-hidden label meant the *visual* reader was the one left
-                      guessing. Roster and Rankings already use this; the first screen a new
-                      player sees did not.
-                    */}
-                    <OverallRating rating={overallRating(f.attributes)} />
-                  </span>
-                }
-              />
-            ))}
-          </div>
-        )}
-      </Card>
+          /*
+            Shown and marked unavailable, never hidden and never `disabled`.
 
-    </div>
+            Doc 10: a real `disabled` attribute removes the control from the tab order, so a
+            keyboard user discovers the option has silently vanished. `aria-disabled` plus a
+            handler that explains itself is the house rule — and showing the mode at all is what
+            makes the flow survive Coach landing, because the slot is already here.
+          */
+          <Button
+            block
+            aria-disabled="true"
+            onClick={(e) => e.preventDefault()}
+            title="Coach mode is designed but not built yet"
+          >
+            Not built yet
+          </Button>
+        )}
+      </div>
+    </Card>
   );
 }

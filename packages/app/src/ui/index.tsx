@@ -15,6 +15,7 @@ export function Card({
   children,
   className = '',
   role,
+  testId,
 }: {
   title?: ReactNode;
   action?: ReactNode;
@@ -24,12 +25,20 @@ export function Card({
   className?: string;
   /** For the rare card whose *appearance* is the result of an action, e.g. a camp report. */
   role?: string;
+  /**
+   * A stable handle for the playability suite.
+   *
+   * The tests used to anchor on card titles — "The climb", "Choose your next fight" — which
+   * made every piece of copy load-bearing and meant a rewording broke six tests that were not
+   * about wording. A region keeps its id across a redesign; its heading does not.
+   */
+  testId?: string;
 }) {
   const classes = ['card', flush && 'card--flush', raised && 'card--raised', className]
     .filter(Boolean)
     .join(' ');
   return (
-    <section className={classes} role={role}>
+    <section className={classes} role={role} data-testid={testId}>
       {(title || action) && (
         <header className="card__header" style={flush ? { padding: 'var(--space-4)', marginBottom: 0 } : undefined}>
           {title && <h2 className="card__title">{title}</h2>}
@@ -363,3 +372,14 @@ export function Empty({ title, children }: { title: string; children?: ReactNode
   );
 }
 export { Flag } from './Flag';
+
+/*
+ * The layout and density primitives.
+ *
+ * Re-exported here so a screen imports its containers from one place — `import { Card, Grid,
+ * Panel } from '../ui'` rather than three paths. They live in their own files because they are
+ * about *composition* rather than about the signal vocabulary, and mixing the two is how this
+ * file grew to carry the rating bar and the segmented control side by side.
+ */
+export { Grid, GridCell, Panel, Strip, MasterDetail, Collapse } from './layout';
+export { DataTable, type Column } from './DataTable';

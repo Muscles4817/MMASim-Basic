@@ -57,18 +57,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 /**
- * The hub's freshness `Fact`, specifically.
+ * The dashboard's condition strip.
  *
- * Scoped rather than `findByText(/Freshness/i)` because the hub now carries a rest card that
- * explains what freshness is *for* — which is the point of it being there, and which makes a bare
- * case-insensitive text match ambiguous. The claim these tests make is about the labelled figure,
- * so they point at the labelled figure.
+ * Scoped to the region rather than matched on loose text, because "freshness" appears in prose
+ * elsewhere and the claim these tests make is about the *labelled, interpreted figure*. It is a
+ * `StateRow` now rather than a `Fact` — same claim, and the interpretation is no longer optional:
+ * every row carries a state word beside its number by construction.
  */
-async function freshnessFact(): Promise<HTMLElement> {
-  const labels = await screen.findAllByText(/Freshness/i);
-  const label = labels.find((node) => node.classList.contains('fact__label'));
-  if (!label) throw new Error('no freshness fact on the hub');
-  return label;
+async function conditionStrip(): Promise<HTMLElement> {
+  return screen.findByTestId('condition');
 }
 
 describe('the hub says what the career has cost', () => {
@@ -78,9 +75,9 @@ describe('the hub says what the career has cost', () => {
     await createFighter(user);
     goTo('#/hub');
 
-    const label = await freshnessFact();
-    expect(label).toBeTruthy();
-    expect(document.body.textContent ?? '').toMatch(/Fresh|Sharp|Worked|Flat|Running on empty/);
+    const strip = await conditionStrip();
+    expect(within(strip).getByText(/Freshness/i)).toBeTruthy();
+    expect(strip.textContent ?? '').toMatch(/Fresh|Sharp|Worked|Flat|Running on empty/);
   });
 
   it('shows body wear and head trauma always, not only once they are bad', async () => {
@@ -93,10 +90,13 @@ describe('the hub says what the career has cost', () => {
     await createFighter(user);
     goTo('#/hub');
 
-    await freshnessFact();
-    const text = document.body.textContent ?? '';
+    const strip = await conditionStrip();
+    const text = strip.textContent ?? '';
     expect(text).toMatch(/Body wear/i);
     expect(text).toMatch(/Head trauma/i);
+    // And interpreted, not left as a bare ratio out of a hundred.
+    expect(text).toMatch(/Pristine|Accumulating|Failing/);
+    expect(text).toMatch(/Sound|Wearing|Worn/);
   });
 
   it('says how long it has been since the last fight, because rust is already modelled', async () => {
@@ -104,9 +104,10 @@ describe('the hub says what the career has cost', () => {
     await createFighter(user);
     goTo('#/hub');
 
-    await screen.findByText(/Last fought/i);
+    const strip = await conditionStrip();
+    expect(within(strip).getByText(/Last fought/i)).toBeTruthy();
     // A debutant has never fought, and the screen has to say that rather than showing "0d ago".
-    expect(document.body.textContent ?? '').toMatch(/Never/);
+    expect(strip.textContent ?? '').toMatch(/Never/);
   });
 
   it('starts a new fighter fresh rather than blank or exhausted', async () => {
@@ -116,9 +117,8 @@ describe('the hub says what the career has cost', () => {
     await createFighter(user);
     goTo('#/hub');
 
-    const label = await freshnessFact();
-    const fact = label.closest('.fact') ?? label.parentElement!;
-    expect(within(fact as HTMLElement).queryByText(/Running on empty/i)).toBeNull();
-    expect(document.body.textContent ?? '').toMatch(/Fresh/);
+    const strip = await conditionStrip();
+    expect(within(strip).queryByText(/Running on empty/i)).toBeNull();
+    expect(strip.textContent ?? '').toMatch(/Fresh/);
   });
 });

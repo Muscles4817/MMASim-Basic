@@ -47,18 +47,29 @@ afterEach(cleanup);
 
 /** Take over a seeded fighter, which is the shortest route to a live career. */
 async function startCareer(user: ReturnType<typeof userEvent.setup>) {
-  goTo('#/start');
+  goTo('#/start/fighter');
   renderApp();
-  const rows = await screen.findAllByRole('button', { name: /Star power/i });
-  await user.click(rows[0]!);
+  // Three steps now rather than one tap, which is the whole change: browse, inspect,
+  // then commit explicitly. Clicking a row used to start the save.
+  const rows = await screen.findAllByRole('button', { name: /./ });
+  const row = rows.find((r) => r.classList.contains('datatable__rowbutton'))!;
+  await user.click(row);
+  await user.click(await screen.findByRole('button', { name: /^Take control of/i }));
+  await user.click(await screen.findByRole('button', { name: /^Yes — take control of/i }));
   await screen.findByText(/Next fight|No opponents|Choose your next/i).catch(() => undefined);
 }
 
-/** Accept the first offer on the hub, which lands us in fight camp. */
+/**
+ * Accept the first offer on the dashboard, which lands us in fight camp.
+ *
+ * The offers are a table now rather than rows that expand in place, so the target is the row
+ * button in the first column rather than the difficulty chip.
+ */
 async function bookAFight(user: ReturnType<typeof userEvent.setup>) {
   goTo('#/hub');
-  const offers = await screen.findAllByRole('button', { name: /Even fight|Step up|Favourable/i });
-  await user.click(offers[0]!);
+  await screen.findByTestId('next-fight');
+  const rows = document.querySelectorAll<HTMLButtonElement>('.datatable__rowbutton');
+  await user.click(rows[0]!);
   await user.click(await screen.findByRole('button', { name: /Accept fight/i }));
 }
 
@@ -150,7 +161,9 @@ describe('training cannot walk past a booked fight', () => {
     await bookAFight(user);
 
     goTo('#/training');
-    expect(await screen.findByText(/Fight in/i)).toBeTruthy();
+    // Twice now, and both earn their place: the chip at the top of the screen is the status,
+    // and the rest card's sentence is the constraint on how long you can afford to sit out.
+    expect((await screen.findAllByText(/Fight in|You fight in/i)).length).toBeGreaterThan(0);
   });
 });
 

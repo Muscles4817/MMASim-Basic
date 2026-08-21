@@ -1,21 +1,26 @@
 /**
- * The promoter's shared components.
+ * The console vocabulary.
  *
  * Presentational only, like the rest of `ui/` — no database, no game logic. What lives here is
- * the vocabulary the mode repeats: an attention row, a card in the pipeline, a slot on a card, a
- * candidate for a slot, a line in a ledger, an ability band.
+ * the vocabulary a management screen repeats: a two-column console, an attention row, a card in
+ * the pipeline, a slot on a card, a candidate for a slot, a line in a ledger, an ability band.
  *
  * They exist as components rather than as markup copied into four screens because every one of
  * them carries a rule that is easy to lose on the fifth copy — an attention row must always say
  * *why* it is there, a candidate must always carry its rationale, an ability must never render a
  * number.
+ *
+ * This was `promoter.tsx` and the name had become a lie: `Console`, `Ledger`, `Tabs`,
+ * `AttentionRow` and `AbilityBand` are not promoter concepts, and doc 32 § 6 needs all of them in
+ * fighter mode. Nothing in here knows which mode it is rendering for, which is the point — mode
+ * arrives as a prop at the route boundary, never as a branch inside a shared component.
  */
 
 import type { ReactNode } from 'react';
 import { ratingBand, type Rating } from '@mmasim/engine';
 import { bandColour } from './index';
 import { Icon, type IconName } from './signals';
-import './promoter.css';
+import './console.css';
 
 // --- Layout ------------------------------------------------------------------------------------
 
@@ -89,12 +94,22 @@ export function AttentionRow({
   detail,
   cue,
   onClick,
+  kind,
 }: {
   tone: 'danger' | 'warn' | 'info' | 'good';
   title: string;
   detail: string;
   cue?: string;
   onClick?(): void;
+  /**
+   * What sort of situation this row is, as a stable handle.
+   *
+   * Every title in this component is a sentence written to be reworded, so a test that asks "is
+   * the dashboard advertising offers" cannot ask by matching prose — it will pass vacuously the
+   * first time somebody improves the copy, which is precisely what happened to the invariant
+   * that the hub must never advertise interest the contract screen lacks.
+   */
+  kind?: string;
 }) {
   const icon: IconName =
     tone === 'danger' || tone === 'warn' ? 'warning' : tone === 'good' ? 'success' : 'info';
@@ -114,14 +129,20 @@ export function AttentionRow({
 
   if (!onClick) {
     return (
-      <div className="attention__item" data-tone={tone}>
+      <div className="attention__item" data-tone={tone} data-kind={kind}>
         {body}
       </div>
     );
   }
 
   return (
-    <button type="button" className="attention__item" data-tone={tone} onClick={onClick}>
+    <button
+      type="button"
+      className="attention__item"
+      data-tone={tone}
+      data-kind={kind}
+      onClick={onClick}
+    >
       {body}
     </button>
   );

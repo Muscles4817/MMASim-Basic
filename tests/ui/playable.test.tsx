@@ -50,12 +50,43 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('the game is playable', () => {
-  it('boots to the fighter picker from a cold start', async () => {
+  it('boots to the mode picker from a cold start', async () => {
     renderApp();
     expectNoCrash();
-    expect(await screen.findByText(/Or take over an existing fighter/i)).toBeTruthy();
+    // Who you are going to be is now a step of its own rather than something decided by which
+    // of three stacked lists you happened to touch. Doc 32 § 11.3.
+    expect(await screen.findByTestId('new-career')).toBeTruthy();
+    expect(screen.getByTestId('mode-fighter')).toBeTruthy();
+    expect(screen.getByTestId('mode-coach')).toBeTruthy();
+    expect(screen.getByTestId('mode-promoter')).toBeTruthy();
+  });
+
+  it('shows Coach as a mode that exists rather than hiding it', async () => {
+    /*
+     * `aria-disabled`, never `disabled`. Doc 10: a real disabled attribute leaves the tab order,
+     * so a keyboard user finds the option has silently vanished with no way to discover why.
+     * Showing the mode at all is also what stops the flow needing to be torn apart when coach
+     * mode lands — the slot is already here.
+     */
+    renderApp();
+    const coach = await screen.findByTestId('mode-coach');
+    const button = within(coach).getByRole('button');
+    expect(button.hasAttribute('disabled')).toBe(false);
+    expect(button.getAttribute('aria-disabled')).toBe('true');
+  });
+
+  it('reaches the roster through the fighter mode, not before it', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(
+      within(await screen.findByTestId('mode-fighter')).getByRole('button'),
+    );
     // The seeded roster is actually on screen, not an empty list.
-    expect(await screen.findByText(/Khabib/)).toBeTruthy();
+    //
+    // `findAll`: `DataTable` renders both of its compositions into the DOM and lets CSS pick one
+    // at 62rem, which keeps the switch free of layout thrash and of a flash on load — jsdom
+    // applies no CSS, so both are present here.
+    expect((await screen.findAllByText(/Khabib/)).length).toBeGreaterThan(0);
   });
 
   it('offers to create your own fighter from the landing screen', async () => {
@@ -64,6 +95,7 @@ describe('the game is playable', () => {
     // fighter and climbing with them is the point of the mode, so this guards the route.
     const user = userEvent.setup();
     renderApp();
+    await user.click(within(await screen.findByTestId('mode-fighter')).getByRole('button'));
 
     const create = await screen.findByRole('button', { name: /Create your own fighter/i });
     await user.click(create);
@@ -75,6 +107,7 @@ describe('the game is playable', () => {
   it('explains why it will not let an unfinished fighter turn pro', async () => {
     const user = userEvent.setup();
     renderApp();
+    await user.click(within(await screen.findByTestId('mode-fighter')).getByRole('button'));
     await user.click(await screen.findByRole('button', { name: /Create your own fighter/i }));
 
     // Nothing filled in. The button must stay reachable and say why rather than sit greyed
@@ -91,22 +124,31 @@ describe('the game is playable', () => {
     const user = userEvent.setup();
     renderApp();
 
-    // 1. Pick a fighter.
-    const khabib = await screen.findByText(/Khabib/);
+    // 1. Pick a mode, inspect a fighter, then commit to them. Three steps, deliberately:
+    // clicking a row used to start the save outright.
+    await user.click(within(await screen.findByTestId('mode-fighter')).getByRole('button'));
+    // The table's row button specifically — `DataTable` puts both compositions in the DOM and
+    // lets CSS choose, so a bare text match finds the phone row as well.
+    const khabib = (await screen.findAllByText(/Khabib/))
+      .map((n) => n.closest('button'))
+      .find((b) => b?.classList.contains('datatable__rowbutton'))!;
     await user.click(khabib);
+    await user.click(await screen.findByRole('button', { name: /^Take control of/i }));
+    await user.click(await screen.findByRole('button', { name: /^Yes — take control of/i }));
 
     // 2. The career hub shows who we are and offers opponents.
     // `findAll` rather than `find`: the hub now also lists the division's rankings, so the
     // player's own name legitimately appears twice — once as the fighter, once in the table
     // with their row marked. The assertion is that the hub is showing them at all.
     expect((await screen.findAllByText(/Nurmagomedov/)).length).toBeGreaterThan(0);
-    const offersCard = await screen.findByText(/Choose your next fight/i);
-    expect(offersCard).toBeTruthy();
+    expect(await screen.findByTestId('next-fight')).toBeTruthy();
     expectNoCrash();
 
-    // 3. Expand an offer and accept it. Booking is deliberately two steps.
-    const stepChips = await screen.findAllByText(/Step up|Even fight|Favourable/);
-    await user.click(stepChips[0]!.closest('button')!);
+    // 3. Select an opponent and accept. Booking is deliberately two steps: the row opens the
+    // detail, the detail books the fight.
+    const rows = await screen.findAllByRole('button', { name: /Nurmagomedov|Poirier|Gaethje|./ });
+    const opponentRow = rows.find((r) => r.classList.contains('datatable__rowbutton'))!;
+    await user.click(opponentRow);
     const accept = await screen.findByRole('button', { name: /Accept fight/i });
     await user.click(accept);
 
@@ -169,8 +211,15 @@ describe('the game is playable', () => {
   it('persists the career across a reload', async () => {
     const user = userEvent.setup();
     const first = renderApp();
-    await user.click((await screen.findAllByText(/Poirier/))[0]!);
-    expect(await screen.findByText(/Choose your next fight/i)).toBeTruthy();
+    await user.click(within(await screen.findByTestId('mode-fighter')).getByRole('button'));
+    await user.click(
+      (await screen.findAllByText(/Poirier/))
+        .map((n) => n.closest('button'))
+        .find((b) => b?.classList.contains('datatable__rowbutton'))!,
+    );
+    await user.click(await screen.findByRole('button', { name: /^Take control of/i }));
+    await user.click(await screen.findByRole('button', { name: /^Yes — take control of/i }));
+    expect(await screen.findByTestId('next-fight')).toBeTruthy();
     first.unmount();
 
     // A fresh mount over the same localStorage is what a page reload does.
@@ -311,7 +360,9 @@ describe('the career is a career, not a sequence of fights', () => {
     await createFighter(user);
 
     // Unknown, unranked, and on the smallest show in the sport. That is the starting point.
-    const climb = (await screen.findByText(/The climb/i)).closest('section')!;
+    // The climb is part of "where you stand" now: a rank without a contract beside it was two
+    // full-height cards saying one thing about a career.
+    const climb = await screen.findByTestId('standing');
     expect(within(climb).getAllByText(/Unranked/i).length).toBeGreaterThan(0);
     expect(within(climb).getByText(/developmental/i)).toBeTruthy();
     expectNoCrash();
@@ -346,9 +397,7 @@ describe('the career is a career, not a sequence of fights', () => {
     const user = userEvent.setup();
     await createFighter(user, 'Trainee');
 
-    await user.click(await screen.findByRole('link', { name: /Career/i }));
-    await user.click(await screen.findByRole('button', { name: /Go to training/i }));
-
+    window.location.hash = '#/training';
     expect(await screen.findByText(/What to work on/i)).toBeTruthy();
     await user.click(screen.getByRole('button', { name: /Wrestling/i }));
     await user.click(screen.getByRole('button', { name: /Train for 8 weeks/i }));
@@ -365,8 +414,7 @@ describe('the career is a career, not a sequence of fights', () => {
     await createFighter(user, 'Clockwatcher');
 
     const dateBefore = document.querySelector('.shell__subtitle')?.textContent;
-    await user.click(await screen.findByRole('link', { name: /Career/i }));
-    await user.click(await screen.findByRole('button', { name: /Go to training/i }));
+    window.location.hash = '#/training';
     await user.click(await screen.findByRole('button', { name: /Train for 8 weeks/i }));
 
     await waitFor(() => {
@@ -379,7 +427,7 @@ describe('the career is a career, not a sequence of fights', () => {
     const user = userEvent.setup();
     await createFighter(user, 'Climber');
 
-    const climb = (await screen.findByText(/The climb/i)).closest('section')!;
+    const climb = await screen.findByTestId('standing');
     expect(within(climb).getByRole('meter', { name: /Career progress/i })).toBeTruthy();
     // Always says what is standing between you and the belt, eligible or not.
     expect(climb.textContent).toMatch(/unranked|ranked|top three|two straight wins|not signed/i);

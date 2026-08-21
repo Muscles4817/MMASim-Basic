@@ -124,7 +124,7 @@ describe('a device that will not store the save', () => {
 
     // The regression. This was "Something went wrong", on every load, forever.
     expect(
-      await screen.findByText(/Or take over an existing fighter/i, {}, { timeout: 6000 }),
+      await screen.findByTestId('new-career', {}, { timeout: 6000 }),
     ).toBeTruthy();
     expect(screen.queryByText(/Something went wrong/i)).toBeNull();
   });
@@ -151,7 +151,7 @@ describe('a device that will not store the save', () => {
     await startSeededGame(user);
 
     expect(
-      await screen.findByText(/Or take over an existing fighter/i, {}, { timeout: 6000 }),
+      await screen.findByTestId('new-career', {}, { timeout: 6000 }),
     ).toBeTruthy();
     expect(screen.queryByText(/Your progress is not being saved/i)).toBeNull();
     expect(screen.queryByText(/Something went wrong/i)).toBeNull();

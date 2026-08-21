@@ -16,7 +16,7 @@ import {
   conditionRead,
   scoutingRead,
   valueRead,
-} from './promoterRead.js';
+} from './fighterRead.js';
 import { makeFighter, TEST_DAY } from '../testing/fixtures.js';
 import { uniformAttributes } from '../ratings/attributes.js';
 import type { Fighter, RecordSummary } from '../domain/fighter.js';

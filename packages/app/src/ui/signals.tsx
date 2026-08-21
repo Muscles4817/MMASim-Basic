@@ -354,3 +354,97 @@ export function OverallRating({ rating }: { rating: number }) {
     </span>
   );
 }
+
+// --- Interpreted state ------------------------------------------------------------------------
+
+/**
+ * A number, and what that number means.
+ *
+ * The component the audit (doc 32 § 1.3) exists to produce. `56 / 100` asks the player to hold
+ * a scale in their head; `56 — Worked` hands them the read and keeps the number beside it for
+ * anyone who wants to do their own arithmetic. Rule 3 of the vocabulary, finally with a
+ * component behind it rather than a convention each screen re-implemented.
+ *
+ * Deliberately a *row*, not a card. A condition strip is five of these on the page — five cards
+ * would be exactly the "card soup" the same audit complains about.
+ *
+ * The mechanic goes in `help`, which renders as a `<details>` rather than as permanent prose:
+ * `Fact` prints its hint on every visit because a `title` reaches neither a phone nor a screen
+ * reader, and that trade was right for teaching and wrong by the fiftieth read. This keeps the
+ * explanation on the page and closed.
+ */
+export function StateRow({
+  label,
+  value,
+  state,
+  tone,
+  help,
+  emphasis = 'secondary',
+}: {
+  label: string;
+  /** The raw simulation value. Kept, always — interpretation never replaces it. */
+  value: ReactNode;
+  /** What it means, in a word or two. `Worked`, `Pristine`, `Ring rust`. */
+  state?: ReactNode;
+  tone?: 'good' | 'bad' | 'warn';
+  /** The mechanic, behind a disclosure. */
+  help?: ReactNode;
+  emphasis?: Emphasis;
+}) {
+  return (
+    <div className={`state-row state-row--${emphasis}${tone ? ` state-row--${tone}` : ''}`}>
+      <span className="state-row__label">{label}</span>
+      <span className="state-row__value numeric">{value}</span>
+      {/* The dash is drawn by CSS, not typed here: it must not reach a screen reader as a
+          minus sign between two numbers, and it must vanish when there is no state word. */}
+      {state !== undefined && <span className="state-row__state">{state}</span>}
+      {help && (
+        <details className="state-row__help">
+          {/*
+            Named with `aria-label` rather than a visually-hidden span.
+            
+            The span worked — the toggle had an accessible name — but it put a second copy of the
+            row's own label into the DOM as text, so "Freshness" appeared twice inside one row.
+            That is invisible on screen and it makes the row ambiguous to anything reading text:
+            find-in-page, a translation layer, and the playability suite, which found it first.
+          */}
+          <summary aria-label={`What ${label.toLowerCase()} means`}>
+            <span aria-hidden="true">?</span>
+          </summary>
+          <div className="state-row__help-body prose">{help}</div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/**
+ * An explanation the player can ask for.
+ *
+ * Doc 10 settled that `title` is not an explanation — a tooltip reaches a desktop mouse and
+ * nobody else — and the fix at the time was to print every hint permanently. That is right the
+ * first time somebody meets a mechanic and is a wall of manual by the fiftieth visit.
+ *
+ * So: on the page, in the DOM, reachable by keyboard and screen reader, and closed. `<details>`
+ * rather than a bespoke disclosure because the browser already implements the whole of it —
+ * the toggle, the state, the announcement, and find-in-page opening it.
+ *
+ * `defaultOpen` is for onboarding surfaces that genuinely should lead with the explanation.
+ * Nothing persists it yet; see doc 32 § 10.
+ */
+export function Help({
+  label = 'What does this mean?',
+  defaultOpen,
+  children,
+}: {
+  label?: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details className="help" open={defaultOpen}>
+      <summary className="help__summary">{label}</summary>
+      <div className="help__body prose">{children}</div>
+    </details>
+  );
+}

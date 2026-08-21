@@ -46,11 +46,13 @@ afterEach(cleanup);
 
 /** Take over a promotion, which is the mode that had no clock at all. */
 async function becomePromoter(user: ReturnType<typeof userEvent.setup>) {
-  goTo('#/start');
+  goTo('#/start/promoter');
   renderApp();
-  const heading = await screen.findByRole('heading', { name: /Or run a promotion/i });
-  const card = heading.closest('.card') as HTMLElement;
-  await user.click(card.querySelectorAll('button')[0] as HTMLElement);
+  const rows = await screen.findAllByRole('button', { name: /./ });
+  const row = rows.find((r) => r.classList.contains('datatable__rowbutton'))!;
+  await user.click(row);
+  await user.click(await screen.findByRole('button', { name: /^Run /i }));
+  await user.click(await screen.findByRole('button', { name: /^Yes — run /i }));
 }
 
 describe('the calendar is reachable and shows the clock', () => {
@@ -171,10 +173,13 @@ describe('the inbox', () => {
 
   it('is reachable from every mode', async () => {
     const user = userEvent.setup();
-    goTo('#/start');
+    goTo('#/start/fighter');
     renderApp();
-    const rows = await screen.findAllByRole('button', { name: /Star power/i });
-    await user.click(rows[0]!);
+    const rows = await screen.findAllByRole('button', { name: /./ });
+    const row = rows.find((r) => r.classList.contains('datatable__rowbutton'))!;
+    await user.click(row);
+    await user.click(await screen.findByRole('button', { name: /^Take control of/i }));
+    await user.click(await screen.findByRole('button', { name: /^Yes — take control of/i }));
 
     expect(await screen.findByRole('link', { name: /Inbox/i })).toBeTruthy();
     expect(screen.getByRole('link', { name: /Calendar/i })).toBeTruthy();

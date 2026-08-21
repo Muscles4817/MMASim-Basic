@@ -52,7 +52,7 @@ const FIGHTER_NAV: readonly NavItem[] = [
     route: { name: 'hub' },
     label: 'Career',
     icon: '🥊',
-    matches: ['hub', 'camp', 'fight', 'start', 'create', 'training'],
+    matches: ['hub', 'me', 'camp', 'fight', 'start', 'create', 'training'],
   },
   { route: { name: 'calendar' }, label: 'Calendar', icon: '📅' },
   { route: { name: 'inbox' }, label: 'Inbox', icon: '📥' },

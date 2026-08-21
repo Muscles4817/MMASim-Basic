@@ -185,6 +185,16 @@ export function titleShotEligibility(
   };
 }
 
+/*
+ * `PromotionOffer` and `promotionOffers()` used to live here.
+ *
+ * Deleted rather than deprecated: a second source of truth that still compiles is a second
+ * source of truth. `business/freeAgency.ts` is the market, and had been since its own docstring
+ * said so — the consumer was simply never migrated, so the game shipped two markets that
+ * disagreed about who was interested and what the money was. Doc 16 records what it cost in
+ * play; doc 32 § 3.1 records the same finding from the interface side.
+ */
+
 /**
  * A fighter's progress toward the top, 0–1.
  *

@@ -85,3 +85,51 @@
 .menu__open:hover .list__primary {
   color: var(--accent);
 }
+
+/*
+ * The mode picker.
+ *
+ * Three peers, so three columns where there is room and three stacked cards where there is not.
+ * Not a `Segmented` and not a list: choosing a role is the largest decision in the flow, and the
+ * cards have to carry a fantasy, a loop and what you are asked to decide next — none of which
+ * fits in a control sized for two-to-four short options.
+ *
+ * Lives here rather than in a screen file of its own because the menu and the mode picker are one
+ * journey with one visual register, even though only one of them renders inside the shell.
+ */
+.modes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: stretch;
+}
+
+@media (min-width: 62rem) {
+  .modes {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-4);
+  }
+}
+
+/* Stretch so the three actions line up along the bottom regardless of how much copy each
+   carries — three buttons at three different heights reads as three different weights. */
+.mode {
+  display: flex;
+  flex-direction: column;
+}
+
+.mode__label {
+  font-size: var(--text-xl);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.mode__pitch {
+  margin-top: var(--space-1);
+  font-weight: 600;
+}
+
+.mode__action {
+  margin-top: auto;
+  padding-top: var(--space-4);
+}

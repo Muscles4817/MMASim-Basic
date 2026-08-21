@@ -45,6 +45,27 @@
   --info: #2c5aa0;
   --info-soft: #e9f0fb;
 
+  /*
+   * Urgency.
+   *
+   * Named separately from the semantic intents even though they currently resolve to them,
+   * because they answer a different question. `--negative` means "this number is bad";
+   * `--urgency-critical` means "deal with this before anything else on the page". They agree
+   * today and the situation feed is the place they are most likely to stop agreeing.
+   *
+   * Defined with `var()` rather than as literals so there is exactly one place per theme where
+   * the colour lives. A dark override here would be a second definition of the same idea, and
+   * that is how a token ends up meaning two things.
+   */
+  --urgency-critical: var(--negative);
+  --urgency-critical-soft: var(--negative-soft);
+  --urgency-high: var(--warning);
+  --urgency-high-soft: var(--warning-soft);
+  --urgency-normal: var(--info);
+  --urgency-normal-soft: var(--info-soft);
+  --urgency-settled: var(--positive);
+  --urgency-settled-soft: var(--positive-soft);
+
   /* --- Corner colours (fixed across themes: they identify a fighter) ---------------- */
   --corner-red: #c0392b;
   --corner-blue: #2b6cb0;
@@ -68,6 +89,8 @@
   --band-none: #7a2c28;
 
   /* --- Space & shape -------------------------------------------------------------- */
+  /* Hairline separation — a chip from its glyph, a value from its unit. Below this, use none. */
+  --space-0: 0.125rem;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -91,18 +114,40 @@
     sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
 
+  /* Table micro-labels and column headers only. Never body copy — it is below the floor. */
+  --text-2xs: 0.6875rem;
   --text-xs: 0.75rem;
   --text-sm: 0.8125rem;
+  /*
+   * Body copy. Sized for a phone held at arm's length, which is the primary target and the
+   * reason it is under 1rem. `--text-body` steps it up on a desktop, where the same size read
+   * as cramped on a 27-inch panel; every screen sets type from `--text-body`, not from this.
+   */
   --text-base: 0.9375rem;
   --text-lg: 1.0625rem;
   --text-xl: 1.25rem;
   --text-2xl: 1.5rem;
   --text-3xl: 2rem;
 
+  /*
+   * Responsive type and gutter.
+   *
+   * The two values that step at a breakpoint. They are tokens rather than per-screen media
+   * queries because the alternative is what the app had: page padding hard-coded in each
+   * screen, so a change to the desktop rhythm meant editing eleven files and missing three.
+   *
+   * The step itself lives at the bottom of this file, in the one media query that is about
+   * width rather than colour.
+   */
+  --text-body: var(--text-base);
+  --gutter: var(--space-3);
+
   /* --- Layout --------------------------------------------------------------------- */
   --nav-height: 3.75rem;
   --header-height: 3.25rem;
   --content-max: 56rem;
+  /* Consoles: dashboards and master/detail, where two regions sit side by side. */
+  --content-max-wide: 82rem;
   /* Minimum interactive size. Never shrink this — it is the difference between a game that
      works on a phone and one that does not. */
   --tap-target: 2.75rem;
@@ -205,4 +250,22 @@
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow: 0 2px 10px rgb(0 0 0 / 0.5);
   --shadow-lg: 0 10px 32px rgb(0 0 0 / 0.6);
+}
+
+/*
+ * The width step.
+ *
+ * The only media query in this file that is about size rather than colour, and deliberately at
+ * the bottom so the palette above reads as one block.
+ *
+ * 62rem rather than the shell's 48rem: 48rem is where the tab bar becomes a rail, which is a
+ * navigation change on a tablet held in two hands. This is where a *pointer on a large screen*
+ * becomes the likely reader, and body copy at 0.9375rem starts reading as cramped rather than
+ * as compact. The two breakpoints answer different questions and should not be merged.
+ */
+@media (min-width: 62rem) {
+  :root {
+    --text-body: 1rem;
+    --gutter: var(--space-5);
+  }
 }

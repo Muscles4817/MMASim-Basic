@@ -86,10 +86,13 @@ describe('landing on the menu', () => {
     // they have pressed the button is not telling them.
     const user = userEvent.setup();
     renderApp();
-    expect(screen.getByRole('radio', { name: /^small$/i })).toBeTruthy();
+    // Not `/^small$/`: the option carries its own hint now — "Small, 850 fighters" — because
+    // choosing between three adjectives was choosing blind. The hint is part of the accessible
+    // name, which is the point of rendering it rather than hiding it.
+    expect(screen.getByRole('radio', { name: /^small/i })).toBeTruthy();
     expect(screen.queryByRole('note')).toBeNull();
 
-    await user.click(screen.getByRole('radio', { name: /^large$/i }));
+    await user.click(screen.getByRole('radio', { name: /^large/i }));
     expect(screen.getByRole('note').textContent).toMatch(/half a minute/i);
   });
 
@@ -97,7 +100,9 @@ describe('landing on the menu', () => {
     // Browser storage is genuinely fragile and the player should know before investing fifteen
     // simulated years in it.
     renderApp();
-    expect(screen.getByText(/stored on this device/i)).toBeTruthy();
+    expect(screen.getByText(/live on this device only/i)).toBeTruthy();
+    // And says the specific thing that destroys them, which is the part worth keeping.
+    expect(screen.getByText(/Clearing your browser data/i)).toBeTruthy();
   });
 });
 
@@ -141,7 +146,22 @@ describe('starting a game', () => {
     await user.click(screen.getByRole('radio', { name: /2026/i }));
     await user.click(screen.getByRole('button', { name: /New game/i }));
 
+    /*
+     * Searched rather than browsed.
+     *
+     * This used to set the hash and match on the name immediately, and it passed because the
+     * landing screen at the time listed the entire roster — so the assertion was satisfied
+     * before the route had changed at all, and it would have passed against the 2020 world too
+     * if that world had happened to contain the name. The roster's default division is
+     * lightweight and Aspinall is a heavyweight; the search crosses divisions, which is what
+     * makes this a claim about the world rather than about a dropdown.
+     */
     window.location.hash = '#/roster';
+    const search = await screen.findByPlaceholderText(/Search all divisions/i, {}, {
+      timeout: 4000,
+    });
+    await user.type(search, 'Aspinall');
+
     // A 2026-only fighter. The 2020 roster does not contain him.
     expect(await screen.findByText(/Aspinall/i, {}, { timeout: 4000 })).toBeTruthy();
   });

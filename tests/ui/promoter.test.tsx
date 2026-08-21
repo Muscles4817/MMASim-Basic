@@ -18,7 +18,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { App } from '../../packages/app/src/App';
@@ -55,14 +55,20 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-/** Take over the first promotion on offer, which is the shortest route into the mode. */
+/**
+ * Take over the first promotion on offer.
+ *
+ * Browse, inspect, commit — the promoter path had no confirmation at all before, so a single
+ * click on any row in a list started the save.
+ */
 async function becomePromoter(user: ReturnType<typeof userEvent.setup>) {
-  goTo('#/start');
+  goTo('#/start/promoter');
   renderApp();
-  const heading = await screen.findByRole('heading', { name: /Or run a promotion/i });
-  const card = heading.closest('.card') as HTMLElement;
-  const promotions = within(card).getAllByRole('button');
-  await user.click(promotions[0]!);
+  const rows = await screen.findAllByRole('button', { name: /./ });
+  const row = rows.find((r) => r.classList.contains('datatable__rowbutton'))!;
+  await user.click(row);
+  await user.click(await screen.findByRole('button', { name: /^Run /i }));
+  await user.click(await screen.findByRole('button', { name: /^Yes — run /i }));
 }
 
 /** Create a card from the calendar and land on it. */

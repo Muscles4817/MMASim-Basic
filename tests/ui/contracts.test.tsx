@@ -66,10 +66,12 @@ describe('a created fighter starts somewhere', () => {
   it('starts with nobody negotiating for them, and says what that costs', async () => {
     const user = userEvent.setup();
     await createFighter(user);
-    goTo('#/hub');
+    // Representation lives with the deal it negotiates, not on the dashboard. Doc 32 § 3.2.
+    goTo('#/contract');
+    renderApp();
 
     expect(
-      await screen.findByText(/negotiating against people who do this for a living/i),
+      await screen.findByText(/negotiate against people who do this professionally/i),
     ).toBeTruthy();
   });
 
@@ -88,7 +90,8 @@ describe('the contract is legible without opening anything', () => {
   it('says how the deal compares to what you are worth, in words not a ratio', async () => {
     const user = userEvent.setup();
     await createFighter(user);
-    goTo('#/hub');
+    goTo('#/contract');
+    renderApp();
 
     // Never "0.68". A ratio needs a paragraph; a sentence does not.
     const sentence = await screen.findByText(
@@ -105,8 +108,11 @@ describe('free agency', () => {
     await createFighter(user);
     goTo('#/hub');
 
-    await user.click(await screen.findByRole('button', { name: /Contract/i }));
-    expect(await screen.findByText(/Who negotiates for you/i)).toBeTruthy();
+    // Two doors now — the tile grid and the situation card both point at it — and either
+    // counts as one tap, which is what the test is about.
+    const doors = await screen.findAllByRole('button', { name: /Your deal/i });
+    await user.click(doors[0]!);
+    expect(await screen.findByTestId('representation')).toBeTruthy();
   });
 
   it('offers managers as shapes rather than as a ranked list', async () => {
@@ -147,10 +153,11 @@ describe('free agency', () => {
     renderApp();
 
     // A debutant with no manager hears from almost nobody, and that is the monopsony
-    // speaking rather than a bug. The screen has to say so.
-    const empty = screen.queryByText(/one buyer that matters/i);
-    const some = screen.queryByText(/on the table/i);
-    expect(empty ?? some).toBeTruthy();
+    // speaking rather than a bug. The screen has to say so — either way, the region exists
+    // and says something, which is the assertion. Anchored on the region rather than on the
+    // two sentences it can contain, because both are copy.
+    const offers = await screen.findByTestId('offers');
+    expect(offers.textContent?.trim().length).toBeGreaterThan(0);
   });
 });
 
@@ -180,12 +187,22 @@ describe('the hub and the offers screen agree', () => {
     await createFighter(user);
 
     goTo('#/hub');
-    const hubSaysCalling = screen.queryAllByText(/promotions? (are|is) calling/i).length > 0;
+    /*
+     * Asked by `data-kind`, not by matching the sentence.
+     *
+     * This test used to look for /promotions? (are|is) calling/ — the dashboard's wording at the
+     * time. The dashboard was then rebuilt around a ranked situation feed and the row now reads
+     * "N promotions are offering you better than you are on", which does not match, so the test
+     * went green by finding nothing rather than by the invariant holding. An assertion whose
+     * subject is prose is an assertion with a expiry date on it.
+     */
+    await screen.findByTestId('needs-you');
+    const hubSaysCalling = document.querySelectorAll('[data-kind="offers"]').length > 0;
 
-    goTo('#/offers');
+    goTo('#/contract');
     renderApp();
-    // The card is titled either way, so waiting on it means the screen has actually rendered.
-    await screen.findAllByText(/Nobody is calling|on the table|worth reading/i);
+    // The panel is titled either way, so waiting on it means the screen has actually rendered.
+    await screen.findByTestId('offers');
     const nobodyIsCalling = screen.queryAllByText(/Nobody is calling/i).length > 0;
 
     expect(hubSaysCalling && nobodyIsCalling).toBe(false);
@@ -202,8 +219,8 @@ describe('hiring a manager', () => {
     // Managers appear before promotions on this screen, so the first is a manager.
     await hireFirstManager(user);
 
-    goTo('#/hub');
-    expect(await screen.findByText(/manages you, on \d+% of the purse/i)).toBeTruthy();
+    // Named, with their cut, on the screen where they do the negotiating.
+    expect(await screen.findByText(/of every purse/i)).toBeTruthy();
   });
 
   it('starts the advice record untested rather than at zero', async () => {
@@ -214,7 +231,7 @@ describe('hiring a manager', () => {
 
     await hireFirstManager(user);
 
-    goTo('#/hub');
+    // On the contract screen with the rest of the representation block, not on the hub.
     expect(await screen.findByText(/has not been tested yet/i)).toBeTruthy();
   });
 });

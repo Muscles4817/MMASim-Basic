@@ -64,10 +64,15 @@ afterEach(cleanup);
 
 /** Take over a seeded fighter and accept the first offer, which lands us in fight camp. */
 async function bookAFight(user: ReturnType<typeof userEvent.setup>) {
-  goTo('#/start');
+  goTo('#/start/fighter');
   renderApp();
-  const rows = await screen.findAllByRole('button', { name: /Star power/i });
-  await user.click(rows[0]!);
+  // Three steps now rather than one tap, which is the whole change: browse, inspect,
+  // then commit explicitly. Clicking a row used to start the save.
+  const rows = await screen.findAllByRole('button', { name: /./ });
+  const row = rows.find((r) => r.classList.contains('datatable__rowbutton'))!;
+  await user.click(row);
+  await user.click(await screen.findByRole('button', { name: /^Take control of/i }));
+  await user.click(await screen.findByRole('button', { name: /^Yes — take control of/i }));
 
   goTo('#/hub');
   const offers = await screen.findAllByRole('button', { name: /Even fight|Step up|Favourable/i });

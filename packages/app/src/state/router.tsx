@@ -35,17 +35,46 @@ const EDITOR_KINDS: readonly EditorEntityKind[] = [
   'commentators',
 ];
 
+/** The three roles a save can be played in. `coach` is designed, not built — see doc 14. */
+export type PlayableMode = 'fighter' | 'coach' | 'promoter';
+
 export type Route =
-  | { name: 'start' }
+  /**
+   * Starting a career.
+   *
+   * `mode` is undefined at the mode picker and set once the player has chosen who to be. It is a
+   * route rather than component state because the four concepts doc 32 § 11.1 separates — world,
+   * mode, starting identity, confirmation — have to be distinguishable in the URL for back to
+   * behave: pressing it from fighter selection should return to the mode picker, not leave the
+   * new-game flow entirely.
+   */
+  | { name: 'start'; mode?: PlayableMode }
   | { name: 'create' }
   | { name: 'training' }
   | { name: 'hub' }
   | { name: 'roster' }
   | { name: 'fighter'; id: string }
+  /**
+   * Your own fighter.
+   *
+   * Its own route rather than `#/fighter/<your id>`, because it is a *place* rather than a page
+   * about somebody: it sits under the Career tab, it is written in the first person, and it must
+   * not put the player's own profile in their back stack on the way home. `#/fighter/<your id>`
+   * redirects here.
+   */
+  | { name: 'me' }
   | { name: 'camp' }
   | { name: 'fight'; boutId: string }
   | { name: 'rankings' }
-  | { name: 'offers' }
+  /**
+   * The fighter's deal: what they are on, who is calling, and who negotiates.
+   *
+   * Was `offers`, which named one third of what the screen does and disagreed with the only
+   * link that pointed at it — the hub's tile said "Contract" and navigated to `#/offers`.
+   * Doc 32 § 3.2 moves the whole negotiation here from the dashboard, at which point "offers"
+   * describes the screen even less well.
+   */
+  | { name: 'contract' }
   // Promoter mode. Flat rather than nested under a role prefix, because a route is a place and
   // the player is only ever in one mode at a time.
   | { name: 'promotion' }
@@ -76,8 +105,13 @@ function parse(hash: string): Route {
   const [head, param, rest] = path.split('/');
   switch (head) {
     case '':
-    case 'start':
       return { name: 'start' };
+    case 'start': {
+      const mode = param as PlayableMode | undefined;
+      return mode === 'fighter' || mode === 'coach' || mode === 'promoter'
+        ? { name: 'start', mode }
+        : { name: 'start' };
+    }
     case 'create':
       return { name: 'create' };
     case 'training':
@@ -88,14 +122,19 @@ function parse(hash: string): Route {
       return { name: 'roster' };
     case 'fighter':
       return param ? { name: 'fighter', id: param } : { name: 'roster' };
+    case 'me':
+      return { name: 'me' };
     case 'camp':
       return { name: 'camp' };
     case 'fight':
       return param ? { name: 'fight', boutId: param } : { name: 'hub' };
     case 'rankings':
       return { name: 'rankings' };
+    // `#/offers` still parses: it is in the wild, in muscle memory, and in the inbox links of
+    // saves made before the rename. A route is a place, and this place did not move.
     case 'offers':
-      return { name: 'offers' };
+    case 'contract':
+      return { name: 'contract' };
     case 'promotion':
       return { name: 'promotion' };
     case 'card':
@@ -128,6 +167,8 @@ function parse(hash: string): Route {
 
 export function toHash(route: Route): string {
   switch (route.name) {
+    case 'start':
+      return route.mode ? `#/start/${route.mode}` : '#/start';
     case 'fighter':
       return `#/fighter/${route.id}`;
     case 'fight':

@@ -65,6 +65,11 @@ export interface LadderStatus {
   titleShot: TitleShotVerdict;
   /** True when the belt is vacant and the top contender can claim it. */
   titleVacant: boolean;
+  /*
+   * No `offers` here. Who wants to sign this fighter is `offersOnTheTable`'s question, asked in
+   * one place — carrying a second answer on `LadderStatus` is how the hub came to advertise a
+   * market the contract screen had never heard of.
+   */
   /** 0–1 toward being global champion. Drives the progress bar. */
   progress: number;
 }

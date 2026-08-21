@@ -1,10 +1,16 @@
 /**
- * Reading a fighter the way a matchmaker reads one.
+ * Reading a fighter.
  *
  * The fighter screen's problem was never that it lacked numbers. It had forty-four of them and
- * no answer to the only question a promoter is actually asking, which is *what do I do with this
- * person*. Two fighters with the same overall rating can be a 23-year-old worth building and a
- * 36-year-old worth one more payday, and nothing on the page said so.
+ * no answer to the only question anybody is actually asking, which is *what does this person
+ * mean to me*. Two fighters with the same overall rating can be a 23-year-old worth building and
+ * a 36-year-old worth one more payday, and nothing on the page said so.
+ *
+ * This was `promoterRead.ts`, and the name was the mistake doc 32 § 6 records: none of it is a
+ * promoter concept. "How good are they, what kind of fighter are they, what has the career cost,
+ * are they available" are the same questions a fighter asks about an opponent, a coach asks about
+ * a prospect and a promoter asks about a signing. What differs is the *framing* and the actions,
+ * and both of those belong in the UI layer rather than in a filename here.
  *
  * Three reads live here, and they are deliberately different kinds of thing:
  *

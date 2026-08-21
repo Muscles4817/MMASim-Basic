@@ -6,15 +6,17 @@ import { Shell } from './shell/Shell';
 import { UpdatePrompt } from './shell/UpdatePrompt';
 import { Alert } from './ui/signals';
 import { StartScreen } from './screens/StartScreen';
+import { StartFighterScreen } from './screens/StartFighterScreen';
+import { StartPromoterScreen } from './screens/StartPromoterScreen';
 import { CreateFighterScreen } from './screens/CreateFighterScreen';
 import { TrainingScreen } from './screens/TrainingScreen';
 import { HubScreen } from './screens/HubScreen';
 import { RosterScreen } from './screens/RosterScreen';
-import { FighterScreen } from './screens/FighterScreen';
+import { FighterScreen, MeScreen } from './screens/FighterScreen';
 import { CampScreen } from './screens/CampScreen';
 import { FightScreen } from './screens/FightScreen';
 import { RankingsScreen } from './screens/RankingsScreen';
-import { OffersScreen } from './screens/OffersScreen';
+import { ContractScreen } from './screens/ContractScreen';
 import { EditorFighterScreen, EditorScreen } from './screens/EditorScreen';
 import {
   EditorEntityScreen,
@@ -89,6 +91,22 @@ export function App() {
   function renderRoute() {
     switch (route.name) {
       case 'start':
+        // Three steps, three titles, one route family. `showBack` from the second step on, so
+        // the mode picker is somewhere to return to rather than somewhere you fell out of.
+        if (route.mode === 'fighter') {
+          return (
+            <Shell title="Choose a fighter" showBack wide>
+              <StartFighterScreen />
+            </Shell>
+          );
+        }
+        if (route.mode === 'promoter') {
+          return (
+            <Shell title="Choose a promotion" showBack wide>
+              <StartPromoterScreen />
+            </Shell>
+          );
+        }
         return (
           <Shell title="New career">
             <StartScreen />
@@ -108,7 +126,10 @@ export function App() {
         );
       case 'hub':
         return (
-          <Shell title="Career">
+          // Wide: the dashboard's argument is the same as the promotion dashboard's — the
+          // decisions are comparative, and a 56rem column forces every comparison across a
+          // scroll. See doc 32 § 1.6 for how much of a 1920px display the old one left empty.
+          <Shell title="Career" wide>
             <HubScreen />
           </Shell>
         );
@@ -128,6 +149,14 @@ export function App() {
             <FighterScreen key={route.id} id={route.id} />
           </Shell>
         );
+      case 'me':
+        return (
+          // Wide, and no back control: this is a place under the Career tab rather than a page
+          // you arrived at from somewhere.
+          <Shell title="My fighter" wide>
+            <MeScreen />
+          </Shell>
+        );
       case 'camp':
         return (
           <Shell title="Fight camp" showBack>
@@ -140,10 +169,12 @@ export function App() {
             <FightScreen boutId={route.boutId} />
           </Shell>
         );
-      case 'offers':
+      case 'contract':
         return (
-          <Shell title="Offers" showBack>
-            <OffersScreen />
+          // Wide: the whole point of the screen is comparing offers against the deal you are
+          // already on, and a 56rem column puts those two things a scroll apart.
+          <Shell title="Your deal" showBack wide>
+            <ContractScreen />
           </Shell>
         );
       // --- Promoter mode ---------------------------------------------------------------
@@ -196,7 +227,9 @@ export function App() {
         );
       case 'rankings':
         return (
-          <Shell title="Rankings">
+          // Wide: a ranking is a comparison, and the filters belong beside the table rather
+          // than in a band above it.
+          <Shell title="Rankings" wide>
             <RankingsScreen />
           </Shell>
         );
@@ -236,7 +269,7 @@ export function App() {
         );
       default:
         return (
-          <Shell title="Career">
+          <Shell title="Career" wide>
             <HubScreen />
           </Shell>
         );

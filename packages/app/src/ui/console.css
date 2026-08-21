@@ -1,10 +1,12 @@
 /*
- * The promoter's console.
+ * The console layer.
  *
  * Same visual language as everything else — dark surfaces, one restrained red accent, cards,
- * compact type — used at a different density. A promoter screen is a management console rather
- * than a phone card: on a desktop it should show a decision and the context for that decision
- * side by side, which is what the whole file is for.
+ * compact type — used at a different density. A management screen is a console rather than a
+ * phone card: on a desktop it should show a decision and the context for that decision side by
+ * side, which is what the whole file is for. Written for promoter mode, and every rule in it
+ * turned out to be about *density and comparison* rather than about promoting — which is why
+ * doc 32 § 6 moves it out from under that name and into fighter mode too.
  *
  * Mobile stays a single column, in source order, so nothing here needs a media query to *undo*.
  * Every rule below is additive at a breakpoint.
@@ -628,7 +630,7 @@
 
 @media (min-width: 62rem) {
   .shell__main--wide {
-    max-width: 82rem;
+    max-width: var(--content-max-wide);
   }
 }
 

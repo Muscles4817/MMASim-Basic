@@ -21,7 +21,9 @@ html {
 
 body {
   font-family: var(--font-sans);
-  font-size: var(--text-base);
+  /* `--text-body`, not `--text-base`: the token steps up at 62rem so body copy is sized for the
+     screen it is on rather than for the phone everywhere. See tokens.css. */
+  font-size: var(--text-body);
   line-height: 1.5;
   color: var(--text);
   background: var(--bg);
