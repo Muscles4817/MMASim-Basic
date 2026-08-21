@@ -14,7 +14,7 @@ import { FighterScreen } from './screens/FighterScreen';
 import { CampScreen } from './screens/CampScreen';
 import { FightScreen } from './screens/FightScreen';
 import { RankingsScreen } from './screens/RankingsScreen';
-import { OffersScreen } from './screens/OffersScreen';
+import { ContractScreen } from './screens/ContractScreen';
 import { EditorFighterScreen, EditorScreen } from './screens/EditorScreen';
 import {
   EditorEntityScreen,
@@ -142,8 +142,10 @@ export function App() {
         );
       case 'contract':
         return (
-          <Shell title="Your deal" showBack>
-            <OffersScreen />
+          // Wide: the whole point of the screen is comparing offers against the deal you are
+          // already on, and a 56rem column puts those two things a scroll apart.
+          <Shell title="Your deal" showBack wide>
+            <ContractScreen />
           </Shell>
         );
       // --- Promoter mode ---------------------------------------------------------------

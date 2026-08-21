@@ -11,7 +11,6 @@
  */
 
 import { clamp } from '../core/math.js';
-import type { Rng } from '../core/rng.js';
 import type { GameDay } from '../core/clock.js';
 import type { DivisionId, FighterId, PromotionId } from '../core/ids.js';
 import type { Fighter } from '../domain/fighter.js';
@@ -186,65 +185,19 @@ export function titleShotEligibility(
   };
 }
 
-export interface PromotionOffer {
-  promotion: Promotion;
-  /** Signing bonus in thousands. Scales with tier and with how badly they want you. */
-  bonus: number;
-  /** Why they are calling, for the offer screen. */
-  pitch: string;
-}
-
-/**
- * Which promotions want to sign this fighter, and why.
+/*
+ * `PromotionOffer` and `promotionOffers()` used to live here.
  *
- * A promotion looks one tier below itself for talent. What it is buying is some mixture of
- * results and marketability, weighted by how much that promotion cares about narrative —
- * which is how a charismatic 6-2 fighter gets the call ahead of a faceless 12-0 one.
+ * They were replaced by `business/freeAgency.ts` — whose docstring says so — and the
+ * replacement was never wired up on the consumer side, so the game shipped two independent
+ * offer markets for eighteen months. The career hub read this one and the offers screen read
+ * the other, and they disagreed about who was interested, about how many, and about what the
+ * money was: this one hard-filtered `step !== 1`, which from a regional fighter selects every
+ * national promotion in the world, and quoted a signing bonus nothing ever paid.
+ *
+ * Deleted rather than deprecated. A second source of truth that still compiles is a second
+ * source of truth. `offersFor` is the market. See doc 32 § 3.1.
  */
-export function promotionOffers(
-  fighter: Fighter,
-  promotions: readonly Promotion[],
-  current: Promotion | undefined,
-  rng: Rng,
-): PromotionOffer[] {
-  const currentTier = current ? tierRank(current.tier) : -1;
-  const streak = fighter.summary.streak;
-
-  // You do not get signed up while you are losing.
-  if (streak < 2) return [];
-
-  return promotions
-    .filter((p) => {
-      if (current && p.id === current.id) return false;
-      const step = tierRank(p.tier) - currentTier;
-      // One rung at a time. Nobody goes from a regional show to the global promotion.
-      if (step !== 1) return false;
-      return p.divisions.includes(fighter.divisionId);
-    })
-    .map((promotion) => {
-      const merit = fighter.reputation * 0.7 + streak * 5;
-      const marketing = fighter.starPower * (promotion.narrativeControl / 100);
-      const appeal = merit + marketing;
-
-      // The bar rises steeply with tier: the global promotion is not signing prospects.
-      const bar = 22 + tierRank(promotion.tier) * 17;
-      if (appeal < bar) return undefined;
-
-      const bonus = Math.round(
-        clamp((appeal - bar) * (promotion.budget / 3000), 2, promotion.budget * 0.05) *
-          rng.range(0.85, 1.2),
-      );
-
-      const pitch =
-        marketing > merit
-          ? `${promotion.shortName} think you can sell. They are less interested in your record than in your name.`
-          : `${promotion.shortName} have been watching your results. They think you can compete at their level.`;
-
-      return { promotion, bonus, pitch };
-    })
-    .filter((o): o is PromotionOffer => o !== undefined)
-    .sort((a, b) => b.bonus - a.bonus);
-}
 
 /**
  * A fighter's progress toward the top, 0–1.

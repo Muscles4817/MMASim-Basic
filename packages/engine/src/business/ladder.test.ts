@@ -1,18 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { createRng } from '../core/rng.js';
 import { asDivisionId, asFighterId, asPromotionId } from '../core/ids.js';
 import type { Fighter } from '../domain/fighter.js';
-import type { Promotion } from '../domain/organisations.js';
 import { makeFighter, makePromotion } from '../testing/fixtures.js';
 import {
   RANKED_DEPTH,
   TIER_ORDER,
   careerProgress,
-  promotionOffers,
   rankDivision,
   rankOf,
   setChampion,
-  tierRank,
   titleShotEligibility,
 } from './ladder.js';
 
@@ -170,76 +166,6 @@ describe('setChampion', () => {
 
     const vacated = setChampion(crowned, DIV, undefined);
     expect(vacated.champions[DIV]).toBeUndefined();
-  });
-});
-
-describe('promotionOffers', () => {
-  const promotions: Promotion[] = [
-    makePromotion({ id: asPromotionId('p_dev'), tier: 'developmental', budget: 900, prestige: 20 }),
-    makePromotion({ id: asPromotionId('p_reg'), tier: 'regional', budget: 2400, prestige: 38 }),
-    makePromotion({ id: asPromotionId('p_maj'), tier: 'major', budget: 14000, prestige: 66 }),
-    makePromotion({ id: asPromotionId('p_glo'), tier: 'global', budget: 42000, prestige: 95 }),
-  ];
-
-  const atTier = (tier: Promotion['tier']) => promotions.find((p) => p.tier === tier)!;
-
-  it('makes no offers to a fighter who is losing', () => {
-    const f = { ...contender('a', 80, -1), promotionId: asPromotionId('p_dev') };
-    expect(promotionOffers(f, promotions, atTier('developmental'), createRng('a'))).toHaveLength(0);
-  });
-
-  it('only ever offers one rung up', () => {
-    const f = { ...contender('a', 90, 4), promotionId: asPromotionId('p_dev') };
-    const offers = promotionOffers(f, promotions, atTier('developmental'), createRng('b'));
-    for (const offer of offers) {
-      expect(tierRank(offer.promotion.tier)).toBe(tierRank('developmental') + 1);
-    }
-  });
-
-  it('does not sign a modest prospect to the global promotion', () => {
-    const f = { ...contender('a', 45, 2), promotionId: asPromotionId('p_maj') };
-    expect(promotionOffers(f, promotions, atTier('major'), createRng('c'))).toHaveLength(0);
-  });
-
-  it('signs a proven fighter up a tier, with a bonus', () => {
-    const f = { ...contender('a', 95, 5), promotionId: asPromotionId('p_reg') };
-    const offers = promotionOffers(f, promotions, atTier('regional'), createRng('d'));
-    expect(offers.length).toBeGreaterThan(0);
-    expect(offers[0]!.bonus).toBeGreaterThan(0);
-    expect(offers[0]!.pitch.length).toBeGreaterThan(20);
-  });
-
-  it('says so when it is buying marketability rather than results', () => {
-    const marketable = {
-      ...contender('a', 40, 3),
-      starPower: 95,
-      promotionId: asPromotionId('p_reg'),
-    };
-    const offers = promotionOffers(
-      marketable,
-      promotions,
-      atTier('regional'),
-      createRng('e'),
-    );
-    if (offers.length > 0) expect(offers[0]!.pitch).toMatch(/sell/i);
-  });
-
-  it('never offers a division the promotion does not run', () => {
-    // Stated explicitly rather than relying on a fixture default. This previously passed
-    // because the shared promotion fixture ran no divisions at all, which meant it was also
-    // silently asserting nothing.
-    const mensOnly = [
-      makePromotion({ id: asPromotionId('p_reg'), tier: 'regional', prestige: 38, divisions: [] }),
-      makePromotion({
-        id: asPromotionId('p_maj'),
-        tier: 'major',
-        budget: 14000,
-        prestige: 66,
-        divisions: [asDivisionId('mens-lightweight')],
-      }),
-    ];
-    const f = { ...contender('a', 95, 5), divisionId: asDivisionId('womens-strawweight') };
-    expect(promotionOffers(f, mensOnly, mensOnly[0]!, createRng('f'))).toHaveLength(0);
   });
 });
 

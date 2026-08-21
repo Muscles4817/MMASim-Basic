@@ -66,10 +66,12 @@ describe('a created fighter starts somewhere', () => {
   it('starts with nobody negotiating for them, and says what that costs', async () => {
     const user = userEvent.setup();
     await createFighter(user);
-    goTo('#/hub');
+    // Representation lives with the deal it negotiates, not on the dashboard. Doc 32 § 3.2.
+    goTo('#/contract');
+    renderApp();
 
     expect(
-      await screen.findByText(/negotiating against people who do this for a living/i),
+      await screen.findByText(/negotiate against people who do this professionally/i),
     ).toBeTruthy();
   });
 
@@ -88,7 +90,8 @@ describe('the contract is legible without opening anything', () => {
   it('says how the deal compares to what you are worth, in words not a ratio', async () => {
     const user = userEvent.setup();
     await createFighter(user);
-    goTo('#/hub');
+    goTo('#/contract');
+    renderApp();
 
     // Never "0.68". A ratio needs a paragraph; a sentence does not.
     const sentence = await screen.findByText(
@@ -105,7 +108,10 @@ describe('free agency', () => {
     await createFighter(user);
     goTo('#/hub');
 
-    await user.click(await screen.findByRole('button', { name: /Contract/i }));
+    // Two doors now — the tile grid and the situation card both point at it — and either
+    // counts as one tap, which is what the test is about.
+    const doors = await screen.findAllByRole('button', { name: /Your deal/i });
+    await user.click(doors[0]!);
     expect(await screen.findByTestId('representation')).toBeTruthy();
   });
 
@@ -173,8 +179,8 @@ describe('hiring a manager', () => {
     // Managers appear before promotions on this screen, so the first is a manager.
     await hireFirstManager(user);
 
-    goTo('#/hub');
-    expect(await screen.findByText(/manages you, on \d+% of the purse/i)).toBeTruthy();
+    // Named, with their cut, on the screen where they do the negotiating.
+    expect(await screen.findByText(/of every purse/i)).toBeTruthy();
   });
 
   it('starts the advice record untested rather than at zero', async () => {
@@ -185,7 +191,7 @@ describe('hiring a manager', () => {
 
     await hireFirstManager(user);
 
-    goTo('#/hub');
+    // On the contract screen with the rest of the representation block, not on the hub.
     expect(await screen.findByText(/has not been tested yet/i)).toBeTruthy();
   });
 });

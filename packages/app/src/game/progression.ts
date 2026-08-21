@@ -18,7 +18,6 @@ import {
   createRng,
   moveDivision,
   overallRating,
-  promotionOffers,
   settleWeight,
   describeInjury,
   rankDivision,
@@ -34,7 +33,6 @@ import {
   type Gym,
   type Injury,
   type Promotion,
-  type PromotionOffer,
   type RankedFighter,
   type TitleShotVerdict,
   type TrainingFocus,
@@ -67,7 +65,14 @@ export interface LadderStatus {
   titleShot: TitleShotVerdict;
   /** True when the belt is vacant and the top contender can claim it. */
   titleVacant: boolean;
-  offers: readonly PromotionOffer[];
+  /*
+   * No `offers` here any more.
+   *
+   * `LadderStatus` used to carry the output of `promotionOffers()`, which is how the career hub
+   * came to render a market the contract screen had never heard of. Who wants to sign this
+   * fighter is a question for `offersOnTheTable`, and asking it in one place is the entire fix.
+   * See doc 32 § 3.1.
+   */
   /** 0–1 toward being global champion. Drives the progress bar. */
   progress: number;
 }
@@ -102,13 +107,6 @@ export function getLadderStatus(db: GameDb, fighter: Fighter): LadderStatus {
     ? titleShotEligibility(fighter, ranked, promotion)
     : { eligible: false, reason: 'You are not signed to a promotion.' };
 
-  const offers = promotionOffers(
-    fighter,
-    db.promotions.findAll() as unknown as Promotion[],
-    promotion,
-    createRng(`${world.seed}:offers:${fighter.id}:${world.day}`),
-  );
-
   return {
     promotion,
     ranked,
@@ -117,7 +115,6 @@ export function getLadderStatus(db: GameDb, fighter: Fighter): LadderStatus {
     champion,
     titleVacant: champion === undefined,
     titleShot,
-    offers,
     progress: careerProgress(fighter, promotion, position, isChampion),
   };
 }

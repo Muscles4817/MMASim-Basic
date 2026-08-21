@@ -76,15 +76,18 @@ export function Panel({
   action,
   children,
   className = '',
+  testId,
 }: {
   title?: ReactNode;
   /** A link or small button belonging to this region, right-aligned against the title. */
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** A stable handle for tests, for the same reason `Card` has one: titles are prose. */
+  testId?: string;
 }) {
   return (
-    <section className={`panel ${className}`.trim()}>
+    <section className={`panel ${className}`.trim()} data-testid={testId}>
       {(title || action) && (
         <header className="panel__header">
           {title && <h2 className="panel__title">{title}</h2>}

@@ -1,21 +1,13 @@
 import { useMemo, useState } from 'react';
 import {
   currentHeat,
-  describeAdviceRecord,
-  describeFairness,
   daysSinceLastBout,
   describeFreshness,
   freshnessOf,
-  describeReleaseRisk,
   describeRust,
   rustFor,
   rustLabel,
   describeHeat,
-  describeStable,
-  describeTrigger,
-  releaseRisk,
-  renegotiationTriggers,
-  type RepaperOffer,
   displayName,
   fighterAge,
   getDivision,
@@ -31,6 +23,7 @@ import {
   WEAR_CONCERN,
 } from '@mmasim/engine';
 import { readMileage } from '../ui/mileage';
+import { money } from '../ui/format';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Flag } from '../ui';
@@ -53,13 +46,9 @@ import { NewsFeed } from '../ui/NewsFeed';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 import { campCostFor, currentPurse, solvencyOf } from '../game/money';
 import {
-  acceptRepaperOffer,
   adviceOn,
   boutMerit,
-  canSignWith,
   contractStanding,
-  repaperOnTheTable,
-  requestRelease,
 } from '../game/contracts';
 import { formatGameDay } from '../shell/Shell';
 import { InjuryStatus, RestCard } from './Recovery';
@@ -75,9 +64,6 @@ export function HubScreen() {
   const { db, world, playerFighter, commit } = useGame();
   const { navigate } = useRouter();
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const [releaseWord, setReleaseWord] = useState<string | undefined>();
-  const [confirmingRepaper, setConfirmingRepaper] = useState(false);
-  const [signedRepaper, setSignedRepaper] = useState<RepaperOffer | undefined>();
   const [pendingOffer, setPendingOffer] = useState<MatchupAppraisal | undefined>();
   const [booking, setBooking] = useState(() => getBooking(playerFighter?.id as string | undefined));
   /*
@@ -125,15 +111,6 @@ export function HubScreen() {
   const gym = fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined;
   const bankState = solvencyOf(fighter, campCostFor(gym, 8));
   const standing = contractStanding(db, fighter);
-  const triggers =
-    standing.agreement && standing.promotion
-      ? renegotiationTriggers(standing.agreement, fighter, standing.promotion, {
-          isChampion: ladder?.isChampion,
-        })
-      : [];
-  const repaper = repaperOnTheTable(db, fighter);
-  const jobRisk =
-    standing.promotion && !standing.freeAgent ? releaseRisk(fighter, standing.promotion) : 0;
   // How long since they last competed, which is now a real cost rather than a stored zero.
   const daysSince = daysSinceLastBout(fighter.record, world.day);
   const rust = rustFor(daysSince ?? 0);
@@ -377,30 +354,7 @@ export function HubScreen() {
           ladder={ladder}
           fighterId={fighter.id as string}
           divisionName={getDivision(fighter.divisionId).name}
-          lock={
-            // Interest arrives whatever your contract says — seeing what you are worth is most
-            // of the drama of being stuck on a bad deal. Acting on it is what the deal governs.
-            ladder.offers.length > 0 && ladder.offers[0]
-              ? (() => {
-                  const eligibility = canSignWith(db, fighter, ladder.offers[0]!.promotion);
-                  return eligibility.allowed
-                    ? undefined
-                    : { reason: eligibility.reason, releasable: eligibility.releasable };
-                })()
-              : undefined
-          }
-          onGoToOffers={() => navigate({ name: 'contract' })}
-          onAskRelease={() => {
-            const outcome = requestRelease(db, fighter);
-            setReleaseWord(outcome.reason);
-            commit();
-          }}
         />
-      )}
-      {releaseWord && (
-        <Alert tone="info" title="You asked for your release">
-          {releaseWord}
-        </Alert>
       )}
 
       {!booking && ladder?.titleShot.eligible && (ladder.champion || ladder.position === 1) && (
@@ -557,22 +511,20 @@ export function HubScreen() {
       )}
 
       {/*
-        Where you stand contractually.
+        Where you stand contractually — as a summary, and a door.
 
-        Deliberately on the home screen rather than behind a Contracts tab: a contract counter
-        that says "fight 3 of 4" is the cheapest source of anticipation in the whole design,
-        because it makes free agency *approach* rather than arrive. The fairness ratio is
-        computed and never shown — a ratio needs a paragraph and a sentence does not.
+        This card used to be the game's entire negotiation surface: the re-paper offer with its
+        full terms, the renegotiation triggers, the release request, the job-risk alert and the
+        manager, all rendered here in alerts, while the screen actually named after contracts
+        could sign a deal and do nothing else. Doc 32 § 3.2 calls that inverted, and it was.
+
+        What survives on a dashboard is the counter — "fight 3 of 4" is the cheapest source of
+        anticipation in the design, because it makes free agency *approach* rather than arrive —
+        and a way through to the rest of it.
       */}
       <Card title="Your situation">
         {standing.freeAgent || !standing.agreement ? (
           <>
-            {/*
-              Being unsigned used to read as neutral — "nobody owes you a fight and you owe
-              nobody one" is very nearly a boast. It is the most dangerous state in a career and
-              the screen has to say so, because the cost of it is invisible until the day you
-              cannot get booked.
-            */}
             <Alert tone="warn" title="You are a free agent">
               Nobody is obliged to offer you anything. Every week without a booking is a week your
               name gets smaller and your timing gets worse, and nothing here is going to happen
@@ -590,18 +542,15 @@ export function HubScreen() {
           <div className="stack" style={{ gap: 'var(--space-2)' }}>
             <p style={{ fontWeight: 700 }}>{standing.status?.summary}</p>
             <p className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
-              {standing.promotion?.name} · £{standing.agreement.showPurse}k to show, £
-              {standing.agreement.winBonus}k to win
+              {standing.promotion?.name} · {money(standing.agreement.showPurse)} to show,{' '}
+              {money(standing.agreement.winBonus)} to win
               {standing.agreement.championshipExtension === 'standard' &&
                 ' · you cannot leave while you hold the belt'}
             </p>
-            <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
-              {describeFairness(standing.fairness ?? 1)}
-            </p>
             {/*
-              What the layoff has cost. `Condition.ringRust` was in the model from the start and
-              was never written or read by anything, so sitting out was free — which is exactly
-              why the pressure the contract layer is built on never arrived.
+              What the layoff has cost, and no longer only to a contracted fighter — the same
+              read now reaches a free agent through `careerAttention`, which is where it always
+              belonged. This is the contracted fighter's copy of it.
             */}
             {rust > 0 && (
               <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
@@ -609,152 +558,13 @@ export function HubScreen() {
                 {describeRust(rust)}
               </p>
             )}
-            {triggers.length > 0 && (
-              <Alert tone="info" title="You have grounds to reopen this">
-                {describeTrigger(triggers[0]!)}
-              </Alert>
-            )}
-
-            {/*
-              The ratchet.
-
-              Doc 16 specifies the re-paper in full and nothing implemented it, which left
-              the contract layer with exactly one shape of decision: sign, then endure until
-              it expires. This is the offer that makes captivity something you agreed to
-              repeatedly — more money today for more captivity tomorrow, put in front of you
-              at the precise moment you feel invincible.
-
-              Both halves are stated plainly, including the ones that cost you, because the
-              whole point is that it is a real decision and a fighter who says yes should
-              know exactly what they said yes to.
-            */}
-            {repaper && !signedRepaper && (
-              <Alert tone="good" title="They want to tear this up">
-                <span
-                  className="prose"
-                  style={{ display: 'block', marginBottom: 'var(--space-2)' }}
-                >
-                  {repaper.reason}
-                </span>
-                <span
-                  className="prose"
-                  style={{ display: 'block', marginBottom: 'var(--space-2)' }}
-                >
-                  <strong>
-                    £{repaper.terms.showPurse}k to show, £{repaper.terms.winBonus}k to win
-                  </strong>{' '}
-                  — up from £{repaper.current.showPurse}k and £{repaper.current.winBonus}k, a{' '}
-                  {Math.round(repaper.uplift * 100)}% rise starting with your next fight.
-                </span>
-                <span
-                  className="prose"
-                  style={{ display: 'block', marginBottom: 'var(--space-3)' }}
-                >
-                  In exchange the deal restarts at{' '}
-                  <strong>{repaper.terms.fightsOwed} fights</strong> owed, where you currently owe{' '}
-                  {repaper.current.fightsRemaining}
-                  {repaper.terms.championshipExtension !== 'none' &&
-                    ', and the championship extension is reattached'}
-                  . Saying no costs you nothing today, but the offer may not come back at this
-                  price.
-                </span>
-                {/*
-                  Two steps, and a confirmation that stays.
-                  
-                  This restarts the deal at N fights owed and can reattach the championship
-                  extension — the most binding thing a fighter can do — and it was one tap on
-                  a default button. Accepting a fight two-steps; committing a camp two-steps;
-                  resetting the save two-steps. This outranks all three.
-                  
-                  It also confirmed nothing: `standing` recomputes, the alert vanishes, and
-                  the player is left with no evidence anything happened. The receipt below is
-                  in a live region and persists until the next fight.
-                */}
-                {confirmingRepaper ? (
-                  <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-                    <Button
-                      onClick={() => {
-                        acceptRepaperOffer(db, fighter, repaper);
-                        setSignedRepaper(repaper);
-                        setConfirmingRepaper(false);
-                        commit();
-                      }}
-                    >
-                      Yes — sign it
-                    </Button>
-                    <Button variant="ghost" onClick={() => setConfirmingRepaper(false)}>
-                      Not yet
-                    </Button>
-                  </div>
-                ) : (
-                  <Button variant="secondary" onClick={() => setConfirmingRepaper(true)}>
-                    Sign it
-                  </Button>
-                )}
-              </Alert>
-            )}
-
-            {/*
-              The receipt.
-
-              Its own region rather than a branch inside the alert, because the alert is gone
-              by then: `standing` recomputes on commit and the offer stops existing, which is
-              exactly why signing used to leave the player with no evidence anything happened.
-            */}
-            {signedRepaper && (
-              <Alert tone="good" title="Signed">
-                <span className="prose" style={{ display: 'block' }}>
-                  You now owe {signedRepaper.terms.fightsOwed} fights at £
-                  {signedRepaper.terms.showPurse}k to show and £{signedRepaper.terms.winBonus}k to
-                  win.
-                </span>
-              </Alert>
-            )}
-
-            {/*
-              Whether the job is safe.
-
-              `describeReleaseRisk` was written and rendered nowhere, so the player could be
-              two losses from being cut with no way of knowing — while the world around them
-              now actually does the cutting. This is the one piece of contract information a
-              fighter genuinely has: everybody in a gym knows when somebody is fighting for
-              their job.
-
-              Silent at zero rather than reassuring, because a permanent "your place is not in
-              question" badge trains the player to stop reading the block.
-            */}
-            {jobRisk > 0 && (
-              <Alert
-                tone={jobRisk >= 0.45 ? 'danger' : 'warn'}
-                title={jobRisk >= 0.45 ? 'You are fighting for your job' : 'Your place is slipping'}
-              >
-                {describeReleaseRisk(jobRisk)}
-              </Alert>
-            )}
-            {standing.agreement.tolledDays > 0 && (
-              <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
-                The clock has been stopped for {standing.agreement.tolledDays} days you were not
-                available. Time out does not run a deal down.
-              </p>
-            )}
+            <div className="row">
+              <Button size="sm" onClick={() => navigate({ name: 'contract' })}>
+                Your deal
+              </Button>
+            </div>
           </div>
         )}
-
-        {/* One number, and it is also the relationship. */}
-        <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
-          {standing.manager ? (
-            <>
-              <strong>{standing.manager.name}</strong> manages you, on{' '}
-              {Math.round(standing.manager.purseRate * 100)}% of the purse.{' '}
-              {describeAdviceRecord(standing.manager)} {describeStable(standing.manager)}
-            </>
-          ) : (
-            <>
-              You have no manager. You keep every penny and you are negotiating against people who
-              do this for a living.
-            </>
-          )}
-        </p>
       </Card>
 
       {/*
@@ -783,8 +593,8 @@ export function HubScreen() {
           />
           <HubLink
             icon="📝"
-            label="Contract"
-            hint="Offers, and who negotiates"
+            label="Your deal"
+            hint="Terms, offers, and who negotiates"
             onClick={() => navigate({ name: 'contract' })}
           />
           <HubLink
@@ -1048,28 +858,13 @@ function LadderCard({
   ladder,
   fighterId,
   divisionName,
-  lock,
-  onGoToOffers,
-  onAskRelease,
 }: {
   ladder: LadderStatus;
   /** So the player's own row can be marked in the table rather than only counted. */
   fighterId: string;
   divisionName: string;
-  /*
-    Why the player cannot act on the interest below, if they cannot.
-   
-    This card used to carry its own "Sign with X" button wired to a three-line `signWith` that set
-    `promotionId` and nothing else — no agreement, no bonus paid, no old deal closed — so a player
-    who used it ended up at their new promotion still on the old one's contract. Signing now lives
-    in exactly one place, the offers screen, and this card's job is to say who is interested and
-    what is standing in the way.
-  */
-  lock?: { reason: string; releasable: boolean };
-  onGoToOffers(): void;
-  onAskRelease(): void;
 }) {
-  const { promotion, position, isChampion, titleShot, offers, progress, ranked, champion } = ladder;
+  const { promotion, position, isChampion, titleShot, progress, ranked, champion } = ladder;
 
   const standing = isChampion
     ? 'Champion'
@@ -1171,58 +966,6 @@ function LadderCard({
         </div>
       )}
 
-      {offers.length > 0 && (
-        <div style={{ marginTop: 'var(--space-4)' }}>
-          <h3 className="section-title">Offers</h3>
-          <div className="stack" style={{ gap: 'var(--space-2)' }}>
-            {offers.map((offer) => (
-              <div
-                key={offer.promotion.id}
-                style={{
-                  padding: 'var(--space-3)',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--accent)',
-                  background: 'var(--accent-soft)',
-                }}
-              >
-                <p style={{ fontWeight: 700 }}>{offer.promotion.name}</p>
-                <p className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
-                  {offer.pitch}
-                </p>
-                <div className="row" style={{ marginTop: 'var(--space-2)', flexWrap: 'wrap' }}>
-                  {/*
-                    Described as a likely bonus rather than promised as a figure. The old label
-                    said "Signing bonus £Xk" next to a button that never paid it, and the real
-                    number is negotiated on the offers screen.
-                  */}
-                  <Chip tone="positive">Around £{offer.bonus}k to sign</Chip>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {lock ? (
-            <div style={{ marginTop: 'var(--space-3)' }}>
-              <Alert tone="warn" title="You are under contract">
-                {lock.reason}
-                {lock.releasable && (
-                  <div className="row" style={{ marginTop: 'var(--space-2)' }}>
-                    <Button size="sm" onClick={onAskRelease}>
-                      Ask to be released
-                    </Button>
-                  </div>
-                )}
-              </Alert>
-            </div>
-          ) : (
-            <div className="row" style={{ marginTop: 'var(--space-3)' }}>
-              <Button size="sm" variant="primary" onClick={onGoToOffers}>
-                See the terms
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
     </Card>
   );
 }
