@@ -91,7 +91,9 @@ calibrate twice.
 | **D7** | F4 (remainder) — authority is not comparable | calibration | D1–D5 | yes, materially |
 | **D8** | F5 — `lead` is inert | cleanup | — | barely |
 | **D9** | F8 — no badly-fatigued situation | cleanup (additive) | — | yes, situationally |
-| **D10** | Reduced's plan sensitivity is inverted on the ground | architectural (Reduced) | — | Reduced only |
+| **D10** | Reduced's plan sensitivity is inverted on the ground *(**done**)* | architectural (Reduced) | — | Reduced only |
+| **D11** | Reduced books no clinch control at all | architectural (Reduced) | — | Reduced only |
+| **D12** | Reduced under-produces knockdowns from standing time | calibration (Reduced) | — | Reduced only |
 
 ### D1 — `stall` conflated two concepts *(was F9; **done**)*
 
@@ -461,35 +463,184 @@ detail.
 
 ---
 
-### D10 — Reduced's ground-control plan sensitivity is inverted *(found during D2)*
+### D10 — Reduced's ground-control plan sensitivity is inverted *(found during D2; **done**)*
 
-Not a tactical-layer finding and not caused by D2 — recorded here because D2 is what put a
-measurement next to it. `resolveFightByRound` reads the plan through the same alignment tables Full
-does, which is what makes the two levels agree on *how much* grappling a plan wants. It does not
-agree on the sign.
+**Built.** `controlShare` is now `controlPull`, three clamps came out of it, contests are resolved
+the way Full resolves them, and `topIntent` reaches Reduced's striking model for the first time.
 
-The same grinder against the same guard player, 900 fights, control seconds per round for the
-grinder:
+Not a tactical-layer finding and not caused by D2 — found because D2 put a measurement next to it.
+`resolveFightByRound` reads the plan through the same alignment tables Full does, which is what
+makes the two levels agree on *how much* grappling a plan wants. It did not agree on the sign.
 
-| his plan | Full | Reduced |
-| --- | --- | --- |
-| outside / stand-and-strike | 137 | **168** |
-| top / control | 217 | **152** |
+The same grinder against the same guard player, control seconds per round for the grinder:
 
-Full separates the two plans by 80 seconds a round in the direction anybody would predict. Reduced
-separates them by 16 in the *opposite* one. Whatever is producing that, it is upstream of anything
-D2 touched — the numbers above are from the D1 commit, before the top exit existed — and it is very
-likely the same clamp that made the `disengageAppetite` term unmeasurable: `controlShare` is pinned
-at `MAX_CONTROL_PER_FIGHTER` for the plan that wants the floor, so the only plan still free to move
-is the one that does not.
+| his plan | Full | Reduced (before) | Reduced (after) |
+| --- | --- | --- | --- |
+| outside / stand-and-strike | 138 | **168** | 117 |
+| top / control | 224 | **152** | 193 |
+
+Full separates the two plans by 86 seconds a round in the direction anybody would predict. Reduced
+separated them by 16 in the *opposite* one, and now separates them by 76 in the right one.
 
 It matters beyond parity. A world simulated at Reduced is where the player's opponents come from, and
-a resolver that rewards a wrestler for *not* asking for the floor will build careers that could not
-have been built at Full. That is invariant 6 failing quietly, which is the failure mode it was
-written for.
+a resolver that rewards a wrestler for *not* asking for the floor builds careers that could not have
+been built at Full. That is invariant 6 failing quietly, which is the failure mode it was written
+for, and it is now **invariant 6a**.
 
-*Not scoped into the D-series.* It is a Reduced-resolver defect rather than a tactical-hierarchy one,
-and it wants its own measurement pass over `controlShare`'s clamp.
+#### The decomposition
+
+The diagnosis before any fix, over the causal chain a control-time claim actually passes through.
+1,200 fights a cell, grinder against guard player, stand-and-strike against take-it-down:
+
+| axis | Full stand | Full top | | Reduced stand | Reduced top | |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 appetite (`grapplingAppetite`) | 0.277 | 2.857 | + | *the same function* | | + |
+| 2 takedown attempts / standing-min | 1.06 | 3.73 | + | 2.13 | 1.93 | **opposite** |
+| 3 takedown success rate | 0.77 | 0.76 | − | 0.99 | 0.52 | − |
+| 4 control sec / landed takedown | 86.7 | 104.5 | + | 76.6 | 144.2 | + |
+| 5 submission attempts / fight | 1.96 | 2.63 | + | 4.42 | 2.98 | **opposite** |
+| 6 opponent control sec / round | 51.4 | 28.8 | − | 39.7 | 61.3 | **opposite** |
+| — control sec / round | 139.6 | 226.2 | + | 187.3 | 167.0 | **opposite** |
+| — clinch control sec / fight | 24.5 | 11.7 | − | 0.00 | 0.00 | *(see D11)* |
+
+**Axis 1 cannot disagree**: both levels call `grapplingAppetite`, which is the point of that
+function existing. The first opposite sign is at **axis 2**.
+
+But axis 2 is not where the *cause* is, and this is the part that mattered. Reduced does not compute
+takedown attempts and derive control from them — it computes the control share first and derives the
+attempts from it (`grapple = own / BASE_CONTROL`). Axes 2, 3, 4, 5 and 6 are all downstream of one
+number. **The plan has exactly one way into this resolver, and that is `controlShare`.** So the sign
+has to be right there, and anything that flattens that term flattens every instruction at once.
+
+#### Where the sign was actually lost, in three clamps
+
+Decomposing `controlShare` itself, for the same fighter under the same two plans:
+
+| term | standing | top | |
+| --- | --- | --- | --- |
+| `tendency` | 0.9999 | 0.9999 | = |
+| `grapplingAppetite` | 0.277 | 2.857 | + |
+| `wants` = tendency × appetite | 0.277 | 2.857 | + |
+| `wants` **after `clamp01`** | 0.277 | **1.000** | + (compressed 10.3:1 → 3.6:1) |
+| `push` (contest ratio) | 2.67 | 3.41 | + |
+| `hold` (contest ratio) | 2.46 | 2.46 | = |
+| raw product | 1.084 | 4.876 | + |
+| **after `clamp(…, 0, MAX_CONTROL_PER_FIGHTER)`** | **0.740** | **0.740** | **=** |
+
+The returned number is *identical* under both plans. Not compressed — identical. And the round loop
+then does this:
+
+```
+pull        = redPull + bluePull
+redImposes  = chance(redPull / pull)
+```
+
+`redPull` is pinned. `bluePull` is not — it still moves with red's plan, through red's `bottomIntent`
+feeding `controlResistance(red)` and through `expectedRangeMix(blue, red)` putting more of the round
+in the pocket. Measured: 0.093 against 0.222. So `P(red imposes)` fell from 0.888 to 0.769 when the
+grinder was told to grapple, and the round arithmetic done by hand at the mean swing predicts 187
+seconds against 163 — against 187.3 and 167.0 measured. The inversion is fully accounted for.
+
+Three separate clamps were doing the same wrong thing, and the fix is the same statement each time:
+
+1. **`clamp(…, 0, MAX_CONTROL_PER_FIGHTER)` on the return.** A ceiling belonging to the realised
+   share, applied to a pull. Removed; the ceiling moved into the round loop, onto the round's own
+   capacity, where `grappled = min(pull, MAX_TOTAL_CONTROL)` — below the ceiling that is the
+   identity, so nothing about an ordinary round changed.
+2. **`clamp01` on `wants`.** `wants` is a term in a pull, not a share. A grinder's tendencies already
+   average 1.0, so an *unplanned* grinder came out at the ceiling and no instruction could move him:
+   telling the best wrestler in the game to wrestle did nothing. Removed.
+3. **`push` and `hold` used as raw ratios.** Not a clamp but the reason the other two bit.
+   `simulate.ts` resolves every contest in the fight as `mine / (mine + theirs)` — bounded, worth at
+   most certainty. Reduced was handed the same two quantities and multiplied by `mine / theirs`,
+   which grows without limit as the mismatch does. **The two levels disagreed about what a mismatch
+   is worth**, so an elite grappler's raw pull came out at 1.08 of a 1.00 round *on a plan telling
+   him to stand and strike*, and saturated whatever was downstream. `asContest(r) = 2r / (1 + r)` is
+   the same number in Full's currency, rescaled so an even contest still reads exactly 1: being twice
+   the man is worth a third more, not twice as much.
+
+Removing only the first restored the sign and left the response at 0.5–2.8%, inside sampling noise
+and flipping from salt to salt. All three together give Reduced a 62% response against Full's 63%.
+
+#### The fourth finding: `topIntent` did not reach Reduced at all
+
+Not a sign inversion — an absence, which is worse, because a flat response has no sign to be wrong.
+`topIntent` reached this resolver through exactly one term, submission attempts, and through nothing
+else. A fighter told to ride for control and one told to posture up and hit threw the **same** number
+of strikes a round, while at Full detail they threw 2.83 a minute against 1.03.
+
+`groundStrikeAppetite` is the third of these functions, alongside `controlResistance` and
+`submissionAppetite`, and is built the same way: `topBias(c, stance, 'groundStrike')` at a neutral
+situation, so an unplanned fighter reads exactly 1. It multiplies the `ownControl` term in
+`attemptsFor` — the one whose comment already said *"plenty of a grappler's volume comes from on top
+of somebody"*. On the ride-versus-hit instruction Reduced now moves 2.93 significant strikes a
+minute to 2.06, against Full's 2.83 to 1.03 — under-reacting, which is allowed, rather than not
+reacting, which is not.
+
+#### What it cost
+
+**Nothing, on the level.** All four changes are exactly neutral for an unplanned fighter — every
+appetite function returns 1 at zero urgency, and `asContest(1) = 1` — so the roster the constants
+were measured on is untouched. Measured against `tools/round-profile.ts`, Reduced's control-time RMSE
+across the six calibration matchups is **39.87 seconds a round against 39.95 before**: unchanged, and
+the residual is pre-existing and unrelated. No constant was re-fitted; `BASE_CONTROL` was tried at
+0.30–0.65 during the diagnosis and moves nothing in the failing cells, because they are pinned by
+`MAX_TOTAL_CONTROL` rather than by it.
+
+The whole existing suite — 1,773 tests including every Full/Reduced parity cell — passes unchanged,
+with no allowance widened.
+
+*Enforced by* `tests/statistical/reduced-direction.test.ts`, seven claims each carrying a fixture
+guard. `tools/reduced-direction.ts` is the instrument.
+
+---
+
+### D11 — Reduced books no clinch control at all *(found during D10)*
+
+`clinchControlSeconds` is never written by `resolveFightByRound`: it is 0 for every fighter in every
+Reduced fight, while Full books 24.5 seconds a fight for a grinder on a standing plan and 11.7 on a
+top plan. Reduced has one `controlSeconds` number and no notion of *where* the control happened.
+
+It is excluded from the directional invariant, and deliberately so — but honestly rather than
+conveniently, because a flat zero fails direction as surely as a sign flip would. The reason it is
+excluded is that the tie-up is not a *thinner* model at round granularity, it is an absent one:
+there is no clinch phase in `resolveRound` to give a share of. Adding one is a modelling change with
+its own evidence, not a term.
+
+It matters for the same reason D10 did. A judoka and a wrestler are the same fighter to this
+resolver, and D3 — which gives the clinch a behaviour axis — will have nothing to reach at Reduced
+detail when it lands.
+
+### D12 — Reduced under-produces knockdowns from standing time *(pre-existing; **not** D10's cause)*
+
+The ~10.6-point standing-knockout deficit, investigated on its own terms. **It does not share a cause
+with D10**, and the measurement says so rather than the argument:
+
+| matchup | level | distance sec/round | strikes landed/distance-min | **knockdowns/distance-min** | KO% |
+| --- | --- | --- | --- | --- | --- |
+| even | Full | 103.1 | 6.70 | **0.093** | 6.8 |
+| even | Reduced | 116.7 | 5.23 | **0.073** | 2.6 |
+| striker-v-grinder | Full | 69.8 | 11.51 | **0.387** | 25.6 |
+| striker-v-grinder | Reduced | 63.7 | 12.51 | **0.264** | 15.2 |
+| smotherer-v-striker | Full | 68.4 | 11.07 | **0.368** | 27.4 |
+| smotherer-v-striker | Reduced | 61.1 | 12.00 | **0.205** | 10.2 |
+| bomber-v-journeyman | Full | 71.9 | 7.91 | **1.234** | 78.8 |
+| bomber-v-journeyman | Reduced | 57.9 | 9.37 | **1.789** | 83.6 |
+
+The two levels **agree on standing time** — within 10% in every row — and Reduced lands *more*
+strikes per standing minute than Full does. So this is not a control-time gap and D10 could not have
+been causing it. What differs is knockdowns per landed strike, by 30–45% in the wrong direction.
+
+And the sign of *that* gap depends on the matchup: Reduced under-converts in the even and
+striker-versus-grappler rows and **over-converts by 45% for the bomber**. A gap that changes sign
+with the fighter is the signature of a nonlinearity evaluated at a mean rather than integrated over a
+distribution — `knockdownHazard` compounds on accumulated head damage, and `MID_ROUND_ACCUMULATION`
+reads it once, at half the round's damage. That is the eighth axis of the D10 audit brief applied to
+a different quantity, and it wants its own pass.
+
+**Deliberately not fixed here.** The fix is a change to how Reduced integrates a convex hazard, it
+will move knockout rates across the whole sport, and bundling it into a change whose entire claim is
+*"the level did not move"* would make both unprovable.
 
 ## 4. The original findings, as recorded
 
