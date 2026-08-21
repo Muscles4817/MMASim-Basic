@@ -32,10 +32,11 @@ export function OffersScreen() {
   const [confirmingManager, setConfirmingManager] = useState<string | undefined>();
   const [refusal, setRefusal] = useState<string | undefined>();
 
-  const offers = useMemo(
-    () => (playerFighter ? offersOnTheTable(db, playerFighter) : []),
+  const market = useMemo(
+    () => (playerFighter ? offersOnTheTable(db, playerFighter) : { offers: [], others: 0 }),
     [db, playerFighter],
   );
+  const offers = market.offers;
   const managers = useMemo(
     () => (playerFighter ? managersWillingToRepresent(db, playerFighter) : []),
     [db, playerFighter],
@@ -144,7 +145,24 @@ export function OffersScreen() {
         )}
       </Card>
 
-      <Card title={offers.length === 0 ? 'Nobody is calling' : `${offers.length} on the table`}>
+      {/*
+        The shortlist, not the market.
+
+        A generated world is over a hundred promotions and a fighter in the middle of it clears
+        the bar at dozens of them, so this screen used to render dozens of cards — each naming a
+        champion, a projected rank and a level, because an offer is meant to be a future rather
+        than a number. Thirty futures is a scroll, not a decision. What is left out is counted
+        rather than hidden: see `shortlistOffers`.
+      */}
+      <Card
+        title={
+          offers.length === 0
+            ? 'Nobody is calling'
+            : market.others > 0
+              ? `The ${offers.length} worth reading`
+              : `${offers.length} on the table`
+        }
+      >
         {offers.length === 0 ? (
           <p className="muted prose">
             Nothing right now. This sport has one buyer that matters and a handful who cannot
@@ -186,6 +204,14 @@ export function OffersScreen() {
                 }}
               />
             ))}
+            {market.others > 0 && (
+              <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
+                {market.others === 1
+                  ? 'One other promotion would sign you, on smaller money than any of these.'
+                  : `${market.others} other promotions would sign you, on smaller money than any of these.`}{' '}
+                Your manager is not going to waste an afternoon reading them out.
+              </p>
+            )}
           </div>
         )}
       </Card>
@@ -239,12 +265,18 @@ function OfferCard({
         </span>
 
         {/*
-          The three named futures. Money, route, level — never a bare purse to compare.
+          The named futures. Money and route folded, level on opening — never a bare purse to
+          compare.
 
           Each glyph is paired with a word and hidden from assistive tech, which is the house
           rule. It was three bare emoji: a screen reader announced "pound banknote", "ladder"
           and "balance scale" before each line, and a sighted player had to infer that 🪜 meant
           "route" at all.
+
+          Level moved inside the expansion when the market started producing a shortlist rather
+          than a pair. Three sentences of prose per row is a fine way to present two offers and
+          a wall of text as four, and the level is a paragraph about what the room is like —
+          which is a thing you read once you are interested rather than while scanning.
         */}
         <span className="stack" style={{ gap: 2, marginTop: 'var(--space-2)' }}>
           <span style={{ fontSize: 'var(--text-sm)' }}>
@@ -255,14 +287,14 @@ function OfferCard({
             <span aria-hidden="true">🪜</span> <span className="muted">Route:</span>{' '}
             {offer.route}
           </span>
-          <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
-            <span aria-hidden="true">⚖️</span> Level: {offer.level}
-          </span>
         </span>
       </button>
 
       {expanded && (
         <div style={{ marginTop: 'var(--space-3)' }}>
+          <p className="muted prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
+            <span aria-hidden="true">⚖️</span> Level: {offer.level}
+          </p>
           <ul style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}>
             <li>
               {offer.terms.fightsOwed} fights owed

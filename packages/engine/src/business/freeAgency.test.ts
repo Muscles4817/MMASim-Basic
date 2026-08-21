@@ -4,7 +4,15 @@ import { createRng } from '../core/rng.js';
 import { uniformPersonality } from '../domain/personality.js';
 import { makeFighter, makePromotion } from '../testing/fixtures.js';
 import type { OfferTerms } from './contracts.js';
-import { canMatch, matchResponse, offersFor, unmatchableTerms, type Offer } from './freeAgency.js';
+import {
+  MAX_OFFERS_SHOWN,
+  canMatch,
+  matchResponse,
+  offersFor,
+  shortlistOffers,
+  unmatchableTerms,
+  type Offer,
+} from './freeAgency.js';
 import type { Manager } from './managers.js';
 
 const apex = () =>
@@ -126,6 +134,44 @@ describe('free agency is escaping, not being courted', () => {
 
     const total = (o: (typeof offers)[number]) => o.terms.showPurse + o.terms.winBonus;
     expect(total(offers[0]!) / total(offers[offers.length - 1]!)).toBeGreaterThan(4);
+  });
+
+  it('keeps a released fighter at the level they were released from', () => {
+    /*
+     * With no incumbent the fighter's own level was `-1` — below the bottom of the sport — so
+     * everything above the smallest promotion in the world read as a two-tier `reach`, which is
+     * gated on star power. A contender cut by the leader got one offer, from a developmental
+     * show, and it never changed however long they waited. Being cut was a dead end.
+     */
+    const cut = makeFighter({ starPower: 45, reputation: 60 });
+    const offers = offersFor({
+      fighter: cut,
+      promotions: ALL(),
+      incumbent: undefined,
+      lastPromotion: apex(),
+      depthOf: () => 8,
+      manager: manager(),
+      day: 0,
+      rng: createRng('released'),
+    });
+
+    expect(offers.some((o) => o.promotion.tier === 'major')).toBe(true);
+    expect(offers.every((o) => o.promotion.tier === 'developmental')).toBe(false);
+  });
+
+  it('lets somebody who has never fought start at the bottom of the sport', () => {
+    // The other half of the same rule: a debutant has no last promotion, and the bottom rung is
+    // their level rather than a step up from nowhere.
+    const debutant = makeFighter({ starPower: 6, reputation: 8 });
+    const offers = offersFor({
+      fighter: debutant,
+      promotions: ALL(),
+      depthOf: () => 6,
+      manager: manager(),
+      day: 0,
+      rng: createRng('debut'),
+    });
+    expect(offers.some((o) => o.promotion.tier === 'developmental')).toBe(true);
   });
 
   it('never offers a division a promotion does not run', () => {
@@ -324,5 +370,64 @@ describe('who is willing to pay', () => {
     const offers = run({ incumbent: undefined });
     const small = offers.filter((o) => o.promotion.tier === 'regional' || o.promotion.tier === 'developmental');
     for (const o of small) expect(o.terms.outsideBouts).toBeGreaterThan(0);
+  });
+});
+
+describe('the shortlist is what reaches the screen', () => {
+  const offerAt = (id: string, tier: Offer['promotion']['tier'], money: number): Offer => ({
+    promotion: makePromotion({ id: asPromotionId(id), tier }),
+    terms: {
+      showPurse: money,
+      winBonus: 0,
+      signingBonus: 0,
+      revenuePoints: 0,
+      fightsOwed: 3,
+      championshipExtension: 'none',
+      matchingRights: false,
+      exclusive: true,
+      outsideBouts: 0,
+    },
+    motive: 'lateral',
+    money: '',
+    route: '',
+    level: '',
+    unmatchable: [],
+  });
+
+  /** A generated world's shape: a handful at the top and a long tail at the bottom. */
+  const many = (): Offer[] => [
+    offerAt('p_glo', 'global', 90),
+    offerAt('p_maj1', 'major', 60),
+    offerAt('p_maj2', 'major', 58),
+    offerAt('p_maj3', 'major', 56),
+    ...Array.from({ length: 12 }, (_, i) => offerAt(`p_dev${i}`, 'developmental', 20 - i)),
+  ];
+
+  it('leaves a small market alone', () => {
+    const all = many().slice(0, 3);
+    expect(shortlistOffers(all).offers).toHaveLength(3);
+    expect(shortlistOffers(all).others).toBe(0);
+  });
+
+  it('caps what is shown and counts the rest', () => {
+    const list = shortlistOffers(many());
+    expect(list.offers).toHaveLength(MAX_OFFERS_SHOWN);
+    expect(list.offers.length + list.others).toBe(many().length);
+  });
+
+  it('is a ladder rather than a top-four, so the fringe survives', () => {
+    // Four of the biggest purses would be the leader and three majors, and the promotion at the
+    // bottom offering terms the leader cannot match is the most interesting row on the screen.
+    const list = shortlistOffers(many());
+    expect(list.offers.some((o) => o.promotion.tier === 'developmental')).toBe(true);
+    expect(list.offers.filter((o) => o.promotion.tier === 'major').length).toBeLessThanOrEqual(2);
+  });
+
+  it('still leads with the money', () => {
+    const list = shortlistOffers(many());
+    const total = (o: Offer) => o.terms.showPurse + o.terms.winBonus;
+    for (let i = 1; i < list.offers.length; i++) {
+      expect(total(list.offers[i - 1]!)).toBeGreaterThanOrEqual(total(list.offers[i]!));
+    }
   });
 });

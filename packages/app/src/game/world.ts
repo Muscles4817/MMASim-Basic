@@ -119,7 +119,13 @@ import {
   venueFor,
   settleNight,
 } from '@mmasim/engine';
-import { getWorld, type Entity, type GameDb } from '@mmasim/data';
+import {
+  MIN_DIVISION_DEPTH,
+  MIN_WOMENS_DIVISION_DEPTH,
+  getWorld,
+  type Entity,
+  type GameDb,
+} from '@mmasim/data';
 import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
 import { settleFightInjuries } from './fightInjuries';
@@ -233,6 +239,18 @@ const rosterTargetFor = (
   world: { rosterTargets?: Record<string, number> },
   promotionId: string,
 ): number => world.rosterTargets?.[promotionId] ?? 0;
+
+/**
+ * How deep one promotion wants to be in one division, as opposed to how deep the sport is.
+ *
+ * `DIVISION_FLOOR` above is the sport-wide floor — every fighter at this weight, everywhere.
+ * This is the per-promotion one from `seed/depth.ts`, derived from what it takes to fill a card,
+ * and it is the number a roster actually has to hold to be able to book anybody.
+ */
+const divisionFloorFor = (divisionId: DivisionId): number =>
+  DIVISIONS.find((d) => d.id === divisionId)?.sex === 'female'
+    ? MIN_WOMENS_DIVISION_DEPTH
+    : MIN_DIVISION_DEPTH;
 
 const divisionTargetFor = (
   world: { divisionTargets?: Record<string, number> },
@@ -1566,6 +1584,18 @@ function resolveFreeAgency(
   const fighters = db.fighters.findAll() as Fighter[];
 
   /*
+   * How deep each promotion is in each division, so a signing can fill a hole rather than a total.
+   * Kept current as the pass signs people, because a quarter's worth of moves into one thin
+   * division would otherwise all read the same stale zero and all land in the same place.
+   */
+  const divisionDepth = new Map<string, number>();
+  for (const f of fighters) {
+    if (f.retiredDay !== undefined || !f.promotionId) continue;
+    const key = `${f.promotionId as string}:${f.divisionId as string}`;
+    divisionDepth.set(key, (divisionDepth.get(key) ?? 0) + 1);
+  }
+
+  /*
    * The standard each promotion signs at, as a rating.
    *
    * **Anchored to the sport, not to the promotion's own roster**, and that distinction is the
@@ -1753,7 +1783,22 @@ function resolveFreeAgency(
       const target = rosterTargetFor(world, p.id as string);
       const have = rosterSizes.get(p.id as string) ?? 0;
       // Floored rather than zeroed: a promotion at its target still signs somebody it wants.
-      return Math.max(0.08, clamp01((target - have) / Math.max(1, target)));
+      const overall = Math.max(0.08, clamp01((target - have) / Math.max(1, target)));
+      /*
+       * And room *at this weight*, which headcount cannot see.
+       *
+       * A promotion can be at its roster target and two fighters deep at 185 at the same time, so
+       * a rule that reads only headcount lets divisions hollow out underneath a roster that looks
+       * healthy. Measured on a generated Small world after pre-history, 59% of the majors'
+       * divisions were below the six `MIN_DIVISION_DEPTH` says a division needs to make a card —
+       * with the rosters themselves the right size.
+       *
+       * A multiplier rather than a gate: where a fighter signs is still mostly about the level
+       * they have earned, and this decides between promotions that would all have them.
+       */
+      const floor = divisionFloorFor(fighter.divisionId);
+      const here = divisionDepth.get(`${p.id as string}:${fighter.divisionId as string}`) ?? 0;
+      return overall * Math.max(0.25, clamp01((floor - here) / floor) + 0.35);
     };
     const whereThereIsRoom = () =>
       fRng.pickWeighted(pool, (p) => room(p) * Math.max(1, p.prestige) ** 0.6);
@@ -1791,6 +1836,18 @@ function resolveFreeAgency(
       agreementId: signed.id,
       resentment: 0,
     } as Fighter & { id: string });
+
+    // Keep the divisional index current, so the rest of this quarter's free agents do not all
+    // read the same stale hole and all pile into it.
+    const moveKey = (promotionId: string) => `${promotionId}:${fighter.divisionId as string}`;
+    if (promotion && promotion.id !== next.id) {
+      const from = moveKey(promotion.id as string);
+      divisionDepth.set(from, Math.max(0, (divisionDepth.get(from) ?? 0) - 1));
+    }
+    if (!promotion || promotion.id !== next.id) {
+      const to = moveKey(next.id as string);
+      divisionDepth.set(to, (divisionDepth.get(to) ?? 0) + 1);
+    }
 
     // Only worth reporting when somebody actually moved.
     if (promotion && next.id !== promotion.id) {
@@ -2030,12 +2087,52 @@ function pickStartingPromotion(
   rng: Rng,
   world: { rosterTargets?: Record<string, number> },
   rosterSizes: ReadonlyMap<string, number>,
+  /**
+   * The division they are turning professional in, and how deep each promotion already is in it.
+   *
+   * Two things it fixes, both of which a player meets directly.
+   *
+   * **A promotion that does not run the division could be picked at all.** The weighting looked
+   * only at headcount, so a heavyweight could début for a show that stages flyweight and nothing
+   * else — a signing that can never be booked by the promotion that made it. Measured on a
+   * generated Small world, seventeen fighters were sitting in that state after pre-history.
+   *
+   * **Divisional room is not roster room.** A promotion at its overall target can still be two
+   * fighters deep at 185, and headcount cannot tell the difference — which is how a division ends
+   * up with four people in it while the promotion looks full. Weighting by the gap in *this*
+   * division is what makes the intake fill the holes rather than the totals.
+   */
+  division: { id: string; sex: 'male' | 'female'; depthOf: (promotionId: string) => number },
 ): Promotion | undefined {
-  const weights = promotions.map((p) => {
+  const floor =
+    division.sex === 'female' ? MIN_WOMENS_DIVISION_DEPTH : MIN_DIVISION_DEPTH;
+
+  const eligible = promotions.filter((p) => p.divisions.includes(division.id as DivisionId));
+  const weights = eligible.map((p) => {
     const target = rosterTargetFor(world, p.id as string);
     const have = rosterSizes.get(p.id as string) ?? 0;
-    const room = target <= 0 ? 0 : clamp01((target - have) / target);
-    return Math.max(1, 100 - p.prestige) ** 2 * room;
+    /*
+     * Floored rather than zeroed, the way free agency's own `room` is.
+     *
+     * A hard zero means "this promotion is out of the draw entirely", and once the division is
+     * only run by a handful of promotions — every women's division in the 2026 world is run by
+     * exactly three — one of them being full hands *all* of that division's debutants to
+     * whichever is not. Measured by the long-sim: winless fighters on the leader's roster went
+     * from half the uniform rate to exactly it, which is the intake quietly stopping being
+     * weighted toward the bottom of the sport at all.
+     *
+     * A floored room keeps the prestige term in charge, which is where the weighting belongs.
+     */
+    // Still zero for a promotion the seed never populated — one founded mid-save, or added by the
+    // editor — which keeps `rosterTargetFor`'s existing meaning intact.
+    const room = target <= 0 ? 0 : Math.max(0.08, clamp01((target - have) / target));
+    // Floored rather than zeroed, so a promotion whose division is full still occasionally signs
+    // somebody — a roster is not a bucket that stops filling at a line.
+    const divisionRoom = Math.max(
+      0.1,
+      clamp01((floor - division.depthOf(p.id as string)) / floor),
+    );
+    return Math.max(1, 100 - p.prestige) ** 2 * room * divisionRoom;
   });
   const total = weights.reduce((a, b) => a + b, 0);
   if (total <= 0) return undefined;
@@ -2043,9 +2140,9 @@ function pickStartingPromotion(
   let roll = rng.range(0, total);
   for (const [index, weight] of weights.entries()) {
     roll -= weight;
-    if (roll <= 0) return promotions[index]!;
+    if (roll <= 0) return eligible[index]!;
   }
-  return promotions[promotions.length - 1]!;
+  return eligible[eligible.length - 1]!;
 }
 
 /**
@@ -2123,6 +2220,14 @@ function replenish(
     const active = all.filter((f) => f.divisionId === division.id && f.retiredDay === undefined);
     const target = divisionTargetFor(getWorld(db), division.id as string, division.sex);
 
+    // How deep each promotion is *in this division*, which is what a debutant fills a hole in.
+    const depthHere = new Map<string, number>();
+    for (const f of active) {
+      if (!f.promotionId) continue;
+      const id = f.promotionId as string;
+      depthHere.set(id, (depthHere.get(id) ?? 0) + 1);
+    }
+
     for (let i = active.length; i < target; i++) {
       /*
        * Where a debutant starts.
@@ -2140,6 +2245,11 @@ function replenish(
         rng.fork(`start:${day}:${division.id}:${i}`),
         getWorld(db),
         rosterSizes,
+        {
+          id: division.id as string,
+          sex: division.sex,
+          depthOf: (promotionId) => depthHere.get(promotionId) ?? 0,
+        },
       );
       /*
        * Most people who turn professional are never going to be anything. A few are.
