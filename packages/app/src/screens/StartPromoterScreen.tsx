@@ -22,7 +22,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { displayName, isActive, type Fighter, type Promotion } from '@mmasim/engine';
+import { displayName, getDivision, isActive, type Fighter, type Promotion } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, DataTable, MasterDetail, Panel, type Column } from '../ui';
@@ -83,6 +83,14 @@ export function StartPromoterScreen() {
   const vacantBelts = (p: Promotion) =>
     p.divisions.filter((d) => p.champions[d] === undefined).length;
 
+  /*
+   * Five columns. The master column is an index — enough to tell two promotions apart and to
+   * sort on, with the rest in the preview.
+   *
+   * Division count and region both went. Six columns overflowed the column and clipped prestige,
+   * which is the one the table is *sorted by* — a sort you cannot see is not a sort. Both are in
+   * the preview, which is on screen the moment a row is selected.
+   */
   const columns: Column<Promotion>[] = [
     {
       id: 'name',
@@ -90,12 +98,6 @@ export function StartPromoterScreen() {
       render: (p) => p.name,
       sort: (a, b) => a.name.localeCompare(b.name),
       onPhone: 'primary',
-    },
-    {
-      id: 'region',
-      label: 'Region',
-      render: (p) => p.baseCountry,
-      onPhone: 'secondary',
     },
     {
       id: 'budget',
@@ -115,16 +117,10 @@ export function StartPromoterScreen() {
       onPhone: 'secondary',
     },
     {
-      id: 'divisions',
-      label: 'Divisions',
-      render: (p) => p.divisions.length,
-      sort: (a, b) => a.divisions.length - b.divisions.length,
-      numeric: true,
-      onPhone: 'hidden',
-    },
-    {
       id: 'vacant',
-      label: 'Vacant belts',
+      // Short, because a header cell is `nowrap` and a long one sets the column width: "Vacant
+      // belts" was wide enough to push prestige — the sort column — off the edge.
+      label: 'Vacant',
       title: 'A vacant belt is a tournament you can build a year around',
       render: (p) => {
         const n = vacantBelts(p);
@@ -245,7 +241,32 @@ function PromotionPreview({
     () => financialSnapshot({ db, promotion }),
     [db, promotion, day],
   );
-  const attention = useMemo(() => attentionFor(db, promotion), [db, promotion, day]);
+  /*
+   * What you would inherit — minus the things that are true of every promotion in the world.
+   *
+   * `attentionFor` opens with "Nothing on the calendar" at urgency 96, and on this screen that is
+   * noise: *no* promotion has planned cards before somebody takes one over, so the row appears
+   * first on every preview and distinguishes nothing. Planning the first card is the job, not a
+   * problem being handed over.
+   */
+  const attention = useMemo(() => {
+    /*
+     * At most two of any one kind.
+     *
+     * A fresh world hands most promotions five or six fighters inside an activity guarantee, and
+     * five rows of "X can walk for nothing" say less than two do — the sixth tells the player
+     * nothing the second did not, and it crowds out the vacant belt and the champion who has not
+     * defended. Variety is what makes a preview a read on a promotion rather than a list.
+     */
+    const perKind = new Map<string, number>();
+    return attentionFor(db, promotion)
+      .filter((item) => item.kind !== 'card')
+      .filter((item) => {
+        const seen = perKind.get(item.kind) ?? 0;
+        perKind.set(item.kind, seen + 1);
+        return seen < 2;
+      });
+  }, [db, promotion, day]);
 
   const champions = promotion.divisions.map((divisionId) => {
     const championId = promotion.champions[divisionId];
@@ -326,9 +347,16 @@ function PromotionPreview({
         )}
         <Ledger>
           {champions.map(({ divisionId, champion }) => (
+            /*
+              `getDivision`, not a regex over the id.
+              
+              Stripping the `mens-`/`womens-` prefix rendered women's strawweight as
+              "strawweight" beside men's flyweight as "flyweight", so the two sexes' divisions
+              were indistinguishable in a list that contains both.
+            */
             <LedgerRow
               key={divisionId}
-              label={divisionId.replace(/^(mens|womens)-/, '').replace(/-/g, ' ')}
+              label={getDivision(divisionId).name}
               value={champion ? displayName(champion) : 'Vacant'}
               tone={champion ? undefined : 'bad'}
             />

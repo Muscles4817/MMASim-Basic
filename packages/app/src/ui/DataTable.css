@@ -216,3 +216,15 @@
 .datatable__table .rank-inline {
   display: none;
 }
+
+/*
+ * A table inside a master/detail index.
+ *
+ * Same component, less horizontal padding. An index column is narrower than a page by design and
+ * the cells do not need page-level breathing room in it — the alternative is a table that scrolls
+ * inside a column that is already scrolling, which is two scrollbars and one readable column.
+ */
+.masterdetail__list .datatable__table th,
+.masterdetail__list .datatable__table td {
+  padding-inline: var(--space-2);
+}

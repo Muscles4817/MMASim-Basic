@@ -152,8 +152,13 @@
 
 @media (min-width: 62rem) {
   .masterdetail {
-    /* The list is the index and the detail is the subject: the subject gets the room. */
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr);
+    /*
+     * The list is the index and the detail is the subject, so the subject gets the room — but
+     * not all of it. At 1.9fr the index was too narrow for five columns and clipped the one the
+     * table was sorted by, which is worse than a slightly smaller preview: a sort nobody can see
+     * is not a sort.
+     */
+    grid-template-columns: minmax(24rem, 1fr) minmax(0, 1.55fr);
     gap: var(--space-5);
   }
 

@@ -21,7 +21,6 @@
 
 import { useMemo, useState } from 'react';
 import {
-  abilityRead,
   careerArc,
   displayName,
   fighterAge,
@@ -80,6 +79,15 @@ export function StartFighterScreen() {
     navigate({ name: 'hub' });
   };
 
+  /*
+   * Five columns, not seven.
+   *
+   * The master column of a `MasterDetail` is an *index*: enough to scan and to tell two
+   * candidates apart, and no more. Ability was in here as a class name — "Championship level" —
+   * which is long enough that the table overflowed its own column and clipped mid-word. It is in
+   * the preview beside every rating behind it, which is where somebody comparing two fighters
+   * properly is looking anyway.
+   */
   const columns: Column<Fighter>[] = [
     {
       id: 'name',
@@ -107,17 +115,6 @@ export function StartFighterScreen() {
       label: 'Record',
       render: (f) => recordString(f.summary),
       onPhone: 'secondary',
-    },
-    {
-      id: 'ability',
-      label: 'Ability',
-      title: 'A class, never a number — see the preview for the full ratings',
-      render: (f) => {
-        const ability = abilityRead(f.attributes);
-        return <span className="faint">{ability.label}</span>;
-      },
-      sort: (a, b) => overallRating(a.attributes) - overallRating(b.attributes),
-      onPhone: 'hidden',
     },
     {
       id: 'arc',

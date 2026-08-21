@@ -56,6 +56,20 @@ world is the one with no character in it.
 
 ## Where it shows
 
+**In the free-agency market, as an absurd number.** Measured on a Medium generated world, a
+mid-tier fighter's career dashboard reports **"111 promotions interested"**. `offersFor` prices
+appetite from budget, divisional need, marketability and manager access — and with the character
+fields constant across the sport, nearly every promotion at a plausible tier passes the same bar
+at the same time. The dashboard row is honest and the market behind it is not: a sport where a
+hundred employers all want you equally is a sport with one employer in it, repeated. The seeded
+eras cannot produce this, because they only contain eight to sixteen promotions in total.
+
+**In the new-game promotion picker.** Eleven regional promotions, all named `national N`, all
+USA, cash between £2.2m and £3.9m, rosters between 48 and 68, three to five vacant belts each.
+The screen is doing everything it can with what it has — the preview reads real financial state
+and asks `attentionFor` what problems are already on the books, which does differentiate them —
+but the table above it is eleven rows of the same promotion at slightly different sizes.
+
 Immediately, in the new-game promotion picker: `national 11 · USA · £3.1m to spend` repeated down
 the screen. Doc 32 § 11.5 ships the honest version of that screen — a table over the axes that
 genuinely vary, plus a preview built from `financialSnapshot`, `attentionFor` and the roster —
