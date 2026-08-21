@@ -42,6 +42,8 @@ import type { FighterId } from '../core/ids.js';
 import type { FinishMethod } from '../domain/fighter.js';
 import { defaultGamePlan, normaliseGamePlan, riskProfile } from '../domain/gameplan.js';
 import {
+  clinchLean,
+  clinchPersistence,
   controlResistance,
   expectedRangeFailure,
   expectedRangeMix,
@@ -168,6 +170,16 @@ const ALREADY_HURT = 1.8;
 
 /** Control share a wholly average fighter takes against another. Measured 0.32. */
 const BASE_CONTROL = 0.33;
+
+/**
+ * Share of a fighter's control time that happens in a tie-up rather than on the floor, with no plan.
+ *
+ * Measured from Full over the same reference fighter the other constants here come from: 18.0% of an
+ * unplanned fighter's control seconds, against 31.8% on a clinch plan, 18.2% on an outside plan and
+ * 6.4% on a top plan. The three terms in `clinchShareOfControl` carry the spread; this is only the
+ * anchor, and it is the neutral value rather than a midpoint (docs/01 § 9).
+ */
+const CLINCH_SHARE_OF_CONTROL = 0.18;
 
 /** Takedown attempts per round at `BASE_CONTROL`. Measured 1.58. */
 const BASE_TAKEDOWN_ATTEMPTS = 1.6;
@@ -356,6 +368,62 @@ function controlPull(a: Combatant, d: Combatant): number {
  */
 function asContest(ratio: number): number {
   return (2 * ratio) / (1 + ratio);
+}
+
+/**
+ * Of the control a fighter takes, how much of it is a tie-up rather than the floor.
+ *
+ * **The whole of D11 is that this number did not exist.** `resolveRound` had one control quantity
+ * and no notion of *where* the control happened, so `clinchControlSeconds` came back 0.00 for every
+ * fighter in every Reduced fight — while Full books 18% of an unplanned fighter's control time on
+ * the fence and 32% of a clinch fighter's. A judoka and a wrestler were the same man to this
+ * resolver, and `lessonFrom` — which reads `controlSeconds − clinchControlSeconds` to decide whether
+ * somebody's hole is *scrambling* — diagnosed every Reduced-simulated career on the assumption that
+ * all of it happened on the floor.
+ *
+ * It is a **partition, not an addition**: `controlSeconds` is unchanged and this is a share of it,
+ * so nothing is created, nothing is double-counted, and the takedowns and strikes the same control
+ * already paid for are untouched. That is the smallest representation that carries the causal
+ * structure, and the structure is three separate questions, each read off a table `simulate.ts`
+ * already uses and each worth exactly 1 to a fighter with no plan:
+ *
+ *  - `clinchLean` — of the grappling he wants, how much is aimed at the fence (a *transition*).
+ *  - `clinchPersistence` — having got there, does he keep the tie-up or convert it (an *in-state*
+ *    decision, and a separate one; docs/01 § 8).
+ *  - retention — and can he hold it, which is a contest and not a preference.
+ *
+ * What it deliberately does **not** contain is a clinch phase. There is no tie-up state at round
+ * granularity to give a share of, so clinch striking and clinch takedowns stay folded into the
+ * generic ones. That is a magnitude limitation, stated in doc 31 § D11 rather than papered over —
+ * the direction is what this has to carry.
+ */
+function clinchShareOfControl(a: Combatant, d: Combatant): number {
+  /*
+   * How long each tie-up lasts, which is the half that belongs to the fighters rather than to the
+   * corner. Measured at Full detail, sweeping strength 30 to 90 on an unplanned fighter moves his
+   * clinch time 26.8 seconds a fight to 52.0 — so this has to be worth about two to one across the
+   * roster, and `asContest` on the same two derived ratings `simulate.ts` contests the tie-up with
+   * is worth about that.
+   */
+  const retention = asContest(
+    fatiguedEffect(a.derived.clinchOffence, 'strength', a.fatigue) /
+      fatiguedEffect(d.derived.clinchDefence, 'strength', d.fatigue),
+  );
+  /*
+   * The **geometric mean** of the two intent terms, not their product, and this is not a softening.
+   * They are not independent questions: both are read off `preferredState`, so a fighter who routes
+   * to the fence is by construction the same fighter who stays on it, and multiplying them charges
+   * for one preference twice — the error `STANDING_ALIGNMENT` already warns about in its own header.
+   *
+   * Each table alone gets one end of the range and misses the other, which is why both are here.
+   * `clinchLean` separates an outside plan from a clinch plan and puts a top-position fighter's
+   * clinch share at 11.7% against Full's 6.4%; `clinchPersistence` gets that one right and has a
+   * clinch plan at 25.3% against Full's 31.8%. Measured together, over fights rather than by hand:
+   * 17.3% on an outside plan, 25.1% on a clinch plan and 8.9% on a top plan, against Full's 18.2%,
+   * 31.8% and 6.4%.
+   */
+  const intent = Math.sqrt(clinchLean(a) * clinchPersistence(a));
+  return clamp01(CLINCH_SHARE_OF_CONTROL * intent * retention);
 }
 
 /**
@@ -571,6 +639,8 @@ interface CornerRound {
   takedownsLanded: number;
   submissionAttempts: number;
   controlSeconds: number;
+  /** Of `controlSeconds`, the part spent in a tie-up rather than on the floor. Always a subset. */
+  clinchControlSeconds: number;
 }
 
 interface RoundEnding {
@@ -814,6 +884,7 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
         takedownsLanded,
         submissionAttempts,
         controlSeconds: own * ROUND_SECONDS,
+        clinchControlSeconds: own * ROUND_SECONDS * clinchShareOfControl(a, d),
       };
     }
 
@@ -912,6 +983,7 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
       // retrospectively undo the two minutes of it they had already banked.
       const grapplingSink = (1 + sink) / 2;
       v.controlSeconds *= grapplingSink;
+      v.clinchControlSeconds *= grapplingSink;
       v.takedownsLanded *= grapplingSink;
       v.submissionAttempts *= grapplingSink;
     }
@@ -941,6 +1013,7 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
         w.takedownsLanded *= lasted;
         w.submissionAttempts *= lasted;
         w.controlSeconds *= lasted;
+        w.clinchControlSeconds *= lasted;
       }
     }
 
@@ -999,6 +1072,7 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
       a.stats.takedownsLanded += w.takedownsLanded;
       a.stats.submissionAttempts += w.submissionAttempts;
       a.stats.controlSeconds += w.controlSeconds;
+      a.stats.clinchControlSeconds += w.clinchControlSeconds;
       a.stats.distanceSeconds += distanceSeconds * lasted;
 
       accrueFatigue(a, {

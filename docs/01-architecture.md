@@ -194,6 +194,24 @@ capacity, in the round loop, where it always belonged.
 Where a Reduced abstraction genuinely cannot carry a magnitude, say so in the allowance table and
 move on. It still has to carry the sign.
 
+**6b. A directional parity test is only meaningful where Full itself has a material directional
+response.** The reference has to move before its sign is evidence of anything. The first draft of the
+directional suite asserted the stand-up instruction against an opponent already pinned at the control
+ceiling, where *Full* moved 0.09% — so the sign it produced was a coin toss and the test was measuring
+the fixture rather than the engine. Every claim therefore states the minimum response Full must show,
+and fails loudly if the fixture goes flat rather than quietly passing on noise. The same rule chooses
+*which* quantity a claim is asserted on: wanting the floor moves clinch occupancy through two
+mechanisms at once and they cancel in seconds, so that claim is asserted on the share of control the
+tie-up accounts for, which is the quantity the mechanism actually computes.
+
+**6c. Before adding new strategic vocabulary to Full, check that Reduced represents the existing
+vocabulary with the correct causal direction.** The priority rule for the whole tactical programme,
+and it is a consequence of 6a rather than a separate opinion: enriching Full's vocabulary while
+Reduced has the old vocabulary pointing the wrong way widens the gap between the sport the player
+watches and the sport their opponents' careers were built in. D3 — a behaviour axis for the clinch —
+was held for exactly this, twice: first behind D10, which had every grappling instruction inverted at
+Reduced detail, and then behind D11, which had no clinch representation at Reduced detail at all.
+
 *Enforced by* `tests/statistical/reduced-fidelity.test.ts` for magnitude and
 `tests/statistical/reduced-direction.test.ts` for direction; `tools/reduced-direction.ts` is the
 instrument. Doc 31 § D10 is the diagnosis.

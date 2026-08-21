@@ -712,6 +712,44 @@ export function controlResistance(c: Combatant): number {
 }
 
 /**
+ * Of the grappling this plan wants, how much of it is aimed at the fence rather than the floor.
+ *
+ * `grapplingAppetite` averages `takedown` and `clinchUp` to say *how much* grappling a plan wants.
+ * This is the other half of the same pair — *which route* — and it is deliberately built from the
+ * same two numbers, so the two functions cannot drift apart or double-count. **1 means no
+ * preference either way**, which is what an unplanned fighter has.
+ *
+ * The form is `2x / (x + y)`, the same share-of-the-pair D10 gave the round resolver's contests:
+ * bounded in (0, 2), exactly 1 when the two are equal.
+ */
+export function clinchLean(c: Combatant): number {
+  const stance = neutralStance(c);
+  const fence = standingBias(stance, 'clinchUp');
+  const floor = standingBias(stance, 'takedown');
+  return (2 * fence) / (fence + floor);
+}
+
+/**
+ * And having got there, how much of the tie-up this plan wants **kept** rather than converted.
+ *
+ * A separate question from the one above and answered by a separate table, because getting to the
+ * fence and staying on it are separate decisions — docs/01 § 8, applied at round granularity. It is
+ * what separates a clinch fighter from a wrestler who uses the fence as a handrail on the way to a
+ * takedown: both route to the tie-up, and only one of them is still there ten seconds later.
+ *
+ * Measured at Full detail, this term is the larger half of the difference. A top-position plan reads
+ * 0.65 on `clinchLean` and 0.38 here; without it Reduced put 4.4% of a top-position fighter's
+ * control in the tie-up against Full's 6.4%, and the shape of the plan table was doing none of the
+ * work that separates the two styles.
+ */
+export function clinchPersistence(c: Combatant): number {
+  const stance = neutralStance(c);
+  const keep = controllingBias(stance, 'clinchMaintain');
+  const convert = controllingBias(stance, 'clinchTakedown');
+  return (2 * keep) / (keep + convert);
+}
+
+/**
  * How much of his time on top the plan wants spent hitting, for the round-level resolver.
  *
  * The third of these, and it exists because `topIntent` reached Reduced through exactly one term —
