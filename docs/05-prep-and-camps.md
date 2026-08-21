@@ -106,18 +106,235 @@ weight so ten pounds at flyweight is a far harder cut than at heavyweight.
 `Weight-Cut Gambler` amplifies all three. It is the archetypal double-edged trait: a real,
 earned advantage and a real, recurring cost.
 
-## Approaches
+## The tactical plan
 
-Six, each shifting intent weights in the simulator:
+**`approach` is gone.** It was seven buttons answering four unrelated questions:
 
-| Approach     | The fight you are trying to have                         |
-| ------------ | -------------------------------------------------------- |
-| Pressure     | Walk them down, take the centre, never let them breathe   |
-| Counter      | Give them the centre and punish everything they throw     |
-| Wrestle      | Get it to the mat early and often; chain the attempts     |
-| Grind        | Fence, clinch, control. Win ugly and drain them           |
-| Point Fight  | Bank rounds, take no risks, get out with the decision     |
-| Hunt Finish  | Swing for it, and accept the damage that comes with that  |
+```
+  Pressure / Counter          → initiative: how do you take the centre?
+  Wrestle / Grind             → position:   where do you want the fight?
+  Point Fight                 → risk:       what are you willing to lose?
+  Hunt Submission / Finish    → finishing:  what ends it?
+```
+
+Those are not alternatives. A pressure fighter who wants it on the fence and takes no risks is an
+extremely common fighter, and the old control made the player pick *one* of the four things that
+describe him. And because the answer was a single row in a weight table with a factor of three
+across it, the engine could only read it as a nudge. Measured: an 84-striking, 38-wrestling
+fighter across from a wrestler spent **138 seconds of a 900-second fight at distance, and all
+seven approaches moved that number between 133 and 143.** Every plan produced the same fight —
+which meant "the plan failed" and "the plan did not matter" were indistinguishable, and the second
+one was always the truth.
+
+A plan now answers five questions. `domain/tactics.ts` is the vocabulary; `fight/policy.ts` is
+what makes the engine obey it. Two of doc 01's fight-engine invariants govern the whole layer and
+are worth stating before the list rather than after it: **a plan decides what a fighter tries, not
+whether it works**, and **initiative is not a destination** — how you take space is a separate
+question from where you want the fight, and the old control's inability to separate them is most
+of why it failed.
+
+### 1. Where do you want the fight?
+
+| | |
+| --- | --- |
+| **Outside** | Kicking range. Make them come to you, and make coming expensive. |
+| **Boxing range** | Where the hands work and the kicks still reach. Neither hiding nor trading. |
+| **Pocket** | Chest to chest. Short shots, heavy exchanges, no room to step off. |
+| **Clinch** | Fence and tie-up. Dirty box, knees, trips, control. |
+| **Ground — Top** | Take them down and stay on top of them. |
+| **Ground — Submission** | Get it to the floor and go hunting, from either position. |
+| **Adaptive** | Take what the opponent gives you. Applies no bias at all. |
+
+Three of the seven are standing, and that is deliberate. Two were tried first — long and pocket —
+and they could not carry a boxer: a rear straight is not a pocket-only weapon, and asking a
+conventional boxer to choose between "kicking range" and "chest to chest" makes him pick the wrong
+one either way. `boxing` is where most fights actually happen, which is also what makes it the
+most forgiving state to be told to hold.
+
+### 2. How do you get it there?
+
+Standing preferences pick from **Lead / Counter / Pressure / Movement**; grappling ones from
+**Reactive shots / Chain wrestling / Clinch first / Trips and throws**. The pair
+`(preferredState, entry)` is where the expressiveness lives: `pocket`+`pressure` is a pressure
+boxer, `top`+`pressure` is a relentless chain wrestler, `top`+`counter` is a reactive wrestler who
+shoots when you overextend. One axis could say none of that.
+
+### 3. What do you do once you are there?
+
+On top: **Control / Damage / Advance / Submit.** Underneath: **Stand up / Scramble / Play guard /
+Recover / Attack.**
+
+The bottom list is what the whole rework exists for. A striker with 32 submissions used to get
+taken down and *hunt a guillotine*, because the three bottom actions were drawn from weights that
+happened to be close together and the game plan was not in the room.
+
+### 4. Finishing
+
+**Stay disciplined / Press advantages / Hunt the finish** — how much the plan is abandoned the
+moment somebody is hurt. Exchange risk is `riskLevel`, which already exists and is already
+measured; positional risk was folded into the top intent, because `control` against `advance`
+*is* that axis asked where the fighter actually chooses.
+
+### 5. What changes when the fight does
+
+Five contingencies — losing the round, winning it, badly hurt, opponent hurt, final minute — each
+taking one response from a shared vocabulary (hold the plan, raise output, raise risk, lower risk,
+force grappling, hunt the finish, survive, secure position). Folded away on the screen by default:
+unset situations behave exactly as they did before this existed.
+
+## How intent becomes behaviour
+
+Every decision in the simulator is a weighted draw over locally reasonable actions. The policy
+layer scores each candidate for **alignment** with the fight the corner asked for, in −1…+1, and
+multiplies:
+
+```
+  bias = exp(alignment × 1.9 × urgency)
+```
+
+Exponential rather than linear because the ends must be reciprocal — at full urgency, doubling
+what you want has to halve what you don't, or every plan quietly becomes "do more of everything".
+
+**`urgency` is derived, never a dial.** It is the plan's own conviction, scaled by whether the
+fighter can execute a plan at all (discipline × fight IQ), by how much of the plan is left
+(`planIntegrity`, which erodes while hurt or losing and only partly recovers between rounds), and
+by whether they are somewhere they did not choose to be. A slider reading "how much do you mean
+it?" is not a question anybody can answer.
+
+Two rules keep it from becoming a straitjacket:
+
+- **Exceptional opportunities override suppression.** A man on his back told to stand up still
+  takes a fight-ending choke if one is genuinely there — `submissionOpportunity` is built from the
+  *gap* and the position, so a 90-submissions fighter gets an exemption when the position offers
+  one, not a permanent licence.
+- **Intent is not ability.** Nothing here makes anybody better at anything. A 25-wrestling fighter
+  told to take it to the floor shoots constantly, misses, gets countered and empties his tank.
+  That is a *failed game plan*, and it is the outcome the old model could not produce.
+
+## Range is a fight state, not a label
+
+`FightState` carries a `range` — `outside | boxing | pocket` — and it is *contested*, once per
+exchange, by whoever wants it moved. This is the piece the plan needed underneath it. Before it
+existed, "where do you want the fight" could only be answered on the floor, because standing up
+the engine had exactly one place to stand.
+
+**The plan decides what range you want. Skills decide whether you get it.** `rangeChangeChance`
+is a push-versus-resist contest: the mover's range control against the holder's, scaled by the
+mover's intent, the holder's ability to deny ground, and how established the current range is.
+Reach tilts it — a 12% swing across a six-inch difference — but is deliberately not a term in
+range control itself, so a long fighter with no feet is still a long fighter with no feet.
+
+Range control today reads `speed × 0.5 + fightIq × 0.3 + cardio × 0.2`. That expression is a seam:
+it is what a **Footwork** attribute would replace if the attribute model ever gains one, and it is
+written in one function so that change is one function.
+
+Measured over 900 fights on two identical 70-across fighters, by what each corner was told:
+
+| plans | outside | boxing | pocket | kick share | takedowns |
+| --- | --- | --- | --- | --- | --- |
+| Outside vs outside | 91% | 8% | 1% | 52% | 2.50 |
+| Boxing vs boxing | 19% | 79% | 2% | 34% | 3.84 |
+| Pocket vs pocket | 20% | 29% | 50% | 23% | 4.41 |
+| Outside vs pocket | 52% | 33% | 15% | 44% | 2.85 |
+
+Two things in that table are the point. The **kick share halves** from 52% to 23% without a word
+about kicks in any plan — a head kick from someone's chest is a bad idea and the engine now knows
+it, which is most of why a kickboxer and a karateka used to produce the same fight. And the
+contested row sits between the two agreed ones rather than at either: two fighters who want
+opposite things get a fight neither of them asked for.
+
+### Getting there is a skill, and failing costs
+
+The same instruction given to two different fighters:
+
+| | outside | boxing | pocket | kick share |
+| --- | --- | --- | --- | --- |
+| 88-speed, 86-IQ, told to stay outside | 68% | 26% | 7% | 51% |
+| 40-speed, 40-IQ, told to stay outside | 38% | 36% | 26% | 39% |
+
+Both are trying equally hard — urgency comes from the plan, not from the attributes — and one of
+them spends a quarter of the fight in a phone booth he was told to avoid. A failed entry is not
+free either: a fighter who lunges and does not arrive hands the other man a counter at 1.45× the
+usual scale, because getting caught coming in is how the sport charges for a bad entry.
+
+### What range does not do
+
+Pocket danger is *emergent*. There is no global "the pocket is 40% more dangerous" multiplier: the
+positional hazard table runs 0.92 to 1.08 and is mean-1 under a reference mix, so it says which
+range is dangerous and never how dangerous the sport is. The pocket hurts because of what is
+available there — hands over kicks, more counters, more exertion — which is a fight explaining
+itself rather than a constant asserting something.
+
+Range also **persists**. `rangeSettled` decays on a 22-second half-life, so a range that was just
+imposed resists being changed back on the very next exchange, and the fight stops flickering. And
+it distinguishes a referee reset, which returns everybody to `outside`, from an organic one: a
+scramble to the feet lands in the pocket, a clean break from the clinch lands at boxing range. A
+fighter who scrambles up with the other man attached is not magically at kicking range.
+
+### Both fidelity levels
+
+`resolveFightByRound` had to learn all of this in the same pass, because fighters are promoted
+from the Reduced resolver to the Full one and a promotion must not change how somebody fights. It
+estimates the range mix the same way — including the share of a round nobody chose, which is the
+walk back in from every reset — and reads the weapon mix a fighter *realises* where he is standing
+rather than the one his attributes suggest in the abstract. `tests/statistical/reduced-fidelity.test.ts`
+holds the two levels to 12 points on every axis, and names the one cell where range
+outran what a round-granularity model can see.
+
+## What proves it
+
+`tests/statistical/tactics.test.ts` holds the fighters and the seeds fixed and changes only the
+plan. On two identical 70-across fighters:
+
+| plan | distance | top | takedowns tried | subs tried | kick share |
+| --- | --- | --- | --- | --- | --- |
+| Outside + movement | 267s | 117s | 2.25 | 1.71 | 41% |
+| Pressure boxer | 268s | 133s | 2.59 | 1.89 | 27% |
+| Clinch grinder | 214s | 209s | 3.88 | 2.56 | 20% |
+| Point wrestler | 189s | 338s | 6.91 | 3.35 | 17% |
+| Submission hunter | 167s | 295s | 5.18 | **9.69** | 27% |
+
+And the plan has to *suit* the fighter. Win rate by (fighter, plan) against the same opponent:
+
+| plan | striker | grappler | balanced |
+| --- | --- | --- | --- |
+| no plan (adaptive) | 66 | 79 | 71 |
+| outside striker | **76** | 65 | 63 |
+| counter striker | **77** | 67 | 67 |
+| point wrestler | 57 | 82 | 74 |
+| ground and pound | 66 | **86** | 80 |
+
+A 20-point swing for picking the plan that matches who you are, and a real penalty for picking
+against it.
+
+## What it cost
+
+Two things worth stating plainly.
+
+**The old default plan was not neutral.** `defaultGamePlan()` carried `approach: 'pressure'`,
+which multiplied striking by 1.25 and takedowns by 0.8 — and every "unplanned" fight the whole
+statistical tier is calibrated against ran on it. Removing it is a correctness fix and it moved
+real numbers; `BASE_ATTEMPTS` in the round resolver came down from 15.5 to 15.0 to follow it.
+
+**The sport is more decisive.** When every fighter commits to the phase they are best in, more
+fights end. Across the whole 2026 roster:
+
+```
+                    before   after     real sport
+  finishes           49.1%    52.5%       ~48%
+  decisions          47.7%    44.1%      ~48-52%
+  KO : submission     1.51     1.91       ~1.8
+  first round        31.1%    35.1%       ~16%
+```
+
+The knockout-to-submission ratio moved *toward* the real sport; the first-round rate moved away
+from it. That gap is the next piece of work and it is not reachable from the tactical layer —
+absorbing it in `BASE_KD_HAZARD` was tried and rejected, because it takes the kicking attribute's
+win-rate swing under the floor `styles.test.ts` holds it to.
+
+**What it bought**, measured on the styles fingerprint: G1 separation went from **3 of 15 pairs to
+6**, and wrestling finally separated from jiu-jitsu — the pair whose whole difference is what you
+do having arrived on the floor, which the one-axis model had no vocabulary for.
 
 ## Targeting
 

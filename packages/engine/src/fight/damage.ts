@@ -16,7 +16,8 @@ import type { Rng } from '../core/rng.js';
 import { traitMul } from '../domain/traits.js';
 import { effect, fatiguedEffect, ratingEffect } from '../ratings/curve.js';
 import { effectiveDurability, type Combatant } from './profile.js';
-import type { StrikeTarget, Weapon } from './types.js';
+import { RANGE_HAZARD } from './range.js';
+import type { Range, StrikeTarget, Weapon } from './types.js';
 
 /** Damage points applied by a fully-clean strike from a Power-50 fighter, per region. */
 const BASE_DAMAGE: Readonly<Record<StrikeTarget, number>> = {
@@ -229,6 +230,16 @@ export function applyStrike(
   defender: Combatant,
   target: StrikeTarget,
   weapon: Weapon,
+  /**
+   * Where the shot was thrown from, when it was thrown standing.
+   *
+   * A small term, and the size is the argument. The pocket is dangerous because reaction time is
+   * shorter, exchanges are reciprocal, heavier weapons become the suitable ones and stepping off
+   * is a contest — all of which are modelled where they happen and produce knockouts on their
+   * own. Making the *label* radioactive on top of that would charge twice for one piece of
+   * physics; `RANGE_HAZARD` runs from 0.92 to 1.08 for exactly that reason.
+   */
+  range?: Range,
 ): StrikeOutcome {
   const flushness = rollFlushness(rng, attacker, defender, weapon);
   const damage = strikeDamage(attacker, target, flushness, weapon);
@@ -245,14 +256,13 @@ export function applyStrike(
       damage * 0.032 * traitMul(defender.fighter.traits, 'headTraumaRate');
   }
 
-  const knockdown = rng.chance(knockdownHazard(attacker, defender, target, flushness, weapon));
+  const positional = range ? RANGE_HAZARD[range] : 1;
+  const hazard = knockdownHazard(attacker, defender, target, flushness, weapon) * positional;
+  const knockdown = rng.chance(hazard);
 
   // A shot short of a knockdown can still rock someone — a separate, lower hazard that only
   // opens the hurt window rather than putting them on the mat.
-  const hurt =
-    !knockdown &&
-    target === 'head' &&
-    rng.chance(knockdownHazard(attacker, defender, target, flushness, weapon) * 1.5);
+  const hurt = !knockdown && target === 'head' && rng.chance(hazard * 1.5);
 
   /*
    * Cuts, which are now a property of what was thrown.

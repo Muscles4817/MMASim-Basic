@@ -27,7 +27,17 @@ import { clamp, clamp01, remap } from '../core/math.js';
 import type { Fighter } from '../domain/fighter.js';
 import type { GamePlan, ReadKey } from '../domain/gameplan.js';
 import { MAX_PREPPED_READS, READ_KEYS, normaliseTargeting } from '../domain/gameplan.js';
-import { deriveTendencies } from '../fight/profile.js';
+import {
+  convictionFor,
+  entriesFor,
+  type BottomIntent,
+  type EntryStyle,
+  type PreferredState,
+  type SituationalRules,
+  type TacticalPlan,
+  type TopIntent,
+} from '../domain/tactics.js';
+import { deriveTendencies, strikeLean } from '../fight/profile.js';
 import { deriveRatings } from '../ratings/derived.js';
 
 /**
@@ -51,54 +61,285 @@ const AI_CONFIDENCE = 0.7;
 const AI_CAMP_QUALITY = 0.7;
 
 /**
- * Where this fighter wants the fight, given who is in front of them.
+ * The fight this corner is trying to create, given who is in front of them.
  *
- * Reads the *derived* grappling ratings rather than raw `wrestling`, so the chain wrestler and the
- * fighter who merely has the attribute are told apart, and gates the grappling approaches on being
- * able to do something once they arrive — a fighter who takes people down and cannot hold them
- * there has picked the wrong plan, which the engine will then punish them for.
+ * Replaces `pickApproach`, which chose one of seven labels and therefore had to answer four
+ * questions with one cascade. What went wrong there is instructive and is why this function is
+ * shaped the way it is: a fighter whose game was `submissions` and `scrambling` had no wrestling
+ * edge and no clinch edge, fell through every branch to the striking arm, and was handed
+ * `pointFight` — **the row whose `submit` weight was the lowest in the table.** The engine was
+ * telling its most dangerous grappler to point-fight, and no amount of care in the cascade could
+ * fix it, because the cascade was answering the wrong question.
+ *
+ * Four independent decisions now, each answered from the thing that actually decides it:
+ *
+ *  1. **Where** — the fighter's own best phase, gated on the opponent being reachable there.
+ *  2. **How** — their route into it, from whether they wrestle in space or in the tie-up.
+ *  3. **What, once there** — top and bottom intent, from their floor game rather than their plan.
+ *  4. **What changes** — the contingencies, from personality.
+ *
+ * Deterministic, no rng: two identical matchups must produce two identical fights, which is what
+ * the whole statistical tier rests on.
  */
-function pickApproach(fighter: Fighter, opponent: Fighter): GamePlan['approach'] {
+function pickPreferredState(fighter: Fighter, opponent: Fighter): PreferredState {
   const a = fighter.attributes;
   const o = opponent.attributes;
-  const derived = deriveRatings(a);
-
-  const wrestlingEdge = derived.chainWrestling - o.takedownDefence;
-  const strikingEdge = Math.max(a.strikingOffence, a.kicking) - o.strikingDefence;
-  const clinchEdge = derived.clinchOffence - deriveRatings(o).clinchDefence;
+  const mine = deriveRatings(a);
+  const theirs = deriveRatings(o);
 
   /*
-   * The submission branch, and it comes first because it is the one nothing else could reach.
+   * **The fighter's own game picks the phase; the opponent only decides which version they get.**
    *
-   * A fighter whose game is `submissions` and `scrambling` has no wrestling edge and no clinch
-   * edge, so every cascade below this one fell through to the striking arm and handed the
-   * submission art `pointFight` — the approach that suppresses submissions harder than any other
-   * (docs/19 §13.8). Gated on the submission game being genuinely *this fighter's* game rather
-   * than merely present, so a well-rounded wrestler does not get it.
+   * The first cut of this function kept `pickApproach`'s shape — a cascade of *edges*, each
+   * comparing one of the fighter's phases against the opponent's defence of it — and it
+   * reproduced the exact defect that made the old model worth replacing. Measured: against the
+   * wrestling exemplar, **the judo exemplar was handed `longRange` + `counter`**, because a
+   * judoka's wrestling edge against 80 takedown defence is negative and his clinch edge did not
+   * clear the striking branch's threshold, so he fell through to the striking arm. The engine was
+   * telling a throwing specialist to kickbox, and jiu-jitsu against judo collapsed to 0.049 on
+   * the styles fingerprint as a result — through the floor every pair in the game is held to.
+   *
+   * A cascade of edges cannot answer "what is this fighter" because every branch is really asking
+   * "is this matchup favourable". So: rank the four phases against *this fighter's own average*,
+   * then subtract what the opponent denies. A judoka whose best phase is the tie-up still wants
+   * the tie-up against a good wrestler — he just wants it less, and only enough to change his
+   * mind if something else is genuinely better.
    */
-  const submissionGame = (a.submissions + a.scrambling) / 2;
-  if (submissionGame > 70 && submissionGame > derived.chainWrestling + 4) return 'submit';
+  const striking = Math.max(a.strikingOffence, a.kicking);
+  const clinch = mine.clinchOffence;
+  const top = (mine.chainWrestling + a.groundControl) / 2;
+  const ground = (a.submissions + a.scrambling) / 2;
+  const average = (striking + clinch + top + ground) / 4;
 
-  // Grappling first, because a takedown ends the striking exchange and the reverse is not true.
-  if (wrestlingEdge > strikingEdge + 6) {
-    // A fighter better in the tie-up than on the shot is told to work there. Before this, every
-    // grappler in the game was sent to `wrestle` and judo and wrestling were handed identical
-    // plans — which is half of why the fingerprint could not tell them apart (docs/19 §13.6).
-    if (clinchEdge > wrestlingEdge) return 'grind';
-    // `wrestle` means "put them down and keep them there", so it is gated on being able to do
-    // something once you arrive. The gate was 68/72 in the first cut and handed 2% of the roster
-    // the approach — a table row nobody reads is the defect this whole phase is about.
-    return a.groundControl > 60 || a.submissions > 66 ? 'wrestle' : 'grind';
+  // Denial is capped: a phase you are good at does not stop being your phase because the other
+  // man defends it well, it just stops being free.
+  const denied = (defence: number, offence: number) => clamp((defence - offence) / 2, 0, 12);
+
+  const score = {
+    striking: striking - average - denied(o.strikingDefence, striking),
+    clinch: clinch - average - denied(theirs.clinchDefence, clinch),
+    top: top - average - denied(o.takedownDefence, mine.chainWrestling),
+    submission: ground - average - denied(o.scrambling, ground),
+  };
+
+  /*
+   * The submission art needs a *margin*, not a ranking, because "my best phase is the floor" and
+   * "I can finish people there" are different claims. Measured, a bare `>=` handed the judo
+   * exemplar `submission` on an exact tie with its clinch score — sending a throwing specialist
+   * to hunt off his back — and jiu-jitsu against judo read 0.049 on the styles fingerprint,
+   * under the 0.05 floor every pair in the game is held to.
+   */
+  /*
+   * **Every grappling branch has to beat the striking one by a margin, and that margin is the
+   * whole correction.** With bare `>=` comparisons, ties and near-ties all fell into the
+   * grappling arms and the shipped roster came out **65.7% clinch fighters** — two thirds of the
+   * sport wanting to fight on the fence, which is not a sport anybody has watched. The cause is
+   * that `clinchOffence` is derived from strength and wrestling, so it sits near a generic
+   * fighter's own average and wins ties by default, while striking is the only phase the
+   * opponent's defence reliably *denies*.
+   *
+   * Standing is the default a fighter has to be argued out of, because that is where MMA starts
+   * and where most of it is spent.
+   */
+  const best = Math.max(score.striking, score.clinch, score.top);
+  if (score.submission >= best + 1.5 && ground > 66) return 'submission';
+
+  /*
+   * **For a fighter who can hold people down, the clinch is a means and the floor is the end.**
+   *
+   * That is the whole of judo in this model, and it is why `top` takes the tie rather than
+   * losing it: a judoka's clinch score beats his top score because grips are what he is best at,
+   * but nobody works for an underhook in order to keep standing there. The version of him that
+   * stops at the fence is a Muay Thai clinch fighter, and that is what the `groundControl` gate
+   * separates — take the tie-up as an end only when there is nothing to do after it.
+   */
+  if (score.top >= score.striking - 1 && score.top >= score.clinch - 3 && a.groundControl > 55) {
+    return 'top';
   }
-  if (clinchEdge > strikingEdge + 10) return 'grind';
+  if (score.clinch >= score.striking + 5) return 'clinch';
+  // A fighter whose game says floor but who cannot hold anybody there has picked the wrong plan;
+  // the fence is the version of the same intent that does not require holding somebody down.
+  if (score.top >= score.striking + 7) return 'clinch';
 
-  // Striking, and the order matters: a fighter who is quicker and sharper than the man in front of
-  // them counters rather than pressing, even when they could press. `counter` was behind the
-  // `pressure` gate in the first cut and 0.5% of the roster ever saw it, which quietly denied the
-  // karate origin the one approach it was designed around (docs/19 §0 F1).
+  /*
+   * The standing split, which `approach` could not make at all: a rangy kicker and a pressure
+   * boxer were both `pressure` or both `counter`, and the engine had one standing position, so
+   * the two were the same fighter.
+   *
+   * Three answers now rather than two, and `boxing` is the honest middle rather than a fudge: a
+   * fighter with good hands, no reach edge and nothing to hide from belongs where the hands work.
+   * Reading `reachInches` here is the second place in the engine that field has ever been read —
+   * `range.ts` is the first, and the one that gives it a contest.
+   */
+  const reachEdge = fighter.reachInches - opponent.reachInches;
+  // Somebody who cannot afford to be hit stays where being hit is hardest, whatever else is true.
+  if (a.durability < o.power - 6) return 'outside';
+  if (a.kicking >= a.strikingOffence + 6 || reachEdge >= 4) return 'outside';
+  // The pocket is for fighters built to be there: heavy hands, a chin, and the engine to hold it.
+  if (a.power >= 66 && a.durability >= 62 && reachEdge <= 1) return 'pocket';
+  return 'boxing';
+}
+
+/** Their route in. For a striker this is initiative; for a grappler it is space against grips. */
+function pickEntry(fighter: Fighter, opponent: Fighter, state: PreferredState): EntryStyle {
+  const a = fighter.attributes;
+  const o = opponent.attributes;
+  const allowed = entriesFor(state);
+
+  if (!allowed.includes('lead')) {
+    // Grappling entries. `wrestling` shoots in space; `strength` and the tie-up throw from grips.
+    const derived = deriveRatings(fighter.attributes);
+    /*
+     * Grips against space, and the margin is zero on purpose.
+     *
+     * It was `+6`, and the judo exemplar missed it by four points — `clinchOffence` 78 against
+     * `chainWrestling` 76 — so the throwing art was routed to `proactiveWrestling` and **shot
+     * doubles all night**. Its clinch control share fell from 0.299 to 0.084 and the
+     * wrestling/judo separation §13.7 bought went with it. A fighter who is *as good* from grips
+     * as from space throws; needing to be six points better was an invented threshold that only
+     * ever excluded the one art it was written for.
+     */
+    /*
+     * The tie-up is a route for a wrestler and a judoka, and not for a guard player.
+     *
+     * `clinchOffence` is derived from strength and wrestling, so it reads high on plenty of
+     * fighters whose game has nothing to do with grips — including the jiu-jitsu exemplar, which
+     * was routed through `clinchEntries` and came out doing *more* fence work than the judoka.
+     * That put jiu-jitsu against judo at 0.046 on the fingerprint, under the floor, with the two
+     * arts separated by the wrong sign on the one axis that should tell them apart.
+     */
+    if (state !== 'submission' && derived.clinchOffence >= derived.chainWrestling) {
+      /*
+       * The throw is a wrestler's tool used from grips, not a submission player's. Gated on real
+       * wrestling for that reason: without it the jiu-jitsu exemplar — whose clinch rating is
+       * incidentally high because `clinchOffence` reads strength — was told to throw people, and
+       * a guard player who leads with uchi-mata is not a fighter anybody has seen.
+       */
+      return a.wrestling > 70 ? 'tripsAndThrows' : 'clinchEntries';
+    }
+    // Shooting into a good takedown defence all night is how a wrestler loses a fight he should
+    // win, so a corner facing one waits for the strike instead.
+    if (o.takedownDefence > derived.chainWrestling + 8) return 'reactiveShot';
+    return a.fightIq > 68 && a.speed < o.speed ? 'reactiveShot' : 'proactiveWrestling';
+  }
+
+  /*
+   * Standing entries. The same reading `pickApproach` used to make, kept because it was right —
+   * *including* the striking-edge clause, which a first cut of this function dropped.
+   *
+   * That clause is doing more work than it looks. `counter` is the only entry the fight engine
+   * treats as a mechanic rather than a weight: `resolveStrikeExchange` scales a counter-fighter's
+   * return burst by 0.9 against everybody else's 0.55, a 64% swing in counter volume. Handing it
+   * to every quick, smart fighter instead of only to those who are *not* already the better
+   * striker took the roster's first-round finishes from 32.7% to 34.8% and its knockouts-to-
+   * submissions ratio from 1.57 to 2.60 — a visibly more explosive sport, from one dropped
+   * conjunct in a function that was only supposed to be renaming things.
+   */
+  const strikingEdge = Math.max(a.strikingOffence, a.kicking) - o.strikingDefence;
   if (a.fightIq > 58 && a.speed >= o.speed && strikingEdge < 16) return 'counter';
-  if (strikingEdge > 8) return 'pressure';
-  return a.durability > o.power + 8 ? 'pressure' : 'pointFight';
+  if (a.cardio > 70 && a.strikingOffence >= o.strikingDefence - 4) return 'pressure';
+  return a.durability < o.power ? 'movement' : 'lead';
+}
+
+/** What they do on top, from their floor game rather than from their plan. */
+function pickTopIntent(fighter: Fighter): TopIntent {
+  const a = fighter.attributes;
+  /*
+   * Read against the fighter's own top game, not an absolute bar — the same correction
+   * `pickBottomIntent` needed, found the same way. `submissions > 68` is rare enough on the
+   * shipped roster that almost everybody was handed `control`, and since `topBias` suppresses
+   * submissions hard for a controller, **the sport's submission rate fell from 19.6% to 16.1%
+   * and its knockout-to-submission ratio rose from 1.51 to 2.18.** A default that quiet is a
+   * design decision nobody made.
+   */
+  if (a.submissions > a.groundControl + 2) return 'submit';
+  if (a.power + a.groundControl > 150) return 'groundAndPound';
+  return a.groundControl > 68 ? 'advance' : 'control';
+}
+
+/**
+ * What they do underneath — and this is the one the whole rework is for.
+ *
+ * A striker with no bottom game is told to get up, and now *does*, because `policy.ts` treats it
+ * as an instruction rather than one weight among three. The threshold is deliberately generous:
+ * being content on your back is a specialist's property, and most of the roster is not one.
+ */
+function pickBottomIntent(fighter: Fighter): BottomIntent {
+  const a = fighter.attributes;
+  const bottomGame = (a.submissions + a.scrambling) / 2;
+  const topGame = (a.wrestling + a.groundControl) / 2;
+
+  /*
+   * Read relative to the fighter, never against a fixed number — and the first cut of this
+   * function proves why. It asked `submissions > 58 && scrambling > 55`, which at exemplar level
+   * is most of the roster, so **the boxing, kickboxing, karate and wrestling exemplars were all
+   * told to play guard.** That is the player's original complaint, generated by the very
+   * function meant to fix it: a striker on his back, content to stay there.
+   *
+   * `strikeLean` is the honest test, because it already knows the difference between a fighter
+   * who owns a submission game and one who merely has the attribute.
+   */
+  if (strikeLean(fighter) > 0.55) return a.scrambling > 62 ? 'scramble' : 'standUp';
+  if (a.submissions > 66 && a.submissions > topGame + 2) return 'attack';
+  if (a.submissions > 56 && bottomGame > topGame + 2) return 'playGuard';
+  if (a.scrambling > 62) return 'scramble';
+  return a.scrambling < 45 && a.takedownDefence < 55 ? 'recover' : 'standUp';
+}
+
+/**
+ * The contingencies, from personality rather than from ability.
+ *
+ * What a fighter does when the fight goes wrong is a question about who they are, and the game
+ * already has the numbers: `aggression` decides whether being behind means more risk or more
+ * output, `discipline` decides whether being ahead means coasting or holding the plan, and
+ * `resilience` — the axis for how somebody handles adversity — decides whether being hurt means
+ * tying up and surviving or swinging back out of it.
+ */
+function pickSituational(fighter: Fighter): SituationalRules {
+  const p = fighter.personality;
+  return {
+    losingRound:
+      p.aggression > 65 ? 'raiseRisk' : p.aggression > 45 ? 'raiseOutput' : 'holdThePlan',
+    winningRound: p.discipline > 60 ? 'secureControl' : 'holdThePlan',
+    badlyHurt: p.resilience > 62 ? 'survive' : p.aggression > 70 ? 'raiseRisk' : 'forceGrappling',
+    opponentHurt: p.aggression > 55 ? 'huntFinish' : 'raiseOutput',
+    finalMinute: p.discipline > 55 ? 'secureControl' : 'raiseOutput',
+  };
+}
+
+function pickTactics(fighter: Fighter, opponent: Fighter): TacticalPlan {
+  const preferredState = pickPreferredState(fighter, opponent);
+  return {
+    preferredState,
+    entry: pickEntry(fighter, opponent, preferredState),
+    topIntent: pickTopIntent(fighter),
+    bottomIntent: pickBottomIntent(fighter),
+    /*
+     * Hunting the finish is a *characterisation*, not a default, and the threshold says so.
+     *
+     * `finishOpportunity` lifts the plan's suppression when the other man is hurt, so a corner
+     * that hunts is a corner whose fighter piles on. Handing that to everyone above the roster's
+     * median aggression pushed the sport's first-round finishes measurably up — the bound
+     * `roster-profile.test.ts` calls the one closest to its limit. Above 78 it is the fighters
+     * the trait is actually about.
+     */
+    finishing:
+      fighter.personality.aggression > 78
+        ? 'huntFinish'
+        : fighter.personality.aggression > 55
+          ? 'pressAdvantage'
+          : 'disciplined',
+    situational: pickSituational(fighter),
+    /*
+     * The world commits, but less than the player does.
+     *
+     * `convictionFor` is the plan's natural conviction; three quarters of it is what a corner
+     * that has not met this opponent before brings. The extremes belong to the player, who is
+     * choosing them against a named man with a scouting report in front of them — the same
+     * reasoning `pickRisk` uses, and the same reason its band is narrow.
+     */
+    conviction: convictionFor(preferredState) * 0.75,
+  };
 }
 
 /**
@@ -213,7 +454,7 @@ function pickReads(opponent: Fighter, count: number): ReadKey[] {
  */
 export function planFor(fighter: Fighter, opponent: Fighter): GamePlan {
   return {
-    approach: pickApproach(fighter, opponent),
+    tactics: pickTactics(fighter, opponent),
     targeting: pickTargeting(fighter, opponent),
     riskLevel: pickRisk(fighter),
     campQuality: AI_CAMP_QUALITY,

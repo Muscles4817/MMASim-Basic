@@ -1,10 +1,25 @@
 import { useMemo, useState } from 'react';
 import {
-  APPROACHES,
   activeLesson,
   focusForAttribute,
   TRAINING_FOCUSES,
-  APPROACH_META,
+  BOTTOM_INTENTS,
+  BOTTOM_INTENT_META,
+  ENTRY_META,
+  FINISHING_META,
+  FINISHING_URGENCIES,
+  PREFERRED_STATES,
+  PREFERRED_STATE_META,
+  RESPONSE_META,
+  SITUATIONS,
+  SITUATION_META,
+  TOP_INTENTS,
+  TOP_INTENT_META,
+  convictionFor,
+  defaultTactics,
+  entriesFor,
+  normaliseTactics,
+  type TacticalPlan,
   MAX_PREPPED_READS,
   PURCHASES,
   PURCHASE_KEYS,
@@ -31,7 +46,7 @@ import {
   type AttributeKey,
   READ_META,
   scoutOpponent,
-  type Approach,
+  strikeLean,
   type TrainingFocus,
   type Attributes,
   type Coach,
@@ -136,7 +151,30 @@ export function CampScreen() {
     return scoutOpponent(truth, coach?.scouting ?? 45, footage, rng);
   }, [opponent, coach, world.seed, booking?.bout.id]);
 
-  const [approach, setApproach] = useState<Approach>(booking?.plan.approach ?? 'pressure');
+  /*
+   * The plan, as five decisions rather than one.
+   *
+   * `approach` was a single row of seven buttons mixing initiative, position, risk and finishing,
+   * so a player who wanted a pressure fighter who grinds and takes no risks had to pick one of
+   * the four things that describe him. `booking.plan.tactics` is filled from the old field by
+   * `normaliseGamePlan` when a camp saved before the rework is reopened, so nobody loses a camp.
+   */
+  /*
+   * The takedown threat as the *report* sees it, not as the opponent's attributes state it.
+   *
+   * Deliberately the scouted estimate: this screen never shows the player a fact about the
+   * opponent they have not paid a coach for, and a warning sourced from the ground truth would
+   * be the one place the camp quietly told them everything.
+   */
+  const shootThreat = useMemo(() => {
+    if (!report) return undefined;
+    const of = (key: ReadKey) => report.reads.find((r) => r.read === key)?.estimate ?? 0;
+    return Math.max(of('doubleLeg'), of('singleLeg'), of('bodyLock'), of('fenceClinch'));
+  }, [report]);
+
+  const [tactics, setTactics] = useState<TacticalPlan>(
+    () => normaliseTactics(booking?.plan.tactics ?? defaultTactics()),
+  );
   const [risk, setRisk] = useState<number>(booking?.plan.riskLevel ?? 0.5);
   const [targeting, setTargeting] = useState<Record<StrikeTarget, number>>(
     booking?.plan.targeting ?? { head: 0.6, body: 0.25, legs: 0.15 },
@@ -166,6 +204,62 @@ export function CampScreen() {
   const purchases = campPurchaseEffects(bought);
   const spend = purchaseCost(bought);
 
+  const situationalCount = SITUATIONS.filter(
+    (situation) => (tactics.situational[situation] ?? 'holdThePlan') !== 'holdThePlan',
+  ).length;
+
+  /*
+   * The plan arguing with the fighter, or with the report, said out loud before it is committed.
+   *
+   * This screen promises a considered decision, and the two commonest ways to get the tactical
+   * layer wrong are both invisible from the controls: telling a fighter to seek the phase they
+   * are worst in, and leaving the bottom instruction on a setting their game cannot support. The
+   * engine will now *obey* either of those — visibly and expensively — which is the whole point,
+   * and it is why saying so first is worth a block on the screen.
+   *
+   * Warnings, never blocks. Being wrong on purpose is a legitimate thing to do to an opponent.
+   */
+  const planWarnings = useMemo(() => {
+    if (!playerFighter) return [];
+    const a = playerFighter.attributes;
+    const lean = strikeLean(playerFighter);
+    const out: { title: string; body: string }[] = [];
+
+    const grapplingPlan =
+      tactics.preferredState === 'top' || tactics.preferredState === 'submission';
+    if (grapplingPlan && lean > 0.6) {
+      out.push({
+        title: 'This is not your fight',
+        body: 'You are asking a striker to go and get it on the floor. Your fighter will keep changing levels, keep getting stuffed, and empty the tank doing it — the plan will be followed, not quietly ignored.',
+      });
+    }
+    if (tactics.preferredState === 'submission' && a.submissions < 55) {
+      out.push({
+        title: 'Nothing to hunt with',
+        body: `Submissions ${a.submissions} is not a finishing threat. You will spend the fight looking for something that is not there.`,
+      });
+    }
+    if (tactics.bottomIntent === 'attack' && a.submissions < 55) {
+      out.push({
+        title: 'Off your back is the worst place for you',
+        body: 'Told to attack from underneath, your fighter will stay there and threaten nothing. If you cannot submit people, the instruction you want is Stand up.',
+      });
+    }
+    if (tactics.bottomIntent === 'standUp' && a.scrambling < 45 && a.submissions > 60) {
+      out.push({
+        title: 'You are better off there than you think',
+        body: 'Scrambling is low and your submissions are real. Wall-walking against a good top game mostly means giving up position; Play guard keeps the threat alive.',
+      });
+    }
+    if (PREFERRED_STATE_META[tactics.preferredState].standing && a.takedownDefence < 50 && shootThreat !== undefined && shootThreat > 0.6) {
+      out.push({
+        title: 'They are coming for your legs',
+        body: `The report has ${opponent ? opponent.lastName : 'him'} changing levels constantly, and your takedown defence is ${a.takedownDefence}. Keeping it standing is the right plan and it will not be enough on its own — drill the shot and mind what you set underneath.`,
+      });
+    }
+    return out;
+  }, [playerFighter, tactics, shootThreat, opponent]);
+
   /**
    * Write the plan down as it is built, not when the fight starts.
    *
@@ -176,7 +270,7 @@ export function CampScreen() {
    * a considered decision.
    */
   const persist = (next: {
-    approach?: Approach;
+    tactics?: TacticalPlan;
     riskLevel?: number;
     targeting?: Record<StrikeTarget, number>;
     selected?: ReadKey[];
@@ -186,7 +280,7 @@ export function CampScreen() {
     setBooking(
       saveBookingPlan(booking, {
         ...booking.plan,
-        approach: next.approach ?? approach,
+        tactics: next.tactics ?? tactics,
         riskLevel: next.riskLevel ?? risk,
         targeting: normaliseTargeting(next.targeting ?? targeting),
         preppedReads: reads.map((read) => ({
@@ -196,6 +290,29 @@ export function CampScreen() {
         })),
       }),
     );
+  };
+
+  /**
+   * Change one part of the plan.
+   *
+   * Every tactical control goes through here rather than each holding its own setter, because
+   * two of them interact: changing where you want the fight changes which entry styles are
+   * even meaningful, and an entry left over from the previous preference is a stale control
+   * rather than a plan. `normaliseTactics` is what re-seats it.
+   */
+  const setPlan = (next: Partial<TacticalPlan>) => {
+    setTactics((current) => {
+      const merged = normaliseTactics({
+        ...current,
+        ...next,
+        // Conviction is derived, never picked: "how much do you mean it?" is not a question
+        // anybody can answer, and a sixth control that silently scales the other five is how a
+        // screen starts feeling arbitrary. See `policy.ts`.
+        conviction: convictionFor(next.preferredState ?? current.preferredState),
+      });
+      persist({ tactics: merged });
+      return merged;
+    });
   };
 
   /*
@@ -273,7 +390,7 @@ export function CampScreen() {
   const startFight = () => {
     setRunning(true);
     const plan = {
-      approach,
+      tactics,
       targeting: normaliseTargeting(targeting),
       riskLevel: risk,
       campQuality: camp,
@@ -610,41 +727,142 @@ export function CampScreen() {
 
       <Card title="Game plan">
         <div className="stack">
-          <div>
-            <h3 className="section-title">Approach</h3>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(9rem, 1fr))',
-                gap: 'var(--space-2)',
-              }}
+          {/*
+            Five decisions, not one.
+
+            The screen this replaces asked "approach?" and offered seven buttons that mixed
+            initiative (Pressure / Counter), position (Wrestle / Grind), risk (Point Fight) and
+            finishing (Hunt the Submission / Hunt the Finish) — four questions with one answer,
+            so a pressure fighter who wants it on the fence and takes no risks could not be
+            described at all. Each block below is one of those questions, asked separately.
+          */}
+          <PlanChoice
+            title="Where do you want the fight?"
+            note="The most important instruction on this screen. It decides what your fighter reaches for, and what they refuse."
+            options={PREFERRED_STATES.map((key) => ({
+              key,
+              label: PREFERRED_STATE_META[key].label,
+              blurb: PREFERRED_STATE_META[key].blurb,
+            }))}
+            value={tactics.preferredState}
+            onPick={(key) => setPlan({ preferredState: key })}
+          />
+
+          <PlanChoice
+            title="How do you get it there?"
+            note={
+              PREFERRED_STATE_META[tactics.preferredState].standing
+                ? 'Who takes the initiative on the feet.'
+                : 'Your route in — off the shot, or off the tie-up.'
+            }
+            options={entriesFor(tactics.preferredState).map((key) => ({
+              key,
+              label: ENTRY_META[key].label,
+              blurb: ENTRY_META[key].blurb,
+            }))}
+            value={tactics.entry}
+            onPick={(key) => setPlan({ entry: key })}
+          />
+
+          <PlanChoice
+            title="When you are on top"
+            options={TOP_INTENTS.map((key) => ({
+              key,
+              label: TOP_INTENT_META[key].label,
+              blurb: TOP_INTENT_META[key].blurb,
+            }))}
+            value={tactics.topIntent}
+            onPick={(key) => setPlan({ topIntent: key })}
+          />
+
+          {/*
+            The control the whole rework exists for.
+
+            A striker on his back used to hunt guillotines he could not finish, because the
+            engine drew from three near-equal weights and the plan was not in the room. This is
+            the instruction that stops it, and the read-out below says so in words when the
+            answer contradicts the fighter's own game.
+          */}
+          <PlanChoice
+            title="When you are underneath"
+            note="Where a striker's night is usually decided, and where the old plan said nothing at all."
+            options={BOTTOM_INTENTS.map((key) => ({
+              key,
+              label: BOTTOM_INTENT_META[key].label,
+              blurb: BOTTOM_INTENT_META[key].blurb,
+            }))}
+            value={tactics.bottomIntent}
+            onPick={(key) => setPlan({ bottomIntent: key })}
+          />
+
+          <PlanChoice
+            title="If a finish is there"
+            options={FINISHING_URGENCIES.map((key) => ({
+              key,
+              label: FINISHING_META[key].label,
+              blurb: FINISHING_META[key].blurb,
+            }))}
+            value={tactics.finishing}
+            onPick={(key) => setPlan({ finishing: key })}
+          />
+
+          {planWarnings.map((warning) => (
+            <Alert key={warning.title} tone="warn" title={warning.title}>
+              {warning.body}
+            </Alert>
+          ))}
+
+          {/*
+            The conditional half, folded away by default.
+
+            Real game plans are mostly contingencies — a corner spends the minute between rounds
+            on them — but five more controls open on arrival would bury the five above, which are
+            the ones that decide the fight. Unset situations behave exactly as they did before
+            this existed, so the fold costs nothing to ignore.
+          */}
+          <details>
+            <summary
+              style={{ cursor: 'pointer', minHeight: 'var(--tap-target)', padding: 'var(--space-2) 0' }}
             >
-              {APPROACHES.map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={approach === key}
-                  onClick={() => {
-                    setApproach(key);
-                    persist({ approach: key });
-                  }}
-                  style={{
-                    padding: 'var(--space-3)',
-                    minHeight: 'var(--tap-target)',
-                    textAlign: 'left',
-                    borderRadius: 'var(--radius)',
-                    border: `1px solid ${approach === key ? 'var(--accent)' : 'var(--border)'}`,
-                    background: approach === key ? 'var(--accent-soft)' : 'var(--surface)',
-                  }}
-                >
-                  <span style={{ fontWeight: 700, display: 'block' }}>{APPROACH_META[key].label}</span>
-                  <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
-                    {APPROACH_META[key].blurb}
-                  </span>
-                </button>
+              <strong>If the fight changes</strong>{' '}
+              <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
+                — {situationalCount === 0 ? 'nothing set' : `${situationalCount} set`}
+              </span>
+            </summary>
+            <div className="stack" style={{ marginTop: 'var(--space-2)' }}>
+              {SITUATIONS.map((situation) => (
+                <div key={situation}>
+                  <h3 className="section-title">{SITUATION_META[situation].label}</h3>
+                  <div className="row" style={{ flexWrap: 'wrap', gap: 'var(--space-2)' }}>
+                    {SITUATION_META[situation].options.map((option) => {
+                      const on = (tactics.situational[situation] ?? 'holdThePlan') === option;
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() =>
+                            setPlan({
+                              situational: { ...tactics.situational, [situation]: option },
+                            })
+                          }
+                          style={{
+                            padding: 'var(--space-2) var(--space-3)',
+                            minHeight: 'var(--tap-target)',
+                            borderRadius: 'var(--radius)',
+                            border: `1px solid ${on ? 'var(--accent)' : 'var(--border)'}`,
+                            background: on ? 'var(--accent-soft)' : 'var(--surface)',
+                          }}
+                        >
+                          {RESPONSE_META[option].label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               ))}
             </div>
-          </div>
+          </details>
 
           <div>
             <h3 className="section-title">Where to attack</h3>
@@ -819,7 +1037,15 @@ export function CampScreen() {
           <li className="row" style={{ justifyContent: 'space-between' }}>
             <span className="muted">Approach</span>
             <strong>
-              {APPROACH_META[approach].label} · {riskLabel(risk).toLowerCase()}
+              {PREFERRED_STATE_META[tactics.preferredState].label} ·{' '}
+              {ENTRY_META[tactics.entry].label.toLowerCase()} · {riskLabel(risk).toLowerCase()}
+            </strong>
+          </li>
+          <li className="row" style={{ justifyContent: 'space-between' }}>
+            <span className="muted">On the floor</span>
+            <strong>
+              {TOP_INTENT_META[tactics.topIntent].label} on top ·{' '}
+              {BOTTOM_INTENT_META[tactics.bottomIntent].label.toLowerCase()} underneath
             </strong>
           </li>
           <li className="row" style={{ justifyContent: 'space-between' }}>
@@ -1028,6 +1254,69 @@ function ExposureLine({
  * corner would actually use, and the description names the trade in both directions so the
  * slider reads as a decision with a cost rather than a difficulty setting.
  */
+/**
+ * One tactical question, as a row of cards.
+ *
+ * Shared by all five because they *are* the same shape of question — pick exactly one, each with
+ * a sentence saying what it means — and five bespoke blocks would drift apart the first time one
+ * of them was edited. The blurb is not decoration: these options are only distinguishable to a
+ * player who is told what they do, and the old screen's failure was as much that its seven
+ * buttons overlapped as that the engine ignored them.
+ */
+function PlanChoice<T extends string>({
+  title,
+  note,
+  options,
+  value,
+  onPick,
+}: {
+  title: string;
+  note?: string;
+  options: readonly { key: T; label: string; blurb: string }[];
+  value: T;
+  onPick: (key: T) => void;
+}) {
+  return (
+    <div>
+      <h3 className="section-title">{title}</h3>
+      {note ? (
+        <p className="faint" style={{ fontSize: 'var(--text-sm)', marginTop: 0 }}>
+          {note}
+        </p>
+      ) : null}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(9rem, 1fr))',
+          gap: 'var(--space-2)',
+        }}
+      >
+        {options.map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            aria-pressed={value === option.key}
+            onClick={() => onPick(option.key)}
+            style={{
+              padding: 'var(--space-3)',
+              minHeight: 'var(--tap-target)',
+              textAlign: 'left',
+              borderRadius: 'var(--radius)',
+              border: `1px solid ${value === option.key ? 'var(--accent)' : 'var(--border)'}`,
+              background: value === option.key ? 'var(--accent-soft)' : 'var(--surface)',
+            }}
+          >
+            <span style={{ fontWeight: 700, display: 'block' }}>{option.label}</span>
+            <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
+              {option.blurb}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function riskLabel(risk: number): string {
   if (risk < 0.2) return 'Stay safe';
   if (risk < 0.4) return 'Measured';

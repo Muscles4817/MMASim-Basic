@@ -16,6 +16,34 @@ export const OTHER_CORNER: Readonly<Record<Corner, Corner>> = { red: 'blue', blu
 
 export type Position = 'distance' | 'clinch' | 'ground';
 
+/**
+ * How far apart two standing fighters are.
+ *
+ * `distance` was one undifferentiated bucket holding everything from a karateka bouncing at
+ * kicking range to two boxers chest-to-chest throwing hooks — and a simulator that cannot tell
+ * those apart cannot model reach, pressure, movement or range management, which is why
+ * `reachInches` sat authored on every fighter in both seed rosters and read by nothing.
+ *
+ * Three states rather than two, deliberately. The two-state version of this landed on "at long
+ * range you may only jab", which is false — a rear straight is not a pocket-only weapon — and
+ * that falsity was the signal that two states were being stretched to cover three. `boxing` is
+ * where most conventional MMA striking happens: hands work normally, kicks still exist, and it
+ * is neither the range you have to *enter* from nor the one you have to *survive* in.
+ *
+ * A sub-state of `distance` rather than three more `Position` values, so everything that reads
+ * `position === 'distance'` — the fatigue table, the judges' `distanceSeconds`, the clinch entry
+ * path — keeps working untouched.
+ */
+export const RANGES = ['outside', 'boxing', 'pocket'] as const;
+export type Range = (typeof RANGES)[number];
+
+/** How far apart each range is, 0 (chest to chest) … 1 (kicking range). Ordering, not geometry. */
+export const RANGE_SEPARATION: Readonly<Record<Range, number>> = {
+  outside: 1,
+  boxing: 0.5,
+  pocket: 0,
+};
+
 /** Ground sub-position ladder, ascending in dominance for the top fighter. */
 export const GROUND_POSITIONS = ['guard', 'halfGuard', 'sideControl', 'mount', 'back'] as const;
 export type GroundPosition = (typeof GROUND_POSITIONS)[number];
@@ -134,6 +162,7 @@ export type FightEventKind =
   | 'takedownStuffed'
   | 'clinch'
   | 'clinchBreak'
+  | 'range'
   | 'positionAdvance'
   | 'sweep'
   | 'standUp'
@@ -181,6 +210,26 @@ export interface FightStats {
   clinchControlSeconds: number;
   /** Seconds spent at distance. Used by judges assessing octagon control. */
   distanceSeconds: number;
+  /**
+   * Of that, the seconds spent at each range.
+   *
+   * Sums to `distanceSeconds`. Kept as its own breakdown rather than folded into it because
+   * `distanceSeconds` answers a judge's question — was this fight standing — and this answers the
+   * player's: *did my game plan actually happen*. Without it, a plan that failed can only be
+   * diagnosed by reading several hundred play-by-play events, which is not diagnosis.
+   */
+  rangeSeconds: Record<Range, number>;
+  /**
+   * Attempts to change the range, and the ones that came off.
+   *
+   * Two counters rather than one because the difference between them *is* range control, and it
+   * is the difference a single number cannot show. A fighter who tried eleven times and got there
+   * twice and a fighter who tried three times and got there twice have the same `rangeSeconds` and
+   * are not remotely the same fighter — the first one is being beaten to the punch every time he
+   * steps in, and that is the diagnosis a player needs when a game plan did not happen.
+   */
+  rangeChangesAttempted: number;
+  rangeChangesLanded: number;
   /** Cumulative damage dealt, in the same units as the opponent's damage meters. */
   damageDealt: number;
 }
@@ -303,6 +352,9 @@ export function emptyStats(): FightStats {
     controlSeconds: 0,
     clinchControlSeconds: 0,
     distanceSeconds: 0,
+    rangeSeconds: { outside: 0, boxing: 0, pocket: 0 },
+    rangeChangesAttempted: 0,
+    rangeChangesLanded: 0,
     damageDealt: 0,
   };
 }

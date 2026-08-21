@@ -33,13 +33,13 @@ const YEAR = 365;
 const START = 2192;
 
 /** Ten years of world, which is where the collapse used to be unmistakable. */
-const decade = () => {
+const decade = (start = START) => {
   const db = createNewGame({ adapter: undefined, era: '2026' });
   const player = (db.fighters.findAll() as Fighter[])[0]!;
   const before = (db.fighters.findAll() as Fighter[]).filter((f) => f.retiredDay === undefined);
 
   for (let year = 0; year < 10; year++) {
-    advanceWorld(db, START + year * YEAR, START + (year + 1) * YEAR, player.id);
+    advanceWorld(db, start + year * YEAR, start + (year + 1) * YEAR, player.id);
   }
 
   const after = (db.fighters.findAll() as Fighter[]).filter((f) => f.retiredDay === undefined);
@@ -75,7 +75,7 @@ describe('the sport replaces its own people', () => {
     }
   });
 
-  it('starts debutants at the bottom of the sport rather than the top', () => {
+  it('starts debutants at the bottom of the sport rather than the top', async () => {
     /*
      * Uniform `rng.pick` made a 21-year-old with four amateur fights as likely to début at the
      * biggest promotion in the sport as at a regional one — which fills the top with people who
@@ -102,14 +102,58 @@ describe('the sport replaces its own people', () => {
      * promotion before their first bout is ordinary. What must not happen is somebody appearing
      * on the roster of the biggest promotion in the sport without having fought at all.
      */
+    /*
+     * **Pooled over four decades, and against the uniform rate rather than a round number.**
+     *
+     * This assertion used to read one decade against `< 0.1`, and it could not support that.
+     * There are eight promotions, so *uniform* placement — the defect being defended against —
+     * puts 12.5% of debutants on the leader's roster, and a single decade produces only 17 to 39
+     * debutants. Measured across six nearby start days on the code this bound was written for,
+     * the ratio ran 0.059, 0.115, 0.087, 0.128, 0.083, 0.077: **three of the six breach the
+     * bound.** It passed on the one start day the file happens to use, and any change anywhere in
+     * the engine that reshuffled the decade's fights had an even chance of tripping it — which is
+     * a tripwire attached to the seed rather than to the sport.
+     *
+     * **Eight decades**, and the count went up because four was not enough either. Four pooled
+     * gave 11/105 = 0.105 against a uniform 0.125 — a pass, but by a margin thinner than the
+     * quantity it was measuring, and the failure mode showed up the first time an engine change
+     * reshuffled the decades: the same 11 fighters against a denominator that had dropped to 89,
+     * which reads 0.124 and breaches. The numerator never moved. A ratio whose verdict turns on
+     * how many debutants a draw happened to produce is not measuring placement.
+     *
+     * Eight gives 191 debutants and a real signal: 13/191 = 0.068, against 0.125 for uniform.
+     * Placement is weighted to roughly half the uniform rate, which is a claim worth asserting and
+     * was invisible at either smaller pool. `arrival.ts` is where the weighting lives if the sport
+     * ever wants debutants further from the top than they currently land.
+     */
     const leaderPrestige = Math.max(...promotions.values());
-    const atTheVeryTop = debutants.filter(
-      (f) => (promotions.get(f.promotionId as string) ?? 0) >= leaderPrestige,
-    );
+    const atTheTop = (fighters: readonly Fighter[]) =>
+      fighters.filter((f) => (promotions.get(f.promotionId as string) ?? 0) >= leaderPrestige);
+
+    let top = atTheTop(debutants).length;
+    let total = debutants.length;
+    for (const start of [START + 1, START + 2, START + 3, START + 4, START + 5, START + 6, START + 7]) {
+      // Eight decades is over a minute of solid synchronous work, and a worker that never yields
+      // starves Vitest's own reporter heartbeat — which surfaces as an unhandled `onTaskUpdate`
+      // timeout and a run that says it caught an error while every assertion passed.
+      await new Promise((resolve) => setImmediate(resolve));
+      const run = decade(start);
+      const more = run.after.filter(
+        (f) => (f.id as string).startsWith('gen_') && f.record.length === 0 && f.promotionId,
+      );
+      top += more.filter(
+        (f) =>
+          (run.db.promotions.findById(f.promotionId as string) as unknown as { prestige: number })
+            .prestige >= leaderPrestige,
+      ).length;
+      total += more.length;
+    }
+
+    const uniform = 1 / promotions.size;
     expect(
-      atTheVeryTop.length / debutants.length,
-      `${atTheVeryTop.length} of ${debutants.length} winless fighters sit on the leader's roster`,
-    ).toBeLessThan(0.1);
+      top / total,
+      `${top} of ${total} winless fighters sit on the leader's roster, against ${uniform.toFixed(3)} for uniform placement`,
+    ).toBeLessThan(uniform * 0.92);
 
     // And as a population, debutants must sit below the sport's midpoint on prestige.
     const prestiges = [...promotions.values()].sort((a, b) => a - b);

@@ -189,47 +189,68 @@ describe('the sport can still afford itself', () => {
      * phase. What must not happen is them being comfortable, which would mean the costs are not
      * doing anything at all.
      *
-     * **Re-stated at doc 31 § 12 step 2, because the previous metric had no signal.** It compared
-     * mean regional *growth* against half the leader's mean growth over three decade-long worlds.
-     * Measured across eight seeds on an unmodified checkout, that rule passed on **five of eight**
-     * — and the leader's own ten-year growth ranged from +7% to +67%. A bound whose denominator
-     * swings tenfold on the seed is measuring the draw, and the comment above already conceded as
-     * much about an earlier version of it.
+     * **This assertion has now been rewritten three times, and twice by two people who did not
+     * know the other was doing it.** That is worth recording, because all three rewrites were
+     * fixing the same thing from different angles and only the third one is sign-safe.
      *
-     * The leader's **share of the sport's total budget** is the same design claim with a statistic
-     * that holds still. Measured over the same eight seeds: 47.7% to 64.8% unmodified, and 38.6% to
-     * 54.9% with the body model, against a mean near half in both. If the bottom of the sport ever
-     * did become comfortable, that share is what would collapse — which is what this is for.
+     *  1. *The smallest promotion ends poorer than it started.* A workable proxy only while the
+     *     bottom of the sport was quietly collapsing. Promotions earn sponsorship now, so the
+     *     bottom survives and the proxy stopped meaning anything.
+     *  2. *The tier grows slower than half the leader's growth.* The natural reading of "does not
+     *     keep pace", and it inverts: the leader shrinks on two decades in six, and **a fraction
+     *     of a negative number is a stricter bound than zero**, so on exactly those draws the
+     *     assertion silently demanded the regionals shrink *faster* than the top. Measured on six
+     *     start days it held on two of six against master and four of six here; measured on five
+     *     seeds elsewhere, three of five. It was never testing what it claimed.
+     *  3. What the tier actually does, which is **hover**.
      *
-     * **A finding for step 7, recorded here rather than acted on.** Introducing the body model moved
-     * mean regional ten-year growth from **+2% to +24%** across those eight seeds while the leader
-     * went 23% → 17%. That is a real effect and not seed noise: regionals finished negative on four
-     * of eight seeds before and on one of eight after. The likely path is `naturals.frame`, which is
-     * still `walkingWeight / 300` and therefore moved for every fighter in the world when walking
-     * weight stopped being a function of the division — heavyweight frames in particular fell a long
-     * way. Doc 31 § 12 step 4 replaces `frame` outright, so tuning the economy against it now would
-     * be tuning against a number that is going to be deleted. Re-measure this at step 7.
+     * On the three worlds this file runs, regional growth reads -0.183, +0.093, +0.331 for a mean
+     * of **+0.080** — flat, with noise either side. Zeroing `periodCosts` and re-running the
+     * identical three gives a mean of **+1.049**: without a cost base the tier doubles in a
+     * decade. Those two regimes are a factor of thirteen apart and 0.4 sits between them, which
+     * is what makes this a bound rather than a curve fitted to a draw. (Measured the same way on
+     * six single-world decades before this file pooled: -0.173 to +0.213 with costs, +0.737 to
+     * +1.210 without, on every draw.)
+     *
+     * That gap is the claim — a tier that compounds against one that does not — stated in a form
+     * that cannot invert when the top of the sport has a bad decade.
+     *
+     * The relative phrasing is retired rather than kept alongside, because "not keeping pace with
+     * the top" is only a claim at all while the top is growing, and whether it grows is a draw.
+     * The half of it worth keeping — that the ladder survives — is the test below, which compares
+     * final budgets and is monotone.
+     *
+     * ---
+     *
+     * **A finding from doc 31 § 12 step 2, recorded here rather than acted on.** Introducing the
+     * body model moved mean regional ten-year growth from **+2% to +24%** measured across eight
+     * seeds, while the leader's went 23% → 17%. That is a real effect and not seed noise: regionals
+     * finished a decade negative on four of eight seeds before and on one of eight after. It sits
+     * comfortably inside the bound above — the claim being defended is that the tier hovers rather
+     * than compounds, and +24% against a no-cost control of +105% still hovers — but it is the
+     * measurement most likely to move it, so it belongs next to it.
+     *
+     * The likely path is `naturals.frame`, still `walkingWeight / 300` and therefore moved for
+     * every fighter in the world when walking weight stopped being a function of the division.
+     * Doc 31 § 12 step 4 deletes `frame`, so tuning the economy against it now would be tuning
+     * against a number that is about to disappear. **Re-measure immediately after step 4.**
      */
-    const leaderShare = worlds.map((world) => {
-      const all = ranked(world.db);
-      const total = all.reduce((sum, p) => sum + p.budget, 0);
-      return all[0]!.budget / total;
-    });
-
-    const context = worlds
-      .map(
-        (w, i) => `${w.seed}: leader holds ${(leaderShare[i]! * 100).toFixed(1)}% — ${w.summary}`,
-      )
-      .join(' || ');
-
-    // Every world, so one collapsed ladder is a failure rather than an outlier.
-    for (const share of leaderShare) {
-      expect(share, `a promotion below the leader took over the sport. ${context}`).toBeGreaterThan(
-        0.3,
+    const regionalGrowth: number[] = [];
+    for (const world of worlds) {
+      const regionals = ranked(world.db).filter(
+        (p) => p.tier === 'regional' || p.tier === 'developmental',
+      );
+      regionalGrowth.push(
+        regionals.reduce((total, p) => total + world.growth(p), 0) / Math.max(1, regionals.length),
       );
     }
-    // And on average clearly ahead, which is the marginality claim proper.
-    expect(mean(leaderShare), `the bottom kept pace with the top. ${context}`).toBeGreaterThan(0.4);
+
+    expect(
+      mean(regionalGrowth),
+      `the bottom of the sport compounded instead of hovering. ${worlds
+        .map((w) => `${w.seed}: ${w.summary}`)
+        .join(' || ')}`,
+    ).toBeLessThan(0.4);
   });
 
   it('keeps the leader clearly ahead, so the ladder survives', () => {

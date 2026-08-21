@@ -13,8 +13,26 @@
 
 import type { StrikeTarget } from '../fight/types.js';
 import { clamp01 } from '../core/math.js';
+import {
+  convictionFor,
+  defaultTactics,
+  normaliseTactics,
+  type PreferredState,
+  type TacticalPlan,
+} from './tactics.js';
 
-/** The overall shape of the fight you are trying to have. */
+/**
+ * The overall shape of the fight you are trying to have.
+ *
+ * **Superseded by `TacticalPlan` (`domain/tactics.ts`), and kept only to read old saves.**
+ *
+ * These seven were one control answering four unrelated questions — initiative
+ * (`pressure`/`counter`), position (`wrestle`/`grind`), risk (`pointFight`) and finishing
+ * (`submit`/`finish`) — so a player who wanted a pressure fighter who grinds and takes no risks
+ * had to pick one of the four things that describe him. `tacticsFromApproach` maps each row onto
+ * the nearest plan the new model can state, which is how a booking saved before the rework still
+ * opens. Nothing in the simulator reads `approach` any more.
+ */
 export const APPROACHES = [
   'pressure',
   'counter',
@@ -215,7 +233,15 @@ export interface PreppedRead {
 export const MAX_PREPPED_READS = 4;
 
 export interface GamePlan {
-  approach: Approach;
+  /**
+   * What fight this corner is trying to create. The authoritative tactical instruction.
+   */
+  tactics: TacticalPlan;
+  /**
+   * @deprecated Legacy single-axis approach, read only to migrate a booking saved before the
+   * tactical rework. `normaliseGamePlan` fills `tactics` from it when `tactics` is absent.
+   */
+  approach?: Approach;
   /** Weights over strike targets. Normalised on construction. */
   targeting: Record<StrikeTarget, number>;
   /** 0 (risk-averse) to 1 (reckless). Trades damage output against damage taken. */
@@ -228,7 +254,7 @@ export interface GamePlan {
 /** A neutral plan, used for fighters with no camp (short notice, AI filler bouts). */
 export function defaultGamePlan(): GamePlan {
   return {
-    approach: 'pressure',
+    tactics: defaultTactics(),
     targeting: { head: 0.6, body: 0.25, legs: 0.15 },
     riskLevel: 0.5,
     preppedReads: [],
@@ -245,6 +271,10 @@ export function normaliseTargeting(t: Record<StrikeTarget, number>): Record<Stri
 export function normaliseGamePlan(plan: GamePlan): GamePlan {
   return {
     ...plan,
+    // A save written before the tactical rework carries `approach` and no `tactics`. Migrating
+    // here rather than at the save layer means every entry point gets it — the simulator, the
+    // camp screen and the editor all funnel through this function.
+    tactics: normaliseTactics(plan.tactics ?? tacticsFromApproach(plan.approach)),
     targeting: normaliseTargeting(plan.targeting),
     riskLevel: clamp01(plan.riskLevel),
     campQuality: clamp01(plan.campQuality),
@@ -347,4 +377,52 @@ export function riskProfile(riskLevel: number): RiskProfile {
     exertion: 1 + r * 0.08,
     output: 1 + r * 0.30,
   };
+}
+
+/**
+ * The nearest tactical plan to a legacy `approach`, for reading old saves.
+ *
+ * Every one of these loses something, which is the argument for the rework in one table: the old
+ * control could not say where `pressure` wanted the fight, so this has to guess (the pocket), and
+ * it could not say what `wrestle` did on arrival, so this has to guess that too (control). A
+ * player reopening an old booking sees a plan that is *a* reading of what they chose rather than
+ * the one they meant — which is the honest cost of replacing a control, and cheaper than
+ * discarding their camp.
+ */
+export function tacticsFromApproach(approach: Approach | undefined): TacticalPlan {
+  const base = defaultTactics();
+  const of = (
+    preferredState: PreferredState,
+    entry: TacticalPlan['entry'],
+    rest: Partial<TacticalPlan> = {},
+  ): TacticalPlan => ({
+    ...base,
+    preferredState,
+    entry,
+    conviction: convictionFor(preferredState),
+    ...rest,
+  });
+
+  switch (approach) {
+    case 'pressure':
+      return of('pocket', 'pressure', { bottomIntent: 'standUp' });
+    case 'counter':
+      return of('boxing', 'counter', { bottomIntent: 'standUp' });
+    case 'wrestle':
+      return of('top', 'proactiveWrestling', { topIntent: 'control', bottomIntent: 'scramble' });
+    case 'grind':
+      return of('clinch', 'pressure', { topIntent: 'control', bottomIntent: 'scramble' });
+    case 'pointFight':
+      return of('outside', 'movement', { bottomIntent: 'standUp' });
+    case 'submit':
+      return of('submission', 'reactiveShot', { topIntent: 'submit', bottomIntent: 'attack' });
+    case 'finish':
+      return of('pocket', 'lead', {
+        finishing: 'huntFinish',
+        topIntent: 'groundAndPound',
+        bottomIntent: 'standUp',
+      });
+    default:
+      return base;
+  }
 }
