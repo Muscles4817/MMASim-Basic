@@ -73,7 +73,7 @@ export const WORLD_SIZE_META: readonly WorldSizeMeta[] = [
     name: 'Small',
     fighters: 850,
     blurb:
-      'A compact sport — one leader, a couple of majors and a short regional circuit. Quick to build and quick to move through.',
+      'A compact sport — one leader, a couple of majors and a short regional circuit. Quick to build, and quick to reach the top of.',
     seconds: 3,
   },
   {
@@ -89,7 +89,7 @@ export const WORLD_SIZE_META: readonly WorldSizeMeta[] = [
     name: 'Large',
     fighters: 5000,
     blurb:
-      'The sport at something close to its real scale: a hundred and seventy promotions and six thousand fighters.',
+      'The sport at something close to its real scale — the whole pyramid, and a regional circuit you will never see the bottom of.',
     seconds: 25,
     warning:
       'Takes around half a minute to build on a desktop and several minutes on a phone. Everything after that runs normally.',

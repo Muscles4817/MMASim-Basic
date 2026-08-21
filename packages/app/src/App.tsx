@@ -6,6 +6,8 @@ import { Shell } from './shell/Shell';
 import { UpdatePrompt } from './shell/UpdatePrompt';
 import { Alert } from './ui/signals';
 import { StartScreen } from './screens/StartScreen';
+import { StartFighterScreen } from './screens/StartFighterScreen';
+import { StartPromoterScreen } from './screens/StartPromoterScreen';
 import { CreateFighterScreen } from './screens/CreateFighterScreen';
 import { TrainingScreen } from './screens/TrainingScreen';
 import { HubScreen } from './screens/HubScreen';
@@ -89,6 +91,22 @@ export function App() {
   function renderRoute() {
     switch (route.name) {
       case 'start':
+        // Three steps, three titles, one route family. `showBack` from the second step on, so
+        // the mode picker is somewhere to return to rather than somewhere you fell out of.
+        if (route.mode === 'fighter') {
+          return (
+            <Shell title="Choose a fighter" showBack wide>
+              <StartFighterScreen />
+            </Shell>
+          );
+        }
+        if (route.mode === 'promoter') {
+          return (
+            <Shell title="Choose a promotion" showBack wide>
+              <StartPromoterScreen />
+            </Shell>
+          );
+        }
         return (
           <Shell title="New career">
             <StartScreen />

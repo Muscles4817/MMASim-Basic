@@ -80,17 +80,27 @@ export function MenuScreen({
       <Card title="Start something new">
         <div className="stack" style={{ gap: 'var(--space-3)' }}>
           {/*
-            The era is a choice about which world, not a difficulty setting, so both options
-            state what is actually different rather than which is harder. `Segmented` renders
-            its hints visibly, which is the only reason this reads as a decision.
+            The era is a choice about which world, not a difficulty setting, so every option
+            states what is actually different rather than which is harder.
           */}
           <Segmented
             label="Which world"
             value={world}
             onChange={setWorld}
+            /*
+              The hints carry the difference.
+
+              The labels are "Generated", "2026" and "2020" — two of which are bare years, which
+              say what a world is *called* and nothing about what it is. `Segmented` renders its
+              hints visibly, which is the only reason this reads as a decision at all.
+            */
             options={[
-              { value: 'generated' as const, label: 'Generated' },
-              ...ERAS.map((e) => ({ value: e.id, label: e.name.split(' — ')[0]! })),
+              { value: 'generated' as const, label: 'Generated', hint: 'A new sport' },
+              ...ERAS.map((e) => ({
+                value: e.id,
+                label: e.name.split(' — ')[0]!,
+                hint: e.name.split(' — ')[1],
+              })),
             ]}
           />
           <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
@@ -101,14 +111,27 @@ export function MenuScreen({
 
           {world === 'generated' && (
             <>
+              {/*
+                The size, with its consequences on the control rather than only in prose.
+
+                `fighters` and `seconds` have been on `WORLD_SIZE_META` since it was written and
+                neither was ever rendered, so the player chose between Small, Medium and Large
+                against three adjectives. "2,500 fighters · about 11s to build" is a decision;
+                "The default" is not.
+              */}
               <Segmented
                 label="How big"
                 value={size}
                 onChange={setSize}
-                options={WORLD_SIZE_META.map((s) => ({ value: s.id, label: s.name }))}
+                options={WORLD_SIZE_META.map((s) => ({
+                  value: s.id,
+                  label: s.name,
+                  hint: `${s.fighters.toLocaleString()} fighters`,
+                }))}
               />
               <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
-                {sizeMeta.blurb}
+                {sizeMeta.blurb}{' '}
+                <span className="muted">About {sizeMeta.seconds}s to build on a desktop.</span>
               </p>
               {/*
                 The warning is on the size rather than in the prose, because it is a different
@@ -210,9 +233,18 @@ export function MenuScreen({
         </Empty>
       )}
 
-      <Alert tone="info" title="Where your game lives">
-        Saves are stored on this device, in the browser&rsquo;s own database. Clearing your browser
-        data will remove them, and they do not follow you to another machine.
+      {/*
+        Where the saves live, and what removes them.
+
+        Moved up out of the footer and given a tone that matches what it is. It was the last
+        thing on the screen, below the save list, as `tone="info"` — a footnote — and it is the
+        single most important sentence here for anybody who has not met a browser-storage game
+        before. Nothing is removed from it: a technical warning is not clutter.
+      */}
+      <Alert tone="warn" title="Your saves live on this device only">
+        They are kept in the browser&rsquo;s own database. <strong>Clearing your browser data
+        will delete them</strong>, they do not follow you to another machine, and there is no
+        cloud copy.
       </Alert>
     </div>
   );

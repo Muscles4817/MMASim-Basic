@@ -35,8 +35,20 @@ const EDITOR_KINDS: readonly EditorEntityKind[] = [
   'commentators',
 ];
 
+/** The three roles a save can be played in. `coach` is designed, not built — see doc 14. */
+export type PlayableMode = 'fighter' | 'coach' | 'promoter';
+
 export type Route =
-  | { name: 'start' }
+  /**
+   * Starting a career.
+   *
+   * `mode` is undefined at the mode picker and set once the player has chosen who to be. It is a
+   * route rather than component state because the four concepts doc 32 § 11.1 separates — world,
+   * mode, starting identity, confirmation — have to be distinguishable in the URL for back to
+   * behave: pressing it from fighter selection should return to the mode picker, not leave the
+   * new-game flow entirely.
+   */
+  | { name: 'start'; mode?: PlayableMode }
   | { name: 'create' }
   | { name: 'training' }
   | { name: 'hub' }
@@ -93,8 +105,13 @@ function parse(hash: string): Route {
   const [head, param, rest] = path.split('/');
   switch (head) {
     case '':
-    case 'start':
       return { name: 'start' };
+    case 'start': {
+      const mode = param as PlayableMode | undefined;
+      return mode === 'fighter' || mode === 'coach' || mode === 'promoter'
+        ? { name: 'start', mode }
+        : { name: 'start' };
+    }
     case 'create':
       return { name: 'create' };
     case 'training':
@@ -150,6 +167,8 @@ function parse(hash: string): Route {
 
 export function toHash(route: Route): string {
   switch (route.name) {
+    case 'start':
+      return route.mode ? `#/start/${route.mode}` : '#/start';
     case 'fighter':
       return `#/fighter/${route.id}`;
     case 'fight':
