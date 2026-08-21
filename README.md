@@ -78,6 +78,12 @@ testing tiers.
 planned months ahead with holes in them, matchmaking is a sequence of the player's own decisions,
 and the dashboard surfaces situations rather than describing entities.
 
+[31 — The physical ladder](docs/31-the-physical-ladder.md) is doc 02's missing half and is
+**design, not yet built**: what Power 74 actually means. Each physical rating is defined as a
+logarithmic scale over a measurable quantity with an allometric mass exponent, so the divisional
+distributions are derived rather than authored — and heavyweight becomes genuinely more dangerous
+than flyweight, by roughly the margin the real sport shows.
+
 Two open plans: [19 — Fight engine](docs/19-fight-engine-plan.md) (phases 0 and 1 landed) and
 [20 — Persistence and save size](docs/20-persistence-and-save-size.md), whose phase 2 has landed:
 saves are in IndexedDB, so the 5 MB ceiling that stopped the app starting on a phone is gone. The

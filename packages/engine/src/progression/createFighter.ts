@@ -17,11 +17,11 @@
  */
 
 import { birthDayForAge, type GameDay } from '../core/clock.js';
-import { clamp, remap } from '../core/math.js';
+import { clamp } from '../core/math.js';
 import type { Rng } from '../core/rng.js';
 import { asFighterId } from '../core/ids.js';
 import type { DivisionId, PromotionId } from '../core/ids.js';
-import { getDivision, type Sex } from '../domain/divisions.js';
+import { type Sex } from '../domain/divisions.js';
 import type { Fighter } from '../domain/fighter.js';
 import { emptyRecordSummary, freshCondition } from '../domain/fighter.js';
 import type { Personality } from '../domain/personality.js';
@@ -48,6 +48,7 @@ import {
   type ResolvedOrigin,
 } from './origin.js';
 import { isPhysical } from './development.js';
+import { sampleBodyForDivision, walkingWeightLbs as walkingWeightOf } from './body.js';
 
 /**
  * Where a fighter came from, flat.
@@ -272,7 +273,8 @@ export function validateOrigin(origin: FighterOrigin, age?: number): CreationIss
 export function validateCreation(spec: CreateFighterSpec): CreationIssue[] {
   const issues: CreationIssue[] = [];
 
-  if (!spec.firstName.trim()) issues.push({ field: 'firstName', message: 'First name is required.' });
+  if (!spec.firstName.trim())
+    issues.push({ field: 'firstName', message: 'First name is required.' });
   if (!spec.lastName.trim()) issues.push({ field: 'lastName', message: 'Last name is required.' });
   if (spec.age < 18 || spec.age > 35) {
     issues.push({ field: 'age', message: 'Debut age must be between 18 and 35.' });
@@ -461,12 +463,23 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
     throw new Error(`Cannot create fighter: ${issues.map((i) => i.message).join(' ')}`);
   }
 
-  const division = getDivision(spec.divisionId);
   const origin = resolveSpecOrigin(spec);
 
-  const buildShift = spec.build === 'powerful' ? 1 : spec.build === 'rangy' ? -1 : 0;
   const build = BUILD_NATURALS[spec.build ?? 'balanced'];
-  const walkingWeightLbs = Math.round(division.limitLbs * (1.07 + buildShift * 0.035));
+
+  /*
+   * The player's fighter gets a body from the same forward model every other fighter does.
+   *
+   * Doc 31 § 12 step 2, and specifically its rule that the creator and the world's intake must not
+   * be able to diverge: one model, sampled two ways. Height, reach and walking weight all used to be
+   * computed here from `division.limitLbs` and `buildShift`, which is a second body model that
+   * happened to agree with nothing.
+   *
+   * `build` still leans the naturals below and no longer touches the body at all — doc 31 § 12 step
+   * 10 removes it outright in favour of height, reach and frame the player chooses directly.
+   */
+  const body = sampleBodyForDivision(rng.fork('body'), spec.sex, spec.divisionId);
+  const walkingWeightLbs = Math.round(walkingWeightOf(body));
 
   // --- Naturals: background leaning, build, and a roll the player does not control --------
   /*
@@ -510,8 +523,9 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
       rng.normalClamped(centre + (origin.naturals.motorLearning ?? 0), 14, 28, 97),
     ),
     injuryProneness: toRating(rng.normalClamped(46, 15, 12, 88)),
-    ageCurve: rng.pickWeighted(['standard', 'longPeak', 'lateBloomer', 'earlyBloomer'] as const, (c) =>
-      c === 'standard' ? 5 : c === 'longPeak' ? 2.5 : c === 'lateBloomer' ? 2 : 1.5,
+    ageCurve: rng.pickWeighted(
+      ['standard', 'longPeak', 'lateBloomer', 'earlyBloomer'] as const,
+      (c) => (c === 'standard' ? 5 : c === 'longPeak' ? 2.5 : c === 'lateBloomer' ? 2 : 1.5),
     ),
   };
 
@@ -550,9 +564,7 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
       attributes[key] = toRating(arrived + rng.range(-2, 2));
       // A ceiling can only ever be raised to fit what the player chose, never lowered onto it —
       // and it always keeps a little room, so no physical is finished before the first fight.
-      potential[key] = toRating(
-        Math.max(ceiling, attributes[key] + MIN_PHYSICAL_HEADROOM),
-      );
+      potential[key] = toRating(Math.max(ceiling, attributes[key] + MIN_PHYSICAL_HEADROOM));
       continue;
     }
 
@@ -601,12 +613,8 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
     sex: spec.sex,
     birthDay: birthDayForAge(spec.age, spec.day, rng.int(1, 12), rng.int(1, 28)),
     walkingWeightLbs,
-    heightInches: Math.round(
-      remap(division.limitLbs, 115, 265, 63, 76) - buildShift * 1.5 + rng.range(-1, 1),
-    ),
-    reachInches: Math.round(
-      remap(division.limitLbs, 115, 265, 63, 79) - buildShift * 2 + rng.range(-1, 1),
-    ),
+    heightInches: body.heightInches,
+    reachInches: body.reachInches,
     stance: spec.stance ?? 'orthodox',
 
     divisionId: spec.divisionId,
@@ -666,10 +674,13 @@ export function creationSummary(fighter: Fighter): string {
   );
 
   const ceiling =
-    upside > 320 ? 'an enormous amount of room to grow' :
-    upside > 220 ? 'real room to grow' :
-    upside > 130 ? 'some room to grow' :
-    'not a great deal of room left';
+    upside > 320
+      ? 'an enormous amount of room to grow'
+      : upside > 220
+        ? 'real room to grow'
+        : upside > 130
+          ? 'some room to grow'
+          : 'not a great deal of room left';
 
   return `Strongest right now in ${best}, weakest in ${worst}, with ${ceiling}.`;
 }

@@ -697,15 +697,28 @@ describe('the deprecated flat background still works', () => {
      * implied. The skills came down two points with `BASELINE`, which is the deliberate other
      * half: the debut overall is where it was, and the fighter underneath it is an athlete with
      * a novice's hands rather than somebody uniformly mediocre.
+     *
+     * **Re-baselined a third time for the body model** (doc 31 § 12 step 2), and this one barely
+     * moved the ratings at all: **strength 57 → 56, and nothing else.** Walking weight is now
+     * derived from a rolled body rather than from `division.limitLbs × 1.07`, which put this
+     * fighter at 163 lb instead of 166, and `frame` — still walking weight on a 0–100 scale until
+     * step 4 replaces it — carries that single point into strength.
+     *
+     * The *body* moved a long way, which is the actual point of the change and is why it is now
+     * asserted here. This fighter was 5'6" with a 67" reach, three to four inches shorter than any
+     * real lightweight and with no reach advantage at all, because height came from a remap linear
+     * in the division limit. He is now 5'9" with a 73" reach.
      */
     const f = legacy();
     expect(ATTRIBUTE_KEYS.map((k) => f.attributes[k])).toEqual([
-      62, 80, 65, 77, 57, 46, 44, 47, 61, 60, 51, 44, 44, 47, 45,
+      62, 80, 65, 77, 56, 46, 44, 47, 61, 60, 51, 44, 44, 47, 45,
     ]);
     expect(f.naturals.explosiveness).toBe(78);
     expect(f.naturals.motorLearning).toBe(86);
     expect(f.reputation).toBe(5);
     expect(f.starPower).toBe(1);
+    // The body, pinned for the same reason the ratings are: it is what the change was for.
+    expect([f.heightInches, f.reachInches, f.walkingWeightLbs]).toEqual([69, 73, 163]);
   });
 
   it('accepts a spec with no build, which used to be required', () => {
