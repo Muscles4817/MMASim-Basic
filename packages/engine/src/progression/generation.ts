@@ -38,7 +38,14 @@ import {
   type Naturals,
 } from '../ratings/attributes.js';
 import { generateName } from './names.js';
-import { sampleBodyForDivision, walkingWeightLbs as walkingWeightOf } from './body.js';
+import {
+  carriedMassIndex,
+  leanMassIndex,
+  physiqueOf,
+  sampleBodyForDivision,
+  walkingWeightLbs as walkingWeightOf,
+  type Body,
+} from './body.js';
 
 export interface GenerationOptions {
   id: string;
@@ -210,7 +217,7 @@ export function athleticTier(rng: Rng, tier: number): number {
  * near-identical linear combinations of `explosiveness` and `frame` (rho = 0.85, doc 31 § 13.1), and
  * that is step 6's work, kept out of this change so the two can be measured independently.
  */
-export function generateNaturals(rng: Rng, tier: number, walkingWeightLbs: number): Naturals {
+export function generateNaturals(rng: Rng, tier: number): Naturals {
   // Forked so that adding the second axis does not reshuffle every draw made after it, and so the
   // athletic roll stays put if the learning side is ever retuned.
   const athletic = naturalsCentre(athleticTier(rng.fork('athletic'), tier));
@@ -218,7 +225,6 @@ export function generateNaturals(rng: Rng, tier: number, walkingWeightLbs: numbe
   const body = (sd: number) => toRating(rng.normalClamped(athletic, sd, 12, 97));
 
   return {
-    frame: toRating(clamp((walkingWeightLbs / 300) * 100, 5, 99)),
     explosiveness: body(14),
     engine: body(14),
     constitution: body(13),
@@ -241,9 +247,22 @@ export function generateNaturals(rng: Rng, tier: number, walkingWeightLbs: numbe
  * can have a 90 ceiling in wrestling and a 55 ceiling in power, and those are different
  * facts about their body.
  */
-export function ceilingsFromNaturals(naturals: Naturals, rng: Rng): Attributes {
+export function ceilingsFromNaturals(naturals: Naturals, body: Body, rng: Rng): Attributes {
   const skill = naturals.motorLearning;
   const noise = () => rng.range(-6, 6);
+
+  /*
+   * Doc 31 § 12 step 4. These three replace `naturals.frame`, which was `walkingWeight / 300 × 100`
+   * and therefore a proxy for the division before the body model landed.
+   *
+   * The coefficients below are untouched: `leanMassIndex` is scaled to land where `frame` landed, so
+   * this is a substitution of the *variable* rather than a retune of the equations. What changes is
+   * that the number now knows the difference between a lean fighter and a soft one of the same
+   * weight, and that Power, Strength and Durability read contractile mass while Cardio reads
+   * everything the fighter has to carry.
+   */
+  const lean = leanMassIndex(body);
+  const carried = carriedMassIndex(body);
 
   const cap = (physical: number, skillWeight: number): number =>
     toRating(physical * (1 - skillWeight) + skill * skillWeight + noise());
@@ -256,12 +275,9 @@ export function ceilingsFromNaturals(naturals: Naturals, rng: Rng): Attributes {
    * primary determinant of peak punch force, and head and neck mass is what resists head
    * acceleration. `strength` already read `(explosiveness + frame)/2` and is the template.
    */
-  const withFrame = (physical: number, frameWeight: number, skillWeight: number): number =>
+  const withMass = (physical: number, massWeight: number, skillWeight: number): number =>
     toRating(
-      physical * (1 - frameWeight - skillWeight) +
-        naturals.frame * frameWeight +
-        skill * skillWeight +
-        noise(),
+      physical * (1 - massWeight - skillWeight) + lean * massWeight + skill * skillWeight + noise(),
     );
 
   /*
@@ -269,14 +285,14 @@ export function ceilingsFromNaturals(naturals: Naturals, rng: Rng): Attributes {
    * measured per kilogram, so a heavyweight does not have a lightweight's engine however he
    * trains. The same fact appears again as the interference effect in `development.ts`.
    */
-  const framePenalty = Math.max(0, (naturals.frame - 60) / 40) * 8;
+  const carriedPenalty = Math.max(0, (carried - 60) / 40) * 8;
 
   return {
-    power: withFrame(naturals.explosiveness, 0.25, 0.15),
+    power: withMass(naturals.explosiveness, 0.25, 0.15),
     speed: cap(naturals.explosiveness, 0.25),
-    cardio: toRating(cap(naturals.engine, 0.15) - framePenalty),
-    durability: withFrame(naturals.constitution, 0.15, 0.05),
-    strength: cap((naturals.explosiveness + naturals.frame) / 2, 0.1),
+    cardio: toRating(cap(naturals.engine, 0.15) - carriedPenalty),
+    durability: withMass(naturals.constitution, 0.15, 0.05),
+    strength: cap((naturals.explosiveness + lean) / 2, 0.1),
     strikingOffence: cap(naturals.explosiveness, 0.7),
     kicking: cap(naturals.explosiveness, 0.7),
     strikingDefence: cap((naturals.explosiveness + naturals.recovery) / 2, 0.7),
@@ -449,8 +465,8 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
   const body = sampleBodyForDivision(rng.fork('body'), options.sex, options.divisionId);
   const walkingWeightLbs = Math.round(walkingWeightOf(body));
 
-  const naturals = generateNaturals(rng, tier, walkingWeightLbs);
-  const potential = ceilingsFromNaturals(naturals, rng);
+  const naturals = generateNaturals(rng, tier);
+  const potential = ceilingsFromNaturals(naturals, body, rng);
 
   // How developed they already are. Older debutants are further along but have less left.
   const development = clamp(remap(age, 20, 30, 0.55, 0.85) + rng.range(-0.06, 0.06), 0.4, 0.92);
@@ -488,6 +504,7 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     walkingWeightLbs,
     heightInches: body.heightInches,
     reachInches: body.reachInches,
+    physique: physiqueOf(body),
     stance: rng.pickWeighted(['orthodox', 'southpaw', 'switch'] as const, (s) =>
       s === 'orthodox' ? 7 : s === 'southpaw' ? 2.5 : 0.5,
     ),

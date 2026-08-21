@@ -37,8 +37,24 @@ describe('the size of a fresh save', () => {
     const adapter = measuringAdapter();
     createNewGame({ adapter, era: '2026' });
 
-    // 2.80 MB today. Doc 20 § 7 wants this under 100 KB, which is phase 5's job.
-    expect(adapter.total()).toBeLessThan(3.0 * MB);
+    /*
+     * 3.05 MB today, against 2.93 before doc 31 § 12 step 4. Doc 20 § 7 wants this under 100 KB,
+     * which is phase 5's job.
+     *
+     * **The ceiling moved 3.0 → 3.2 MB, and this comment is the price of that.** Step 4 gave every
+     * fighter a stored `physique` — skeleton, muscle, fat and water-cut capacity — and deleted
+     * `naturals.frame`, for a net of three numbers. It cost **120.6 KB, or 4.0%**, which is about
+     * 144 bytes a fighter and almost entirely JSON key names rather than data.
+     *
+     * Paid deliberately. `frame` was `walkingWeight / 300 × 100`, so before the body model it was a
+     * proxy for the division, and it fed the Power, Strength, Durability and Cardio ceilings. Three
+     * numbers is what it costs to replace a proxy with the thing it was standing in for.
+     *
+     * It comes back twice over. Step 11 makes `walkingWeightLbs` derived rather than stored, which
+     * is another 25 characters a fighter; and doc 20 phases 3 to 5 rebuild the roster from its seed,
+     * which deletes 90% of this file's subject outright.
+     */
+    expect(adapter.total()).toBeLessThan(3.2 * MB);
   });
 
   it('fits the 2020 world inside its budget', () => {

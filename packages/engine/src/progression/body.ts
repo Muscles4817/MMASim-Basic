@@ -124,6 +124,15 @@ export function bodyFatFraction(body: Body): number {
 const KG_PER_LB = 0.45359237;
 const M_PER_INCH = 0.0254;
 
+/**
+ * The part of a body a fighter carries around with them.
+ *
+ * `Body` also holds sex, height and reach, all three of which `Fighter` already stores, so storing a
+ * whole `Body` would put three fields in two places and invite them to disagree. `bodyOf` reassembles
+ * one when a caller needs the full API.
+ */
+export type Physique = Omit<Body, 'sex' | 'heightInches' | 'reachInches'>;
+
 /** Lean body mass in pounds. Everything that is not fat. */
 export function leanMassLbs(body: Body): number {
   const heightM = body.heightInches * M_PER_INCH;
@@ -482,5 +491,131 @@ export function bodyFromChoices(
     muscleIndex: rolled.muscleIndex,
     bodyFatIndex: rolled.bodyFatIndex,
     waterCutIndex: rolled.waterCutIndex,
+  };
+}
+
+// --- What the rating ceilings read ---------------------------------------------------------
+
+/**
+ * The denominator that turns a mass in pounds into a 0–100 index.
+ *
+ * Chosen so the new indices land where `naturals.frame` used to, which is the whole point of the
+ * number: `frame` was `walkingWeight / 300 × 100` and fed the Power, Strength, Durability and Cardio
+ * ceilings with coefficients tuned against that scale. Replacing the *variable* without preserving
+ * the *scale* would have silently retuned four ceilings at once and made the change unattributable.
+ *
+ * At a typical thirteen per cent body fat the two agree to about a point across the whole ladder:
+ *
+ * ```
+ *   division    old frame (walk/300)    new lean index (lean/260)
+ *   FLW                         44.7                         44.6
+ *   LW                          56.3                         56.4
+ *   HW                          80.7                         79.6
+ * ```
+ *
+ * What is new is that they now come apart *within* a division. Two 180 lb fighters had identical
+ * frames; a lean one and a soft one now differ by six points of the number that feeds their Power
+ * and Strength ceilings, which is the entire reason the body model exists.
+ */
+const LEAN_INDEX_DIVISOR = 260;
+
+/** Total mass on the same scale. Kept at `walkingWeight / 300` — the number `frame` always was. */
+const CARRIED_INDEX_DIVISOR = 300;
+
+/**
+ * Contractile mass, as a 0–100 index.
+ *
+ * What the Power, Strength and Durability ceilings should always have been reading. Fat is not
+ * contractile and does not resist head acceleration, so a soft heavyweight and a lean one of the
+ * same scale weight are not the same puncher — a distinction `walkingWeight / 300` could not make.
+ */
+export function leanMassIndex(body: Body): number {
+  return clamp((leanMassLbs(body) / LEAN_INDEX_DIVISOR) * 100, 5, 99);
+}
+
+/**
+ * Everything the fighter has to move, as a 0–100 index.
+ *
+ * What the Cardio penalty reads, because relative aerobic capacity is measured per kilogram of
+ * whatever is actually there — fat included, and fat especially.
+ */
+export function carriedMassIndex(body: Body): number {
+  return clamp((walkingWeightLbs(body) / CARRIED_INDEX_DIVISOR) * 100, 5, 99);
+}
+
+/**
+ * Absolute skeletal size, as a 0–100 index — the structural half of the body, with muscle removed.
+ *
+ * Computed as the lean mass this frame would carry at *median* muscle, so it moves with height and
+ * `frameIndex` and not with how much the fighter currently lifts. That is what
+ * `development.ts:carriedStrength` is actually asking: how much muscle this skeleton supports before
+ * more of it starts costing cardio. Feeding it current muscle instead would make the interference
+ * effect self-cancelling — get bigger, and the threshold for being too big moves with you.
+ *
+ * Note it is deliberately **not** `frameIndex`. That number is skeletal size *for height*, so a
+ * large-framed flyweight scores the same as a large-framed heavyweight, and a flyweight does not
+ * carry a heavyweight's muscle.
+ */
+export function skeletalIndex(body: Body): number {
+  return leanMassIndex({ ...body, muscleIndex: 50 });
+}
+
+/** Reassemble a full `Body` from the parts a `Fighter` stores. */
+export function bodyOf(fighter: {
+  sex: Sex;
+  heightInches: number;
+  reachInches: number;
+  physique: Physique;
+}): Body {
+  return {
+    sex: fighter.sex,
+    heightInches: fighter.heightInches,
+    reachInches: fighter.reachInches,
+    ...fighter.physique,
+  };
+}
+
+/** The storable part of a rolled body. */
+export function physiqueOf(body: Body): Physique {
+  return {
+    frameIndex: body.frameIndex,
+    muscleIndex: body.muscleIndex,
+    bodyFatIndex: body.bodyFatIndex,
+    waterCutIndex: body.waterCutIndex,
+  };
+}
+
+/**
+ * Solve for a physique that produces a given height and walking weight.
+ *
+ * The seed roster hand-authors real fighters' heights and walking weights, and those are transcribed
+ * measurements rather than model output — so the model has to accept them rather than overwrite them.
+ * This inverts the composition chain: pick a body-fat level, work out the lean mass that implies, and
+ * split what the base coefficient does not cover between frame and muscle.
+ *
+ * The split is deliberately even. Nothing in a tale of the tape says whether a 205 lb man is
+ * big-boned or heavily muscled, so inventing a lean either way would be putting a number where there
+ * is no information.
+ */
+export function physiqueForMeasurements(
+  sex: Sex,
+  heightInches: number,
+  walkingWeightLbs: number,
+  bodyFatIndex: Rating,
+  waterCutIndex: Rating,
+): Physique {
+  const c = COMPOSITION[sex];
+  const heightM = heightInches * M_PER_INCH;
+  const fatFraction = remap(bodyFatIndex, 1, 100, c.fatFloor, c.fatCeiling);
+  const leanKg = walkingWeightLbs * (1 - fatFraction) * KG_PER_LB;
+  const needed = clamp(leanKg / heightM ** 3, c.base, c.base + c.fromFrame + c.fromMuscle);
+  const above = needed - c.base;
+
+  // Half each, in coefficient units, then converted back to the index each one is expressed in.
+  return {
+    frameIndex: toRating(((above * 0.5) / c.fromFrame) * 100),
+    muscleIndex: toRating(((above * 0.5) / c.fromMuscle) * 100),
+    bodyFatIndex,
+    waterCutIndex,
   };
 }

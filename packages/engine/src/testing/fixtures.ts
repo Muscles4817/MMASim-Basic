@@ -17,6 +17,7 @@ import { uniformPersonality } from '../domain/personality.js';
 import type { TraitId } from '../domain/traits.js';
 import type { Condition } from '../domain/fighter.js';
 import type { Attributes, Naturals } from '../ratings/attributes.js';
+import { physiqueForMeasurements, type Physique } from '../progression/body.js';
 import { uniformAttributes } from '../ratings/attributes.js';
 
 export interface FighterOverrides {
@@ -32,6 +33,8 @@ export interface FighterOverrides {
   traits?: readonly TraitId[];
   divisionId?: string;
   walkingWeightLbs?: number;
+  heightInches?: number;
+  physique?: Physique;
   /**
    * Overridable since range landed.
    *
@@ -61,7 +64,6 @@ export const TEST_DAY: GameDay = 0;
 
 export function makeNaturals(overrides: Partial<Naturals> = {}): Naturals {
   return {
-    frame: 50,
     explosiveness: 50,
     engine: 50,
     constitution: 50,
@@ -88,8 +90,25 @@ export function makeFighter(o: FighterOverrides = {}): Fighter {
     sex: o.sex ?? 'male',
     birthDay: birthDayForAge(age, TEST_DAY, 6, 15),
     walkingWeightLbs: o.walkingWeightLbs ?? 170,
-    heightInches: 70,
+    heightInches: o.heightInches ?? 70,
     reachInches: o.reachInches ?? 72,
+    /*
+     * A median body solved from the height and weight above rather than typed, so a fixture cannot
+     * describe a person the body model would call impossible. Doc 31 § 12 step 4.
+     *
+     * Solving it matters more than it looks: half the suite builds a heavyweight by passing
+     * `walkingWeightLbs: 250`, and a fixed physique would have attached a lightweight's lean mass to
+     * it — which `leanMassIndex` feeds straight into the Power, Strength and Durability ceilings.
+     */
+    physique:
+      o.physique ??
+      physiqueForMeasurements(
+        o.sex ?? 'male',
+        o.heightInches ?? 70,
+        o.walkingWeightLbs ?? 170,
+        50,
+        50,
+      ),
     stance: o.stance ?? 'orthodox',
 
     divisionId,
@@ -229,8 +248,7 @@ export const ARCHETYPES = {
     }),
 
   /** Deliberately, uniformly average. The control in every experiment. */
-  journeyman: (): Fighter =>
-    makeFighter({ id: 'fighter_journeyman', lastName: 'Journeyman' }),
+  journeyman: (): Fighter => makeFighter({ id: 'fighter_journeyman', lastName: 'Journeyman' }),
 
   /**
    * A well-rounded top-15 fighter with no glaring hole and no elite weapon.
@@ -335,8 +353,7 @@ export const ARCHETYPES = {
    * fighters against each other — using the same archetype twice gives both corners the
    * same id and silently breaks win-rate accounting.
    */
-  journeyman2: (): Fighter =>
-    makeFighter({ id: 'fighter_journeyman_2', lastName: 'Everyman' }),
+  journeyman2: (): Fighter => makeFighter({ id: 'fighter_journeyman_2', lastName: 'Everyman' }),
 } as const;
 
 /**

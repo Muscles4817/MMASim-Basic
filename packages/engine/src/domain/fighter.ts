@@ -21,6 +21,7 @@ import type { AttributeKey, Attributes, Aptitudes, Naturals } from '../ratings/a
 import type { Personality } from './personality.js';
 import type { TraitId } from './traits.js';
 import type { Injury } from '../health/injuries.js';
+import type { Physique } from '../progression/body.js';
 
 /** How a bout ended, from the winner's perspective. */
 export type FinishMethod =
@@ -153,10 +154,27 @@ export interface Fighter {
   nationality: string;
   sex: 'male' | 'female';
   birthDay: GameDay;
-  /** Natural walking weight in pounds, out of camp. Drives cut severity. */
+  /**
+   * Natural walking weight in pounds, out of camp. Drives cut severity.
+   *
+   * Derivable from `physique` and `heightInches` via `walkingWeightLbs(bodyOf(fighter))`, and stored
+   * anyway until doc 31 § 12 step 11 — which is when mass starts genuinely *moving* over a career
+   * and a cached copy could go stale. `body.test.ts` asserts the two agree, so it cannot drift in
+   * the meantime.
+   */
   walkingWeightLbs: number;
   heightInches: number;
   reachInches: number;
+  /**
+   * Structural body composition: skeleton, muscle, fat, and how much water comes off in fight week.
+   *
+   * Doc 31 § 12 step 4. These are the primitives the body is made of — lean mass and walking weight
+   * are computed from them plus height, rather than the other way round, and the Power, Strength,
+   * Durability and Cardio ceilings read them through the indices in `progression/body.ts`.
+   *
+   * `muscleIndex` is the only one that moves over a career; the rest are facts about the person.
+   */
+  physique: Physique;
   stance: 'orthodox' | 'southpaw' | 'switch';
 
   /** Division they currently compete in. Changing this changes no ratings. */
@@ -408,8 +426,7 @@ export function summariseRecord(record: readonly FightRecordEntry[]): RecordSumm
 
 /** Add two record summaries. Streak comes from the later one unless it is empty. */
 export function mergeSummaries(prior: RecordSummary, recent: RecordSummary): RecordSummary {
-  const recentBouts =
-    recent.wins + recent.losses + recent.draws + recent.noContests;
+  const recentBouts = recent.wins + recent.losses + recent.draws + recent.noContests;
   return {
     wins: prior.wins + recent.wins,
     losses: prior.losses + recent.losses,
