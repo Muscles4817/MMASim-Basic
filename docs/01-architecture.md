@@ -76,11 +76,16 @@ needs an RNG.
 
 ## Fight-engine invariants
 
-Eight rules the fight engine is built on. Each names where it is enforced, because an invariant
+Nine rules the fight engine is built on. Each names where it is enforced, because an invariant
 nothing checks is a preference — and where one is *not* yet enforced it says so, which is the
 honest version of the same thing.
 
 ### 1. A plan decides what a fighter *tries*. Attributes decide whether it works.
+
+Stated precisely, because the two halves land in different places in the code:
+
+> **Tactical intent primarily controls attempt selection and frequency. Capability and opposition
+> primarily control success.**
 
 Nothing in the tactical layer makes anybody better at anything. A 25-wrestling fighter told to take
 it to the floor shoots constantly, misses, gets countered and empties his tank — that is a *failed
@@ -201,7 +206,48 @@ it opens. Its neutral is what an unplanned fighter does, not one half: getting u
 a property of fighting rather than of planning, the same lesson `rangeUrgency` records about its
 floor.
 
+Three rules follow from it, and each was learned by getting it wrong first:
+
+**8a. Exit intent is independent of the number and weight of in-state actions.** Adding another way
+to work from a position must not make a fighter less interested in leaving it. The first cut derived
+the urgency from the ratio of intents across the two lists, so introducing `pummel` — an action that
+*helps a striker leave* — dropped his break attempts from 91% of beats to 51%, because the new
+candidate landed on the "staying" side of a ratio it had no business being in.
+
+**8b. Time is charged once for a resolved beat.** Parallel decision layers must not independently
+advance the clock, or accrue stalled time, for the same period of action. Booking stalled seconds on
+both the failed exit and the in-state work made a bottom beat accrue 20–32 seconds where it used to
+accrue 20, which raised referee restarts across the whole sport.
+
+**8c. Split only where the decisions are genuinely simultaneous.** Mutually exclusive actions stay
+competitors: `takedown` and `clinchUp` remain in the standing list because you cannot throw a hand
+and shoot a double in the same instant, and the clinch takedown stays in the holding list for the
+same reason. A generic two-roll structure applied everywhere would break the positions that are
+already right.
+
 *Enforced by* `tests/statistical/transition-intent.test.ts`. Doc 31 § F1 is the audit.
+
+### 9. Neutral means the unplanned baseline, not the midpoint of a range.
+
+Every scale in the tactical layer has a value that represents *no instruction*, and it is whatever
+the sport does on its own — never the arithmetic middle of the range the scale happens to span. A
+neutral may legitimately be 0.80, or 0.56, or 0.38.
+
+The engine is calibrated on a roster that mostly has no game plan, so the unplanned value is not a
+default in the programming sense, it is **the number the whole sport is balanced around**. Choosing
+a tidy midpoint instead silently rebalances the game:
+
+- `rangeUrgency` floors at 0.3 because a fighter with no instructions still manages distance;
+  without it, 63% of every unplanned fight sat at kicking range with the range beat never firing.
+- `exitUrgency` centres at 0.80 underneath and 0.56 in the clinch, both measured from what the
+  engine did before the transition split. Centring them at a half made every unplanned fighter in
+  the game stop trying to stand, and cost the striking attributes two points of win-rate swing.
+
+The corollary is that a neutral is **measured, not chosen**: it is what the previous behaviour
+produced, recorded at the point of change.
+
+*Enforced by* `tests/statistical/transition-intent.test.ts` for the exit rates, and by the
+statistical tier at large for the range floor.
 
 ## State shape & mutation
 
@@ -241,6 +287,45 @@ get from a cold start to a finished fight? It uses no mocks — real providers, 
 real engine — and runs under `StrictMode`, so double-invoked effects and initialisers are
 exercised too. It covers the full career loop, every screen, theme switching, save
 persistence, corrupt-save recovery and the accessibility basics.
+
+### Assert as close as possible to the mechanism
+
+A claim should be tested on the quantity that carries it, not on something downstream that
+correlates with it today.
+
+- **Clock share** is the right axis for a claim about *time allocation* — a striking plan spends
+  more of the fight standing than a wrestling plan does.
+- **Attempt counts and rates** are the right axis for a claim about *tactical intent* — told to get
+  up, a fighter goes for the exit more often. How long he then spends underneath is settled by 40
+  scrambling against 82 ground control, and asserting the plan on it is asserting the plan on
+  somebody else's attributes.
+
+Three assertions moved from the clock to the attempt during the transition split, and each had
+looked fine for months because the two axes were coupled: choosing to stand up *also* meant not
+doing anything else, so an instruction bought time off the floor by suppressing everything that kept
+him there. Separating the decisions broke the correlation and the tests failed — correctly. Two of
+the three had under 1% headroom before the change, which is the tell: a downstream proxy passes
+until the day the coupling it depends on is removed.
+
+Where a rate is used, normalise by exposure. Escape attempts *per fight* read 8.2 against 5.9
+between two plans while the rates read 1.51 against 0.98 a minute, because the fighter told to stay
+down is underneath for longer and accumulates attempts he never chose to make.
+
+### Deterministic equivalence is exact; statistical claims get tolerances
+
+Two kinds of test live in `tests/statistical/` and they are not the same kind of test.
+
+- A **deterministic equivalence** claim — the same seeds must produce the same fights — is asserted
+  with **exact equality**, and is deliberately fitted to one draw. That is what makes it a strong
+  statement. Re-seeding such a test is a category error: it compares two different samples and calls
+  the difference a regression. The golden fingerprint in `intent-authority.test.ts` is the example,
+  and it caught a 0.1% perturbation of a single constant when tested against one.
+- A **statistical** claim — about a distribution — gets an explicit tolerance and is **swept across
+  several seed salts** before its bound is set. Never fit a bound to one draw. Four assertions in
+  this repo failed that sweep on at least one salt; two of them were pre-existing bounds sitting on
+  under 1% headroom.
+
+If a deterministic test needs more statistical power, the answer is more fights, not a wider bound.
 
 ### Shape, not level
 

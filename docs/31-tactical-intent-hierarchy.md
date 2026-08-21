@@ -7,7 +7,7 @@ architecture before they are implemented — some may have changed shape.**
 | --- | --- |
 | F4 | **representation done.** Every decision surface goes through `fight/decide.ts` and `intentAuthority` makes the gap measurable. Choosing the baselines is a behaviour change and has not happened. |
 | F1 | **done** for the two positions that needed it — bottom and the held clinch. Distance already had the architecture; holding-clinch and top do not need it. See the audit below. |
-| F2, F3, F5–F8 | untouched |
+| the rest | re-ranked by architectural dependency as **D1–D9** in § 3, which is the live register. F3 is largely resolved by F1 as a side effect; two new findings were raised by the F1 audit. |
 
 The range split (doc 05, doc 01 § invariants) fixed the standing half of a problem that is larger
 than standing. This document is the audit of what is left, and it deliberately stops before the
@@ -41,9 +41,11 @@ Every choice in the fight is one shape:
 ```
 weight(action) = capability(actor) × planBias(action) × localOpportunity
                  ↑                    ↑                 ↑
-                 a raw attribute      exp(alignment ×   exploitFactor,
-                 on the 25–95 scale,  1.9 × urgency)    ENTRY_EASE, dominance,
-                 or a bare constant                     submissionOpportunity
+                 an attribute read    exp(alignment ×   exploitFactor,
+                 through effect(),    1.9 × urgency)    ENTRY_EASE, dominance,
+                 so a multiplier                        submissionOpportunity
+                 near 1 — or a bare
+                 constant
 ```
 
 …drawn with `rng.pickWeighted` over a flat list of actions. There are five such lists:
@@ -61,7 +63,130 @@ say about them.
 
 ---
 
-## 3. Findings
+## 3. The register, after F4 and F1
+
+Re-ranked by **architectural dependency** rather than by the order they were found. The original
+numbering is kept as an identifier so earlier commits and comments still resolve, but it carries no
+meaning about sequence.
+
+The ordering principle: **settle what the action vocabularies are before calibrating how loudly the
+plan speaks over them.** Every list that D1–D4 touches is a list D7 would otherwise have to
+calibrate twice.
+
+| # | finding | kind | depends on | changes fights? |
+| --- | --- | --- | --- | --- |
+| **D1** | F9 — `stall` conflates riding with residual | architectural + calibration | — | **yes, materially** |
+| **D2** | F10 — a fighter on top cannot elect to disengage | architectural | D1 (same list) | yes |
+| **D3** | F2 — the clinch has no behaviour axis | architectural | D1 (same list) | yes |
+| **D4** | F6 — no `bottom` desired state | architectural (vocabulary) | — | yes, mildly |
+| **D5** | F7 — positional risk is not expressible | architectural | D3 | yes |
+| **D6** | F3 — `recover` is still `standUp` | behavioural | D4 | yes, narrowly |
+| **D7** | F4 (remainder) — authority is not comparable | calibration | D1–D5 | yes, materially |
+| **D8** | F5 — `lead` is inert | cleanup | — | barely |
+| **D9** | F8 — no badly-fatigued situation | cleanup (additive) | — | yes, situationally |
+
+### D1 — `stall` conflates two concepts *(was F9, raised by the F1 audit)*
+
+**Recorded as debt. Not to be fixed as part of a refactor.**
+
+`stall` bundles two things that are not the same:
+
+1. **Deliberate positional maintenance** — riding top position, pinning a man on the fence, running
+   clock. That is genuine fighter behaviour and a genuine game plan. Its capability should derive
+   from the relevant control attribute — `groundControl`, `clinchOffence` — combined with tactical
+   intent, exactly as every other real action does.
+2. **Residual inactivity** — what is left when attempted actions fail. This should not be an action
+   candidate at all. The engine already reaches it through every other action's failure branch: a
+   failed advance books 15 stalled seconds, a failed escape 20, a failed break 8.
+
+Today both live in one candidate backed by `BASE_GROUND_STALL = 0.35` and `BASE_CLINCH_STALL = 0.5`
+— bare constants, unrelated to anything about the fighter. They are **not negligible**: at 0.35
+against an `advancePosition` capability of 1.42, `stall` holds **32%** of a top-position decision
+for a control plan.
+
+Replacing them with capability-backed behaviour will materially change fight distributions —
+control time, referee stand-ups, finish rates. It is its own behavioural and calibration change with
+its own evidence, and folding it into a structural pass would hide it.
+
+*It ranks first because D2, D3 and D7 all touch the lists it lives in.*
+
+### D2 — A fighter on top cannot elect to disengage *(was F10, raised by the F1 audit)*
+
+The top position offers `advancePosition`, `groundStrike`, `submission` and `stall`, and **no exit**.
+A striker who takes somebody down by accident, or a fighter who wants the fight back on the feet, has
+no way to stand up. Every other position has a way out.
+
+This is a missing *action*, not a mis-structured decision, so it does not need the F1 split — it
+needs a candidate, and per invariant 8c it probably belongs in the flat list, since standing back up
+out of somebody's guard consumes the moment.
+
+### D3 — The clinch has no behaviour axis *(was F2)*
+
+**Changed by F1, and narrowed.** The held side gained `pummel` and now offers three in-state actions
+driven by `preferredState`, which covers most of what the held fighter needs. **The controlling side
+is untouched**: `clinchTakedown` / `clinchStrike` / `stall`, keyed on `preferredState` only. There is
+still no `clinchIntent`, so "hold him here" and "hurt him here" remain two readings of one
+instruction. Measured, all four `topIntent` values produce the same clinch: 141–147 seconds, 1.86–1.94
+takedowns.
+
+### D4 — No `bottom` desired state *(was F6)*
+
+Unchanged by F1 in substance, though less acute: `bottomIntent` now carries real distinct behaviour,
+so a guard player is at least expressible *once he is there*. What is still missing is the ability to
+say he *wants* to be there. `preferredState: 'submission'` conflates "get it to the floor and hunt
+from either position" with "fight off my back", which are different fighters.
+
+### D5 — Positional risk is not expressible *(was F7)*
+
+Unchanged, and more relevant than it was: F1 added axes for risk to apply to. Doc 05 records that
+positional risk was folded into `topIntent` because "`control` against `advance` *is* that axis asked
+where the fighter actually chooses" — true while the ground was the only position with a behaviour
+layer, and false as soon as the clinch and standing get one. Depends on D3.
+
+### D6 — `recover` is still `standUp` *(was F3, largely resolved by F1)*
+
+**Substantially changed, and worth re-stating honestly.** F1 added `defend` and split the exit, which
+fixed most of this finding as a side effect. Measured over 1,200 fights, before and after:
+
+| bottomIntent | get-ups (before → after) | sub attempts (before → after) |
+| --- | --- | --- |
+| `standUp` | 1.96 → 1.90 | 2.17 → 2.07 |
+| `recover` | 1.40 → 1.45 | 3.20 → 2.29 |
+| `scramble` | 0.98 → 1.07 | 3.04 → 3.02 |
+| `playGuard` | 0.65 → 0.68 | 4.62 → 3.48 |
+| `attack` | 0.63 → 0.67 | 4.58 → 4.58 |
+
+- **`playGuard` is no longer `attack`.** It was 0.65/4.62 against 0.63/4.58 — indistinguishable.
+  It now attacks 32% less per beat of in-state work (0.349 against 0.456) while staying down just as
+  readily, which is a recognisable difference between a guard player and a finisher.
+- **`recover` is still `standUp`.** 1.37 exit attempts a minute against 1.45, and the second-lowest
+  submission rate. The cause has changed, though: it is no longer that recover has no action of its
+  own — it has `defend` — but that what should distinguish it is *lowered output and damage
+  avoidance*, and the engine has no representation of a fighter deliberately doing less. That is a
+  different and smaller finding than the one originally recorded.
+
+Depends on D4 only in the sense that both are bottom-position vocabulary and are cheaper done
+together.
+
+### D8 — `lead` is inert *(was F5)*
+
+Unchanged. `tactics.entry` has five readers in the engine — `groundDenial`, `entryWeight`,
+`isCounterFighter`, and two `tripsAndThrows` checks — and none of them mentions `lead`. It is a
+defensible neutral presented as a peer of three options that do something.
+
+### D9 — No badly-fatigued situation *(was F8)*
+
+Unchanged. `SITUATIONS` covers losing the round, winning it, being badly hurt, the opponent being
+hurt, and the final minute. Not being able to say *what changes when the tank is empty* omits the
+most common real reason a game plan gets abandoned, and the one the engine already models in most
+detail.
+
+---
+
+## 4. The original findings, as recorded
+
+Kept for the reasoning and the measurements. Where F4 or F1 changed a finding, the section above is
+the current statement of it.
 
 ### F1 — Transitions and in-state behaviour compete for the same probability mass
 
@@ -321,7 +446,7 @@ reason a real game plan gets abandoned, and the one the engine already models in
 
 ---
 
-## 4. What the target model implies
+## 5. What the target model implies
 
 The five layers, and what each one has to become:
 
@@ -343,7 +468,10 @@ the difference between a hierarchy and five knobs.
 
 ---
 
-## 5. Proposed sequencing
+## 6. Proposed sequencing
+
+**Superseded by the register in § 3**, which re-ranks what is left by architectural dependency. The
+principle below still holds and is why the interface is not in the ordering at all.
 
 Engine first, interface last — the current screen can keep rendering the current vocabulary while
 the layers underneath it are rebuilt, and a UI designed against a half-migrated engine would have

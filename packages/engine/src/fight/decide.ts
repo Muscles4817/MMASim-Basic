@@ -6,7 +6,8 @@
  * chain of multiplications with the plan's bias somewhere in the middle, and each chain mixed
  * three different kinds of number without naming any of them:
  *
- *  - **capability**, what this fighter can physically do, on the 25–95 attribute scale
+ *  - **capability**, what this fighter can physically do — an attribute read through
+ *    `fatiguedEffect`, which returns a multiplier near 1 rather than a rating
  *  - **intent**, `exp(alignment × strength × urgency)` from the policy layer
  *  - **opportunity**, what is actually available right now — how far away he is, how dominant the
  *    position is, whether the man in front of him has a hole in his defence
@@ -14,11 +15,16 @@
  * That they were indistinguishable is doc 31 § F4. A draw is a softmax over `ln(capability) +
  * alignment × strength × urgency`, so **the plan's authority over a decision is the size of its
  * span relative to the spread of the capability terms it is arguing against** — and that spread
- * was set per list by whatever coefficients happened to be written there. Bottom submissions were
- * `submissions × 0.8` in guard and the literal `0.05` outside it, a spread of about 900:1 against
- * a plan whose entire range is 6.7:1; the same plan at range argues against a spread nearer 2:1
- * and wins easily. Nobody could tell which instructions were strong and which were decorative,
- * because the answer was never written down anywhere.
+ * was set per list by whatever coefficients happened to be written there. Bottom submissions are
+ * `submissions × 0.8` in guard, which reads about 1.29, and the literal `0.05` outside it: sixteen
+ * to one against a `standUp` at 0.82, where a plan's entire range is about seven to one. Nobody
+ * could tell which instructions were strong and which were decorative, because the answer was
+ * never written down anywhere.
+ *
+ * (An earlier version of this comment said capability was "on the 25–95 scale" and put that gap at
+ * 900:1. It is not and it is not: `fatiguedEffect` returns `effect()`, which is
+ * `exp(convexity × (rating − 50) / 50)`, so a 70-rated attribute reads about 1.5. The measurements
+ * were always right because they read the real values; the prose was invented.)
  *
  * This module does not change any of those numbers. It gives them names, puts every list on one
  * code path, and makes the authority a fighter's corner has over each decision a value that can be
@@ -42,10 +48,11 @@ export interface Candidate<K extends string> {
   /**
    * What this fighter brings to this action, before anybody's plan or the state of the fight.
    *
-   * Usually a fatigued attribute. Sometimes a declared constant — a fighter holding somebody
-   * against the fence and doing nothing is not expressing an attribute — and those constants are
-   * the ones worth being suspicious of, because a bare number competing against a 25–95 scale is
-   * a baseline nobody chose on purpose.
+   * Usually a fatigued attribute, which lands near 1. Sometimes a declared constant — a fighter
+   * holding somebody against the fence and doing nothing is not expressing an attribute — and
+   * those constants are the ones worth being suspicious of, not because they are small but because
+   * they are arbitrary: unrelated to anything about the fighter, and therefore a baseline nobody
+   * chose on purpose.
    */
   capability: number;
   /** `exp(alignment × strength × urgency)`. What the corner asked for, and how much they meant it. */
