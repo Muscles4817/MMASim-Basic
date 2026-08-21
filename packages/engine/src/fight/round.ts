@@ -46,6 +46,7 @@ import {
   expectedRangeFailure,
   expectedRangeMix,
   grapplingAppetite,
+  groundStrikeAppetite,
   strikingAppetite,
   submissionAppetite,
 } from './policy.js';
@@ -115,6 +116,12 @@ const BASE_ATTEMPTS = 15.0;
  */
 const MAX_CONTROL_PER_FIGHTER = 0.74;
 const MAX_TOTAL_CONTROL = 0.77;
+/*
+ * Both are ceilings on the **realised share of a round**, and that is the only thing either of them
+ * may ever be applied to. `MAX_CONTROL_PER_FIGHTER` spent a long time capping `controlPull` as well,
+ * where it flattened the game plan of every competent grappler in the sport — see `controlPull` and
+ * doc 31 § D10 for what that cost.
+ */
 
 /**
  * How lopsided a round's grappling is once somebody has imposed it.
@@ -267,29 +274,44 @@ const SUBMISSION_REPEAT_DECAY = 0.4;
  * ------------------------------------------------------------------------------------------ */
 
 /**
- * How much of the round this fighter spends in a controlling position.
+ * **How hard this fighter is pulling the round onto the floor.** Not the share he gets.
  *
  * Two factors, because getting there and staying there are different skills and the sport is full
  * of people who can do one: `push` is whether they can impose the grappling at all, `hold` is
  * whether it stays imposed once it is. A wrestler who cannot hold produces scrambles, not control.
+ *
+ * **It is deliberately unbounded, and it used to be capped at `MAX_CONTROL_PER_FIGHTER`.** That cap
+ * was the whole of D10. The round loop reads this as a *pull* — it divides one by the sum of both
+ * to decide who imposes the round — and a ceiling that belongs to the realised share was flattening
+ * the numerator of that ratio. Any fighter good enough at grappling to exceed 0.74 returned exactly
+ * 0.74 whatever his corner had asked for: the grinder's raw pull ran 1.08 on a standing plan and
+ * 4.88 on a top plan and both arrived as 0.740. His opponent's pull was *not* saturated and still
+ * moved with the grinder's plan, so `redPull / (redPull + bluePull)` fell when the grinder was told
+ * to grapple, and Reduced paid a wrestler for **not** asking for the floor (doc 31 § D10).
+ *
+ * The ceiling still exists. It is applied where it means something, to the realised share, in the
+ * round loop — twice, once per fighter and once jointly.
  */
-function controlShare(a: Combatant, d: Combatant): number {
+function controlPull(a: Combatant, d: Combatant): number {
   /*
    * What they do, times what they were told to do.
    *
    * `tendencies` is the fighter; `grapplingAppetite` is the plan, read off the same alignment
    * table `simulate.ts` uses so the two levels of detail cannot disagree about what a plan means.
-   * Clamped after the multiply rather than before, so a plan can push a middling grappler up to
-   * the ceiling but never past it.
+   *
+   * **Not clamped**, and it used to be. This is a term in a pull, not a share of a round, and the
+   * clamp was a third copy of D10's mistake: a grinder's tendencies already average 1.0, so an
+   * *unplanned* grinder came out at the ceiling and no instruction could move him. Telling the best
+   * wrestler in the game to wrestle did nothing at this level of detail. The round's capacity is
+   * enforced on the round, in the loop below, where it belongs.
    */
-  const wants = clamp01(
+  const wants =
     ((a.tendencies.singleLeg +
       a.tendencies.doubleLeg +
       a.tendencies.fenceClinch +
       a.tendencies.bodyLock) /
       3) *
-      grapplingAppetite(a),
-  );
+    grapplingAppetite(a);
 
   /*
    * You still have to be close enough to shoot, at this level of detail too.
@@ -314,11 +336,26 @@ function controlShare(a: Combatant, d: Combatant): number {
       // A man told to get up is a man you hold for less of the round.
       controlResistance(d));
 
-  return clamp(
-    BASE_CONTROL * (wants / 0.42) * push ** 0.9 * hold ** 0.8,
-    0,
-    MAX_CONTROL_PER_FIGHTER,
-  );
+  return Math.max(0, BASE_CONTROL * (wants / 0.42) * asContest(push) ** 0.9 * asContest(hold) ** 0.8);
+}
+
+/**
+ * A contest between two fighters is a share of the pair, not a ratio.
+ *
+ * The second half of D10, and the earlier of the two. `simulate.ts` resolves every contest in the
+ * fight as `mine / (mine + theirs)` — bounded, and worth at most certainty. Reduced was handed the
+ * same two quantities and multiplied by `mine / theirs`, which is unbounded and grows without limit
+ * as the mismatch does. The two levels therefore disagreed about what a mismatch is *worth*: a
+ * grinder against a guard player came out pulling 1.08 of a 1.00 round on a plan that told him to
+ * stand and strike, and 4.88 on one that told him to grapple. Both are past the ceiling, so both
+ * arrived as the ceiling, and his corner stopped mattering.
+ *
+ * This is the same number in Full's currency, rescaled so that an even contest still reads exactly
+ * 1 and the calibrated average round is untouched. It ranges (0, 2): being twice the man is worth
+ * a third more, not twice as much, and being ten times the man is worth 1.8 rather than 10.
+ */
+function asContest(ratio: number): number {
+  return (2 * ratio) / (1 + ratio);
 }
 
 /**
@@ -391,7 +428,17 @@ function attemptsFor(
    * produce and this one does.
    */
   const underneath = 0.9 - strikeLean(a.fighter) * 0.85;
-  const position = clamp(1 + ownControl * 0.26 - beingControlled * underneath, 0.3, 1.6);
+  /*
+   * And what he is doing with the top position he has. `groundStrikeAppetite` is 1 for an unplanned
+   * fighter, so this term is the same as it was for the roster the constants were measured on — it
+   * only separates the man told to ride from the man told to posture up and hit, who used to throw
+   * identically here (doc 31 § D10).
+   */
+  const position = clamp(
+    1 + ownControl * 0.26 * groundStrikeAppetite(a) - beingControlled * underneath,
+    0.3,
+    1.6,
+  );
 
   return Math.max(0, BASE_ATTEMPTS * output * position);
 }
@@ -631,20 +678,28 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
      * the round is once they have. The expectation is unchanged — two even fighters still average
      * a third of the round each — and only the variance is right now.
      */
-    const redPull = controlShare(red, blue);
-    const bluePull = controlShare(blue, red);
+    const redPull = controlPull(red, blue);
+    const bluePull = controlPull(blue, red);
     const pull = redPull + bluePull;
+    /*
+     * Who imposes it is a *ratio of pulls*, and it is the only place a competent grappler's game
+     * plan can reach this resolver — so both pulls have to be the real ones. See `controlPull`.
+     */
     const redImposes = pull <= 0 ? roundRng.chance(0.5) : roundRng.chance(redPull / pull);
+    /*
+     * How much of the round ends up on the floor at all, which is where the ceiling belongs: two men
+     * pulling twice as hard as the sport allows still only have five minutes between them. Below the
+     * ceiling this is the identity, so nothing about an ordinary round changed.
+     */
+    const grappled = Math.min(pull, MAX_TOTAL_CONTROL);
     const swing = clamp(CONTROL_SWING * (1 + roundRng.normal() * 0.3), 0, 0.95);
-    let cRed = pull * (redImposes ? (1 + swing) / 2 : (1 - swing) / 2);
-    let cBlue = pull - cRed;
+    let cRed = grappled * (redImposes ? (1 + swing) / 2 : (1 - swing) / 2);
+    let cBlue = grappled - cRed;
+    // And no single fighter holds more of it than anyone has been measured holding. What the cap
+    // takes off him is time nobody controlled, so it goes back to distance rather than to the
+    // other man.
     cRed = Math.min(cRed, MAX_CONTROL_PER_FIGHTER);
     cBlue = Math.min(cBlue, MAX_CONTROL_PER_FIGHTER);
-    const total = cRed + cBlue;
-    if (total > MAX_TOTAL_CONTROL) {
-      cRed = (cRed / total) * MAX_TOTAL_CONTROL;
-      cBlue = (cBlue / total) * MAX_TOTAL_CONTROL;
-    }
     const share: Record<Corner, number> = { red: cRed, blue: cBlue };
     const distanceSeconds = (1 - cRed - cBlue) * ROUND_SECONDS;
 
