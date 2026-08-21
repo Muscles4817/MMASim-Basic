@@ -1,0 +1,232 @@
+/*
+ * Responsive layout primitives.
+ *
+ * Every rule here is additive at a breakpoint. The mobile rendering is the source order with no
+ * media query applied at all, and the wide rendering *places* regions rather than reordering
+ * them — so the reading order and the visual order are identical at every width, and a screen
+ * reader never gets a different page from a sighted user.
+ *
+ * 62rem throughout, matching `console.css`. That is the width at which a pointer on a large
+ * screen becomes the likely reader; 48rem, where the shell's tab bar becomes a rail, is a
+ * different question and deliberately a different number.
+ */
+
+/* --- Grid --------------------------------------------------------------------------------- */
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.grid__cell {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+@media (min-width: 62rem) {
+  .grid {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: var(--space-5);
+  }
+
+  .grid__cell {
+    grid-column: span var(--span, 12);
+  }
+
+  /* Standing context that follows the page. `align-items: start` on the grid is what makes this
+     work — a stretched cell has nothing to be sticky within. */
+  .grid__cell--sticky {
+    position: sticky;
+    top: calc(var(--header-height) + var(--space-4));
+  }
+}
+
+/* --- Panel -------------------------------------------------------------------------------- */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.panel__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+/*
+ * A section title, not a card heading.
+ *
+ * Uppercase and small because a panel sits inside a column that is already a container: at body
+ * size it competes with the content it is labelling, which is how a page ends up with four
+ * things all claiming to be the most important.
+ */
+.panel__title {
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* --- Strip -------------------------------------------------------------------------------- */
+
+.strip {
+  display: flex;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+}
+
+.strip > * {
+  flex: 0 0 auto;
+}
+
+/* A scroll region is a keyboard stop, so it has to show one. */
+.strip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* --- Master / detail ------------------------------------------------------------------------
+   Phone: one region at a time, selection swaps them. Desktop: both, list on the left, and
+   selecting a row swaps only the right-hand side. */
+
+.masterdetail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.masterdetail__list,
+.masterdetail__detail {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Programmatically focused when the phone composition swaps regions. Not a tab stop, so it must
+   not paint a ring. */
+.masterdetail__detail:focus {
+  outline: none;
+}
+
+/* Phone: whichever region is not current is not rendered at all. `display: none` rather than a
+   visual hide, because a screen reader must not be able to walk into the region that is not on
+   screen — that is the bug a visually-hidden list would introduce. */
+.masterdetail:not([data-selected]) .masterdetail__detail {
+  display: none;
+}
+
+.masterdetail[data-selected] .masterdetail__list {
+  display: none;
+}
+
+.masterdetail__back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--tap-target);
+  padding-inline: var(--space-2);
+  margin-inline-start: calc(var(--space-2) * -1);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.masterdetail__back:hover {
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+@media (min-width: 62rem) {
+  .masterdetail {
+    /* The list is the index and the detail is the subject: the subject gets the room. */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr);
+    gap: var(--space-5);
+  }
+
+  /* Both regions, always, whatever is selected. */
+  .masterdetail:not([data-selected]) .masterdetail__detail,
+  .masterdetail[data-selected] .masterdetail__list {
+    display: flex;
+  }
+
+  /* The list scrolls within itself so a long roster cannot push the preview off the bottom of
+     a screen that has room for both. */
+  .masterdetail__list {
+    position: sticky;
+    top: calc(var(--header-height) + var(--space-4));
+    max-height: calc(100dvh - var(--header-height) - var(--space-6));
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+  }
+
+  /* The list never leaves, so a control for going back to it would point at itself. */
+  .masterdetail__back {
+    display: none;
+  }
+}
+
+/* --- Collapse ------------------------------------------------------------------------------ */
+
+.collapse {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.collapse__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap-target);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* The default triangle is a UA glyph at a UA size and it sits badly against a tap target.
+   `list-style: none` plus an authored marker keeps it consistent between browsers. */
+.collapse__summary {
+  list-style: none;
+}
+
+.collapse__summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapse__summary::after {
+  content: '▾';
+  margin-inline-start: auto;
+  color: var(--text-faint);
+  transition: transform var(--transition-fast);
+}
+
+.collapse[open] .collapse__summary::after {
+  transform: rotate(180deg);
+}
+
+.collapse__body {
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+@media (min-width: 62rem) {
+  /* Open by default at this width, and the summary becomes a section label rather than a
+     control — the region is not folded away, so a chevron would be promising a state change
+     nobody wants. It stays operable; it just stops advertising itself. */
+  .collapse__summary::after {
+    opacity: 0.4;
+  }
+}

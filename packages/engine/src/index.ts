@@ -91,7 +91,7 @@ export * from './business/inbox.js';
 export * from './business/championships.js';
 export * from './business/matchmakingStyle.js';
 export * from './business/matchmakingIntent.js';
-export * from './business/promoterRead.js';
+export * from './business/fighterRead.js';
 export * from './business/news.js';
 
 // Testing helpers (shared across the out-of-package test suites)

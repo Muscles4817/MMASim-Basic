@@ -12,7 +12,7 @@
  */
 
 import { useRouter, toHash, type Route } from '../state/router';
-import { SubNav } from '../ui/promoter';
+import { SubNav } from '../ui/console';
 
 export type PromoterPlace = 'promotion' | 'calendar' | 'roster' | 'champions';
 

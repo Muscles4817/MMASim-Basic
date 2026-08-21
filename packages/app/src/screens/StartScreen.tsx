@@ -102,7 +102,7 @@ export function StartScreen() {
   };
 
   return (
-    <div className="stack" style={{ gap: 'var(--space-4)' }}>
+    <div className="stack" style={{ gap: 'var(--space-4)' }} data-testid="new-career">
       {/*
         The primary path, and it was previously unreachable.
 

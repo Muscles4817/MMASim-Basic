@@ -1,0 +1,195 @@
+/*
+ * The dense list.
+ *
+ * Two renderings of one dataset, swapped at 62rem: a real table where there is room to compare
+ * across columns, and rows where there is not. Only one is ever in the layout — the other is
+ * `display: none`, which keeps it out of the accessibility tree too, so nothing is announced
+ * twice.
+ */
+
+.datatable {
+  display: none;
+}
+
+.datatable__rows {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 62rem) {
+  .datatable {
+    display: block;
+  }
+
+  .datatable__rows {
+    display: none;
+  }
+}
+
+/* --- The table ------------------------------------------------------------------------------ */
+
+.datatable__table {
+  width: 100%;
+  border-collapse: collapse;
+  /* Digits in a column that do not line up are digits nobody can compare, which is the entire
+     job of this component. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+.datatable__table th,
+.datatable__table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: baseline;
+}
+
+.datatable__table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  /* Opaque: the body scrolls under this, and a translucent header over moving rows is
+     unreadable in exactly the moment somebody is scanning. */
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-strong);
+  font-size: var(--text-2xs);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.datatable__table tbody th {
+  font-weight: 600;
+}
+
+.datatable__table [data-numeric='true'] {
+  text-align: right;
+}
+
+.datatable__table tbody tr:last-child th,
+.datatable__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.datatable__table tbody tr[data-clickable='true'] {
+  cursor: pointer;
+}
+
+.datatable__table tbody tr:hover {
+  background: var(--surface-sunken);
+}
+
+/*
+ * The reader's own row.
+ *
+ * A left edge and a weight, not a background tint alone: a tinted row against a hover tint is
+ * two shades of the same idea, and finding yourself in a table of thirty should not require
+ * reading it.
+ */
+.datatable__table tbody tr[data-current='true'] {
+  background: var(--accent-soft);
+}
+
+.datatable__table tbody tr[data-current='true'] th:first-child {
+  box-shadow: inset 3px 0 0 0 var(--accent);
+  font-weight: 800;
+}
+
+.datatable__sort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.datatable__sort:hover {
+  color: var(--text);
+}
+
+.datatable__arrow {
+  color: var(--accent);
+  /* Reserved whether or not this column is the sorted one, so the header row does not shift
+     sideways every time somebody re-sorts it. */
+  min-width: 0.6em;
+}
+
+/* The row's one keyboard target. Fills the cell so the pointer and the keyboard agree about
+   what is clickable. */
+.datatable__rowbutton {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+/* `.card--flush` is `overflow: hidden`, which clips an outline-offset ring away entirely — the
+   failure doc 10 records. An inset shadow cannot be clipped. */
+.datatable__rowbutton:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: var(--radius-sm);
+}
+
+/* --- The rows ------------------------------------------------------------------------------- */
+
+.datatable__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3);
+  min-height: var(--tap-target);
+  border-bottom: 1px solid var(--border);
+  color: inherit;
+  font: inherit;
+}
+
+.datatable__row:last-child {
+  border-bottom: none;
+}
+
+.datatable__row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.datatable__row[data-current='true'] {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 0 var(--accent);
+}
+
+.datatable__row-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.datatable__row-primary {
+  display: block;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.datatable__row-secondary {
+  display: block;
+  margin-top: var(--space-0);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.datatable__row-trailing {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}

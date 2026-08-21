@@ -71,7 +71,7 @@ import {
   MiniRating,
   TabPanel,
   Tabs,
-} from '../ui/promoter';
+} from '../ui/console';
 import { FightRecordList, RecordSummaryBar } from '../ui/FightRecord';
 import { readMileage } from '../ui/mileage';
 import { money } from '../ui/format';

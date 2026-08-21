@@ -55,7 +55,7 @@ import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
 import { Alert, Fact, KeyStat } from '../ui/signals';
-import { Console, Ledger, LedgerRow, LedgerRule } from '../ui/promoter';
+import { Console, Ledger, LedgerRow, LedgerRule } from '../ui/console';
 import { formatGameDay } from '../shell/Shell';
 import { money } from '../ui/format';
 import {

@@ -63,7 +63,7 @@ export function OffersScreen() {
       )}
 
       {/* The manager comes first, because who negotiates decides what you are offered. */}
-      <Card title="Who negotiates for you">
+      <Card title="Who negotiates for you" testId="representation">
         {standing.manager ? (
           <p className="prose">
             <strong>{standing.manager.name}</strong> — {standing.manager.blurb}
@@ -144,7 +144,10 @@ export function OffersScreen() {
         )}
       </Card>
 
-      <Card title={offers.length === 0 ? 'Nobody is calling' : `${offers.length} on the table`}>
+      <Card
+        title={offers.length === 0 ? 'Nobody is calling' : `${offers.length} on the table`}
+        testId="offers"
+      >
         {offers.length === 0 ? (
           <p className="muted prose">
             Nothing right now. This sport has one buyer that matters and a handful who cannot

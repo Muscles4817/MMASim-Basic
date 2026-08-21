@@ -37,7 +37,7 @@ import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, ListItem } from '../ui';
 import { Fact, KeyStat } from '../ui/signals';
-import { AttentionRow, Console, Ledger, LedgerRow, LedgerRule, PipelineCard } from '../ui/promoter';
+import { AttentionRow, Console, Ledger, LedgerRow, LedgerRule, PipelineCard } from '../ui/console';
 import { NewsFeed } from '../ui/NewsFeed';
 import { formatGameDay } from '../shell/Shell';
 import { money } from '../ui/format';

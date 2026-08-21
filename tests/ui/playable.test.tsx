@@ -53,7 +53,7 @@ describe('the game is playable', () => {
   it('boots to the fighter picker from a cold start', async () => {
     renderApp();
     expectNoCrash();
-    expect(await screen.findByText(/Or take over an existing fighter/i)).toBeTruthy();
+    expect(await screen.findByTestId('new-career')).toBeTruthy();
     // The seeded roster is actually on screen, not an empty list.
     expect(await screen.findByText(/Khabib/)).toBeTruthy();
   });
@@ -100,8 +100,7 @@ describe('the game is playable', () => {
     // player's own name legitimately appears twice — once as the fighter, once in the table
     // with their row marked. The assertion is that the hub is showing them at all.
     expect((await screen.findAllByText(/Nurmagomedov/)).length).toBeGreaterThan(0);
-    const offersCard = await screen.findByText(/Choose your next fight/i);
-    expect(offersCard).toBeTruthy();
+    expect(await screen.findByTestId('next-fight')).toBeTruthy();
     expectNoCrash();
 
     // 3. Expand an offer and accept it. Booking is deliberately two steps.
@@ -170,7 +169,7 @@ describe('the game is playable', () => {
     const user = userEvent.setup();
     const first = renderApp();
     await user.click((await screen.findAllByText(/Poirier/))[0]!);
-    expect(await screen.findByText(/Choose your next fight/i)).toBeTruthy();
+    expect(await screen.findByTestId('next-fight')).toBeTruthy();
     first.unmount();
 
     // A fresh mount over the same localStorage is what a page reload does.
@@ -311,7 +310,7 @@ describe('the career is a career, not a sequence of fights', () => {
     await createFighter(user);
 
     // Unknown, unranked, and on the smallest show in the sport. That is the starting point.
-    const climb = (await screen.findByText(/The climb/i)).closest('section')!;
+    const climb = await screen.findByTestId('climb');
     expect(within(climb).getAllByText(/Unranked/i).length).toBeGreaterThan(0);
     expect(within(climb).getByText(/developmental/i)).toBeTruthy();
     expectNoCrash();
@@ -379,7 +378,7 @@ describe('the career is a career, not a sequence of fights', () => {
     const user = userEvent.setup();
     await createFighter(user, 'Climber');
 
-    const climb = (await screen.findByText(/The climb/i)).closest('section')!;
+    const climb = await screen.findByTestId('climb');
     expect(within(climb).getByRole('meter', { name: /Career progress/i })).toBeTruthy();
     // Always says what is standing between you and the belt, eligible or not.
     expect(climb.textContent).toMatch(/unranked|ranked|top three|two straight wins|not signed/i);

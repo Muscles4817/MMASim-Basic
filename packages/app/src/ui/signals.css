@@ -327,3 +327,145 @@
   text-transform: uppercase;
   color: var(--text-muted);
 }
+
+/* --- Interpreted state -------------------------------------------------------------------------
+   `56 — Worked`. A row rather than a card, because a condition strip is five of these and five
+   cards is the soup this vocabulary exists to prevent. Grid rather than flex so the labels and
+   the values line up down the strip without each row knowing about its neighbours. */
+
+.state-strip {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.state-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.state-row:last-child {
+  border-bottom: none;
+}
+
+.state-row__label {
+  color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.state-row__value {
+  font-weight: 700;
+  text-align: right;
+}
+
+/* The interpretation, which is the point of the row. Same weight as the value at secondary and
+   heavier at primary — never quieter, or the number wins again and nothing has changed. */
+.state-row__state {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* Drawn, not typed. A literal "—" between two values is announced as a minus sign, and it has
+   to disappear cleanly when a row carries no state word. */
+.state-row__state::before {
+  content: '—';
+  margin-inline-end: var(--space-1);
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.state-row--primary .state-row__value,
+.state-row--primary .state-row__state {
+  font-size: var(--text-lg);
+  font-weight: 800;
+}
+
+.state-row--tertiary .state-row__label,
+.state-row--tertiary .state-row__value,
+.state-row--tertiary .state-row__state {
+  font-size: var(--text-sm);
+}
+
+.state-row--tertiary .state-row__state {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* Three channels, as everywhere: the colour, the state word, and the weight. Colour is applied
+   to the interpretation rather than to the number, because the word is the thing that carries
+   the meaning in greyscale. */
+.state-row--good .state-row__state {
+  color: var(--positive);
+}
+.state-row--warn .state-row__state {
+  color: var(--warning);
+}
+.state-row--bad .state-row__state {
+  color: var(--negative);
+}
+
+/* The mechanic, on demand. A real tap target, and it must never be the thing the eye lands on. */
+.state-row__help > summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-strong);
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.state-row__help > summary::-webkit-details-marker {
+  display: none;
+}
+
+.state-row__help > summary:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+/* Spans the row when open, rather than squeezing into the fourth column. */
+.state-row__help[open] {
+  grid-column: 1 / -1;
+}
+
+.state-row__help-body {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+/* --- Help disclosure ---------------------------------------------------------------------------
+   Doc 10: `title` is not an explanation. Neither is a paragraph printed on every visit. */
+
+.help > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--tap-target);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.help > summary:hover {
+  color: var(--text);
+}
+
+.help__body {
+  padding-bottom: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}

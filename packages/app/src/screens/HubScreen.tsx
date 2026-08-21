@@ -454,6 +454,7 @@ export function HubScreen() {
         <Card
           title={booking.bout.isTitleFight ? 'Next fight — for the title' : 'Next fight'}
           raised
+          testId="next-fight"
         >
           <p
             style={{ fontSize: 'var(--text-xl)', fontWeight: 700, marginBottom: 'var(--space-1)' }}
@@ -496,7 +497,7 @@ export function HubScreen() {
           )}
         </Card>
       ) : (
-        <Card title="Choose your next fight" flush>
+        <Card title="Choose your next fight" flush testId="next-fight">
           {offers.length === 0 ? (
             <div className="empty">
               <p className="empty__title">No opponents available right now</p>
@@ -1077,7 +1078,7 @@ function LadderCard({
       : `Ranked #${position}`;
 
   return (
-    <Card title="The climb">
+    <Card title="The climb" testId="climb">
       <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
         <span>
           <span style={{ fontSize: 'var(--text-xl)', fontWeight: 700, display: 'block' }}>

@@ -23,7 +23,7 @@ import { fighterAge } from '../domain/fighter.js';
 import { overallRating } from '../ratings/attributes.js';
 import type { Promotion } from '../domain/organisations.js';
 import { paperOdds } from './matchmaking.js';
-import { careerArc, type CareerArcId } from './promoterRead.js';
+import { careerArc, type CareerArcId } from './fighterRead.js';
 
 // --- The reasons ------------------------------------------------------------------------------
 
