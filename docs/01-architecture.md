@@ -318,7 +318,7 @@ result. That exception is documented at the call site.
 | Integration        | `tests/integration/`         | every commit| A full fight, a full camp, a full event    |
 | Statistical        | `tests/statistical/`         | every commit| 10k-fight distributions: KO rates, decisions, upset frequency |
 | Playability        | `tests/ui/`                  | every commit| Mounts the real app in jsdom and drives it with real clicks |
-| Long-sim regression| `tests/long-sim/`            | on demand + CI | 20 in-game years: no ratings inflation, sane career lengths, division health |
+| Long-sim regression| `tests/long-sim/`            | on demand   | 20 in-game years: no ratings inflation, sane career lengths, division health |
 
 Statistical tests assert on *distributions with tolerances*, never on single outcomes.
 Every one of them is seeded, so a failure is reproducible.
@@ -329,6 +329,35 @@ get from a cold start to a finished fight? It uses no mocks — real providers, 
 real engine — and runs under `StrictMode`, so double-invoked effects and initialisers are
 exercised too. It covers the full career loop, every screen, theme switching, save
 persistence, corrupt-save recovery and the accessibility basics.
+
+### Continuous integration
+
+Two workflows, and the distinction between them is the point.
+
+| Workflow | Trigger | Runs | Answers |
+| --- | --- | --- | --- |
+| `.github/workflows/ci.yml` | `pull_request`, plus `push` to master | `lint`, `typecheck`, `test` | *Is this change safe to merge?* |
+| `.github/workflows/pages.yml` | `push` to master | `typecheck`, `test`, build, deploy | *Is this branch safe to publish?* |
+
+`ci.yml` exists because `pages.yml` alone is not a gate. It triggers on `push` to master, so it
+runs after the merge button, on code already on the default branch — it can tell you master is
+broken, and it cannot stop master from breaking. `ci.yml` runs the same checks on the pull request,
+where a red result is still actionable. The two overlap deliberately: the deploy keeps its own
+gate so a direct push or a re-run cannot publish a broken build.
+
+`ci.yml` also runs `npm run lint`, which the deploy does not. It runs every step even after one
+fails, so a red test does not hide a lint error you would only meet on the next push.
+
+**`npm test` is capped at two workers** (`maxWorkers` in `vitest.config.ts`). Vitest's default is
+one per core, and on a four-core runner that starves its own main thread until the reporter RPC
+times out — `Error: [vitest-worker]: Timeout calling "onTaskUpdate"`, counted as an unhandled
+error, exit 1, every test passing. It failed six consecutive deploys that way. The cap costs
+almost nothing, because at ~720s of test CPU over a ~335s wall the suite was achieving about 2.1x
+parallelism on four cores regardless.
+
+The long-sim tier runs in neither workflow: twenty in-game years is minutes of CPU, and it guards
+drift over time rather than the correctness of a diff. Run it with `npm run test:long` before
+anything that touches progression, ageing or matchmaking.
 
 ### Assert as close as possible to the mechanism
 
