@@ -410,6 +410,7 @@ function NeedsYou({
         {shown.map((situation) => (
           <AttentionRow
             key={situation.id}
+            kind={situation.kind}
             tone={situation.tone}
             title={situation.title}
             detail={situation.detail}

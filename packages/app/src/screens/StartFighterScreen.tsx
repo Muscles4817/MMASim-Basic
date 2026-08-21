@@ -35,7 +35,7 @@ import { Button, Card, Chip, DataTable, Flag, MasterDetail, Segmented, type Colu
 import { Alert } from '../ui/signals';
 import { FighterView } from './FighterView';
 import { activeDivisionPeers, clearTransientCareerState } from '../game/career';
-import { contractStanding } from '../game/contracts';
+import { contractStanding, formaliseExistingDeal } from '../game/contracts';
 
 type Filter = 'contenders' | 'prospects' | 'all';
 
@@ -75,6 +75,11 @@ export function StartFighterScreen() {
     // Bookings and the last result are keyed to the previous fighter. Left behind, the dashboard
     // offers to send the new fighter into the old one's booked bout.
     clearTransientCareerState();
+    // Whatever roster they are on becomes a contract you can read, count down and ask out of.
+    // Without this the player is handed a fighter the contract layer considers a free agent
+    // while they sit on somebody's roster — so the deal counter, the release request and the
+    // whole of `#/contract` have nothing to describe.
+    formaliseExistingDeal(db, fighter);
     updateWorld({ playerRole: 'fighter', playerFighterId: fighter.id as string });
     navigate({ name: 'hub' });
   };

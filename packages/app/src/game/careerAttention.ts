@@ -447,23 +447,56 @@ function opportunityIssues(
   }
 
   /*
-   * The market, summarised rather than reproduced.
+   * The market, summarised rather than reproduced — and filtered to what is actually news.
    *
-   * The old hub rendered every interested promotion as a card — twenty-two of them in a Medium
-   * world — from a second offer engine that has now been deleted. One row, from the canonical
-   * market, saying how many and what the best of them is.
+   * Two separate reductions, and both are needed.
+   *
+   * `offersOnTheTable` returns a *shortlist*: a generated world is over a hundred promotions and
+   * a fighter in the middle of it clears the bar at dozens, so the engine takes the best at each
+   * level of the sport and counts the rest. That stops the contract screen being a scroll.
+   *
+   * It does not stop the dashboard reporting a number nobody can act on. A fighter under contract
+   * is *always* wanted by somebody at their own level — free agency models that honestly — and a
+   * lateral move to an identical promotion for the same money is not news. It is news when
+   * somebody offers a step up, meaningfully more money, or a visibly bigger room, which is the
+   * whole content of "you are worth more than this deal". A free agent has no deal to compare
+   * against and needs the lot.
+   *
+   * The filter lives here rather than on the screen so the ranking and the row agree, and so this
+   * is never a *superset* of what the contract screen lists — the hub saying more than the screen
+   * behind its own button is the defect this whole area was rebuilt to end.
    */
-  const offers = offersOnTheTable(db, fighter);
-  if (offers.length > 0) {
-    const best = offers[0]!;
+  const market = offersOnTheTable(db, fighter);
+  const standing = contractStanding(db, fighter);
+  const newsworthy =
+    !standing.agreement || standing.freeAgent || !standing.promotion
+      ? market.offers
+      : (() => {
+          const current = standing.agreement.showPurse + standing.agreement.winBonus;
+          const here = standing.promotion;
+          return market.offers.filter(
+            (offer) =>
+              offer.motive === 'ascend' ||
+              offer.motive === 'reach' ||
+              offer.terms.showPurse + offer.terms.winBonus > current * 1.15 ||
+              offer.promotion.prestige > here.prestige + 8,
+          );
+        })();
+
+  if (newsworthy.length > 0) {
+    const best = newsworthy[0]!;
     items.push({
       id: 'offers',
       kind: 'offers',
       tone: 'good',
       urgency: 64,
-      title: `${offers.length} promotion${offers.length === 1 ? '' : 's'} interested`,
-      // `offersFor` sorts best money first, so `offers[0]` is the headline without this
-      // module re-deciding what "best" means — which is how two screens end up disagreeing.
+      title:
+        newsworthy.length === 1
+          ? 'A promotion is offering you better than you are on'
+          : `${newsworthy.length} promotions are offering you better than you are on`,
+      // `offersFor` sorts best money first and the shortlist preserves that, so `[0]` is the
+      // headline without this module re-deciding what "best" means — which is exactly how two
+      // screens end up disagreeing about it.
       detail: `Best of them is ${best.promotion.shortName}. ${best.money}${
         best.unmatchable.length > 0 ? ' They are offering something nobody else can match.' : ''
       }`,

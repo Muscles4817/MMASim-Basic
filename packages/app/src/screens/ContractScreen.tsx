@@ -62,10 +62,23 @@ export function ContractScreen() {
   const [releaseWord, setReleaseWord] = useState<string | undefined>();
   const [refusal, setRefusal] = useState<string | undefined>();
 
-  const offers = useMemo(
-    () => (playerFighter ? offersOnTheTable(db, playerFighter) : []),
+  /*
+   * The shortlist, not the market.
+   *
+   * A generated world is over a hundred promotions and a fighter in the middle of it clears the
+   * bar at dozens of them. `offersOnTheTable` takes the best at each level of the sport and
+   * counts the rest, so what is left out is *stated* rather than hidden — the fringe promotion
+   * offering terms the leader structurally cannot match survives the cut, which is the whole
+   * interest of the scene.
+   */
+  const shortlist = useMemo(
+    () =>
+      playerFighter
+        ? offersOnTheTable(db, playerFighter)
+        : { offers: [] as readonly Offer[], others: 0 },
     [db, playerFighter, world.day],
   );
+  const offers = shortlist.offers;
   const managers = useMemo(
     () => (playerFighter ? managersWillingToRepresent(db, playerFighter) : []),
     [db, playerFighter],
@@ -160,7 +173,13 @@ export function ContractScreen() {
   const market = (
     <Panel
       testId="offers"
-      title={offers.length === 0 ? 'Nobody is calling' : `${offers.length} on the table`}
+      title={
+        offers.length === 0
+          ? 'Nobody is calling'
+          : shortlist.others > 0
+            ? `The ${offers.length} worth reading`
+            : `${offers.length} on the table`
+      }
       action={
         chosen && (
           <Button size="sm" variant="ghost" onClick={() => setSelected(undefined)}>
@@ -196,6 +215,17 @@ export function ContractScreen() {
               isCurrent={(o) => (o.promotion.id as string) === selected}
             />
           </Card>
+
+          {/* Counted rather than hidden. A shortlist that does not say it is one is a lie by
+              omission, and the number is the whole evidence that the market is real. */}
+          {shortlist.others > 0 && (
+            <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
+              {shortlist.others === 1
+                ? 'One other promotion would sign you, on smaller money than any of these.'
+                : `${shortlist.others} other promotions would sign you, on smaller money than any of these.`}{' '}
+              Your manager is not going to waste an afternoon reading them out.
+            </p>
+          )}
 
           {chosen ? (
             <OfferDetail

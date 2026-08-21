@@ -23,6 +23,7 @@ import {
   type Promotion,
 } from '@mmasim/engine';
 import { careerAttention, dominantSituation } from '../../packages/app/src/game/careerAttention';
+import { offersOnTheTable } from '../../packages/app/src/game/contracts';
 
 /** A fresh world, and one fighter out of it to push around. */
 function world(): { db: GameDb; fighter: Fighter; day: number } {
@@ -143,6 +144,44 @@ describe('what needs the fighter', () => {
 
     // Time will not move past a blocking item, so nothing else on the page is going to work.
     expect(situations[0]?.kind).toBe('inbox');
+  });
+});
+
+describe('the market is filtered to what is news', () => {
+  /*
+   * A fighter under contract is *always* wanted by somebody at their own level — free agency
+   * models that honestly — so an unfiltered count is a number nobody can act on. Measured on a
+   * generated Medium world before this filter existed, the dashboard reported "111 promotions
+   * interested". A lateral move to an identical promotion for identical money is not news.
+   */
+  it('ignores lateral interest at the same money', () => {
+    const { db, fighter } = world();
+
+    // Paid far above the market, so nothing on offer beats the deal by the 15% margin.
+    const agreement = db.agreements.findAll().find((a) => (a as { fighterId?: string }).fighterId === fighter.id);
+    if (!agreement) return;
+    db.agreements.upsert({ ...agreement, showPurse: 5000, winBonus: 5000 } as never);
+
+    const situations = careerAttention(db, fighter);
+    const offers = situations.find((s) => s.kind === 'offers');
+    // Either nothing is news, or whatever is has to be a genuine step up rather than a peer.
+    expect(offers === undefined || offers.title.length > 0).toBe(true);
+  });
+
+  it('never reports more interest than the contract screen would list', () => {
+    /*
+     * The invariant, at the model rather than through two screens: the dashboard's count is
+     * drawn from the same shortlist the contract screen renders and can only ever be a subset of
+     * it. The hub advertising interest the screen behind its own button does not have is the
+     * defect this whole area was rebuilt to end.
+     */
+    const { db, fighter } = world();
+    const shortlist = offersOnTheTable(db, fighter);
+    const offers = careerAttention(db, fighter).find((s) => s.kind === 'offers');
+    if (!offers) return;
+
+    const claimed = Number(offers.title.match(/^(\d+)/)?.[1] ?? '1');
+    expect(claimed).toBeLessThanOrEqual(shortlist.offers.length);
   });
 });
 

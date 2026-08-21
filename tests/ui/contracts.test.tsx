@@ -187,12 +187,22 @@ describe('the hub and the offers screen agree', () => {
     await createFighter(user);
 
     goTo('#/hub');
-    const hubSaysCalling = screen.queryAllByText(/promotions? (are|is) calling/i).length > 0;
+    /*
+     * Asked by `data-kind`, not by matching the sentence.
+     *
+     * This test used to look for /promotions? (are|is) calling/ — the dashboard's wording at the
+     * time. The dashboard was then rebuilt around a ranked situation feed and the row now reads
+     * "N promotions are offering you better than you are on", which does not match, so the test
+     * went green by finding nothing rather than by the invariant holding. An assertion whose
+     * subject is prose is an assertion with a expiry date on it.
+     */
+    await screen.findByTestId('needs-you');
+    const hubSaysCalling = document.querySelectorAll('[data-kind="offers"]').length > 0;
 
-    goTo('#/offers');
+    goTo('#/contract');
     renderApp();
-    // The card is titled either way, so waiting on it means the screen has actually rendered.
-    await screen.findAllByText(/Nobody is calling|on the table|worth reading/i);
+    // The panel is titled either way, so waiting on it means the screen has actually rendered.
+    await screen.findByTestId('offers');
     const nobodyIsCalling = screen.queryAllByText(/Nobody is calling/i).length > 0;
 
     expect(hubSaysCalling && nobodyIsCalling).toBe(false);

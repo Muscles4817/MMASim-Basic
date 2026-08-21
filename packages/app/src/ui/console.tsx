@@ -94,12 +94,22 @@ export function AttentionRow({
   detail,
   cue,
   onClick,
+  kind,
 }: {
   tone: 'danger' | 'warn' | 'info' | 'good';
   title: string;
   detail: string;
   cue?: string;
   onClick?(): void;
+  /**
+   * What sort of situation this row is, as a stable handle.
+   *
+   * Every title in this component is a sentence written to be reworded, so a test that asks "is
+   * the dashboard advertising offers" cannot ask by matching prose — it will pass vacuously the
+   * first time somebody improves the copy, which is precisely what happened to the invariant
+   * that the hub must never advertise interest the contract screen lacks.
+   */
+  kind?: string;
 }) {
   const icon: IconName =
     tone === 'danger' || tone === 'warn' ? 'warning' : tone === 'good' ? 'success' : 'info';
@@ -119,14 +129,20 @@ export function AttentionRow({
 
   if (!onClick) {
     return (
-      <div className="attention__item" data-tone={tone}>
+      <div className="attention__item" data-tone={tone} data-kind={kind}>
         {body}
       </div>
     );
   }
 
   return (
-    <button type="button" className="attention__item" data-tone={tone} onClick={onClick}>
+    <button
+      type="button"
+      className="attention__item"
+      data-tone={tone}
+      data-kind={kind}
+      onClick={onClick}
+    >
       {body}
     </button>
   );
