@@ -76,10 +76,16 @@ needs an RNG.
 
 ## Fight-engine invariants
 
-Six rules the fight engine is built on. Each is enforced somewhere, and the enforcement is named,
-because an invariant nothing checks is a preference.
+Nine rules the fight engine is built on. Each names where it is enforced, because an invariant
+nothing checks is a preference — and where one is *not* yet enforced it says so, which is the
+honest version of the same thing.
 
 ### 1. A plan decides what a fighter *tries*. Attributes decide whether it works.
+
+Stated precisely, because the two halves land in different places in the code:
+
+> **Tactical intent primarily controls attempt selection and frequency. Capability and opposition
+> primarily control success.**
 
 Nothing in the tactical layer makes anybody better at anything. A 25-wrestling fighter told to take
 it to the floor shoots constantly, misses, gets countered and empties his tank — that is a *failed
@@ -150,6 +156,99 @@ general mechanism rather than add a third.
 
 *Enforced by* `tests/statistical/reduced-fidelity.test.ts`.
 
+### 7. Intent authority must be comparable across decision surfaces.
+
+A given conviction should not become dominant or irrelevant merely because one action list happens
+to be expressed in 0.05 constants and another in 25–95 capability weights.
+
+Every choice in a fight is a weighted draw, which is a softmax over
+`ln(capability × opportunity) + alignment × strength × urgency`. The two terms are directly
+comparable in that space, so **the plan's authority over a decision is the ratio of their spans** —
+above 1 and a convinced corner can reorder the list, near 0 and the instruction is decorative
+whatever it says. `intentAuthority` in `fight/decide.ts` computes it.
+
+The rule exists because that ratio was set per list by whichever coefficients happened to be
+written there, and nothing measured it. Measured now, at full conviction, it runs from 0.32 to
+10.28 across the engine's seven decision surfaces — and the same bottom instruction is worth ten
+times more in guard than in side control, purely because the submission candidate is
+`submissions × 0.8` in one and the literal `0.05` in the other.
+
+*Enforced by* `tests/statistical/intent-authority.test.ts`, which currently records the gap as
+bounded, named debt rather than asserting the rule outright — closing it means choosing the
+baselines, which is a behaviour change and its own piece of work.
+
+### 8. Transition and in-state behaviour are separate decisions.
+
+*State-transition intent and in-state behaviour are separate decisions unless the actions genuinely
+compete for the same moment.*
+
+They used to be drawn from one flat weighted list at every position, so wanting to leave more
+*arithmetically* meant doing less while you were there: a fighter told to stand up managed 1.96
+get-ups against 0.63 and paid for it with 2.17 submission attempts against 4.96. That trade was
+plausible, which is what made it hard to see, and nothing in the model chose it — a desperate
+wrestler and a busy guard player are different people and one list cannot hold both. Worse, a
+*failed* exit produced nothing at all: a fighter who tried to stand and did not spent the whole
+beat achieving zero.
+
+**The exception in the rule is real and load-bearing**, and it is why this was not applied
+uniformly. Two actions that genuinely occupy the same moment — you cannot throw a hand and shoot a
+double at the same instant — belong in one draw, so `takedown` and `clinchUp` stay in the standing
+list and the clinch takedown stays in the holding one. What does not belong is *how hard am I
+trying to get out of here* competing with *what am I doing while I am here*.
+
+Where they are split, the exit is a **pre-beat**: resolved first, consuming no time of its own,
+and on failure the beat continues into the in-state work. That is the shape `resolveRangeBeat`
+already had standing; the bottom position and the held clinch now have it too.
+
+The urgency to leave is built from the plan and the fighter's conviction and **nothing about his
+capability** — the corner decides how often he goes for the door, the two fighters decide whether
+it opens. Its neutral is what an unplanned fighter does, not one half: getting up off your back is
+a property of fighting rather than of planning, the same lesson `rangeUrgency` records about its
+floor.
+
+Three rules follow from it, and each was learned by getting it wrong first:
+
+**8a. Exit intent is independent of the number and weight of in-state actions.** Adding another way
+to work from a position must not make a fighter less interested in leaving it. The first cut derived
+the urgency from the ratio of intents across the two lists, so introducing `pummel` — an action that
+*helps a striker leave* — dropped his break attempts from 91% of beats to 51%, because the new
+candidate landed on the "staying" side of a ratio it had no business being in.
+
+**8b. Time is charged once for a resolved beat.** Parallel decision layers must not independently
+advance the clock, or accrue stalled time, for the same period of action. Booking stalled seconds on
+both the failed exit and the in-state work made a bottom beat accrue 20–32 seconds where it used to
+accrue 20, which raised referee restarts across the whole sport.
+
+**8c. Split only where the decisions are genuinely simultaneous.** Mutually exclusive actions stay
+competitors: `takedown` and `clinchUp` remain in the standing list because you cannot throw a hand
+and shoot a double in the same instant, and the clinch takedown stays in the holding list for the
+same reason. A generic two-roll structure applied everywhere would break the positions that are
+already right.
+
+*Enforced by* `tests/statistical/transition-intent.test.ts`. Doc 31 § F1 is the audit.
+
+### 9. Neutral means the unplanned baseline, not the midpoint of a range.
+
+Every scale in the tactical layer has a value that represents *no instruction*, and it is whatever
+the sport does on its own — never the arithmetic middle of the range the scale happens to span. A
+neutral may legitimately be 0.80, or 0.56, or 0.38.
+
+The engine is calibrated on a roster that mostly has no game plan, so the unplanned value is not a
+default in the programming sense, it is **the number the whole sport is balanced around**. Choosing
+a tidy midpoint instead silently rebalances the game:
+
+- `rangeUrgency` floors at 0.3 because a fighter with no instructions still manages distance;
+  without it, 63% of every unplanned fight sat at kicking range with the range beat never firing.
+- `exitUrgency` centres at 0.80 underneath and 0.56 in the clinch, both measured from what the
+  engine did before the transition split. Centring them at a half made every unplanned fighter in
+  the game stop trying to stand, and cost the striking attributes two points of win-rate swing.
+
+The corollary is that a neutral is **measured, not chosen**: it is what the previous behaviour
+produced, recorded at the point of change.
+
+*Enforced by* `tests/statistical/transition-intent.test.ts` for the exit rates, and by the
+statistical tier at large for the range floor.
+
 ## State shape & mutation
 
 The world state is a plain, serialisable object tree. No classes with methods, no `Map`s in
@@ -188,6 +287,45 @@ get from a cold start to a finished fight? It uses no mocks — real providers, 
 real engine — and runs under `StrictMode`, so double-invoked effects and initialisers are
 exercised too. It covers the full career loop, every screen, theme switching, save
 persistence, corrupt-save recovery and the accessibility basics.
+
+### Assert as close as possible to the mechanism
+
+A claim should be tested on the quantity that carries it, not on something downstream that
+correlates with it today.
+
+- **Clock share** is the right axis for a claim about *time allocation* — a striking plan spends
+  more of the fight standing than a wrestling plan does.
+- **Attempt counts and rates** are the right axis for a claim about *tactical intent* — told to get
+  up, a fighter goes for the exit more often. How long he then spends underneath is settled by 40
+  scrambling against 82 ground control, and asserting the plan on it is asserting the plan on
+  somebody else's attributes.
+
+Three assertions moved from the clock to the attempt during the transition split, and each had
+looked fine for months because the two axes were coupled: choosing to stand up *also* meant not
+doing anything else, so an instruction bought time off the floor by suppressing everything that kept
+him there. Separating the decisions broke the correlation and the tests failed — correctly. Two of
+the three had under 1% headroom before the change, which is the tell: a downstream proxy passes
+until the day the coupling it depends on is removed.
+
+Where a rate is used, normalise by exposure. Escape attempts *per fight* read 8.2 against 5.9
+between two plans while the rates read 1.51 against 0.98 a minute, because the fighter told to stay
+down is underneath for longer and accumulates attempts he never chose to make.
+
+### Deterministic equivalence is exact; statistical claims get tolerances
+
+Two kinds of test live in `tests/statistical/` and they are not the same kind of test.
+
+- A **deterministic equivalence** claim — the same seeds must produce the same fights — is asserted
+  with **exact equality**, and is deliberately fitted to one draw. That is what makes it a strong
+  statement. Re-seeding such a test is a category error: it compares two different samples and calls
+  the difference a regression. The golden fingerprint in `intent-authority.test.ts` is the example,
+  and it caught a 0.1% perturbation of a single constant when tested against one.
+- A **statistical** claim — about a distribution — gets an explicit tolerance and is **swept across
+  several seed salts** before its bound is set. Never fit a bound to one draw. Four assertions in
+  this repo failed that sweep on at least one salt; two of them were pre-existing bounds sitting on
+  under 1% headroom.
+
+If a deterministic test needs more statistical power, the answer is more fights, not a wider bound.
 
 ### Shape, not level
 

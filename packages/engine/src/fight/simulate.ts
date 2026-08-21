@@ -17,6 +17,7 @@ import type { Fighter, FinishMethod } from '../domain/fighter.js';
 import type { GamePlan, ReadKey } from '../domain/gameplan.js';
 import { PREP_MAX_BONUS, defaultGamePlan, normaliseGamePlan, prepValue, riskProfile } from '../domain/gameplan.js';
 import { stanceEdge } from './stance.js';
+import { chooseAction, type Candidate } from './decide.js';
 import {
   ENTRY_EASE,
   RANGE_COUNTER,
@@ -30,12 +31,14 @@ import {
 } from './range.js';
 import {
   bottomBias,
+  bottomExitUrgency,
   controllingBias,
   desiredRangeOf,
   groundDenial,
   rangeUrgency,
   erodePlanIntegrity,
   finishOpportunity,
+  clinchExitUrgency,
   heldBias,
   isDisplaced,
   restorePlanIntegrity,
@@ -933,6 +936,272 @@ function resolveRangeBeat(ctx: ExchangeContext, actor: Combatant, target: Combat
   return change === 'close' ? 1.45 : 1.3;
 }
 
+/**
+ * What a fighter could do from his feet, and how much of the choice is his corner's.
+ *
+ * Extracted so the list can be inspected without running a fight. `intentAuthority` needs the
+ * candidates, and a decision nobody can measure is one nobody can hold to a rule.
+ */
+export function distanceCandidates(
+  actor: Combatant,
+  target: Combatant,
+  range: Range,
+  stance: Stance,
+): Candidate<'strike' | 'kick' | 'takedown' | 'clinchUp'>[] {
+  return [
+    {
+      key: 'strike',
+      capability: fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue),
+      intent: standingBias(stance, 'strike', finishOpportunity(actor, target)),
+      opportunity: exploitFactor(actor, actor.attrs.strikingOffence, target.attrs.strikingDefence),
+    },
+    {
+      key: 'kick',
+      capability:
+        fatiguedEffect(actor.attrs.kicking, 'kicking', actor.fatigue) * legImpairment(actor),
+      intent: standingBias(stance, 'kick'),
+      opportunity: exploitFactor(actor, actor.attrs.kicking, target.attrs.strikingDefence),
+    },
+    {
+      key: 'takedown',
+      capability: fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue),
+      intent: standingBias(stance, 'takedown'),
+      /*
+       * `takedownRate` is how often they shoot, which is what the trait means. It was on the
+       * takedown *contest* instead — better shots rather than more of them — and no trait in the
+       * game set it, so the hook had a reader and no writer for as long as it existed (docs/19
+       * §9a). `ENTRY_EASE` is the other half: you have to be close enough to shoot, and the engine
+       * had no concept of that until range existed.
+       */
+      opportunity:
+        traitMul(actor.fighter.traits, 'takedownRate') *
+        entryWeight(actor, 'takedown') *
+        ENTRY_EASE[range] *
+        exploitFactor(actor, actor.attrs.wrestling, target.attrs.takedownDefence),
+    },
+    {
+      key: 'clinchUp',
+      capability: fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue),
+      intent: standingBias(stance, 'clinchUp'),
+      opportunity:
+        entryWeight(actor, 'clinch') *
+        ENTRY_EASE[range] *
+        exploitFactor(actor, actor.derived.clinchOffence, target.derived.clinchDefence),
+    },
+  ];
+}
+
+/**
+ * Three ways out of a tie-up you did not ask to be in, and one of them is the door.
+ *
+ * Weighted toward leaving, because that is what the sport does: a fighter with his back to the
+ * fence is mostly trying to get off it, and the short shots and the reversal are what he does when
+ * leaving is not working. The first cut had these coefficients at 0.55 and 0.8 and the clinch ate
+ * enough distance time to drag `kicking`'s win-rate swing from 8.2 points to 5.9.
+ *
+ * The two coefficients are *baselines* rather than anything a fighter has, which is what makes
+ * them worth naming as `opportunity` — they say what the position offers, not what he brings.
+ */
+
+/**
+ * What a fighter does in a tie-up he did not ask to be in, while he is still in it.
+ *
+ * `reverse` counts as in-state rather than as an exit, and the distinction is the point: taking
+ * the tie-up off somebody changes who is in charge of the clinch, not whether the fight is in one.
+ *
+ * The two coefficients are baselines rather than anything a fighter has. The first cut had them at
+ * 0.55 and 0.8 and the clinch ate enough distance time to drag `kicking`'s win-rate swing from 8.2
+ * points to 5.9.
+ */
+export function heldWork(
+  actor: Combatant,
+  target: Combatant,
+  stance: Stance,
+  breaking: boolean,
+): Candidate<'clinchStrike' | 'reverse' | 'pummel'>[] {
+  return [
+    {
+      key: 'clinchStrike',
+      capability: fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) * 0.32,
+      intent: heldBias(stance, 'clinchStrike', finishOpportunity(actor, target)),
+      opportunity: breaking ? 0.6 : 1,
+    },
+    {
+      key: 'reverse',
+      capability: fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * 0.45,
+      intent: heldBias(stance, 'reverse'),
+      opportunity: breaking ? 1.2 : 1,
+    },
+    {
+      key: 'pummel',
+      capability: fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) * 0.45,
+      intent: heldBias(stance, 'pummel'),
+      opportunity: breaking ? 1.3 : 1,
+    },
+  ];
+}
+
+/**
+ * What the man doing the holding does with it.
+ *
+ * `BASE_CLINCH_STALL` is the one candidate here with no attribute behind it — holding somebody on
+ * the fence and doing nothing is not a skill — and a bare constant competing against the 25–95
+ * scale is exactly the kind of baseline doc 31 § F4 is about. Naming it as `capability` does not
+ * fix that; it makes it visible, and `intentAuthority` makes it measurable.
+ */
+export function controllingCandidates(
+  actor: Combatant,
+  target: Combatant,
+  stance: Stance,
+): Candidate<'takedown' | 'clinchStrike' | 'stall'>[] {
+  return [
+    {
+      key: 'takedown',
+      capability:
+        fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
+        traitMul(actor.fighter.traits, 'takedownRate') *
+        1.2,
+      intent: controllingBias(stance, 'clinchTakedown'),
+      // Trips and throws are *this* takedown — the one that comes out of a tie-up — so the entry
+      // style that had no route at range gets its route here.
+      opportunity: actor.plan.tactics.entry === 'tripsAndThrows' ? 1.6 : 1,
+    },
+    {
+      key: 'clinchStrike',
+      capability: fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) * 0.8,
+      intent: controllingBias(stance, 'clinchStrike', finishOpportunity(actor, target)),
+    },
+    {
+      key: 'stall',
+      capability: BASE_CLINCH_STALL,
+      intent: controllingBias(stance, 'clinchStall'),
+    },
+  ];
+}
+
+/**
+ * Three locally reasonable things to do off your back.
+ *
+ * The submission row is the sharpest instance of doc 31 § F4 in the engine: `submissions × 0.8` in
+ * guard and the literal `0.05` everywhere else, which is roughly 900:1 against getting up before
+ * the plan says anything, against a plan whose whole range is 6.7:1. A submission specialist told
+ * to attack from underneath side control is arithmetically incapable of being obeyed, and
+ * `submissionOpportunity` cannot rescue him because it feeds the intent and not the constant.
+ *
+ * It stays exactly as it was here. Writing it down where `intentAuthority` can see it is the
+ * point of this pass; changing it is a behaviour change and belongs to its own.
+ */
+export function bottomExits(
+  actor: Combatant,
+  stance: Stance,
+  groundPosition: GroundPosition,
+): Candidate<'standUp' | 'sweep'>[] {
+  return [
+    {
+      key: 'standUp',
+      capability:
+        fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * legImpairment(actor),
+      intent: bottomBias(actor, stance, 'standUp'),
+      opportunity: 1 - GROUND_DOMINANCE[groundPosition] * 0.7,
+    },
+    {
+      key: 'sweep',
+      capability: fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * 0.6,
+      intent: bottomBias(actor, stance, 'sweep'),
+    },
+  ];
+}
+
+/**
+ * What a fighter does off his back while he is still on it.
+ *
+ * `defend` is new and it is the smallest honest thing that makes the invariant hold. Before it,
+ * the only in-state action underneath was `submission`, so a striker who wanted to stand had a
+ * choice between attempting an escape and hunting a choke he cannot finish — and when the escape
+ * failed, which is most of the time, he did *nothing at all*.
+ *
+ * It is deliberately not a new damage or damage-prevention system: framing, denying the pass and
+ * hand-fighting all resolve here as pressure toward the referee's stand-up, which is a real escape
+ * route the engine already models and the one a defensive guard actually earns. Giving the bottom
+ * position a proper vocabulary — a `playGuard` that is not `attack`, a `recover` that is not a weak
+ * `standUp` — is doc 31 § F3 and is not this change.
+ *
+ * `escaping` is the analogue of range's `punished`: a fighter who has just burned most of the beat
+ * on a failed get-up is scrambling, not hunting, and what he has left goes into staying safe.
+ */
+export function bottomWork(
+  actor: Combatant,
+  stance: Stance,
+  groundPosition: GroundPosition,
+  subChance: number,
+  escaping: boolean,
+): Candidate<'submission' | 'defend'>[] {
+  return [
+    {
+      key: 'submission',
+      capability:
+        groundPosition === 'guard'
+          ? fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) * 0.8
+          : 0.05,
+      intent: bottomBias(actor, stance, 'submission', subChance),
+      opportunity: escaping ? 0.5 : 1,
+    },
+    {
+      key: 'defend',
+      /*
+       * Sized against the submission candidate it sits beside rather than pulled out of the air:
+       * `scrambling` is what frames and hand-fights, and the 0.8 matches the coefficient the
+       * submission row already carries so that neither is a bare constant relative to the other.
+       */
+      capability: fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * 0.8,
+      intent: bottomBias(actor, stance, 'defend'),
+      opportunity: escaping ? 1.5 : 1,
+    },
+  ];
+}
+
+/**
+ * What a fighter does having got on top, where `topIntent` governs rather than `preferredState`.
+ *
+ * The dominance terms are `opportunity` in the strict sense: the same fighter with the same plan
+ * has different things available in guard and on somebody's back. `BASE_GROUND_STALL` is the
+ * other bare constant, and the same caveat applies as in the clinch.
+ */
+export function topCandidates(
+  actor: Combatant,
+  target: Combatant,
+  stance: Stance,
+  dominance: number,
+  subChance: number,
+): Candidate<'advancePosition' | 'groundStrike' | 'submission' | 'stall'>[] {
+  return [
+    {
+      key: 'advancePosition',
+      capability:
+        fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue) * (1 - dominance),
+      intent: topBias(actor, stance, 'advancePosition'),
+    },
+    {
+      key: 'groundStrike',
+      capability:
+        fatiguedEffect(actor.derived.groundAndPound, 'groundControl', actor.fatigue) *
+        (0.4 + dominance),
+      intent: topBias(actor, stance, 'groundStrike', finishOpportunity(actor, target)),
+    },
+    {
+      key: 'submission',
+      capability:
+        fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) * (0.3 + dominance),
+      intent: topBias(actor, stance, 'submission', subChance),
+    },
+    {
+      key: 'stall',
+      capability: BASE_GROUND_STALL,
+      intent: topBias(actor, stance, 'groundStall'),
+    },
+  ];
+}
+
 // --- Distance -----------------------------------------------------------------------------
 
 function resolveDistance(
@@ -962,39 +1231,7 @@ function resolveDistance(
    */
   const stance = stanceOfActor(ctx, actor, 'distance');
 
-  const strikeW =
-    fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) *
-    standingBias(stance, 'strike', finishOpportunity(actor, target)) *
-    exploitFactor(actor, actor.attrs.strikingOffence, target.attrs.strikingDefence);
-  const kickW =
-    fatiguedEffect(actor.attrs.kicking, 'kicking', actor.fatigue) *
-    legImpairment(actor) *
-    standingBias(stance, 'kick') *
-    exploitFactor(actor, actor.attrs.kicking, target.attrs.strikingDefence);
-  const takedownW =
-    fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
-    standingBias(stance, 'takedown') *
-    // How often they shoot, which is what `takedownRate` means. It was on the takedown contest
-    // instead — better shots rather than more of them — and no trait in the game set it, so the
-    // hook had a reader and no writer for as long as it has existed (docs/19 §9a).
-    traitMul(actor.fighter.traits, 'takedownRate') *
-    entryWeight(actor, 'takedown') *
-    // You have to be close enough to shoot. The engine had no concept of that, so a wrestler's
-    // entry cost the same from two metres away as from somebody's chest.
-    ENTRY_EASE[range] *
-    exploitFactor(actor, actor.attrs.wrestling, target.attrs.takedownDefence);
-  const clinchW =
-    fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) *
-    standingBias(stance, 'clinchUp') *
-    entryWeight(actor, 'clinch') *
-    ENTRY_EASE[range] *
-    exploitFactor(actor, actor.derived.clinchOffence, target.derived.clinchDefence);
-
-  const intent = rng.pickWeighted(
-    ['strike', 'kick', 'takedown', 'clinchUp'] as const,
-    (i) =>
-      i === 'strike' ? strikeW : i === 'kick' ? kickW : i === 'takedown' ? takedownW : clinchW,
-  );
+  const intent = chooseAction(rng, distanceCandidates(actor, target, range, stance));
 
   switch (intent) {
     case 'strike':
@@ -1609,90 +1846,83 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
      * did not choose this, and `heldBias` reads that through `placedBy`.
      */
     const stance = stanceOfActor(ctx, actor, 'clinch');
-    const breakW =
-      fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) *
-      heldBias(stance, 'breakAway');
+
     /*
-     * Weighted toward the door, because that is what the sport does: a fighter with their back to
-     * the fence is mostly trying to get off it, and the short shots and the reversal are what they
-     * do when leaving is not working. The first cut had these at 0.55 and 0.8 and the clinch ate
-     * enough distance time to drag `kicking`'s win-rate swing from 8.2 points to 5.9 — a two-sided
-     * clinch is worth having and it is not worth having at the cost of a goal that is already met.
+     * The same split as underneath: how hard he is working for the break, asked before and apart
+     * from what he does in the tie-up. A fighter creating the separation is still pummelling and
+     * still hand-fighting while he does it — and a break that does not come off used to produce
+     * nothing at all.
      */
-    const strikeW =
-      fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) *
-      0.32 *
-      heldBias(stance, 'clinchStrike', finishOpportunity(actor, target));
-    const reverseW =
-      fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
-      0.45 *
-      heldBias(stance, 'reverse');
+    let breaking = false;
 
-    const intent = rng.pickWeighted(
-      ['breakAway', 'clinchStrike', 'reverse'] as const,
-      (i) => (i === 'breakAway' ? breakW : i === 'clinchStrike' ? strikeW : reverseW),
-    );
+    if (rng.chance(clinchExitUrgency(stance))) {
+      actor.stats.escapesAttempted++;
+      const escape = fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue);
+      const hold = fatiguedEffect(target.derived.clinchOffence, 'strength', target.fatigue);
+      if (rng.chance(escape / (escape + hold))) {
+        actor.stats.escapesLanded++;
+        state.position = 'distance';
+        state.clinchControl = undefined;
+        state.placedBy = actor.corner;
+        state.stalledSeconds = 0;
+        // A clean break out of a tie-up puts two people at hands range, not at kicking range.
+        state.range = TRANSITION_RANGE.clinchBreak!;
+        state.rangeSettled = 0.35;
+        emit('clinchBreak', say.clinchBreakText(rng, actor), actor.corner);
+        return { seconds: rng.int(6, 14) };
+      }
+      // Charged by the in-state work below, not here. See the note underneath.
+      breaking = true;
+    }
 
-    if (intent === 'clinchStrike') {
+    const work = chooseAction(rng, heldWork(actor, target, stance, breaking));
+
+    if (work === 'clinchStrike') {
       // 0.75: a short shot from underneath is a real weapon and a worse one.
       const ending = throwClinchStrike(ctx, actor, target, 0.75);
       state.stalledSeconds += 6;
       return { seconds: rng.int(6, 12), ending };
     }
 
-    if (intent === 'reverse') {
-      const attack = fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue);
-      const hold = fatiguedEffect(target.derived.clinchOffence, 'strength', target.fatigue);
-      if (rng.chance(attack / (attack + hold))) {
-        state.clinchControl = actor.corner;
-        state.placedBy = actor.corner;
+    if (work === 'pummel') {
+      /*
+       * Fighting the hands, resolved as pressure toward the referee's break rather than as a new
+       * mechanic — the same shape as `defend` underneath, and the same reasoning: a tie-up nobody
+       * is working in is one the referee separates, and that is the out a striker actually earns.
+       */
+      const hands = fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue);
+      const grip = fatiguedEffect(target.derived.clinchOffence, 'strength', target.fatigue);
+      const stifled = rng.chance(hands / (hands + grip));
+      state.stalledSeconds += stifled ? 16 : 7;
+      if (stifled) emit('note', `${say.surname(actor)} fights the hands and gives them nothing.`);
+      if (state.stalledSeconds >= clinchBreakThreshold(ctx)) {
+        state.position = 'distance';
+        state.clinchControl = undefined;
+        state.placedBy = undefined;
+        state.range = TRANSITION_RANGE.refSeparation!;
+        state.rangeSettled = 0;
         state.stalledSeconds = 0;
-        shiftMomentum(actor, target, 0.2);
-        emit('clinch', say.clinchReversalText(rng, actor, target), actor.corner);
-        return { seconds: rng.int(6, 12) };
+        emit('refStandUp', say.clinchSeparationText());
       }
-      state.stalledSeconds += 8;
       return { seconds: rng.int(6, 12) };
     }
 
-    const escape = fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue);
+    const attack = fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue);
     const hold = fatiguedEffect(target.derived.clinchOffence, 'strength', target.fatigue);
-    if (rng.chance(escape / (escape + hold))) {
-      state.position = 'distance';
-      state.clinchControl = undefined;
+    if (rng.chance(attack / (attack + hold))) {
+      state.clinchControl = actor.corner;
       state.placedBy = actor.corner;
       state.stalledSeconds = 0;
-      // A clean break out of a tie-up puts two people at hands range, not at kicking range.
-      state.range = TRANSITION_RANGE.clinchBreak!;
-      state.rangeSettled = 0.35;
-      emit('clinchBreak', say.clinchBreakText(rng, actor), actor.corner);
-      return { seconds: rng.int(6, 14) };
+      shiftMomentum(actor, target, 0.2);
+      emit('clinch', say.clinchReversalText(rng, actor, target), actor.corner);
+      return { seconds: rng.int(6, 12) };
     }
     state.stalledSeconds += 8;
-    return { seconds: rng.int(6, 14) };
+    return { seconds: rng.int(6, 12) };
   }
 
   const stance = stanceOfActor(ctx, actor, 'clinch');
-  const takedownW =
-    fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
-    traitMul(actor.fighter.traits, 'takedownRate') *
-    1.2 *
-    controllingBias(stance, 'clinchTakedown') *
-    // Trips and throws are *this* takedown — the one that comes out of a tie-up — so the entry
-    // style that had no route at range gets its route here.
-    (actor.plan.tactics.entry === 'tripsAndThrows' ? 1.6 : 1);
-  const strikeW =
-    fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) *
-    0.8 *
-    controllingBias(stance, 'clinchStrike', finishOpportunity(actor, target));
-  // Holding somebody on the fence and doing nothing is a plan, and now only for the fighter whose
-  // plan it is. It used to be a flat 0.5 for everybody with a bonus for one of seven labels.
-  const stallW = BASE_CLINCH_STALL * controllingBias(stance, 'clinchStall');
-
-  const intent = rng.pickWeighted(
-    ['takedown', 'clinchStrike', 'stall'] as const,
-    (i) => (i === 'takedown' ? takedownW : i === 'clinchStrike' ? strikeW : stallW),
-  );
+  const intent = chooseAction(rng, controllingCandidates(actor, target, stance));
 
   if (intent === 'takedown') return resolveTakedown(ctx, actor, target, 'clinch');
 
@@ -1745,61 +1975,100 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
   const stance = stanceOfActor(ctx, actor, 'bottom');
   const subChance = submissionOpportunity(actor, target, state.groundPosition, false);
 
-  const getUpW =
-    fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
-    legImpairment(actor) *
-    bottomBias(actor, stance, 'standUp') *
-    (1 - GROUND_DOMINANCE[state.groundPosition] * 0.7);
-  const sweepW =
-    fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
-    0.6 *
-    bottomBias(actor, stance, 'sweep');
-  const subW =
-    (state.groundPosition === 'guard'
-      ? fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) * 0.8
-      : 0.05) * bottomBias(actor, stance, 'submission', subChance);
+  /*
+   * **Two decisions, not one.**
+   *
+   * How hard he is working for the exit is asked first and separately, exactly as the range beat
+   * asks it standing: `transitionUrgency` reads the plan and nothing else, so the corner decides
+   * how often he goes for the door and the two fighters decide whether it opens.
+   *
+   * What this replaced drew the exits against the in-state work in one list, which meant a fighter
+   * told to stand up bought his get-ups by giving up everything else — and a *failed* get-up, which
+   * is most of them, produced nothing whatsoever. He spent the beat achieving zero and the model
+   * had no way to say he was still fighting. That is doc 01 § 8 and it is the whole of F1.
+   */
+  const exits = bottomExits(actor, stance, state.groundPosition);
+  const goingForIt = rng.chance(bottomExitUrgency(actor, stance));
 
-  const intent = rng.pickWeighted(
-    ['standUp', 'sweep', 'submission'] as const,
-    (i) => (i === 'standUp' ? getUpW : i === 'sweep' ? sweepW : subW),
-  );
+  let escaping = false;
+  if (goingForIt) {
+    const route = chooseAction(rng, exits);
+    actor.stats.escapesAttempted++;
 
-  if (intent === 'submission') return resolveSubmission(ctx, actor, target, true);
+    const bonus = prepBonus(target, actor, route === 'standUp' ? ['wallGetUp'] : ['guardPassing']);
+    const escape =
+      fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
+      legImpairment(actor) *
+      (1 - GROUND_DOMINANCE[state.groundPosition] * 0.5);
+    const hold =
+      fatiguedEffect(target.attrs.groundControl, 'groundControl', target.fatigue) *
+      (1 + bonus) *
+      // What the man on top is doing with his weight. Hitting you is not holding you.
+      topControlFocus(target);
 
-  const bonus = prepBonus(target, actor, intent === 'standUp' ? ['wallGetUp'] : ['guardPassing']);
-  const escape =
-    fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
-    legImpairment(actor) *
-    (1 - GROUND_DOMINANCE[state.groundPosition] * 0.5);
-  const hold =
-    fatiguedEffect(target.attrs.groundControl, 'groundControl', target.fatigue) *
-    (1 + bonus) *
-    // What the man on top is doing with his weight. Hitting you is not holding you.
-    topControlFocus(target);
-
-  if (rng.chance(escape / (escape + hold))) {
-    if (intent === 'sweep') {
-      state.groundTop = actor.corner;
-      state.groundPosition = 'guard';
-      state.placedBy = actor.corner;
-      shiftMomentum(actor, target, 0.3);
-      emit('sweep', say.sweepText(rng, actor), actor.corner, 'major');
-    } else {
-      state.position = 'distance';
-      state.groundTop = undefined;
-      state.groundPosition = 'guard';
-      state.placedBy = actor.corner;
-      // Wall-walked back up with the other man disengaging. Nobody is at kicking range yet.
-      state.range = TRANSITION_RANGE.standUp!;
-      state.rangeSettled = 0.2;
-      shiftMomentum(actor, target, 0.15);
-      emit('standUp', say.standUpText(rng, actor), actor.corner);
+    if (rng.chance(escape / (escape + hold))) {
+      actor.stats.escapesLanded++;
+      if (route === 'sweep') {
+        state.groundTop = actor.corner;
+        state.groundPosition = 'guard';
+        state.placedBy = actor.corner;
+        shiftMomentum(actor, target, 0.3);
+        emit('sweep', say.sweepText(rng, actor), actor.corner, 'major');
+      } else {
+        state.position = 'distance';
+        state.groundTop = undefined;
+        state.groundPosition = 'guard';
+        state.placedBy = actor.corner;
+        // Wall-walked back up with the other man disengaging. Nobody is at kicking range yet.
+        state.range = TRANSITION_RANGE.standUp!;
+        state.rangeSettled = 0.2;
+        shiftMomentum(actor, target, 0.15);
+        emit('standUp', say.standUpText(rng, actor), actor.corner);
+      }
+      state.stalledSeconds = 0;
+      return { seconds: rng.int(8, 16) };
     }
-    state.stalledSeconds = 0;
-    return { seconds: rng.int(8, 16) };
+
+    /*
+     * It did not come off, and the beat is not over. He is still down there and still fighting.
+     *
+     * No stalled time is booked here on purpose. Stalling is a property of what the beat achieved,
+     * and the in-state work below is what decides that — charging it twice made a bottom beat
+     * accrue 20 to 32 seconds where it used to accrue 20, which raised referee stand-ups across
+     * the whole sport and quietly compressed the gap between a striking plan and a wrestling one.
+     */
+    escaping = true;
   }
 
-  state.stalledSeconds += 20;
+  const work = chooseAction(
+    rng,
+    bottomWork(actor, stance, state.groundPosition, subChance, escaping),
+  );
+  actor.stats.bottomWorkBeats++;
+  if (work === 'submission') return resolveSubmission(ctx, actor, target, true);
+
+  /*
+   * Framing and hand-fighting, resolved as pressure toward a referee stand-up rather than as a new
+   * damage system. A guard nobody can work in is how a fight gets restarted on the feet, and that
+   * is the escape a defensive bottom game actually earns.
+   */
+  const frame =
+    fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * legImpairment(actor);
+  const press =
+    fatiguedEffect(target.attrs.groundControl, 'groundControl', target.fatigue) *
+    topControlFocus(target);
+  /*
+   * Sized against what the beat used to charge. The branch this replaced booked a flat 20 stalled
+   * seconds for any failed escape, and that number is load-bearing: stalled time is what draws the
+   * referee's stand-up, which is a real route back to the feet. Splitting it into a contest and
+   * letting the loser accrue only 8 cut the stand-up rate for exactly the fighters who need it
+   * most — a 40-scrambling striker under an 88-groundControl wrestler gained **48 seconds a fight**
+   * on his back. Measured back to within 5% of the old rate, with the contest still worth a third
+   * more stalled time to the man who wins it.
+   */
+  const held = rng.chance(frame / (frame + press));
+  state.stalledSeconds += held ? 24 : 18;
+  if (held) emit('note', `${say.surname(actor)} frames and hand-fights, giving them nothing.`);
   return maybeRefStandUp(ctx, rng.int(10, 20));
 }
 
@@ -1820,31 +2089,7 @@ function resolveGroundTop(
   const stance = stanceOfActor(ctx, actor, 'top');
   const subChance = submissionOpportunity(actor, target, state.groundPosition, true);
 
-  const advanceW =
-    fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue) *
-    (1 - dominance) *
-    topBias(actor, stance, 'advancePosition');
-  const gnpW =
-    fatiguedEffect(actor.derived.groundAndPound, 'groundControl', actor.fatigue) *
-    (0.4 + dominance) *
-    topBias(actor, stance, 'groundStrike', finishOpportunity(actor, target));
-  const subW =
-    fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) *
-    (0.3 + dominance) *
-    topBias(actor, stance, 'submission', subChance);
-  const stallW = BASE_GROUND_STALL * topBias(actor, stance, 'groundStall');
-
-  const intent = rng.pickWeighted(
-    ['advancePosition', 'groundStrike', 'submission', 'stall'] as const,
-    (i) =>
-      i === 'advancePosition'
-        ? advanceW
-        : i === 'groundStrike'
-          ? gnpW
-          : i === 'submission'
-            ? subW
-            : stallW,
-  );
+  const intent = chooseAction(rng, topCandidates(actor, target, stance, dominance, subChance));
 
   if (intent === 'submission') return resolveSubmission(ctx, actor, target, false);
 
