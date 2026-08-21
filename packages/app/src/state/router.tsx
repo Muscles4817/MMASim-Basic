@@ -45,7 +45,15 @@ export type Route =
   | { name: 'camp' }
   | { name: 'fight'; boutId: string }
   | { name: 'rankings' }
-  | { name: 'offers' }
+  /**
+   * The fighter's deal: what they are on, who is calling, and who negotiates.
+   *
+   * Was `offers`, which named one third of what the screen does and disagreed with the only
+   * link that pointed at it — the hub's tile said "Contract" and navigated to `#/offers`.
+   * Doc 32 § 3.2 moves the whole negotiation here from the dashboard, at which point "offers"
+   * describes the screen even less well.
+   */
+  | { name: 'contract' }
   // Promoter mode. Flat rather than nested under a role prefix, because a route is a place and
   // the player is only ever in one mode at a time.
   | { name: 'promotion' }
@@ -94,8 +102,11 @@ function parse(hash: string): Route {
       return param ? { name: 'fight', boutId: param } : { name: 'hub' };
     case 'rankings':
       return { name: 'rankings' };
+    // `#/offers` still parses: it is in the wild, in muscle memory, and in the inbox links of
+    // saves made before the rename. A route is a place, and this place did not move.
     case 'offers':
-      return { name: 'offers' };
+    case 'contract':
+      return { name: 'contract' };
     case 'promotion':
       return { name: 'promotion' };
     case 'card':

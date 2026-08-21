@@ -389,7 +389,7 @@ export function HubScreen() {
                 })()
               : undefined
           }
-          onGoToOffers={() => navigate({ name: 'offers' })}
+          onGoToOffers={() => navigate({ name: 'contract' })}
           onAskRelease={() => {
             const outcome = requestRelease(db, fighter);
             setReleaseWord(outcome.reason);
@@ -580,7 +580,7 @@ export function HubScreen() {
             </Alert>
             <Button
               variant="primary"
-              onClick={() => navigate({ name: 'offers' })}
+              onClick={() => navigate({ name: 'contract' })}
               style={{ marginTop: 'var(--space-3)' }}
             >
               See what is on the table
@@ -785,7 +785,7 @@ export function HubScreen() {
             icon="📝"
             label="Contract"
             hint="Offers, and who negotiates"
-            onClick={() => navigate({ name: 'offers' })}
+            onClick={() => navigate({ name: 'contract' })}
           />
           <HubLink
             icon="📊"

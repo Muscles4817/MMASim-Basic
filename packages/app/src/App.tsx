@@ -140,9 +140,9 @@ export function App() {
             <FightScreen boutId={route.boutId} />
           </Shell>
         );
-      case 'offers':
+      case 'contract':
         return (
-          <Shell title="Offers" showBack>
+          <Shell title="Your deal" showBack>
             <OffersScreen />
           </Shell>
         );
