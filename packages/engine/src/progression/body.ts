@@ -228,6 +228,112 @@ export function underLimitLbs(body: Body, limitLbs: number): number {
   return Math.max(0, limitLbs - walkingWeightLbs(body));
 }
 
+// --- Decomposing the cut ---------------------------------------------------------------------
+
+/**
+ * The cut, taken apart term by term.
+ *
+ * Diagnostic rather than mechanism: nothing in the engine consumes this, and `weighInFloorLbs` is
+ * still the single source of the answer. It exists because doc 31 § 14.6 asks a question the scalar
+ * floor cannot answer — *which* assumption is rejecting a fighter who demonstrably made the weight.
+ * A number that says 187.1 when the limit is 185 tells you that something is wrong by 2.1 lb and
+ * nothing at all about what.
+ *
+ * The chain runs walking weight → camp weight → weigh-in floor, and each step removes a named pool.
+ * Printing the pools beside each other is what makes it possible to say "his fat pool is 5 lb
+ * because he is 9% body fat, and that is the whole shortfall" rather than "the model says no".
+ */
+export interface CutChain {
+  /** Where the fighter lives between camps. */
+  walkingWeightLbs: number;
+  bodyFatFraction: number;
+  /** Fat carried at walking weight. */
+  fatMassLbs: number;
+  /** Everything that is not fat. */
+  leanMassLbs: number;
+  /** Fat the model lets a camp burn: walking weight down to `CAMP_BODY_FAT`. */
+  dietableFatLbs: number;
+  /** End of camp, dieted down and fully hydrated. */
+  campWeightLbs: number;
+  /** Fat the model insists on keeping. Essential, and the reason a cut has a floor at all. */
+  retainedFatLbs: number;
+  /** Water and glycogen shed in fight week. The model's only transient pool. */
+  transientLbs: number;
+  transientFraction: number;
+  /** Everything the model will not remove under any circumstances. */
+  protectedMassLbs: number;
+  /** The lightest number this body could put on a scale. */
+  weighInFloorLbs: number;
+}
+
+/** Take the chain apart for one body. */
+export function cutChain(body: Body): CutChain {
+  const walking = walkingWeightLbs(body);
+  const fatFraction = bodyFatFraction(body);
+  const lean = leanMassLbs(body);
+  const camp = campWeightLbs(body);
+  const transient = camp * waterCutFraction(body);
+  return {
+    walkingWeightLbs: walking,
+    bodyFatFraction: fatFraction,
+    fatMassLbs: walking - lean,
+    leanMassLbs: lean,
+    dietableFatLbs: walking - camp,
+    campWeightLbs: camp,
+    retainedFatLbs: camp - lean,
+    transientLbs: transient,
+    transientFraction: waterCutFraction(body),
+    protectedMassLbs: camp - transient,
+    weighInFloorLbs: weighInFloorLbs(body),
+  };
+}
+
+/**
+ * What each assumption would have to become for this body to make this limit.
+ *
+ * The point of the exercise, and the reason it is a separate function from `cutChain`. When the
+ * model rejects somebody, four different numbers could be at fault and the floor alone cannot say
+ * which. This asks each in turn: *hold everything else, and what would you have to be?* An answer
+ * inside the range the sport actually contains indicts that term; an answer outside it exonerates
+ * it. A required camp body fat of 4% is a real number that lean fighters hit; a required walking
+ * weight 15 lb below the estimate is an accusation against the estimate.
+ *
+ * All four are returned rather than a verdict, because reading them together is what identifies
+ * interaction — the case where no single term is implausible but their product is.
+ */
+export interface CutRequirement {
+  /** Pounds the floor sits above the limit. Zero or negative means the body already makes it. */
+  shortfallLbs: number;
+  /** Camp body fat this body would need to reach, holding everything else. */
+  campBodyFat: number;
+  /** Fight-week transient loss it would need, as a fraction of camp weight. */
+  transientFraction: number;
+  /** Walking weight the estimate would have to be, in pounds. */
+  walkingWeightLbs: number;
+  /** Out-of-camp body fat it would need to carry, as a fraction. */
+  bodyFatFraction: number;
+}
+
+export function cutRequirement(body: Body, limitLbs: number): CutRequirement {
+  const chain = cutChain(body);
+  const lean = chain.leanMassLbs;
+  const campFat = CAMP_BODY_FAT[body.sex];
+  const water = chain.transientFraction;
+  const fat = chain.bodyFatFraction;
+
+  return {
+    shortfallLbs: chain.weighInFloorLbs - limitLbs,
+    // limit = lean / (1 - campFat') * (1 - water)
+    campBodyFat: 1 - (lean * (1 - water)) / limitLbs,
+    // limit = camp * (1 - water')
+    transientFraction: 1 - limitLbs / chain.campWeightLbs,
+    // limit = W' * (1 - fat) / (1 - campFat) * (1 - water)
+    walkingWeightLbs: (limitLbs * (1 - campFat)) / ((1 - fat) * (1 - water)),
+    // limit = W * (1 - fat') / (1 - campFat) * (1 - water)
+    bodyFatFraction: 1 - (limitLbs * (1 - campFat)) / (chain.walkingWeightLbs * (1 - water)),
+  };
+}
+
 export type WeightFit = 'comfortable' | 'typical' | 'severe' | 'extreme' | 'notViable';
 
 /**
