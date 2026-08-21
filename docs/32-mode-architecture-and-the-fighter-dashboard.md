@@ -1,6 +1,7 @@
 # 32 — Mode architecture, the fighter dashboard, and starting a save
 
-> Status: **audit and proposal. Nothing here is built.**
+> Status: **approved, in implementation.** The audit stands as written; § 14 records the
+> decisions taken on it and the two amendments made before work started.
 > Read [10 — UX & Design System](./10-ux-and-design-system.md) for the vocabulary this uses and
 > [29 — Promoter Mode UX](./29-promoter-mode-ux.md) for the pattern this generalises.
 
@@ -969,3 +970,36 @@ true on paper only.
 - **No mode forced into another's interface.** The three dashboards are bespoke by design. What is
   shared is the vocabulary, the entity facts, and the layout primitives — never the shape of the
   home screen.
+
+---
+
+## 14. Decisions taken
+
+The three Phase 0 questions in § 12.1 were answered before implementation began.
+
+**1. Offer engines — approved.** `offersFor()` is the single canonical market. `promotionOffers()`
+is removed and every consumer migrated. The Career dashboard *summarises* the canonical market
+rather than computing a second one.
+
+**2. Generated promotions — option (a).** Build the honest picker around the axes that genuinely
+vary today. Do not invent differentiation in the interface, and do not touch world generation in
+this pass. The template cloning is recorded as a real world-generation weakness in
+[33 — Generated promotions have no identity](./33-generated-promotion-identity.md), to be
+addressed separately.
+
+**3. Overall rating — approved.** The exact Overall comes off the Career hub in favour of
+`AbilityBand`, consistent with `FighterScreen`. The underlying granular attributes stay exactly
+where they are; this removes a *summary* number, not information.
+
+### Amendments to the proposal
+
+**One primary action is a dashboard rule, not a lint rule.** § 10 proposed "one
+`variant="primary"` per rendered screen, lintable". Overreach. The rule adopted is **one dominant
+action per decision context**, and specifically **one computed dominant action on the Career
+dashboard**. A screen with two genuinely independent decisions on it may have two primaries.
+Nothing is linted; unrelated future screens are not constrained.
+
+**The comparison tray is deferred.** § 11.4 proposed pinning up to three candidates into a compare
+table. Build the master/detail selection experience first — browse freely, inspect a full preview,
+explicitly take control. Comparison is not added merely because `DataTable` makes it cheap; it
+lands only if the selection experience turns out to want it.
