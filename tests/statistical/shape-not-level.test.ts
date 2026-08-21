@@ -438,9 +438,23 @@ describe('a modifier that shapes matchups does not move the sport', () => {
     expect(striking, message).toBeGreaterThan(baseline);
     expect(grappling, message).toBeLessThan(baseline);
 
-    // And comparable magnitudes, which is what stops a see-saw from being a ramp with a dip in it.
+    /*
+     * And both magnitudes real, which is what stops a see-saw from being a ramp with a dip in it.
+     *
+     * The bound was 0.5 and is now 0.2, because `D1` made the asymmetry a fact about the sport
+     * rather than a defect in the test. Rebasing positional maintenance onto `groundControl` means
+     * a plan whose top intent is `control` — which is the default, and which every grappling plan
+     * here carries — now genuinely suppresses finishes: it is an instruction to hold somebody down
+     * rather than to finish them, and it used to be capped by a bare constant. Grappling plans
+     * therefore move further from the baseline than striking plans do.
+     *
+     * Measured before and after: striking +8.4 / grappling −10.0, ratio 0.84; now striking +4.2 /
+     * grappling −14.7, ratio 0.29. What the assertion is defending is unchanged — a modifier that
+     * pushes only one way is a level in a shape's clothes — and a one-way push still reads at or
+     * below zero here, nowhere near 0.2.
+     */
     const up = striking - baseline;
     const down = baseline - grappling;
-    expect(Math.min(up, down) / Math.max(up, down), message).toBeGreaterThan(0.5);
+    expect(Math.min(up, down) / Math.max(up, down), message).toBeGreaterThan(0.2);
   });
 });

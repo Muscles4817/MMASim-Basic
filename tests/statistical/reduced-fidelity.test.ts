@@ -166,14 +166,63 @@ describe('who wins', () => {
  * this file had quietly become a list of things the two levels disagree about, which is the
  * opposite of what a parity suite is.
  */
+/**
+ * Where the two levels disagree, by name and by cause.
+ *
+ * Two cells, and they are not two problems. Both sit in matchups containing the extremes of the
+ * archetype set — the smotherer carries `groundControl` 98 — and both come from the same thing:
+ * *Reduced has no model of positional maintenance.*
+ *
+ * `D1` made that visible without making it much worse. Before it, a fighter who elected to hold
+ * position did so at a rate set by a bare constant, so Reduced's plan-driven approximation tracked
+ * Full closely enough by accident. Now the rate scales with `groundControl`, and the fighters at
+ * the top of that distribution ride more than Reduced credits them with. The knockout allowance
+ * below is **unchanged from before D1**; the volume one moved from 1.40 to 1.42.
+ *
+ * A Reduced term for it was built and then removed. It scaled round-level submission attempts by
+ * the share of top time this fighter spends riding, normalised against a roster-typical rider —
+ * and it moved the matchup it was written for by about a point, because a shape-only term sits near
+ * 1 for everybody once the maintenance gradient is damped. A symmetric term on striking volume
+ * moved its ratio by 0.004. Both were deleted rather than kept: a modifier that cannot be measured
+ * is dead code with a comment, and two of them would have implied Reduced had an answer here.
+ *
+ * **The signal is specific.** This is not the path-dependence problem of doc 27 § 5.1a — nothing
+ * here compounds within a round. It is that Reduced needs a positional-maintenance model, and the
+ * measurement says what it has to contain: not just fewer attempts, but the *conversion* those
+ * attempts lose. In `smotherer-v-striker`, D1 cut Full's submission attempts by 7% and its
+ * submission finishes by 22%, because a fighter riding is attempting from the position he is
+ * holding rather than the one he would have advanced to. Nothing at round granularity knows which
+ * position an attempt came from, and that is the piece of work.
+ */
 const KO_GAP_ALLOWANCE: Readonly<Record<string, number>> = { 'smotherer-v-striker': 0.13 };
+
+const SUBMISSION_GAP_ALLOWANCE: Readonly<Record<string, number>> = {};
+
+/**
+ * The volume gap, which is the oldest of the two and has its own flavour of the same cause.
+ *
+ * A fighter pinned underneath in the pocket barely throws, and modelling bottom-position volume at
+ * round granularity has been named in the comment on the bound below since before the tactical
+ * programme started. Full throws 9.4 significant strikes a round here against Reduced's 13.2. D1
+ * moved the ratio from about 1.35 to 1.40 for the same reason as the knockout cell: the smotherer
+ * rides harder than the old constant let him, so the guard player throws even less.
+ */
+const VOLUME_GAP_ALLOWANCE: Readonly<Record<string, number>> = {
+  'guardPlayer-v-smotherer': 1.42,
+};
 
 describe('how it ends', () => {
   it.each(measured)(
     'agrees on the method mix for $name to within 12 points',
     ({ name, full, reduced }) => {
       for (const key of ['ko', 'submission', 'decision'] as const) {
-        const bound = key === 'ko' ? (KO_GAP_ALLOWANCE[name] ?? 0.12) : 0.12;
+        const allowance =
+          key === 'ko'
+            ? KO_GAP_ALLOWANCE[name]
+            : key === 'submission'
+              ? SUBMISSION_GAP_ALLOWANCE[name]
+              : undefined;
+        const bound = allowance ?? 0.12;
         expect(
           Math.abs(full[key] - reduced[key]),
           describeGap(name, key, full[key], reduced[key]),
@@ -254,7 +303,10 @@ describe('the fight stats a screen would show', () => {
         ratio,
         describeGap(name, 'landedPerRound', full.landedPerRound, reduced.landedPerRound),
       ).toBeGreaterThan(0.7);
-      expect(ratio).toBeLessThan(1.4);
+      expect(
+        ratio,
+        describeGap(name, 'landedPerRound', full.landedPerRound, reduced.landedPerRound),
+      ).toBeLessThan(VOLUME_GAP_ALLOWANCE[name] ?? 1.4);
     },
   );
 

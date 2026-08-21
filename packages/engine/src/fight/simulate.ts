@@ -775,9 +775,41 @@ function prepBonus(defender: Combatant, actor: Combatant, reads: readonly ReadKe
  * was deliberately left alone: it absorbs this class of drift and did not need to.
  */
 
-/** Referee-tolerated inaction, unchanged from the pre-policy engine. */
-const BASE_GROUND_STALL = 0.35;
-const BASE_CLINCH_STALL = 0.5;
+/**
+ * What holding a position is worth as a *choice*, relative to the fighter's control rating.
+ *
+ * These replace `BASE_GROUND_STALL = 0.35` and `BASE_CLINCH_STALL = 0.5`, which were bare constants
+ * carrying two different ideas at once — deliberate riding and residual inactivity — and which
+ * produced a gradient that ran backwards. Measured across the roster's real `groundControl`
+ * distribution on a control-oriented plan, the old constant gave the **10th percentile a 46% share
+ * of top-position decisions and the best controller in the game 15%**: the worse a fighter was at
+ * holding people down, the more of the fight he spent doing it, because a fixed number keeps a
+ * larger share of a list whose other members scale with the man.
+ *
+ * Now it scales with what actually does the holding. The multiplier is what keeps that a change of
+ * *shape* rather than of *level*: it is sized so the population still spends about as much of the
+ * fight in positional maintenance as it did, while which fighters are doing it inverts. See
+ * doc 31 § D1 for the before-and-after.
+ */
+const MAINTAIN_TOP_SCALE = 0.39;
+const MAINTAIN_CLINCH_SCALE = 0.42;
+
+/**
+ * How steeply the *choice* to ride follows the *ability* to.
+ *
+ * Below 1, and deliberately. `groundControl` carries a convexity of 1.6, so its effect spans nine
+ * to one across the roster — and letting the decision to hold position inherit all of that made the
+ * fighters at the very top of the distribution ride three and a half times more than the constant
+ * ever let them, which is more change than the sport's calibration or the Reduced resolver could
+ * absorb.
+ *
+ * The damping is not a fudge for that, it is the more honest model. Control is a skill with a
+ * ceiling as a *decision*: past a point, being better at holding somebody down does not make a
+ * fighter choose to do it much more often, it makes the riding he already chose more effective —
+ * and that half is modelled elsewhere, in `topControlFocus` and in the escape contest. What scales
+ * steeply is how well it works, not how often it is picked.
+ */
+const MAINTAIN_CONVEXITY = 0.6;
 
 /**
  * How the current round is going for this fighter, on the same arithmetic the judges use.
@@ -1053,7 +1085,7 @@ export function controllingCandidates(
   actor: Combatant,
   target: Combatant,
   stance: Stance,
-): Candidate<'takedown' | 'clinchStrike' | 'stall'>[] {
+): Candidate<'takedown' | 'clinchStrike' | 'maintainPosition'>[] {
   return [
     {
       key: 'takedown',
@@ -1072,9 +1104,12 @@ export function controllingCandidates(
       intent: controllingBias(stance, 'clinchStrike', finishOpportunity(actor, target)),
     },
     {
-      key: 'stall',
-      capability: BASE_CLINCH_STALL,
-      intent: controllingBias(stance, 'clinchStall'),
+      key: 'maintainPosition',
+      capability:
+        fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) **
+          MAINTAIN_CONVEXITY *
+        MAINTAIN_CLINCH_SCALE,
+      intent: controllingBias(stance, 'clinchMaintain'),
     },
   ];
 }
@@ -1173,7 +1208,7 @@ export function topCandidates(
   stance: Stance,
   dominance: number,
   subChance: number,
-): Candidate<'advancePosition' | 'groundStrike' | 'submission' | 'stall'>[] {
+): Candidate<'advancePosition' | 'groundStrike' | 'submission' | 'maintainPosition'>[] {
   return [
     {
       key: 'advancePosition',
@@ -1195,9 +1230,18 @@ export function topCandidates(
       intent: topBias(actor, stance, 'submission', subChance),
     },
     {
-      key: 'stall',
-      capability: BASE_GROUND_STALL,
-      intent: topBias(actor, stance, 'groundStall'),
+      key: 'maintainPosition',
+      capability:
+        fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue) **
+          MAINTAIN_CONVEXITY *
+        MAINTAIN_TOP_SCALE,
+      intent: topBias(actor, stance, 'maintainPosition'),
+      /*
+       * Riding mount is easier than riding guard, and this is `opportunity` in the strict sense:
+       * the same fighter with the same instruction has a different amount of the position
+       * available to him depending where he is.
+       */
+      opportunity: 0.7 + dominance * 0.6,
     },
   ];
 }
@@ -1931,7 +1975,7 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
     return { seconds: rng.int(6, 14), ending };
   }
 
-  // Stalling on the fence: cheap for nobody, more expensive for the fighter pinned — and now on a
+  // Pinning him on the fence: cheap for nobody, more expensive for the fighter pinned — and on a
   // clock, because a referee who will stand two men up off the floor will not watch them lean on
   // the fence indefinitely.
   const seconds = rng.int(10, 20);
@@ -2181,7 +2225,14 @@ function resolveGroundTop(
     return maybeRefStandUp(ctx, rng.int(8, 16));
   }
 
-  // Stall: control time without action. Effective on the cards, and a stand-up risk.
+  /*
+   * Riding the position: control time without offence. Effective on the cards, and a stand-up risk.
+   *
+   * The stalled time is charged here because this is the beat that produced it — a fighter holding
+   * somebody down and doing nothing else is exactly what a referee stands up. It is *not* the same
+   * accounting as the residual inactivity from a failed advance or a whiffed ground strike, which
+   * those branches charge for themselves. Both are stalled time; only this one was chosen.
+   */
   state.stalledSeconds += 25;
   return maybeRefStandUp(ctx, rng.int(14, 26));
 }

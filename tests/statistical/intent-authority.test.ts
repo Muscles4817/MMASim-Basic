@@ -222,7 +222,14 @@ interface Fingerprint {
  * A tactical change that moves these on purpose *should* fail this test and rewrite the numbers
  * with its own measurement. That is the guard working, not the guard being in the way.
  *
- * **Re-recorded once so far**, by the transition split. It failed on all three matchups, which is
+ * **Re-recorded twice so far**, by the transition split and then by rebasing positional
+ * maintenance onto control capability. Both times it failed on all three matchups, which is what it
+ * is for. The second re-recording moved advances and submissions down and standing time up, which
+ * is the change doing exactly what it was built to do: fighters below the top of the control
+ * distribution now ride *less* than the old constant made them, so more of the fight is spent
+ * working. Knockouts moved by under two points on every matchup and mean round by under 0.04.
+ *
+ * The first re-recording, by the transition split. It failed on all three matchups, which is
  * what it is for, and the numbers below are that change's own measurement. What moved is small and
  * in the direction the change intended: a little more standing time and a few more takedowns as
  * fighters who used to do nothing after a failed escape now frame and hand-fight their way to a
@@ -231,22 +238,22 @@ interface Fingerprint {
  */
 const BASELINE: Readonly<Record<string, Fingerprint>> = {
   'striker-v-grinder': {
-    punches: 20.63, kicks: 7.583, takedowns: 5.59, submissions: 7.43,
-    clinchEntries: 1.9, getUps: 1.322, advances: 4.267, sweeps: 1.19,
-    distanceSeconds: 282.26, clinchSeconds: 38.205, groundSeconds: 457.41,
-    koRate: 0.235, submissionRate: 0.21, meanRound: 2.368,
+    punches: 20.24, kicks: 7.807, takedowns: 5.75, submissions: 6.825,
+    clinchEntries: 1.93, getUps: 1.288, advances: 3.898, sweeps: 1.092,
+    distanceSeconds: 294.65, clinchSeconds: 38.555, groundSeconds: 446.658,
+    koRate: 0.233, submissionRate: 0.21, meanRound: 2.352,
   },
   'contender-v-canFodder': {
-    punches: 12.343, kicks: 3.073, takedowns: 2.307, submissions: 4.813,
-    clinchEntries: 0.888, getUps: 0.278, advances: 1.88, sweeps: 0.232,
-    distanceSeconds: 118.62, clinchSeconds: 20.7, groundSeconds: 214.728,
-    koRate: 0.573, submissionRate: 0.358, meanRound: 1.493,
+    punches: 12.553, kicks: 3.098, takedowns: 2.443, submissions: 4.813,
+    clinchEntries: 0.943, getUps: 0.273, advances: 1.882, sweeps: 0.265,
+    distanceSeconds: 122.763, clinchSeconds: 21.72, groundSeconds: 225.688,
+    koRate: 0.558, submissionRate: 0.372, meanRound: 1.537,
   },
   'guardPlayer-v-smotherer': {
-    punches: 17.183, kicks: 2.95, takedowns: 7.092, submissions: 12.022,
-    clinchEntries: 3.035, getUps: 1.433, advances: 5.128, sweeps: 1.42,
-    distanceSeconds: 265.953, clinchSeconds: 62.813, groundSeconds: 569.415,
-    koRate: 0.052, submissionRate: 0.223, meanRound: 2.668,
+    punches: 16, kicks: 3.228, takedowns: 7.68, submissions: 10.693,
+    clinchEntries: 3.232, getUps: 1.468, advances: 4.865, sweeps: 1.472,
+    distanceSeconds: 289.753, clinchSeconds: 66.693, groundSeconds: 566.793,
+    koRate: 0.04, submissionRate: 0.228, meanRound: 2.703,
   },
 };
 

@@ -1,13 +1,14 @@
 # 31 — The tactical intent hierarchy
 
-**Status: F4 and F1 landed. The rest are still findings and should be re-audited against the new
+**Status: F4, F1 and D1 landed. The rest are still findings and should be re-audited against the new
 architecture before they are implemented — some may have changed shape.**
 
 | | |
 | --- | --- |
 | F4 | **representation done.** Every decision surface goes through `fight/decide.ts` and `intentAuthority` makes the gap measurable. Choosing the baselines is a behaviour change and has not happened. |
 | F1 | **done** for the two positions that needed it — bottom and the held clinch. Distance already had the architecture; holding-clinch and top do not need it. See the audit below. |
-| the rest | re-ranked by architectural dependency as **D1–D9** in § 3, which is the live register. F3 is largely resolved by F1 as a side effect; two new findings were raised by the F1 audit. |
+| D1 | **done.** `stall` is split into `maintainPosition`, which is capability-backed, and residual inactivity, which is no longer a candidate. |
+| the rest | re-ranked by architectural dependency as **D2–D9** in § 3, which is the live register. F3 is largely resolved by F1 as a side effect; two new findings were raised by the F1 audit. |
 
 The range split (doc 05, doc 01 § invariants) fixed the standing half of a problem that is larger
 than standing. This document is the audit of what is left, and it deliberately stops before the
@@ -85,9 +86,12 @@ calibrate twice.
 | **D8** | F5 — `lead` is inert | cleanup | — | barely |
 | **D9** | F8 — no badly-fatigued situation | cleanup (additive) | — | yes, situationally |
 
-### D1 — `stall` conflates two concepts *(was F9, raised by the F1 audit)*
+### D1 — `stall` conflated two concepts *(was F9; **done**)*
 
-**Recorded as debt. Not to be fixed as part of a refactor.**
+**Built.** `stall` is now `maintainPosition` on the ground and `clinchMaintain` in the tie-up, with a
+capability that scales with the control rating that does the holding. Residual inactivity was left
+exactly where it already was — in the failure branch of every other action — and is no longer a
+selectable candidate.
 
 `stall` bundles two things that are not the same:
 
@@ -109,6 +113,66 @@ control time, referee stand-ups, finish rates. It is its own behavioural and cal
 its own evidence, and folding it into a structural pass would hide it.
 
 *It ranks first because D2, D3 and D7 all touch the lists it lives in.*
+
+#### What the constant was implicitly producing
+
+Measured before anything changed, across the roster's real `groundControl` distribution
+(p10 = 27, p50 = 44, p90 = 66, max = 94), share of the top-position decision, guard/mount:
+
+| plan | p10 | p50 | p90 | max |
+| --- | --- | --- | --- | --- |
+| control-heavy | **46/39%** | 37/34% | 26/26% | **15/18%** |
+| unplanned | 23/17% | 18/15% | 12/11% | 7/8% |
+| damage-heavy | 13/8% | 10/7% | 7/5% | 4/3% |
+
+**The gradient ran backwards.** The worse a fighter was at holding people down, the more of the
+fight he spent doing it — three times more, at the extremes — because a fixed number keeps a larger
+share of a list whose other members scale with the man. The clinch was the same: 22% at the 10th
+percentile of strength against 14% at the top.
+
+Time, per fight, over 1,800 fights between 120 roster fighters: top position ran 344 seconds, of
+which the **explicit stall candidate was 34.6s and the failure branches 27.3s** — a ratio of 1.27,
+so the two sources were the same order and both mattered. The clinch candidate was 7.6s.
+
+#### What it produces now
+
+| plan | p10 | p50 | p90 | max |
+| --- | --- | --- | --- | --- |
+| control-heavy | 25/27% | 29/34% | 33/42% | **37/52%** |
+| unplanned | 11/10% | 13/15% | 16/21% | 20/29% |
+| damage-heavy | 6/5% | 7/7% | 9/9% | 12/13% |
+
+Rising with capability at every plan, and still moving four-fold with the plan at fixed capability.
+Nothing is swallowed: a control-heavy fighter in a middling position splits advance 27% / strikes
+29% / submissions 13% / maintenance 31%. The clinch gradient is corrected but mild — 14% to 17% —
+because `clinchOffence` and `chainWrestling` share strength and wrestling, so the qualities that let
+you hold a man on the fence are largely the ones that let you take him down from it. Its
+plan-sensitivity is capped until **D3** gives the clinch a behaviour axis of its own.
+
+#### The two calibration decisions, both measured
+
+**The scale.** Sized so the population still spends about as much of the fight maintaining as it
+did — the roster profile, action counts and referee restarts are what anchor it, not a target
+percentage.
+
+**The convexity, and this one was not in the original plan.** `groundControl` carries a convexity of
+1.6, so its effect spans nine to one across the roster. Letting the *decision* inherit all of that
+made the top of the distribution ride three and a half times more than the constant ever allowed,
+which neither the sport's calibration nor the Reduced resolver could absorb: it pushed first-round
+finishes past their bound and opened four separate parity gaps in the two matchups containing the
+extreme grapplers. Damping it at 0.6 fixed both, and is the more honest model anyway — **control is
+a skill with a ceiling as a decision.** Past a point, being better at holding somebody down does not
+make a fighter choose it much more often; it makes the riding he already chose more effective, and
+that half is modelled elsewhere in `topControlFocus` and the escape contest. What scales steeply is
+how well it works, not how often it is picked.
+
+#### What it cost
+
+One parity allowance widened, from 1.40 to 1.42, on the striking-volume axis of
+`guardPlayer-v-smotherer`. The knockout allowance is **unchanged**. Two Reduced terms were written
+to close the gaps properly and both were deleted for moving their target by about a point — the
+measurement instead names what a Reduced maintenance model would have to contain, which is not just
+fewer submission attempts but the *conversion* those attempts lose.
 
 ### D2 — A fighter on top cannot elect to disengage *(was F10, raised by the F1 audit)*
 

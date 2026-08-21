@@ -95,7 +95,7 @@ const STRENGTH = 1.9;
  */
 export type StandingAction = 'strike' | 'kick' | 'takedown' | 'clinchUp';
 export type HeldAction = 'breakAway' | 'clinchStrike' | 'reverse' | 'pummel';
-export type ControllingAction = 'clinchTakedown' | 'clinchStrike' | 'clinchStall';
+export type ControllingAction = 'clinchTakedown' | 'clinchStrike' | 'clinchMaintain';
 
 type Alignment = Readonly<Record<PreferredState, number>>;
 
@@ -217,7 +217,13 @@ const CONTROLLING_ALIGNMENT: Readonly<Record<ControllingAction, Alignment>> = {
     submission: -0.25,
     adaptive: 0,
   },
-  clinchStall: {
+  /*
+   * Pinning a man on the fence and keeping him there. Renamed from `clinchStall`, because what a
+   * fighter *chooses* here is positional maintenance — a real thing to do with a tie-up — and
+   * calling it stalling conflated it with the inactivity that arrives when other actions fail.
+   * See doc 31 § D1.
+   */
+  clinchMaintain: {
     outside: -0.5,
     boxing: -0.45,
     pocket: -0.4,
@@ -236,14 +242,19 @@ const CONTROLLING_ALIGNMENT: Readonly<Record<ControllingAction, Alignment>> = {
  * Keeping them separate is what lets a wrestler who wants top position also be told to hunt
  * from it, or to sit on it, without those being different game plans.
  */
-export type TopAction = 'advancePosition' | 'groundStrike' | 'submission' | 'groundStall';
+export type TopAction = 'advancePosition' | 'groundStrike' | 'submission' | 'maintainPosition';
 export type BottomAction = 'standUp' | 'sweep' | 'submission' | 'defend';
 
 const TOP_ALIGNMENT: Readonly<Record<TopAction, Readonly<Record<TopIntent, number>>>> = {
   advancePosition: { control: 0.15, groundAndPound: -0.2, advance: 1, submit: 0.5 },
   groundStrike: { control: 0.1, groundAndPound: 1, advance: -0.1, submit: -0.2 },
   submission: { control: -0.6, groundAndPound: -0.3, advance: 0.2, submit: 1 },
-  groundStall: { control: 1, groundAndPound: -0.4, advance: -0.5, submit: -0.7 },
+  /*
+   * Riding the position. Renamed from `groundStall` for the reason above: a fighter who elects to
+   * hold somebody down is doing something, and the residual inactivity that used to share this row
+   * is produced by the failure branches of every other action instead.
+   */
+  maintainPosition: { control: 1, groundAndPound: -0.4, advance: -0.5, submit: -0.7 },
 };
 
 const BOTTOM_ALIGNMENT: Readonly<Record<BottomAction, Readonly<Record<BottomIntent, number>>>> = {
@@ -657,7 +668,7 @@ export function groundDenial(c: Combatant, against: 'retreat' | 'close'): number
  * while Full ranged from 119 for an outside striker to 349 for a wrestler, and `bulk-tick` caught
  * it as a world whose pyramid came out a different shape depending on how it was simulated.
  */
-function neutralStance(c: Combatant): Stance {
+export function neutralStance(c: Combatant): Stance {
   return stanceOf(c, undefined, false);
 }
 
