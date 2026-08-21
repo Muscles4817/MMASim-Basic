@@ -222,7 +222,23 @@ interface Fingerprint {
  * A tactical change that moves these on purpose *should* fail this test and rewrite the numbers
  * with its own measurement. That is the guard working, not the guard being in the way.
  *
- * **Re-recorded once so far**, by the transition split. It failed on all three matchups, which is
+ * **Re-recorded three times so far**, by the transition split, by rebasing positional maintenance
+ * onto control capability, and by giving the man on top a voluntary exit. Every time it failed on
+ * all three matchups, which is what it is for.
+ *
+ * The third re-recording, by D2. The largest movement the fingerprint has recorded, and every part
+ * of it is the new action: standing time up 12%, 8% and 12% across the three matchups, ground time
+ * down 2–4%, get-ups up by about half again — 1.29 to 2.01 in `striker-v-grinder`, because a
+ * get-up is now something either man can produce. The outcome mix moved with it and was allowed to:
+ * knockouts 23.3% to 24.7% and 55.8% to 60.5%, submissions down about four points in the matchup
+ * where the exit gets used most. That is a real shift in the sport, not a rounding error, and it is
+ * the intended price of a position that had no door in it. Doc 31 § D2 carries the level reasoning.
+ * The second re-recording moved advances and submissions down and standing time up, which
+ * is the change doing exactly what it was built to do: fighters below the top of the control
+ * distribution now ride *less* than the old constant made them, so more of the fight is spent
+ * working. Knockouts moved by under two points on every matchup and mean round by under 0.04.
+ *
+ * The first re-recording, by the transition split. It failed on all three matchups, which is
  * what it is for, and the numbers below are that change's own measurement. What moved is small and
  * in the direction the change intended: a little more standing time and a few more takedowns as
  * fighters who used to do nothing after a failed escape now frame and hand-fight their way to a
@@ -231,22 +247,22 @@ interface Fingerprint {
  */
 const BASELINE: Readonly<Record<string, Fingerprint>> = {
   'striker-v-grinder': {
-    punches: 20.63, kicks: 7.583, takedowns: 5.59, submissions: 7.43,
-    clinchEntries: 1.9, getUps: 1.322, advances: 4.267, sweeps: 1.19,
-    distanceSeconds: 282.26, clinchSeconds: 38.205, groundSeconds: 457.41,
-    koRate: 0.235, submissionRate: 0.21, meanRound: 2.368,
+    punches: 20.448, kicks: 8.423, takedowns: 6.572, submissions: 6.205,
+    clinchEntries: 2.107, getUps: 2.005, advances: 3.8, sweeps: 1.152,
+    distanceSeconds: 327.917, clinchSeconds: 42.15, groundSeconds: 438.443,
+    koRate: 0.247, submissionRate: 0.168, meanRound: 2.39,
   },
   'contender-v-canFodder': {
-    punches: 12.343, kicks: 3.073, takedowns: 2.307, submissions: 4.813,
-    clinchEntries: 0.888, getUps: 0.278, advances: 1.88, sweeps: 0.232,
-    distanceSeconds: 118.62, clinchSeconds: 20.7, groundSeconds: 214.728,
-    koRate: 0.573, submissionRate: 0.358, meanRound: 1.493,
+    punches: 12.687, kicks: 3.582, takedowns: 2.977, submissions: 4.192,
+    clinchEntries: 1.16, getUps: 0.782, advances: 1.873, sweeps: 0.268,
+    distanceSeconds: 149.403, clinchSeconds: 26.4, groundSeconds: 211.823,
+    koRate: 0.605, submissionRate: 0.308, meanRound: 1.565,
   },
   'guardPlayer-v-smotherer': {
-    punches: 17.183, kicks: 2.95, takedowns: 7.092, submissions: 12.022,
-    clinchEntries: 3.035, getUps: 1.433, advances: 5.128, sweeps: 1.42,
-    distanceSeconds: 265.953, clinchSeconds: 62.813, groundSeconds: 569.415,
-    koRate: 0.052, submissionRate: 0.223, meanRound: 2.668,
+    punches: 15.912, kicks: 3.482, takedowns: 8.538, submissions: 10.112,
+    clinchEntries: 3.592, getUps: 2.008, advances: 4.72, sweeps: 1.522,
+    distanceSeconds: 323.787, clinchSeconds: 74.36, groundSeconds: 549.885,
+    koRate: 0.032, submissionRate: 0.203, meanRound: 2.725,
   },
 };
 

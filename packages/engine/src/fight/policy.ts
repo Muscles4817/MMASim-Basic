@@ -95,7 +95,7 @@ const STRENGTH = 1.9;
  */
 export type StandingAction = 'strike' | 'kick' | 'takedown' | 'clinchUp';
 export type HeldAction = 'breakAway' | 'clinchStrike' | 'reverse' | 'pummel';
-export type ControllingAction = 'clinchTakedown' | 'clinchStrike' | 'clinchStall';
+export type ControllingAction = 'clinchTakedown' | 'clinchStrike' | 'clinchMaintain';
 
 type Alignment = Readonly<Record<PreferredState, number>>;
 
@@ -217,7 +217,13 @@ const CONTROLLING_ALIGNMENT: Readonly<Record<ControllingAction, Alignment>> = {
     submission: -0.25,
     adaptive: 0,
   },
-  clinchStall: {
+  /*
+   * Pinning a man on the fence and keeping him there. Renamed from `clinchStall`, because what a
+   * fighter *chooses* here is positional maintenance — a real thing to do with a tie-up — and
+   * calling it stalling conflated it with the inactivity that arrives when other actions fail.
+   * See doc 31 § D1.
+   */
+  clinchMaintain: {
     outside: -0.5,
     boxing: -0.45,
     pocket: -0.4,
@@ -236,14 +242,43 @@ const CONTROLLING_ALIGNMENT: Readonly<Record<ControllingAction, Alignment>> = {
  * Keeping them separate is what lets a wrestler who wants top position also be told to hunt
  * from it, or to sit on it, without those being different game plans.
  */
-export type TopAction = 'advancePosition' | 'groundStrike' | 'submission' | 'groundStall';
+export type TopAction = 'advancePosition' | 'groundStrike' | 'submission' | 'maintainPosition';
+
 export type BottomAction = 'standUp' | 'sweep' | 'submission' | 'defend';
 
 const TOP_ALIGNMENT: Readonly<Record<TopAction, Readonly<Record<TopIntent, number>>>> = {
   advancePosition: { control: 0.15, groundAndPound: -0.2, advance: 1, submit: 0.5 },
   groundStrike: { control: 0.1, groundAndPound: 1, advance: -0.1, submit: -0.2 },
   submission: { control: -0.6, groundAndPound: -0.3, advance: 0.2, submit: 1 },
-  groundStall: { control: 1, groundAndPound: -0.4, advance: -0.5, submit: -0.7 },
+  /*
+   * Riding the position. Renamed from `groundStall` for the reason above: a fighter who elects to
+   * hold somebody down is doing something, and the residual inactivity that used to share this row
+   * is produced by the failure branches of every other action instead.
+   */
+  maintainPosition: { control: 1, groundAndPound: -0.4, advance: -0.5, submit: -0.7 },
+};
+
+/**
+ * Standing back up out of somebody's guard, and it is keyed on `preferredState` rather than on
+ * `topIntent` — which is the whole reason it needed a table of its own.
+ *
+ * Everything else a fighter does on top is *in-state behaviour*, and in-state behaviour is what
+ * `topIntent` is for. Getting off the floor is a **transition**, and transitions are answered by
+ * where the fighter wants the fight, exactly as `breakAway` is in the clinch (docs/01 § 8). A
+ * striker who wants the fight at range wants it at range whether he is standing over somebody or
+ * not, and nothing in `topIntent`'s four values can say that.
+ *
+ * The negative rows matter as much as the positive ones. A fighter who came for top position does
+ * not give it back because the option exists, and this is where that is stated.
+ */
+const TOP_EXIT: Alignment = {
+  outside: 1,
+  boxing: 0.85,
+  pocket: 0.5,
+  clinch: -0.35,
+  top: -1,
+  submission: -0.9,
+  adaptive: 0,
 };
 
 const BOTTOM_ALIGNMENT: Readonly<Record<BottomAction, Readonly<Record<BottomIntent, number>>>> = {
@@ -434,6 +469,9 @@ export const controllingBias = (
 
 export const topBias = (c: Combatant, stance: Stance, action: TopAction, opportunity = 0): number =>
   bias(TOP_ALIGNMENT[action][c.plan.tactics.topIntent], stance.urgency, opportunity);
+
+/** How much this plan wants the fight back on the feet, read from the top position. */
+export const topExitBias = (stance: Stance): number => bias(TOP_EXIT[stance.desired], stance.urgency);
 
 /**
  * The bottom of the fight, where the reported defect lived.
@@ -657,7 +695,7 @@ export function groundDenial(c: Combatant, against: 'retreat' | 'close'): number
  * while Full ranged from 119 for an outside striker to 349 for a wrestler, and `bulk-tick` caught
  * it as a world whose pyramid came out a different shape depending on how it was simulated.
  */
-function neutralStance(c: Combatant): Stance {
+export function neutralStance(c: Combatant): Stance {
   return stanceOf(c, undefined, false);
 }
 

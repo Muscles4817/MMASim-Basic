@@ -24,6 +24,7 @@ import {
   TRANSITION_RANGE,
   changeToward,
   decayStickiness,
+  disengageRange,
   rangeChangeChance,
   stepRange,
   strikeSuitability,
@@ -48,6 +49,7 @@ import {
   submissionOpportunity,
   topBias,
   topControlFocus,
+  topExitBias,
   type Stance,
 } from './policy.js';
 import type { Judge, Referee } from '../domain/officials.js';
@@ -775,9 +777,70 @@ function prepBonus(defender: Combatant, actor: Combatant, reads: readonly ReadKe
  * was deliberately left alone: it absorbs this class of drift and did not need to.
  */
 
-/** Referee-tolerated inaction, unchanged from the pre-policy engine. */
-const BASE_GROUND_STALL = 0.35;
-const BASE_CLINCH_STALL = 0.5;
+/**
+ * What holding a position is worth as a *choice*, relative to the fighter's control rating.
+ *
+ * These replace `BASE_GROUND_STALL = 0.35` and `BASE_CLINCH_STALL = 0.5`, which were bare constants
+ * carrying two different ideas at once — deliberate riding and residual inactivity — and which
+ * produced a gradient that ran backwards. Measured across the roster's real `groundControl`
+ * distribution on a control-oriented plan, the old constant gave the **10th percentile a 46% share
+ * of top-position decisions and the best controller in the game 15%**: the worse a fighter was at
+ * holding people down, the more of the fight he spent doing it, because a fixed number keeps a
+ * larger share of a list whose other members scale with the man.
+ *
+ * Now it scales with what actually does the holding. The multiplier is what keeps that a change of
+ * *shape* rather than of *level*: it is sized so the population still spends about as much of the
+ * fight in positional maintenance as it did, while which fighters are doing it inverts. See
+ * doc 31 § D1 for the before-and-after.
+ */
+const MAINTAIN_TOP_SCALE = 0.39;
+const MAINTAIN_CLINCH_SCALE = 0.42;
+
+/**
+ * How steeply the *choice* to ride follows the *ability* to.
+ *
+ * Below 1, and deliberately. `groundControl` carries a convexity of 1.6, so its effect spans nine
+ * to one across the roster — and letting the decision to hold position inherit all of that made the
+ * fighters at the very top of the distribution ride three and a half times more than the constant
+ * ever let them, which is more change than the sport's calibration or the Reduced resolver could
+ * absorb.
+ *
+ * The damping is not a fudge for that, it is the more honest model. Control is a skill with a
+ * ceiling as a *decision*: past a point, being better at holding somebody down does not make a
+ * fighter choose to do it much more often, it makes the riding he already chose more effective —
+ * and that half is modelled elsewhere, in `topControlFocus` and in the escape contest. What scales
+ * steeply is how well it works, not how often it is picked.
+ */
+const MAINTAIN_CONVEXITY = 0.6;
+
+/**
+ * What choosing to stand back up is worth against the things a fighter could do instead.
+ *
+ * The one number in D2 that had to be *chosen* rather than measured, because invariant 9 asks for
+ * the unplanned baseline and before this the unplanned baseline was zero by construction: the
+ * action did not exist. What stands in for it is the sport. Here an unplanned fighter elects the
+ * exit on about 5% of his top-position beats and voluntarily gets up about once every two fights;
+ * control time falls 1.5–5% by matchup, knockouts rise 0.7 to 3 points, submissions fall 1 to 3.
+ * Twice this was measured and rejected — top position started reading as optional. Half of it was
+ * measured and rejected too: at a 4% neutral a striker who wants the fight standing gets up once
+ * per nine minutes on top, which is a feature that exists only in the constants. Doc 31 § D2.
+ */
+const TOP_EXIT_SCALE = 0.28;
+
+/**
+ * And how much of the fighter's scrambling is allowed to decide that he picks it.
+ *
+ * The same damping D1 applied to `maintainPosition`, for the same reason and stated as the general
+ * rule it has become: **capability weighs strongly on whether an action works and only lightly on
+ * whether it is chosen.** Undamped, `scrambling`'s convexity of 1.2 spans 6.8:1 across the roster,
+ * and letting the decision inherit all of it made the top exit a property of the fighter rather
+ * than of his corner — undamped it runs 7.8% of top-position beats at 15 scrambling against 36.5%
+ * at 95, on the same instruction, against the twelve-fold span the plan is supposed to own. That is
+ * invariant 1 with the two halves swapped. At 0.25 it runs 13.6% to 20.3%: a fighter who knows he
+ * can get up is somewhat readier to let the position go, which is honest, and the rest of the
+ * spread shows up where it belongs, in the contest below.
+ */
+const TOP_EXIT_CONVEXITY = 0.25;
 
 /**
  * How the current round is going for this fighter, on the same arithmetic the judges use.
@@ -1053,7 +1116,7 @@ export function controllingCandidates(
   actor: Combatant,
   target: Combatant,
   stance: Stance,
-): Candidate<'takedown' | 'clinchStrike' | 'stall'>[] {
+): Candidate<'takedown' | 'clinchStrike' | 'maintainPosition'>[] {
   return [
     {
       key: 'takedown',
@@ -1072,9 +1135,12 @@ export function controllingCandidates(
       intent: controllingBias(stance, 'clinchStrike', finishOpportunity(actor, target)),
     },
     {
-      key: 'stall',
-      capability: BASE_CLINCH_STALL,
-      intent: controllingBias(stance, 'clinchStall'),
+      key: 'maintainPosition',
+      capability:
+        fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) **
+          MAINTAIN_CONVEXITY *
+        MAINTAIN_CLINCH_SCALE,
+      intent: controllingBias(stance, 'clinchMaintain'),
     },
   ];
 }
@@ -1173,7 +1239,9 @@ export function topCandidates(
   stance: Stance,
   dominance: number,
   subChance: number,
-): Candidate<'advancePosition' | 'groundStrike' | 'submission' | 'stall'>[] {
+): Candidate<
+  'advancePosition' | 'groundStrike' | 'submission' | 'maintainPosition' | 'standUpFromTop'
+>[] {
   return [
     {
       key: 'advancePosition',
@@ -1195,9 +1263,44 @@ export function topCandidates(
       intent: topBias(actor, stance, 'submission', subChance),
     },
     {
-      key: 'stall',
-      capability: BASE_GROUND_STALL,
-      intent: topBias(actor, stance, 'groundStall'),
+      /*
+       * Getting off the floor on purpose — the one thing a fighter on top could not previously
+       * elect to do, so a striker who landed or inherited a takedown was made to play top-position
+       * MMA for the rest of the round whatever his corner wanted (doc 31 § D2).
+       *
+       * It sits in the flat list rather than in a pre-beat, because standing back out of somebody's
+       * guard *is* the moment: you cannot post, break the grips, step back and also throw
+       * ground-and-pound in the same beat. That is invariant 8c, and it is the same reasoning that
+       * keeps `takedown` competing with `strike` at range.
+       *
+       * `scrambling` is the capability, the same one that governs getting up from underneath —
+       * disentangling is disentangling, whichever end of it you are on.
+       */
+      key: 'standUpFromTop',
+      capability:
+        fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) ** TOP_EXIT_CONVEXITY *
+        TOP_EXIT_SCALE,
+      intent: topExitBias(stance),
+      /*
+       * How much of the position the other man still has hold of. Standing out of a closed guard
+       * means breaking grips off your own hips; standing off side control or mount means standing
+       * up. `GROUND_DOMINANCE` runs 0.3 in guard to 1.0 on the back, so this runs about 0.5 to 1.2.
+       */
+      opportunity: 0.35 + dominance * 0.85,
+    },
+    {
+      key: 'maintainPosition',
+      capability:
+        fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue) **
+          MAINTAIN_CONVEXITY *
+        MAINTAIN_TOP_SCALE,
+      intent: topBias(actor, stance, 'maintainPosition'),
+      /*
+       * Riding mount is easier than riding guard, and this is `opportunity` in the strict sense:
+       * the same fighter with the same instruction has a different amount of the position
+       * available to him depending where he is.
+       */
+      opportunity: 0.7 + dominance * 0.6,
     },
   ];
 }
@@ -1816,6 +1919,72 @@ function throwClinchStrike(
 }
 
 /**
+ * Standing back up out of somebody's guard, on purpose.
+ *
+ * The contest is disentangling against being held: `scrambling` on both sides, because retaining a
+ * guard and breaking out of one are the same skill pointed in opposite directions, and the man
+ * underneath is spending the beat trying to keep hold of hips and wrists. `groundControl` deliberately
+ * does not appear on the actor's side — being good at *holding somebody down* is not what gets you
+ * off them, and letting it in would make the fighters who least want to leave the best at it.
+ *
+ * Position decides most of it, and that lives in the candidate's `opportunity` rather than here:
+ * how hard this is was already settled when the action was chosen. What is left is whether the man
+ * underneath can keep hold.
+ *
+ * **What the engine cannot model, stated rather than invented:** there is no fence on the floor. A
+ * fighter with his back to the cage genuinely has less room to stand out of, and nothing in
+ * `FightState` knows where on the mat anybody is. It belongs with whatever eventually gives the
+ * ground a geography.
+ */
+function resolveTopDisengage(
+  ctx: ExchangeContext,
+  actor: Combatant,
+  target: Combatant,
+): ExchangeOutcome {
+  const { rng, state, emit } = ctx;
+  const position = state.groundPosition;
+  actor.stats.topExitsAttempted++;
+
+  const breaking = fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue);
+  /*
+   * Guard retention, grips, a leg hooked. The man underneath does not have to sweep to keep him
+   * there — he only has to stay attached, and how much of him there is to stay attached to is the
+   * position: 1.39 in a closed guard down to 0.90 from the back, a little over half again.
+   */
+  const holding =
+    fatiguedEffect(target.attrs.scrambling, 'scrambling', target.fatigue) *
+    (1.6 - GROUND_DOMINANCE[position] * 0.7);
+
+  if (rng.chance(breaking / (breaking + holding))) {
+    actor.stats.topExitsLanded++;
+    state.position = 'distance';
+    state.groundTop = undefined;
+    state.groundPosition = 'guard';
+    state.placedBy = actor.corner;
+    /*
+     * Where the fight restarts is a function of how the separation happened, not a universal
+     * reset. Out of a guard he had to break grips off his own hips and the other man comes up
+     * attached to him; off side control, mount or the back he simply stands off a man who is flat
+     * on his back. Same decision, two different amounts of space (doc 31 § D2).
+     */
+    state.range = disengageRange(position);
+    state.rangeSettled = 0.15;
+    state.stalledSeconds = 0;
+    emit('standUp', say.topDisengageText(rng, actor), actor.corner);
+    return { seconds: rng.int(8, 16) };
+  }
+
+  /*
+   * Held there. The beat is spent and the position is unchanged — which is the honest outcome of
+   * trying to stand out of a guard somebody is determined to keep you in, and is also what stops
+   * this being a free exit. Stalled time accrues because nothing happened, the same as any other
+   * failed action on the floor.
+   */
+  state.stalledSeconds += 15;
+  return maybeRefStandUp(ctx, rng.int(8, 16));
+}
+
+/**
  * The clinch, from both sides.
  *
  * It used to have one side. The fighter in control chose between shooting, a knee and standing
@@ -1931,7 +2100,7 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
     return { seconds: rng.int(6, 14), ending };
   }
 
-  // Stalling on the fence: cheap for nobody, more expensive for the fighter pinned — and now on a
+  // Pinning him on the fence: cheap for nobody, more expensive for the fighter pinned — and on a
   // clock, because a referee who will stand two men up off the floor will not watch them lean on
   // the fence indefinitely.
   const seconds = rng.int(10, 20);
@@ -2090,8 +2259,11 @@ function resolveGroundTop(
   const subChance = submissionOpportunity(actor, target, state.groundPosition, true);
 
   const intent = chooseAction(rng, topCandidates(actor, target, stance, dominance, subChance));
+  actor.stats.topBeats++;
 
   if (intent === 'submission') return resolveSubmission(ctx, actor, target, false);
+
+  if (intent === 'standUpFromTop') return resolveTopDisengage(ctx, actor, target);
 
   if (intent === 'advancePosition') {
     const bonus = prepBonus(target, actor, ['guardPassing', 'backTake']);
@@ -2181,7 +2353,14 @@ function resolveGroundTop(
     return maybeRefStandUp(ctx, rng.int(8, 16));
   }
 
-  // Stall: control time without action. Effective on the cards, and a stand-up risk.
+  /*
+   * Riding the position: control time without offence. Effective on the cards, and a stand-up risk.
+   *
+   * The stalled time is charged here because this is the beat that produced it — a fighter holding
+   * somebody down and doing nothing else is exactly what a referee stands up. It is *not* the same
+   * accounting as the residual inactivity from a failed advance or a whiffed ground strike, which
+   * those branches charge for themselves. Both are stalled time; only this one was chosen.
+   */
   state.stalledSeconds += 25;
   return maybeRefStandUp(ctx, rng.int(14, 26));
 }

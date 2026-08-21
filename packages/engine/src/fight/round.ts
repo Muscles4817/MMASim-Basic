@@ -83,6 +83,7 @@ const RANGES_FOR_MIX = ['outside', 'boxing', 'pocket'] as const;
 const REFERENCE_KICK_LEAN = 0.38;
 
 
+
 /* --------------------------------------------------------------------------------------------
  * Calibration constants. Every one is a column of `tools/round-profile.ts`.
  * ------------------------------------------------------------------------------------------ */
@@ -452,6 +453,7 @@ function accuracyFor(
  */
 const FAILED_ENTRY_HAZARD = 0.6;
 
+
 /** What a pairing with no particular range disagreement fails at. Measured, not chosen. */
 const REFERENCE_ENTRY_FAILURE = 0.16;
 
@@ -740,7 +742,8 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
         roundRng,
         (SUBMISSION_FLOOR +
           SUBMISSION_PER_CONTROL *
-            (own * submissionAppetite(a, true) + under * 0.15 * submissionAppetite(a, false))) *
+            (own * submissionAppetite(a, true) +
+              under * 0.15 * submissionAppetite(a, false))) *
           (0.75 + a.tendencies.backTake * 0.5),
         0.4,
       );

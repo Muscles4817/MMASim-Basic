@@ -248,6 +248,26 @@ export interface FightStats {
    * on every other statistic to one who is busy.
    */
   bottomWorkBeats: number;
+  /**
+   * Deliberate disengagements from top position, and the ones that came off.
+   *
+   * The third attempt/landed pair, for the third transition, and for the same reason as the other
+   * two: the plan owns how often a fighter tries to stand back up, and the two fighters own whether
+   * he manages it. Only both numbers together tell "he wanted the fight standing and was held down"
+   * from "he was happy where he was".
+   */
+  topExitsAttempted: number;
+  topExitsLanded: number;
+  /**
+   * Beats resolved from top position, whatever was chosen on them.
+   *
+   * The denominator `bottomWorkBeats` is for the other half of the floor, and it exists for the
+   * same reason: a share of the fighter's *decisions* is not recoverable from a share of the
+   * *clock*, and docs/01 forbids inferring either from the other. Without it, "he stopped throwing
+   * because he was busy standing up" and "he stopped throwing because he was on top for less of
+   * the fight" are the same statistic.
+   */
+  topBeats: number;
   /** Cumulative damage dealt, in the same units as the opponent's damage meters. */
   damageDealt: number;
 }
@@ -376,6 +396,9 @@ export function emptyStats(): FightStats {
     escapesAttempted: 0,
     escapesLanded: 0,
     bottomWorkBeats: 0,
+    topExitsAttempted: 0,
+    topExitsLanded: 0,
+    topBeats: 0,
     damageDealt: 0,
   };
 }

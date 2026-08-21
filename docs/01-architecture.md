@@ -94,8 +94,20 @@ nearly triples how often a fighter attempts to change range (3.2 attempts to 9.1
 success rate almost untouched (54% to 52%), because whether you get there is a contest between two
 fighters and has nothing to do with what your corner asked for.
 
+**1a. Capability weighs strongly on whether an action works and only lightly on whether it is
+chosen.** The corollary that keeps the rule true inside a single weighted draw. When intent and
+capability multiply into one weight, an attribute with a steep convexity quietly takes the decision
+over: `groundControl` spans 9:1 across the roster and `scrambling` 6.8:1, and letting either through
+undamped made the choice a property of the fighter rather than of his corner — undamped,
+`standUpFromTop` is picked on 7.8% of top-position beats at 15 scrambling and 36.5% at 95, on the
+same instruction, against the twelve-fold span the plan is supposed to own. Both actions therefore damp the capability term in the *decision* — `maintainPosition`
+by an exponent of 0.6, `standUpFromTop` by 0.25 — and use it at full strength in the *contest* that
+follows. The damping is not a fudge factor: it is the statement that knowing you can do a thing
+makes you somewhat readier to try it, and much better at it.
+
 *Enforced by* `tests/statistical/tactics.test.ts` — "intent is not ability", and the six-plan
-validation block.
+validation block; and by `tests/statistical/top-disengagement.test.ts` for the damping, which holds
+attempt rates inside 1.5:1 across the roster's whole scrambling range while success spans 2.4:1.
 
 ### 2. Desired state and realised state are different things, and both are observable.
 
@@ -293,12 +305,29 @@ persistence, corrupt-save recovery and the accessibility basics.
 A claim should be tested on the quantity that carries it, not on something downstream that
 correlates with it today.
 
+> **Time-share tests are for positional occupancy. Attempt- and action-share tests are for
+> tactical preference. Do not infer one from the other unless the mechanism actually links them.**
+
 - **Clock share** is the right axis for a claim about *time allocation* — a striking plan spends
   more of the fight standing than a wrestling plan does.
 - **Attempt counts and rates** are the right axis for a claim about *tactical intent* — told to get
   up, a fighter goes for the exit more often. How long he then spends underneath is settled by 40
   scrambling against 82 ground control, and asserting the plan on it is asserting the plan on
   somebody else's attributes.
+
+The inference this forbids is the one the old tactical suite was built on: *does more submissions*
+therefore *must spend more seconds on his back*. That held only while wanting a thing and doing
+nothing else were the same act, and it stopped holding the moment the decisions were separated. A
+fighter told to hunt submissions from the bottom now attacks more **and** gets up more, because
+those are two axes of one plan rather than two ends of one slider; a fighter on top told he would
+rather be standing keeps hitting at the same rate per minute of top position and simply has fewer
+of them. Neither of those is visible to a seconds-in-position bound, and a bound that reads them as
+a regression is measuring a coupling the engine no longer has.
+
+Where the mechanism *does* link them, say which one, in the test. Voluntary top disengagement
+genuinely converts an action share into a clock share — every exit that lands ends the position —
+so `top-disengagement.test.ts` asserts both, and names the conversion as the reason it is allowed
+to.
 
 Three assertions moved from the clock to the attempt during the transition split, and each had
 looked fine for months because the two axes were coupled: choosing to stand up *also* meant not

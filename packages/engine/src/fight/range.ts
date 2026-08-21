@@ -32,9 +32,11 @@
 
 import { clamp, clamp01, remap } from '../core/math.js';
 import {
+  GROUND_DOMINANCE,
   RANGES,
   RANGE_SEPARATION,
   STRIKE_TARGETS,
+  type GroundPosition,
   type Range,
   type StrikeTarget,
   type Weapon,
@@ -331,6 +333,26 @@ export function changeToward(current: Range, desired: Range): RangeChange | unde
  * happened, and saying so is the difference between a range model and a range label.
  */
 export const TRANSITION_RANGE: Readonly<Record<string, Range>> = {
+  /**
+   * A fighter on top choosing to let the other man up and step back — from a position he was not
+   * tangled in.
+   *
+   * The most space-creating transition in the game, and the reason it is not `boxing` like the
+   * bottom man's get-up: the man doing the standing is the one who chose it, he is on his feet
+   * first, and the other man is starting from the floor. What he does with the space is then his
+   * own problem — the stickiness this is booked with is deliberately low, so the opponent can
+   * contest it on the very next beat rather than being walked out to kicking range for free.
+   */
+  topDisengage: 'outside',
+  /**
+   * The same decision taken out of a guard, which is not the same separation.
+   *
+   * *Where you end up depends on how you got out*, and out of a closed or half guard you got out
+   * by peeling somebody's legs off your hips while he held them there. He comes up with you and he
+   * is within arm's reach when he does — so this books hands range, exactly like the bottom man's
+   * wall-walk, rather than the clean step-off the dominant positions give.
+   */
+  topDisengageTangled: 'boxing',
   /** Round start, referee restart, ref stand-up: everybody resets to their own corner's distance. */
   neutral: 'outside',
   /** A clean break out of the tie-up. Hands range, not kicking range. */
@@ -344,6 +366,19 @@ export const TRANSITION_RANGE: Readonly<Record<string, Range>> = {
   /** A stuffed shot that ends up back on the feet: you are right on top of each other. */
   stuffedTakedown: 'pocket',
 };
+
+/**
+ * Where a voluntary top disengagement puts the fight, given where it was disengaged *from*.
+ *
+ * The question this answers is "how did the separation happen", not "reset to what" — see the two
+ * `TRANSITION_RANGE` entries for the reasoning. Split out of the resolver so the mapping can be
+ * asserted directly rather than inferred from a range histogram three mechanisms downstream.
+ */
+export function disengageRange(position: GroundPosition): Range {
+  return GROUND_DOMINANCE[position] >= GROUND_DOMINANCE.sideControl
+    ? TRANSITION_RANGE.topDisengage!
+    : TRANSITION_RANGE.topDisengageTangled!;
+}
 
 /**
  * How much of a fighter's plan is about range at all.

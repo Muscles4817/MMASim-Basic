@@ -252,10 +252,29 @@ describe('G1 — separation between the six disciplines', () => {
     const met = sameFamily.filter(
       ([a, b]) => separatedAxes(prints().get(a)!, prints().get(b)!).length >= 2,
     );
-    expect(
-      met.map(([a, b]) => `${a}/${b}`),
-      'the standing phase stopped expressing, or the grappling family started',
-    ).toEqual(['boxing/karate']);
+    /*
+     * **Asserted as the property, not as the list**, and D1 is why.
+     *
+     * This read `toEqual(['boxing/karate'])`, which was the exact set at the time. Rebasing
+     * positional maintenance onto `groundControl` separated **boxing/kickboxing** as well, so the
+     * set is now two — and an exact-list assertion calls that a failure when it is the opposite.
+     * The three things the paragraph above actually cares about are that the count never returns to
+     * zero, that it never silently becomes all six, and that whatever clears comes from the
+     * striking family rather than the grappling one. Those are what is checked.
+     */
+    const names = met.map(([a, b]) => `${a}/${b}`);
+    const message = `separated same-family pairs: ${names.join(', ') || 'none'}`;
+
+    expect(names.length, `${message} — the standing phase stopped expressing`).toBeGreaterThan(0);
+    expect(names.length, `${message} — this should not quietly become every pair`).toBeLessThan(
+      sameFamily.length,
+    );
+    for (const [a, b] of met) {
+      expect(
+        striking.includes(a) && striking.includes(b),
+        `${message} — the grappling family started separating`,
+      ).toBe(true);
+    }
   });
 
   it('tells the throwing art from the shooting art, and not the two submission arts', () => {
