@@ -10,7 +10,7 @@ import { CreateFighterScreen } from './screens/CreateFighterScreen';
 import { TrainingScreen } from './screens/TrainingScreen';
 import { HubScreen } from './screens/HubScreen';
 import { RosterScreen } from './screens/RosterScreen';
-import { FighterScreen } from './screens/FighterScreen';
+import { FighterScreen, MeScreen } from './screens/FighterScreen';
 import { CampScreen } from './screens/CampScreen';
 import { FightScreen } from './screens/FightScreen';
 import { RankingsScreen } from './screens/RankingsScreen';
@@ -129,6 +129,14 @@ export function App() {
           // exactly what desktop width is for.
           <Shell title={fighterName(route.id) ?? 'Fighter'} showBack wide>
             <FighterScreen key={route.id} id={route.id} />
+          </Shell>
+        );
+      case 'me':
+        return (
+          // Wide, and no back control: this is a place under the Career tab rather than a page
+          // you arrived at from somewhere.
+          <Shell title="My fighter" wide>
+            <MeScreen />
           </Shell>
         );
       case 'camp':

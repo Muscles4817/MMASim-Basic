@@ -42,6 +42,15 @@ export type Route =
   | { name: 'hub' }
   | { name: 'roster' }
   | { name: 'fighter'; id: string }
+  /**
+   * Your own fighter.
+   *
+   * Its own route rather than `#/fighter/<your id>`, because it is a *place* rather than a page
+   * about somebody: it sits under the Career tab, it is written in the first person, and it must
+   * not put the player's own profile in their back stack on the way home. `#/fighter/<your id>`
+   * redirects here.
+   */
+  | { name: 'me' }
   | { name: 'camp' }
   | { name: 'fight'; boutId: string }
   | { name: 'rankings' }
@@ -96,6 +105,8 @@ function parse(hash: string): Route {
       return { name: 'roster' };
     case 'fighter':
       return param ? { name: 'fighter', id: param } : { name: 'roster' };
+    case 'me':
+      return { name: 'me' };
     case 'camp':
       return { name: 'camp' };
     case 'fight':

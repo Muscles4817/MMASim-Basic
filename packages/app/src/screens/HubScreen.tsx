@@ -262,6 +262,7 @@ export function HubScreen() {
             rust={rust}
             onOpenContract={() => navigate({ name: 'contract' })}
             onOpenRankings={() => navigate({ name: 'rankings' })}
+            onOpenProfile={() => navigate({ name: 'me' })}
           />
 
           <Collapse
@@ -930,12 +931,14 @@ function StandingPanel({
   rust,
   onOpenContract,
   onOpenRankings,
+  onOpenProfile,
 }: {
   ladder: ReturnType<typeof getLadderStatus> | undefined;
   standing: ReturnType<typeof contractStanding>;
   rust: number;
   onOpenContract(): void;
   onOpenRankings(): void;
+  onOpenProfile(): void;
 }) {
   return (
     <Card title="Where you stand" testId="standing">
@@ -1006,6 +1009,9 @@ function StandingPanel({
           </Button>
           <Button size="sm" onClick={onOpenRankings}>
             Rankings
+          </Button>
+          <Button size="sm" onClick={onOpenProfile}>
+            My fighter
           </Button>
         </div>
       </div>
