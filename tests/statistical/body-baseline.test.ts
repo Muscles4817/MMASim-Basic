@@ -31,7 +31,8 @@ import {
   leanMassIndex,
   leanMassLbs,
   massCoefficient,
-  requiredCutFraction,
+  cutRequiredFraction,
+  underLimitLbs,
   sampleBody,
   sampleCutTolerance,
   skeletalIndex,
@@ -159,14 +160,22 @@ describe('the body model, as it stands after step 4', () => {
           'body fat %'.padStart(12) +
           'camp'.padStart(8) +
           'floor'.padStart(8) +
-          'cut %'.padStart(8),
+          'cut req %'.padStart(11) +
+          'under limit'.padStart(13),
       );
       for (const division of divisionsFor(sex)) {
         const bodies = cohort(sex, division);
         if (bodies.length === 0) continue;
         const walk = bodies.map(walkingWeightLbs);
         const lean = bodies.map(leanMassLbs);
-        const cut = bodies.map((b) => 100 * requiredCutFraction(b, division.limitLbs));
+        /*
+         * Two columns rather than one signed number. A heavyweight walking 243 lb against a 265 lb
+         * ceiling is not cutting −9%; he is walking 22 lb under the maximum, and a diagnostic that
+         * says the first thing invites somebody to read a biologically strange event into an
+         * ordinary one.
+         */
+        const cut = bodies.map((b) => 100 * cutRequiredFraction(b, division.limitLbs));
+        const under = bodies.map((b) => underLimitLbs(b, division.limitLbs));
         console.log(
           division.shortName.padEnd(7) +
             `${mean(walk).toFixed(0)} (${band(walk)})`.padStart(16) +
@@ -174,7 +183,8 @@ describe('the body model, as it stands after step 4', () => {
             `${(100 * mean(bodies.map(bodyFatFraction))).toFixed(1)}`.padStart(12) +
             mean(bodies.map(campWeightLbs)).toFixed(0).padStart(8) +
             mean(bodies.map(weighInFloorLbs)).toFixed(0).padStart(8) +
-            mean(cut).toFixed(1).padStart(8),
+            mean(cut).toFixed(1).padStart(11) +
+            (mean(under) > 0.05 ? `${mean(under).toFixed(0)} lb` : '—').padStart(13),
         );
       }
     }

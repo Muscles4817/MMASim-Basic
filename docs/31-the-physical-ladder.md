@@ -1434,6 +1434,81 @@ is a calibration instrument that lives beside them until the scale is locked at 
 
 ---
 
+### 13.9 What step 5 found
+
+The roster landed at **115 fighters** — 88 men across the eight men's divisions, 27 women across the
+four women's — every physical stated as a sigma placement against its division's major-promotion
+median and computed through `physicalScale.ts`. `packages/data/src/calibration/` holds it;
+`tests/statistical/calibration-roster.test.ts` prints the audit and asserts the criteria. Four things
+came out of authoring it that were not in the plan.
+
+**13.9.1 The authoring drifted, exactly the way § 13.8's criterion 4 was built to catch.** The first
+draft ran a mean of **+8.7 rating points above the § 4.3 divisional p50**, with Power sitting at
+**+1.2σ to +1.5σ in every men's division** — the roster's median heavyweight was being placed at his
+own division's 95th percentile for punching force, which ten fighters cannot all be.
+
+The cause was one specific confusion rather than general optimism: _famous finisher_ was being read
+as _hardest hitter_. Knockouts come from timing, accuracy and the opponent's chin at least as much as
+from force, and Power is defined here as peak strike impulse. The pattern in the drift is itself the
+evidence — Power was the most inflated attribute and Durability the least, which is what selecting on
+fame does, because highlight reels are made of knockouts.
+
+Two corrections. Placements were re-authored downward wherever the evidence was a highlight reel
+rather than a physical fact — 187 values in one pass — and **thirteen fighters were added**, because
+part of the problem was the sample rather than the numbers: Volkov, Gane, Tybura and Arlovski at
+heavyweight, Vera, Munhoz and Font at bantamweight, Formiga and Schnell at flyweight, dos Anjos and
+Dariush at lightweight, Nate Diaz and Condit at welterweight. Mean drift now **+5.0 points**, mean
+placement **+0.51σ**.
+
+The residual is correct rather than tolerated, and the reasoning is worth writing down because the
+criterion will be re-run: a calibration roster cannot sit _at_ its divisions' medians, because a
+landmark is by definition somebody worth watching. A few points of positive drift is the right
+answer. Eight is not.
+
+**13.9.2 The body model rejects ten fighters who demonstrably competed where they competed, and the
+pattern is diagnostic.** Per the step 5 amendment these are recorded as classified disagreements
+rather than trimmed away, and they fall into two mechanisms.
+
+_Very lean bodies are penalised twice._ `physiqueForMeasurements` puts everything that is not fat
+into the lean column, camp weight is lean over 0.93, and the weigh-in floor rises with it. So the
+leanest fighters in the file are the ones the model says cannot make weight — **Yoel Romero is
+rejected at a 9.8% cut**, which is barely above the hand-authored roster's 8.2% mean and nowhere near
+anything the sport considers dangerous. Pereira (10.8%) and Chandler (11.4%) fail the same way.
+Whatever else is true, a sub-10% cut must not resolve to `notViable`.
+
+_The women's floor is systematically too high._ **Four of the nine strawweights are rejected**, at
+cuts of 13.4%, 14.2%, 15.4% and 18.5% — Zhang, Suarez, Jędrzejczyk and Dern. That is not four
+authoring errors. `COMPOSITION.female` sets `fatFloor` 0.15 against the male 0.08 and
+`CAMP_BODY_FAT.female` is 0.13, so a female body has proportionally less water to shed than a male
+one of the same relative size, and the lightest women's division is where it surfaces first. The
+model needs to be able to call a cut _dangerous_ without calling it _impossible_, and at strawweight
+it currently cannot.
+
+Two rejections are the model being right and are kept as controls: Figueiredo, who missed 125 lb more
+than once and moved up, and Harrison, whose cut to 135 was described as dangerous at the time by
+people who were not exaggerating.
+
+**None of this is fixed here.** Step 5 does not touch the body model, and the disagreements are the
+deliverable — a calibration set containing only cases the model already agrees with has calibrated
+nothing. They are step 6's and step 11's input.
+
+**13.9.3 The archetype problem is a generator problem, not a conceptual one.** § 13.1 measured
+ρ = 0.85 for Power × Strength and 0.89 for Power × Speed in the generated population. Across the 115
+authored placements the same pairs come out at **0.34 and 0.30**, and the largest correlation
+anywhere in the matrix is Power × Cardio at **−0.52** — negative, because heavy hitters carry mass
+and mass costs work capacity, which is the mass law showing up in human judgement before it has been
+implemented in code. Nothing in the authoring was constrained to produce this; each attribute was
+assessed on its own. So the ρ ≈ 0.7 target § 13.1 carries is not merely reachable, it is loose: the
+people the ladder is meant to describe are far less correlated than that.
+
+**13.9.4 The Cardio ceiling wants a fifth attribute more than the others do.** Velasquez at +2.9σ and
+Dvalishvili at +2.9σ are the two highest placements in the file on any attribute, and both are
+placements about _pace maintained under a specific style_ rather than about aerobic capacity as such.
+§ 14.4 already flags Cardio's equation shape as the one that may not match the other four; the
+roster agrees, from the opposite direction.
+
+---
+
 ## 14. Open questions
 
 **14.1 The sex pivot on Speed and Durability.** §2.3 pivots all five physicals. Power, Strength and
@@ -1461,3 +1536,18 @@ which the game world contains but which is hard to observe in reality. The alter
 to the median UFC fighter — is directly observable but would put most of the game's own world below
 50 on everything. §4.2's lift exists to bridge the two; if the lift turns out to be doing too much
 work, this is the assumption to revisit.
+
+**14.6 The weigh-in floor for lean bodies and for women.** § 13.9.2. Two separate mis-specifications
+found by the calibration roster, both in `weighInFloorLbs` rather than in the ladder: a sub-10% cut
+resolving to `notViable` for the leanest men, and four of nine strawweights rejected at cuts the
+sport performs routinely. The fix is not obvious — raising the water-cut ceiling, lowering the female
+fat floor, and splitting `physiqueForMeasurements`'s even frame/muscle assumption are three different
+answers with different downstream consequences — so it is recorded rather than guessed at. Step 6
+owns the composition question; step 11 owns what a cut costs.
+
+**14.7 Whether the calibration roster should ever become shipped data.** It is a measuring instrument
+and § 13.8 says so, but 115 hand-authored fighters with real anthropometry and defended placements is
+also the best-documented population in the repository. The temptation to seed a world from it will
+recur. The argument against is that it would put the sport's hundred-odd most memorable athletes into
+every save, which is a different game; the argument for is that step 12 has to rebuild the world from
+something. Decide at step 8, when the scale locks.

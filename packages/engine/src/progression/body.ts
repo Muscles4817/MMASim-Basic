@@ -188,10 +188,44 @@ export function weighInFloorLbs(body: Body): number {
   return campWeightLbs(body) * (1 - waterCutFraction(body));
 }
 
-/** How much of their walking weight a fighter has to shed to make a limit. Negative if none. */
-export function requiredCutFraction(body: Body, limitLbs: number): number {
+/**
+ * Signed margin against a limit, as a fraction of walking weight. Positive means over.
+ *
+ * The raw quantity, useful because it is monotone and comparable in both directions. **It is not a
+ * cut**, and reporting it as one produced a diagnostic row reading `HW walking 243, cut % −9.3` —
+ * which describes a 243 lb heavyweight performing a negative weight cut rather than a man who simply
+ * competes under a 265 lb ceiling. Use `cutRequiredFraction` or `underLimitFraction` for anything a
+ * human reads.
+ */
+export function weightMarginFraction(body: Body, limitLbs: number): number {
   const walking = walkingWeightLbs(body);
   return (walking - limitLbs) / walking;
+}
+
+/**
+ * How much of their walking weight a fighter has to shed to make a limit. Never negative.
+ *
+ * Zero means no cut is required, which is a different statement from a small cut and should read as
+ * one everywhere it is shown.
+ */
+export function cutRequiredFraction(body: Body, limitLbs: number): number {
+  return Math.max(0, weightMarginFraction(body, limitLbs));
+}
+
+/**
+ * How far under the class ceiling a fighter walks around, as a fraction. Never negative.
+ *
+ * The other half of the same measurement, and the one that means something in a division with no
+ * floor: a heavyweight is not cutting −9%, he is walking 9% below the maximum. Zero for anybody who
+ * has to cut at all.
+ */
+export function underLimitFraction(body: Body, limitLbs: number): number {
+  return Math.max(0, -weightMarginFraction(body, limitLbs));
+}
+
+/** The same, in pounds, for a diagnostic that reads better in the sport's own units. */
+export function underLimitLbs(body: Body, limitLbs: number): number {
+  return Math.max(0, limitLbs - walkingWeightLbs(body));
 }
 
 export type WeightFit = 'comfortable' | 'typical' | 'severe' | 'extreme' | 'notViable';
@@ -207,7 +241,7 @@ export type WeightFit = 'comfortable' | 'typical' | 'severe' | 'extreme' | 'notV
 export function weightFit(body: Body, divisionId: DivisionId): WeightFit {
   const limit = getDivision(divisionId).limitLbs;
   if (weighInFloorLbs(body) > limit) return 'notViable';
-  const cut = requiredCutFraction(body, limit);
+  const cut = weightMarginFraction(body, limit);
   if (cut <= 0.04) return 'comfortable';
   if (cut <= 0.11) return 'typical';
   if (cut <= 0.16) return 'severe';
@@ -238,7 +272,7 @@ export function makeableDivisions(body: Body, sex: Sex): Division[] {
 export function chosenDivision(body: Body, sex: Sex, cutTolerance: number): Division | undefined {
   for (const division of divisionsFor(sex)) {
     if (weighInFloorLbs(body) > division.limitLbs) continue;
-    if (requiredCutFraction(body, division.limitLbs) <= cutTolerance) return division;
+    if (weightMarginFraction(body, division.limitLbs) <= cutTolerance) return division;
   }
   // Nothing was within tolerance. If any division is physiologically makeable at all, the heaviest
   // body still fights — at the lightest one it can actually make, cheerfully over its tolerance.
