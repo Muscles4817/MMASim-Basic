@@ -312,14 +312,21 @@ describe('the physical attributes generated', () => {
      *
      * So "explosive but not especially strong" and "very strong but not explosive" — two of the most
      * ordinary fighters in the sport — are both close to impossible for the generator to produce.
-     * Doc 31 § 12 step 3 splits the talent axes and step 6 gives each attribute its own mass basis,
-     * and together they should bring this to roughly 0.6.
+     * Doc 31 § 12 step 3 splits the talent axes and step 6 gives each attribute its own mass basis.
      *
-     * **The 0.7 target is a provisional marker rather than a specification.** What the design
-     * requires is that distinct plausible physical archetypes exist — the explosive fighter who is
-     * not especially strong, the strong one who is not explosive. Whether the coefficient that
-     * produces that is 0.7 or 0.55 is a calibration question for step 7, once the ladder is being
-     * exercised against real fights.
+     * **There is no longer a numeric target here, and doc 31 § 16.2 explains why the old one went.**
+     * "Tighten to 0.7 at step 6" was written down before there was any evidence about the right
+     * value, and keeping a placeholder because it had been written down is how it turns into a
+     * specification. The calibration roster now supplies real evidence — the same pairs come out at
+     * +0.34 and +0.30 across 115 hand-placed fighters — but that roster is a selected sample of
+     * landmarks rather than a population, so its coefficients are not the replacement target either.
+     *
+     * What the design requires is that distinct physical archetypes are *common* rather than merely
+     * possible: the explosive fighter who is not especially strong, the strong one who is not
+     * explosive, the puncher with no gas tank. A step 6 that reaches ρ = 0.70 while still making
+     * "strong but not explosive" rare has failed; one that lands at 0.55 with every archetype
+     * populated has succeeded. Let the coefficient fall out of the physiology and then argue with
+     * it.
      *
      * The bound below is therefore set where the code *is*, not where it should be. A test that
      * fails on an untouched checkout is a broken test, so this one guards against the correlation
@@ -451,12 +458,27 @@ describe('the body sampler', () => {
   });
 
   it('keeps sampling cheap enough to run inside world generation', () => {
-    // `replenish` calls this once per fighter it creates, while somebody waits for a screen.
+    /**
+     * `replenish` calls this once per fighter it creates, while somebody waits for a screen. A draw
+     * is four clamped normals and a division walk, so the number that matters here is latency and
+     * the honest budget is generous.
+     *
+     * It was 25 and male heavyweight breached it at 26.2 when doc 31 § 14.6 lowered the weigh-in
+     * floor — `chosenDivision` walks the ladder lightest-first and skips divisions the floor rules
+     * out, so a lower floor makes bodies eligible for lighter divisions and heavyweight becomes a
+     * rarer draw. That is the correction working rather than a regression, and the bound is raised
+     * to match with the reason recorded rather than silently.
+     *
+     * The bound that actually guards the population is the fallback rate above, not this one: the
+     * fallback replaces the forward model with a narrower distribution, where a slow draw only costs
+     * microseconds. Male heavyweight went 9.1% → 13.0% against a 15% ceiling in the same change,
+     * which is the number to watch, and step 6 will move it again when mass starts moving.
+     */
     for (const row of RATES) {
       expect(
         mean(row.attempts),
         `${row.sex} ${row.division} needs ${mean(row.attempts).toFixed(1)} draws on average`,
-      ).toBeLessThan(25);
+      ).toBeLessThan(35);
     }
   });
 });

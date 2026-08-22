@@ -88,7 +88,22 @@ export type BodyModelDisagreement =
   /** Real, and genuinely dangerous. The sport did this and should not have. */
   | 'historicalExtremeCut'
   /** The height or reach we have is wrong. */
-  | 'sourceData';
+  | 'sourceData'
+  /**
+   * The model cannot build this body at all, so every number downstream describes somebody else.
+   *
+   * A different animal from the other five, and worse. Those are disagreements about whether a cut
+   * was possible; this one says `physiqueForMeasurements` silently returned a *smaller person* than
+   * the measurements describe, because lean mass per cubic metre of height is capped at
+   * `base + fromFrame + fromMuscle` and the sport contains men above it. Mark Hunt at 5'10" and
+   * 265 lb needs a coefficient of about 18 against a ceiling of 15.3, so the roster is holding a
+   * 226 lb Mark Hunt and resolving his Power and Strength against a 226 lb man's divisional median.
+   *
+   * Entries filed under this **are not calibration evidence for the ladder** until the ceiling
+   * moves, which is step 6's work: it owns the mass coefficients, and changing them here would
+   * shift the whole generated population against a baseline taken to measure exactly that.
+   */
+  | 'outsideBodyModelRange';
 
 export interface CalibrationEntry {
   id: string;
@@ -128,6 +143,27 @@ export interface CalibrationEntry {
   alsoFought?: readonly string[];
 
   /**
+   * Why an extreme placement describes the body rather than the career.
+   *
+   * Required for every placement at **|nσ| ≥ 1.8**, and for a short named list below that where the
+   * risk is specific. The `notes` field defends the whole entry; this defends the numbers most
+   * likely to be wrong, one at a time, against one particular failure.
+   *
+   * That failure is reputation leaking into a physical rating. These five attributes are supposed to
+   * describe raw physiology — peak strike impulse, limb velocity, mass-relative work capacity — and
+   * every one of them has a confound that produces the same highlight reel: **technique, timing,
+   * accuracy, defence, tactical style, or damage accumulated over a career.** A fighter who lands
+   * first is not necessarily faster, and one who is never hurt may be hard to hit rather than hard
+   * to concuss. Each defence has to say which it is.
+   *
+   * **Durability especially.** The game already degrades durability through accumulated damage, so a
+   * calibration entry describes a fighter at a chosen prime point and a placement read off a
+   * late-career decline would be double-counting the same fact. Where a low placement rests on
+   * knockouts that came at the end of a long career, the defence has to say so explicitly.
+   */
+  defence?: Partial<Record<PhysicalScaleKey, string>>;
+
+  /**
    * Why these placements and not others. Mandatory, and the actual deliverable.
    *
    * A note that does not say why a number is what it is has justified nothing, and the numbers are
@@ -139,6 +175,19 @@ export interface CalibrationEntry {
   disagreement?: {
     kind: BodyModelDisagreement;
     note: string;
+    /**
+     * What came of it, once the model was changed.
+     *
+     * A disagreement is a piece of **evidence**, so it is not deleted when it is acted on — the
+     * reasoning that produced a model change is worth more than the change is, and a file that
+     * quietly drops its falsifiers the moment they are addressed cannot be audited later. But a
+     * note reading "the model calls a 10.8% cut impossible" is a lie the day the model stops saying
+     * that, so an entry the model now accepts has to say so here.
+     *
+     * `calibration-roster.test.ts` enforces both halves: a rejected entry needs a `note`, and an
+     * accepted one needs this.
+     */
+    resolution?: string;
   };
 }
 

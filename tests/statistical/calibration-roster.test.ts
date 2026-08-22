@@ -508,6 +508,7 @@ describe('calibration roster — acceptance criteria added at step 5 approval', 
       'placement',
       'alsoFought',
       'notes',
+      'defence',
       'disagreement',
     ]);
     for (const e of CALIBRATION_ROSTER) {
@@ -610,6 +611,33 @@ describe('calibration roster — acceptance criteria added at step 5 approval', 
     }
   });
 
+  it('7b. the roster is a landmark set, not a population sample, and says so', () => {
+    /**
+     * Doc 31 § 16.1. The roster averages about +0.51σ across the five physicals after § 13.9.1's
+     * correction, and the single most likely way for this file to do damage is for that number to be
+     * read as a specification — "the generator should average +0.51σ" is a claim nothing here makes.
+     *
+     * A calibration roster is drawn from the fighters people have watched, which selects hard for
+     * being worth watching, so it sits above the divisional median *by construction*. A roster that
+     * averaged 0.0σ would be the suspicious one. It answers "do recognisable fighters land in
+     * sensible places on the ladder"; § 4.3's percentile tables answer "what does the population
+     * look like", and step 7 compares the generator against those rather than against this.
+     *
+     * The bounds below exist to keep the selection visible rather than to pin it: high enough to
+     * confirm this is a selected sample, low enough to catch the authoring drifting again.
+     */
+    const all = CALIBRATION_ROSTER.flatMap((e) => PHYSICAL_SCALE_KEYS.map((k) => e.placement[k]));
+    const centre = mean(all);
+    say(
+      `\n\n═══ Selection, not population ═══\n\n  mean placement ${centre.toFixed(2)}σ across ` +
+        `${all.length} judgements — a landmark set sitting above its divisions on purpose.\n` +
+        '  Doc 31 § 16.1: this is not a target for the generator and step 7 does not compare\n' +
+        "  against it. § 4.3's percentile tables are what the generated population is measured on.",
+    );
+    expect(centre, 'roster no longer reads as a selected sample').toBeGreaterThan(0.25);
+    expect(centre, 'authoring has drifted upward again').toBeLessThan(0.8);
+  });
+
   it('7. the five physicals were assessed independently enough to break the archetype', () => {
     say('\n\n═══ Placement correlations (the archetype check) ═══\n');
     let worst = 0;
@@ -644,6 +672,7 @@ describe('calibration roster — acceptance criteria added at step 5 approval', 
       'placement',
       'alsoFought',
       'notes',
+      'defence',
       'disagreement',
     ]);
     const forbidden = ['tier', 'naturals', 'attributes', 'potential', 'aptitude', 'motorLearning'];
@@ -653,5 +682,112 @@ describe('calibration roster — acceptance criteria added at step 5 approval', 
         expect(forbidden).not.toContain(key);
       }
     }
+  });
+});
+
+describe('calibration roster — the extreme placements, made reviewable', () => {
+  /**
+   * Doc 31 § 17. The roster's architecture is settled; the remaining risk in it is human, and it is
+   * specific: **reputation leaking into a raw physical attribute.**
+   *
+   * Every one of these five is supposed to describe physiology — peak strike impulse, limb velocity,
+   * mass-relative work capacity — and every one has a confound that produces an identical highlight
+   * reel. Technique, timing, accuracy, defence, tactical style, and damage accumulated across a
+   * career all make a fighter look like a physical outlier without making him one. The placements
+   * most exposed to that are the extreme ones, because those are where a memorable career pushes
+   * hardest, so each is defended individually rather than left to the entry-level note.
+   */
+  const THRESHOLD = 1.8;
+  const extremes = CALIBRATION_ROSTER.flatMap((entry) =>
+    PHYSICAL_SCALE_KEYS.filter((key) => Math.abs(entry.placement[key]) >= THRESHOLD).map((key) => ({
+      entry,
+      key,
+      sigma: entry.placement[key],
+    })),
+  );
+
+  it('prints every placement at |nσ| ≥ 1.8 with its defence', () => {
+    say(`\n\n═══ Extreme placements (|nσ| ≥ ${THRESHOLD}) ═══\n`);
+    say(
+      '  Read these as claims about a body, and disagree with any of them. Each defence has to say\n' +
+        '  what separates the physical attribute from the thing that would otherwise explain the\n' +
+        '  same career: technique, timing, accuracy, defence, style, or accumulated damage.\n',
+    );
+    for (const { entry, key, sigma } of extremes) {
+      const resolved = get(entry.id).physicals[key];
+      say(
+        `\n  ${entry.name} — ${key} ${sigma >= 0 ? '+' : '−'}${Math.abs(sigma).toFixed(1)}σ → rating ${resolved.rating}`,
+      );
+      say(`      ${entry.defence?.[key] ?? '(undefended)'}`);
+    }
+    say('\n\n  And the entries defended below the threshold, where the risk is specific:\n');
+    for (const entry of CALIBRATION_ROSTER) {
+      for (const key of PHYSICAL_SCALE_KEYS) {
+        if (Math.abs(entry.placement[key]) >= THRESHOLD) continue;
+        const defence = entry.defence?.[key];
+        if (!defence) continue;
+        say(`\n  ${entry.name} — ${key} ${entry.placement[key].toFixed(1)}σ`);
+        say(`      ${defence}`);
+      }
+    }
+    expect(extremes.length).toBeGreaterThan(30);
+  });
+
+  it('requires a defence for every extreme placement', () => {
+    for (const { entry, key, sigma } of extremes) {
+      const defence = entry.defence?.[key];
+      expect(
+        defence,
+        `${entry.name} ${key} at ${sigma}σ has no defence against reputation`,
+      ).toBeDefined();
+      expect(defence!.length, `${entry.name} ${key} defence is too thin`).toBeGreaterThan(100);
+    }
+  });
+
+  it('requires every Durability defence to address career damage explicitly', () => {
+    /**
+     * The one attribute where the confound is structural rather than incidental. The game already
+     * degrades durability through accumulated damage, so an entry describes a fighter at a chosen
+     * prime point — and a placement read off a late-career decline would be double-counting the same
+     * fact twice, once in the rating and once in the system that erodes it.
+     */
+    const marker = /prime|career|decline|damage|late|accumulat|wear/i;
+    for (const entry of CALIBRATION_ROSTER) {
+      const defence = entry.defence?.durability;
+      if (!defence) continue;
+      expect(
+        marker.test(defence),
+        `${entry.name}'s Durability defence never says whether it is a prime-point reading`,
+      ).toBe(true);
+    }
+  });
+
+  it('reports that the roster has no extreme low placements at all', () => {
+    /**
+     * Not an assertion about what the roster should contain — a finding about what it does, printed
+     * because it is the shape a reputation bias would leave behind. Fame is made of highlight reels,
+     * and nobody is famous for being the slowest man in his division, so the tail that goes missing
+     * first is the low one.
+     */
+    const low = extremes.filter((e) => e.sigma <= -THRESHOLD);
+    const mostNegative = CALIBRATION_ROSTER.flatMap((entry) =>
+      PHYSICAL_SCALE_KEYS.map((key) => ({ entry, key, sigma: entry.placement[key] })),
+    ).sort((a, b) => a.sigma - b.sigma);
+    say(
+      `\n\n═══ The missing tail ═══\n\n  ${extremes.length} placements sit at or beyond ±${THRESHOLD}σ. ` +
+        `${low.length} of them are negative.\n\n  The five lowest in the file:`,
+    );
+    for (const { entry, key, sigma } of mostNegative.slice(0, 5)) {
+      say(`      ${entry.name.padEnd(22)}${key.padEnd(11)}${sigma.toFixed(1)}σ`);
+    }
+    say(
+      '\n  A roster of landmarks is a roster of people worth watching, and nobody is watched for\n' +
+        '  being the slowest man in his division — so the tail that goes missing is the low one. It\n' +
+        '  is reported rather than fixed: inventing a −2.0σ fighter to balance the file would be\n' +
+        '  authoring to a shape instead of to evidence, which is the error § 13.9.1 already caught\n' +
+        '  once. What it means in practice is that the bottom of the ladder is calibrated more\n' +
+        '  weakly than the top, and step 7 should not read the roster as bounding it.',
+    );
+    expect(low.length).toBeLessThan(extremes.length / 2);
   });
 });
