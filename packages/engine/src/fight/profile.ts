@@ -353,6 +353,24 @@ export const POSITION_COST: Readonly<Record<Position, number>> = {
   ground: 1.15,
 };
 
+/**
+ * Extra stamina cost for the fighter being held on the fence: carrying somebody is exhausting.
+ *
+ * D15. The engine has computed `isControlled` for the clinch since the tie-up got two sides, and
+ * then never read it — `GROUND_BOTTOM_COST` was applied only on the floor, so a man pinned against
+ * the cage paid exactly what the man pinning him paid. Two things follow from fixing it, and the
+ * second is the one that matters: `clinchIntent: 'control'` stops being an instruction that buys
+ * only clock and judges' points, because wearing somebody out against the fence is most of what
+ * holding them there is *for*.
+ *
+ * Calibrated against the analogous ground distinction rather than chosen: the floor charges the man
+ * underneath 1.5× the man on top in side control, and this reads 1.4 — a little less, because a man
+ * on the fence still has his feet under him and can hand-fight, which is more than a man under side
+ * control has. `POSITION_COST.clinch` is untouched, so the tie-up remains the most expensive place
+ * in the fight for *both* men, which it should be and already was.
+ */
+export const CLINCH_HELD_COST = 1.4;
+
 /** Extra stamina cost for the fighter *underneath*: being controlled is exhausting. */
 export const GROUND_BOTTOM_COST: Readonly<Record<GroundPosition, number>> = {
   guard: 1.1,

@@ -84,7 +84,7 @@ calibrate twice.
 | --- | --- | --- | --- | --- |
 | **D1** | F9 — `stall` conflates riding with residual | architectural + calibration | — | **yes, materially** |
 | **D2** | F10 — a fighter on top cannot elect to disengage *(**done**)* | architectural | D1 (same list) | yes |
-| **D3** | F2 — the clinch has no behaviour axis *(re-audited; designed)* | architectural | D1, D11 (Reduced must represent the clinch first) | yes |
+| **D3** | F2 — the clinch has no behaviour axis *(**done**)* | architectural | D1, D11 (Reduced must represent the clinch first) | yes |
 | **D4** | F6 — no `bottom` desired state | architectural (vocabulary) | — | yes, mildly |
 | **D5** | F7 — positional risk is not expressible *(shrunk: D3 absorbs the clinch slice)* | architectural | D3 | yes |
 | **D6** | F3 — `recover` is still `standUp` | behavioural | D4 | yes, narrowly |
@@ -94,9 +94,9 @@ calibrate twice.
 | **D10** | Reduced's plan sensitivity is inverted on the ground *(**done**)* | architectural (Reduced) | — | Reduced only |
 | **D11** | Reduced books no clinch control at all *(**done**)* | architectural (Reduced) | — | Reduced only |
 | **D12** | Reduced under-produces knockdowns from standing time *(deferred)* | calibration (Reduced) | — | Reduced only |
-| **D13** | The controlling fighter in a clinch cannot let go | architectural | ships with D3 | yes |
+| **D13** | The controlling fighter in a clinch cannot let go *(**done**)* | architectural | shipped with D3 | yes |
 | **D14** | Reduced collapses the two grappling entries into one appetite | architectural (Reduced) | — | Reduced only |
-| **D15** | A tie-up costs both men the same | calibration | — | yes, sport-wide |
+| **D15** | A tie-up costs both men the same *(**done**)* | calibration | shipped with D3 | yes, sport-wide |
 
 ### D1 — `stall` conflated two concepts *(was F9; **done**)*
 
@@ -403,7 +403,12 @@ is not true of the other two thirds of it, and the exposure pass is its own piec
 *Enforced by* `tests/statistical/top-disengagement.test.ts`, fifteen assertions swept over eight seed
 salts.
 
-### D3 — The clinch has no behaviour axis *(was F2; **re-audited against the corrected Reduced model, not yet built**)*
+### D3 — The clinch has no behaviour axis *(was F2; **done**, with D13 and D15)*
+
+**Built.** `clinchIntent: control | damage | takedown`, one field over both ends of the tie-up
+through one alignment table; the controlling fighter gained a voluntary release (D13); and being
+held on the fence stopped costing what holding it costs (D15). The design below is what shipped —
+the sections that follow it record what the built thing measured.
 
 **Re-audited after D10 and D11.** The finding survives and its shape is now precise: the clinch is
 **the only position in the engine whose in-state behaviour is read off `preferredState`.** Everywhere
@@ -631,7 +636,95 @@ magnitude error in *how much* control a fence-first plan buys, and it is recorde
   the tie-up it does not (D15).
 - **D4, D6, D8 unaffected.**
 
-*Nothing implemented. This section is the design.*
+#### What the built thing measures
+
+The design above shipped with one number changed, and it is the semantic one. `clinchTakedown` under
+`control` moved from −0.2 to **−0.55**, which is the answer to the question the design put up:
+
+> **`control` means *this tie-up*, not grappling in general.** Decision A, not B.
+
+The first draft implemented B by accident — 36% takedowns against 46% holding — and it was rejected
+because three intents that overlap are three intents that do not separate, and separating them is the
+entire finding. A player who asks for `control` and gets a fighter shooting a third of the time has
+been given `takedown` with extra steps. The screen therefore says *"Keep the tie-up. Wear them out
+against the fence."* and the table means it.
+
+It is not zero and should not be. A quarter of a controlling fighter's beats are still a takedown
+under `control`, because the takedown's *capability* is in the draw and a good wrestler is a good
+wrestler whatever he was told. That is invariant 1, not a leak: what the instruction buys is the
+emphasis, and holding outweighs shooting two to one.
+
+Shares at conviction 0.9, on the real capabilities:
+
+| plan | takedown | strike | maintain | release | authority |
+| --- | --- | --- | --- | --- | --- |
+| *before D3, clinch preference* | 22.1% | 64.0% | 13.9% | — | 1.24 |
+| clinch / `control` | 25.4% | 20.3% | **50.6%** | 3.7% | 1.90 |
+| clinch / `damage` | 18.6% | **74.5%** | 4.8% | 2.1% | 1.90 |
+| clinch / `takedown` | **83.3%** | 11.0% | 4.0% | 1.7% | 1.90 |
+| outside / `control` | 17.6% | 14.1% | 35.0% | **33.3%** | 1.47 |
+| outside / `damage` | 14.9% | 59.5% | 3.8% | **21.8%** | 1.33 |
+| top / `takedown` | 80.4% | 10.7% | 3.9% | 5.1% | 1.28 |
+| *unplanned* | 44.7% | 31.5% | 12.2% | 11.6% | 0.00 |
+
+And held, where the same instruction is read from the other end:
+
+| plan | strike | reverse | pummel | authority |
+| --- | --- | --- | --- | --- |
+| `control` | 7.7% | 56.1% | **36.1%** | 3.70 |
+| `damage` | **63.0%** | 18.4% | 18.6% | 3.70 |
+| `takedown` | 9.7% | **70.6%** | 19.7% | 3.70 |
+
+**Authority.** The controlling clinch was the quietest decision surface in the engine at 0.56–1.35
+across five preferences; it now reads **1.28–1.90** across twelve plan combinations. Not calibrated
+to a universal value — comparability is D7's job and this is not it — but off the floor, and no
+longer *differently* quiet for different corners, which was the subtler half of the defect.
+
+**Capability still owns success.** At a fixed instruction, sweeping strength 30 → 90 moves the
+takedown share 81.5% → 84.4%. Whether the takedown comes off is `resolveTakedown`, whether the knee
+lands is `throwClinchStrike`, whether the pin holds is the escape contest. None was touched.
+
+**The unplanned row did not move**, because every alignment is read through `bias`, which returns
+exactly 1 at zero urgency. The clearest evidence of what the axis was worth is what the *old* engine
+did with the two plans it could not tell apart: `clinch / control` and `clinch / damage` produced
+**192.6 seconds of tie-up each, the same win rate and the same knockout rate, to the last decimal.**
+They were the same fight.
+
+#### What Reduced took
+
+Exactly what the audit said it would, and nothing else:
+
+- `clinchLean` stays on `preferredState`. It is the entry route.
+- `clinchPersistence` repointed to `clinchIntent` — the two rows it reads moved tables. Its neutral
+  is still exactly 1 and its spread is comparable: 1.65 / 0.97 / 0.30 for control / damage / takedown
+  against the 1.41 / 1.07 / 0.38 it read for clinch / outside / top.
+- `clinchStrikeAppetite` added, the clinch twin of `groundStrikeAppetite`, blended into
+  `attemptsFor`'s control term by D11's own clinch share. Without it `damage` and `control` would
+  have thrown identically at round granularity while Full separated them four-fold.
+
+No new phase, no new state, no constant retuned. Reduced's unplanned fixtures are **bit-identical**
+before and after.
+
+#### What it cost
+
+| matchup (unplanned, Full) | clinch sec/f | control sec/f | KO% | SUB% |
+| --- | --- | --- | --- | --- |
+| even | 103.3 → 101.4 | 504.1 → 491.3 | 6.8 → 6.4 | 13.4 → 14.2 |
+| striker-v-grinder | 43.6 → 41.1 | 468.1 → 465.1 | 25.6 → 27.0 | 20.0 → 18.6 |
+| guardPlayer-v-smotherer | 74.6 → 72.4 | 627.9 → 621.7 | 2.6 → 3.4 | 19.4 → 19.0 |
+| contender-v-canFodder | 25.3 → 24.7 | 223.0 → 219.9 | 63.2 → 62.2 | 30.8 → 31.4 |
+
+Two to six per cent of the sport's clinch time, which is the price of the position having a door, and
+it is D13's bill rather than D3's. One Full/Reduced allowance widened — `smotherer-v-striker`'s
+knockout gap from 0.145 to 0.16 — with the cause named: Reduced has no tie-up to release from,
+because the clinch exists there as a share of control rather than as a phase, which is D11's stated
+limitation working exactly as documented.
+
+The golden fingerprint's fourth re-recording is the smallest of the four: **only `punches` moved**, by
+0.3% to 1.1%, following the time back out to range.
+
+*Enforced by* `tests/statistical/clinch-intent.test.ts`, nineteen assertions swept over six seed
+salts.
 
 ### D4 — No `bottom` desired state *(was F6)*
 
@@ -991,7 +1084,33 @@ a different quantity, and it wants its own pass.
 will move knockout rates across the whole sport, and bundling it into a change whose entire claim is
 *"the level did not move"* would make both unprovable.
 
-### D13 — The controlling fighter in a clinch cannot let go *(found in the D3 re-audit)*
+### D13 — The controlling fighter in a clinch cannot let go *(found in the D3 re-audit; **done**)*
+
+**Built with D3**, and the design was D2's transposed without amendment: a fourth candidate in the
+same flat list, keyed on `preferredState` through the existing `CLINCH_EXIT` table, `clinchDefence`
+against `clinchOffence` for the contest, the beat consumed either way.
+
+Measured: a fighter who wants the fight at range releases a tie-up he is holding on **18–33%** of his
+controlling beats depending on what else he was told to do with it, one who came for the clinch on
+**3.7%**, and one with no instructions at all on 11.6%. The release share never exceeds 5% for any
+fighter who wants to stay, which bounds what it can have taken off the other three. Success runs 51%
+to 66% across a full sweep of the three ratings `clinchDefence` is built from, against an attempt
+rate that moves by a third — plan owns the attempt, the two fighters own the outcome.
+
+Two details worth keeping. `clinchOffence` deliberately does **not** appear on the actor's side: being
+good at holding people is not what gets you away from them, and letting it in would make the fighters
+who least want to leave the best at leaving. And the range it books is `boxing`, the same as the held
+man's break, because two men who are both already standing when they separate are within arm's reach
+however it happened — what differs is the stickiness, 0.45 against 0.35, because this man picked the
+moment and is balanced when the space appears. That is *how the separation happened* reflected in the
+mechanism it actually changes, rather than in a range label.
+
+**What could not be modelled, stated rather than invented:** whether either man has his back to the
+fence. `FightState` knows they are tied up and not where in the cage they are — the same gap the top
+disengage records on the floor.
+
+*The original finding follows.*
+
 
 D2's sibling, one position over, and it went unnoticed because the *held* fighter's exit is so
 prominent. `resolveClinch`'s controlling branch offers a takedown, a strike and the position, and no
@@ -1020,7 +1139,41 @@ weighted by which route dominates, because a fence hold is shorter-lived than a 
 Architectural debt against the transition-intent vocabulary, and the natural place to pay it is
 alongside whatever next touches `controlPull`.
 
-### D15 — A tie-up costs both men the same *(found in the D3 re-audit)*
+### D15 — A tie-up costs both men the same *(found in the D3 re-audit; **done**)*
+
+**Built with D3.** `accrueFatigue` now reads the `isControlled` it has been computing for the clinch
+all along: `CLINCH_HELD_COST = 1.4`, applied the same way `GROUND_BOTTOM_COST` is applied on the
+floor. `POSITION_COST` is untouched, so the tie-up remains the most expensive place in the fight for
+both men, which it should be and already was — the earlier note calling that an oddity was wrong, and
+this corrects it.
+
+Calibrated against the analogous ground distinction rather than chosen: side control charges the man
+underneath 1.5× the man on top, and the fence charges 1.4× — a little less, because a man on the
+fence still has his feet under him and can hand-fight, which is more than a man under side control
+has.
+
+**The payoff, isolated.** Toggling the constant alone, 800 fights of an 84-strength clinch fighter
+against a better boxer:
+
+| plan | `CLINCH_HELD_COST` 1.0 | 1.4 |
+| --- | --- | --- |
+| clinch / `control` | 72.5% | **78.0%** |
+| clinch / `damage` | 78.8% | 81.0% |
+| boxing / `counter` | 74.0% | 74.9% |
+| outside / `movement` | 60.9% | 61.6% |
+
+Five and a half points to the plan that holds people and under a point to the plans that do not,
+which is the shape a positional attrition term should have. The opponent's *first*-round output falls
+with it, 17.5 attempts to 16.4, because he is carrying weight from the opening minute. Without this,
+`clinchIntent: 'control'` would have bought clock and judges' points and nothing else.
+
+That experiment is documented rather than asserted, because separating it inside a test would mean
+toggling the constant, which a test cannot do — so the suite asserts the mechanism exactly (a second
+of being held costs 1.4 seconds of holding) and the docs carry the behaviour. Asserting a behavioural
+claim a fixture cannot carry is the mistake docs/01 § 6b exists to stop.
+
+*The original finding follows.*
+
 
 `accrueFatigue` computes `isControlled` for the clinch and then never reads it: `GROUND_BOTTOM_COST`
 is applied only when `position === 'ground'`. Measured over sixty seconds for an average fighter:

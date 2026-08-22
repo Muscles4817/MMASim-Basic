@@ -191,6 +191,33 @@ export type TopIntent = (typeof TOP_INTENTS)[number];
 export const BOTTOM_INTENTS = ['standUp', 'scramble', 'playGuard', 'recover', 'attack'] as const;
 export type BottomIntent = (typeof BOTTOM_INTENTS)[number];
 
+/**
+ * And in a tie-up, which until D3 was the one position with no instruction of its own.
+ *
+ * The clinch was the only place in the engine where *what do I do having arrived* was read off
+ * `preferredState` — the field that answers *where do I want the fight*. One instruction doing two
+ * jobs, and the measurement said so: the controlling clinch was the **lowest-authority decision
+ * surface in the game** (0.56 to 1.35 at full conviction, against 2.11–4.82 at range), and a clinch
+ * preference spent 64% of its beats striking against 13.9% holding. "Hold him here" could not be
+ * said.
+ *
+ * **One field for both ends of the tie-up**, which is the one place this departs from the
+ * `topIntent` / `bottomIntent` precedent. Top and bottom are separate fields because they are
+ * separate jobs a fighter can be in for minutes. The two ends of a clinch swap within seconds —
+ * `reverse` exists to swap them — and a corner does not give two different tie-up instructions. Two
+ * alignment tables, one instruction, read from whichever end he is on.
+ *
+ * Three values and not four: there is no clinch analogue of `submit`, standing submissions are not
+ * modelled, and inventing one here would be a mechanic smuggled in through a vocabulary change.
+ *
+ * **What it does not cover is leaving.** Whether a fighter wants to be in a tie-up at all is a
+ * `preferredState` question, exactly as getting off the floor is (docs/01 § 8, and D2 before this).
+ * The rule the two share: *intents own what stays within or advances the grappling; `preferredState`
+ * owns the exits back to the feet.*
+ */
+export const CLINCH_INTENTS = ['control', 'damage', 'takedown'] as const;
+export type ClinchIntent = (typeof CLINCH_INTENTS)[number];
+
 export const TOP_INTENT_META: Readonly<Record<TopIntent, { label: string; blurb: string }>> = {
   control: { label: 'Control', blurb: 'Position and riding time. Give up nothing.' },
   groundAndPound: {
@@ -226,6 +253,40 @@ export const BOTTOM_INTENT_META: Readonly<Record<BottomIntent, { label: string; 
  *
  * What is left is genuinely its own question: how much the plan changes when a finish appears.
  */
+/**
+ * **`control` means this tie-up, not grappling in general** — decision A of the two the design put
+ * up, and it is the reason the wording matters before the screen is written.
+ *
+ * The alternative, B, was *prioritise position over damage, takedowns included*, and the first
+ * draft's alignments implemented it by accident: `control` came out at 36% takedowns against 46%
+ * holding. It was rejected because three intents that overlap are three intents that do not
+ * separate, and separating them is the entire finding — a player who asks for `control` and gets a
+ * fighter who shoots a third of the time has been given `takedown` with extra steps.
+ *
+ * So the blurb says *keep the tie-up*, and the table means it: `clinchTakedown` reads −0.55 under
+ * `control`. A fighter told to control a clinch and take people down is told two things, and the
+ * axis lets him say the second one.
+ */
+/**
+ * What a plan written before `clinchIntent` existed was implicitly asking for.
+ *
+ * Measured off the table it replaces. Keyed on `preferredState`, the old clinch decision gave a
+ * top or submission preference 82% takedowns, and gave everybody else a strike-led mix — 44% for an
+ * outside fighter, 57% in the pocket, 64% for a clinch fighter. So two rows, and the clinch
+ * preference lands on `damage` rather than `control` because that is what it *did*, not because a
+ * clinch fighter should not be allowed to grind. Making him grind is the new instruction, and new
+ * instructions are opt-in.
+ */
+export function clinchIntentFor(state: PreferredState): ClinchIntent {
+  return state === 'top' || state === 'submission' ? 'takedown' : 'damage';
+}
+
+export const CLINCH_INTENT_META: Readonly<Record<ClinchIntent, { label: string; blurb: string }>> = {
+  control: { label: 'Control', blurb: 'Keep the tie-up. Wear them out against the fence.' },
+  damage: { label: 'Damage', blurb: 'Knees and short shots. Accept the position getting away.' },
+  takedown: { label: 'Takedown', blurb: 'Use the tie-up as the route to the floor.' },
+};
+
 export const FINISHING_URGENCIES = ['disciplined', 'pressAdvantage', 'huntFinish'] as const;
 export type FinishingUrgency = (typeof FINISHING_URGENCIES)[number];
 
@@ -314,6 +375,7 @@ export interface TacticalPlan {
   entry: EntryStyle;
   topIntent: TopIntent;
   bottomIntent: BottomIntent;
+  clinchIntent: ClinchIntent;
   finishing: FinishingUrgency;
   /** Unset situations fall through to `holdThePlan`. */
   situational: SituationalRules;
@@ -361,6 +423,7 @@ export function defaultTactics(): TacticalPlan {
     entry: 'lead',
     topIntent: 'control',
     bottomIntent: 'scramble',
+    clinchIntent: 'damage',
     finishing: 'disciplined',
     situational: {},
     conviction: 0,
@@ -402,6 +465,12 @@ export function normaliseTactics(plan: TacticalPlan): TacticalPlan {
     entry: entries.includes(plan.entry) ? plan.entry : entries[0]!,
     topIntent: oneOf(TOP_INTENTS, plan.topIntent, fallback.topIntent),
     bottomIntent: oneOf(BOTTOM_INTENTS, plan.bottomIntent, fallback.bottomIntent),
+    /*
+     * A plan written before this field existed is not missing an instruction, it *had* one — the
+     * clinch read `preferredState` — so the migration asks what that plan was implicitly saying
+     * rather than dropping everybody on a default. See `clinchIntentFor`.
+     */
+    clinchIntent: oneOf(CLINCH_INTENTS, plan.clinchIntent, clinchIntentFor(preferredState)),
     finishing: oneOf(FINISHING_URGENCIES, plan.finishing, fallback.finishing),
     situational: plan.situational ?? {},
     conviction: Number.isFinite(plan.conviction) ? clamp01(plan.conviction) : 0,

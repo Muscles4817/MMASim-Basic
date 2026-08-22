@@ -218,8 +218,18 @@ describe('who wins', () => {
  * and it moved Reduced's control by under 1% because the same clamp swallows it. Deleted: a
  * modifier that cannot be measured is dead code with a comment.
  */
+/**
+ * **D3 + D13 + D15 widened one cell, for the reason D2 widened two.**
+ *
+ * Giving the man holding a tie-up a voluntary release costs the sport 2–6% of its clinch time, and
+ * that time comes back standing: Full's knockout rate in `smotherer-v-striker` moved 25.9% to 27.2%
+ * and the gap with it. Reduced does not follow because it has no tie-up to release from — the clinch
+ * exists there as a share of control, not as a phase, which is D11's stated limitation working
+ * exactly as documented. The *direction* is intact and enforced: a fighter who wants the fight at
+ * range gets less clinch occupancy at both levels.
+ */
 const KO_GAP_ALLOWANCE: Readonly<Record<string, number>> = {
-  'smotherer-v-striker': 0.145,
+  'smotherer-v-striker': 0.16,
   'striker-v-grinder': 0.145,
 };
 

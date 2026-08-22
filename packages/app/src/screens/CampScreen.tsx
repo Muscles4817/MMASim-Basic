@@ -14,6 +14,8 @@ import {
   SITUATIONS,
   SITUATION_META,
   TOP_INTENTS,
+  CLINCH_INTENTS,
+  CLINCH_INTENT_META,
   TOP_INTENT_META,
   convictionFor,
   defaultTactics,
@@ -793,6 +795,23 @@ export function CampScreen() {
             }))}
             value={tactics.bottomIntent}
             onPick={(key) => setPlan({ bottomIntent: key })}
+          />
+
+          {/*
+            D3. The clinch was the only position whose in-state behaviour was read off the
+            preferred state, so "tie them up" and "hold them there" were one instruction — and the
+            controlling clinch measured as the quietest decision surface in the engine.
+          */}
+          <PlanChoice
+            title="When you have the tie-up"
+            note="Whether you want the clinch at all is above; this is what you do with it."
+            options={CLINCH_INTENTS.map((key) => ({
+              key,
+              label: CLINCH_INTENT_META[key].label,
+              blurb: CLINCH_INTENT_META[key].blurb,
+            }))}
+            value={tactics.clinchIntent}
+            onPick={(key) => setPlan({ clinchIntent: key })}
           />
 
           <PlanChoice

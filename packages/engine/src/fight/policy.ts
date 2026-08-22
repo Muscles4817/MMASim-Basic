@@ -60,6 +60,7 @@ import { rangeChangeChance, rangeUrgencyScale, type RangeChange } from './range.
 import { exitUrgency } from './decide.js';
 import type {
   BottomIntent,
+  ClinchIntent,
   PreferredState,
   SituationalResponse,
   Situation,
@@ -94,8 +95,10 @@ const STRENGTH = 1.9;
  * Read a row as: *if this is the fight I want, how well does this action serve it?*
  */
 export type StandingAction = 'strike' | 'kick' | 'takedown' | 'clinchUp';
-export type HeldAction = 'breakAway' | 'clinchStrike' | 'reverse' | 'pummel';
 export type ControllingAction = 'clinchTakedown' | 'clinchStrike' | 'clinchMaintain';
+
+/** What a fighter does with a tie-up he has chosen to stay in, from either end of it. */
+export type ClinchWork = ControllingAction | 'reverse' | 'pummel';
 
 type Alignment = Readonly<Record<PreferredState, number>>;
 
@@ -147,91 +150,44 @@ const STANDING_ALIGNMENT: Readonly<Record<StandingAction, Alignment>> = {
   },
 };
 
-const HELD_ALIGNMENT: Readonly<Record<HeldAction, Alignment>> = {
-  breakAway: {
-    outside: 1,
-    boxing: 0.9,
-    pocket: 0.65,
-    clinch: -1,
-    top: -0.1,
-    submission: -0.2,
-    adaptive: 0,
-  },
-  clinchStrike: {
-    outside: -0.35,
-    boxing: -0.1,
-    pocket: 0.25,
-    clinch: 0.7,
-    top: -0.15,
-    submission: -0.2,
-    adaptive: 0,
-  },
-  reverse: {
-    outside: -0.4,
-    boxing: -0.25,
-    pocket: -0.1,
-    clinch: 1,
-    top: 0.7,
-    submission: 0.4,
-    adaptive: 0,
-  },
-  /*
-   * Hand-fighting: the work a fighter does in a tie-up he wants no part of.
-   *
-   * Added with the transition split, and for the same reason `defend` was added underneath. Once
-   * `breakAway` stopped competing for the same draw, the only things left in the held fighter's
-   * in-state list were a short strike and a reversal — so an outside fighter whose break failed
-   * *took over the clinch* 59% of the time, which is the opposite of what he was told and cost the
-   * striking swing 1.6 points of win rate.
-   *
-   * Reversing a tie-up is a grappler's answer to being held. A striker's answer is to fight the
-   * hands and force the referee to look at it, which is what this row says.
-   */
-  pummel: {
-    outside: 0.9,
-    boxing: 0.8,
-    pocket: 0.5,
-    clinch: -0.2,
-    top: -0.15,
-    submission: -0.2,
-    adaptive: 0,
-  },
-};
 
-const CONTROLLING_ALIGNMENT: Readonly<Record<ControllingAction, Alignment>> = {
-  clinchTakedown: {
-    outside: -0.6,
-    boxing: -0.55,
-    pocket: -0.5,
-    clinch: -0.1,
-    top: 1,
-    submission: 0.85,
-    adaptive: 0,
-  },
-  clinchStrike: {
-    outside: -0.3,
-    boxing: -0.05,
-    pocket: 0.2,
-    clinch: 1,
-    top: -0.2,
-    submission: -0.25,
-    adaptive: 0,
-  },
+/**
+ * What a fighter does with a tie-up he has chosen to stay in — **both ends of it, one instruction.**
+ *
+ * Keyed on `clinchIntent`, which is the whole of D3. Until it existed these rows were keyed on
+ * `preferredState`, so the clinch was the only position in the engine whose *in-state* behaviour was
+ * read off the field that answers *where do I want the fight*. One instruction doing two jobs, and it
+ * did the second one badly: the controlling clinch measured **0.56 to 1.35** on `intentAuthority`
+ * against 2.11–4.82 at range, the lowest surface in the game, and a clinch preference spent 64% of
+ * its beats striking against 13.9% holding. *Hold him here* could not be said.
+ *
+ * One table rather than two, and read from whichever end the fighter is on. `clinchTakedown`,
+ * `clinchStrike` and `clinchMaintain` are the controller's; `clinchStrike`, `reverse` and `pummel`
+ * are the held man's. The shared row is deliberate — *hit him* means the same thing from both ends.
+ *
+ * `reverse` is the held man's route to **both** control and a takedown, because he cannot shoot from
+ * underneath a tie-up; he has to take the position first. `pummel` is the hand-fighting that keeps a
+ * tie-up alive without spending it, which is what `control` asks for from the wrong end.
+ *
+ * Leaving is not here. Whether a fighter wants a tie-up at all is a `preferredState` question and
+ * `CLINCH_EXIT` answers it, from both ends, for the same reason `TOP_EXIT` does on the floor.
+ */
+const CLINCH_WORK_ALIGNMENT: Readonly<Record<ClinchWork, Readonly<Record<ClinchIntent, number>>>> = {
   /*
-   * Pinning a man on the fence and keeping him there. Renamed from `clinchStall`, because what a
-   * fighter *chooses* here is positional maintenance — a real thing to do with a tie-up — and
-   * calling it stalling conflated it with the inactivity that arrives when other actions fail.
-   * See doc 31 § D1.
+   * `control` reads −0.55 here, and that is the semantic decision the design put up for a ruling.
+   *
+   * The first draft had −0.2, which produced 36% takedowns against 46% holding — *prioritise
+   * position over damage, takedowns included*. It reads reasonably and it was rejected: three
+   * intents that overlap are three intents that do not separate, and separating them is the entire
+   * finding. A player who asks for `control` and gets a fighter who shoots a third of the time has
+   * been given `takedown` with extra steps. So `control` means **this tie-up**, and a fighter told
+   * to hold people and take them down is being told two things — the axis lets him say the second.
    */
-  clinchMaintain: {
-    outside: -0.5,
-    boxing: -0.45,
-    pocket: -0.4,
-    clinch: 0.55,
-    top: -0.1,
-    submission: -0.35,
-    adaptive: 0,
-  },
+  clinchTakedown: { control: -0.55, damage: -0.35, takedown: 1 },
+  clinchStrike: { control: -0.45, damage: 1, takedown: -0.3 },
+  clinchMaintain: { control: 1, damage: -0.4, takedown: -0.35 },
+  reverse: { control: 0.85, damage: -0.2, takedown: 1 },
+  pummel: { control: 0.4, damage: -0.3, takedown: -0.1 },
 };
 
 /**
@@ -458,20 +414,36 @@ export function bias(alignment: number, urgency: number, opportunity = 0): numbe
 export const standingBias = (stance: Stance, action: StandingAction, opportunity = 0): number =>
   bias(STANDING_ALIGNMENT[action][stance.desired], stance.urgency, opportunity);
 
-export const heldBias = (stance: Stance, action: HeldAction, opportunity = 0): number =>
-  bias(HELD_ALIGNMENT[action][stance.desired], stance.urgency, opportunity);
-
-export const controllingBias = (
+/**
+ * What he does with a tie-up, from either end of it. Reads `clinchIntent` and nothing else.
+ *
+ * Takes the combatant rather than only the stance, exactly as `topBias` and `bottomBias` do, and for
+ * exactly the same reason: this is an in-state decision, so it asks the in-state field.
+ */
+export const clinchWorkBias = (
+  c: Combatant,
   stance: Stance,
-  action: ControllingAction,
+  action: ClinchWork,
   opportunity = 0,
-): number => bias(CONTROLLING_ALIGNMENT[action][stance.desired], stance.urgency, opportunity);
+): number =>
+  bias(CLINCH_WORK_ALIGNMENT[action][c.plan.tactics.clinchIntent], stance.urgency, opportunity);
 
 export const topBias = (c: Combatant, stance: Stance, action: TopAction, opportunity = 0): number =>
   bias(TOP_ALIGNMENT[action][c.plan.tactics.topIntent], stance.urgency, opportunity);
 
 /** How much this plan wants the fight back on the feet, read from the top position. */
 export const topExitBias = (stance: Stance): number => bias(TOP_EXIT[stance.desired], stance.urgency);
+
+/**
+ * And how much it wants out of a tie-up — read by the man *holding* it, who until D13 could not act
+ * on the answer.
+ *
+ * The same `CLINCH_EXIT` table the held man's break already uses, because *how badly do I want out
+ * of a tie-up* does not depend on which end of it I have hold of. What differs is the contest, not
+ * the wish: one man is escaping and the other is letting go.
+ */
+export const clinchExitBias = (stance: Stance): number =>
+  bias(CLINCH_EXIT[stance.desired], stance.urgency);
 
 /**
  * The bottom of the fight, where the reported defect lived.
@@ -741,12 +713,32 @@ export function clinchLean(c: Combatant): number {
  * 0.65 on `clinchLean` and 0.38 here; without it Reduced put 4.4% of a top-position fighter's
  * control in the tie-up against Full's 6.4%, and the shape of the plan table was doing none of the
  * work that separates the two styles.
+ *
+ * **Repointed to `clinchIntent` by D3**, which is the whole of what Reduced needed from that change:
+ * these two rows moved tables, so this asks the field that now owns them. Its neutral is still
+ * exactly 1 — an unplanned fighter reads 1 on every alignment — and its spread is comparable, 1.65 /
+ * 0.97 / 0.30 for control / damage / takedown against the 1.41 / 1.07 / 0.38 it read for clinch /
+ * outside / top.
  */
 export function clinchPersistence(c: Combatant): number {
   const stance = neutralStance(c);
-  const keep = controllingBias(stance, 'clinchMaintain');
-  const convert = controllingBias(stance, 'clinchTakedown');
+  const keep = clinchWorkBias(c, stance, 'clinchMaintain');
+  const convert = clinchWorkBias(c, stance, 'clinchTakedown');
   return (2 * keep) / (keep + convert);
+}
+
+/**
+ * And how much of the tie-up the plan wants spent hitting, for the round-level resolver.
+ *
+ * The clinch twin of `groundStrikeAppetite`, and it exists for the reason D10 found on the floor: a
+ * new in-state field reaches Reduced through nothing at all unless something reads it. Without this,
+ * `clinchIntent: 'damage'` and `clinchIntent: 'control'` would throw identically at round
+ * granularity while Full separated them four-fold. Read at a neutral situation off the same table,
+ * so an unplanned fighter reads exactly 1.
+ */
+export function clinchStrikeAppetite(c: Combatant): number {
+  const stance = neutralStance(c);
+  return clinchWorkBias(c, stance, 'clinchStrike');
 }
 
 /**

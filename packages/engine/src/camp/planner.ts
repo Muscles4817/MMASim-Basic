@@ -35,6 +35,7 @@ import {
   type PreferredState,
   type SituationalRules,
   type TacticalPlan,
+  type ClinchIntent,
   type TopIntent,
 } from '../domain/tactics.js';
 import { deriveTendencies, strikeLean } from '../fight/profile.js';
@@ -258,6 +259,23 @@ function pickTopIntent(fighter: Fighter): TopIntent {
 }
 
 /**
+ * And in a tie-up, read off the same three things the position is actually about.
+ *
+ * The order matters and is the same lesson `pickTopIntent` records: read against the fighter's own
+ * game rather than an absolute bar, or one branch swallows the roster. A man whose wrestling is the
+ * best thing he does in a tie-up uses it as a route down; a man whose strength and striking are
+ * better than his wrestling hits from it; and the fighters left over are the ones who hold, which
+ * after D15 is a real strategy rather than a way to pass the time.
+ */
+function pickClinchIntent(fighter: Fighter): ClinchIntent {
+  const a = fighter.attributes;
+  const clinchGame = (a.strength + a.wrestling) / 2;
+  if (a.wrestling > clinchGame + 4) return 'takedown';
+  if (a.strikingOffence + a.power > a.wrestling + a.strength + 8) return 'damage';
+  return a.strength > 62 ? 'control' : 'takedown';
+}
+
+/**
  * What they do underneath — and this is the one the whole rework is for.
  *
  * A striker with no bottom game is told to get up, and now *does*, because `policy.ts` treats it
@@ -314,6 +332,7 @@ function pickTactics(fighter: Fighter, opponent: Fighter): TacticalPlan {
     entry: pickEntry(fighter, opponent, preferredState),
     topIntent: pickTopIntent(fighter),
     bottomIntent: pickBottomIntent(fighter),
+    clinchIntent: pickClinchIntent(fighter),
     /*
      * Hunting the finish is a *characterisation*, not a default, and the threshold says so.
      *

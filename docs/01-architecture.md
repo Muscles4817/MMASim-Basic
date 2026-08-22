@@ -144,6 +144,14 @@ explicit, named purpose.
 
 *Enforced by* `tests/statistical/shape-not-level.test.ts`.
 
+**1b. Intents own what stays within or advances the grappling; `preferredState` owns the exits back
+to the feet.** Where the two fields meet, and it was learned twice before it was stated. `topIntent`
+already contains `advance` and `submit`, both of which change the state — what it cannot contain is
+*do I want to be on the floor at all*, because that is the question `preferredState` exists to answer.
+So `standUpFromTop` reads `preferredState` (D2) and `clinchDisengage` reads it too (D13), while
+`clinchIntent` owns the takedown out of a tie-up (D3) exactly as `topIntent` owns the guard pass. The
+test is not *does this action change the state* — most of them do — but *does it leave the grappling*.
+
 ### 4. Standing is three states: `outside | boxing | pocket`.
 
 Not two, and not one with a flag. Two was tried and could not carry a boxer — a rear straight is
