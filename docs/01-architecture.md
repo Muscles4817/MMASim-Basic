@@ -87,6 +87,18 @@ Stated precisely, because the two halves land in different places in the code:
 > **Tactical intent primarily controls attempt selection and frequency. Capability and opposition
 > primarily control success.**
 
+Stated for a *state* rather than for an action, which is the form D11 needed:
+
+> **Tactical desire primarily controls how much of a state the fighter seeks. Capability and
+> opposition primarily determine who wins and controls that state.**
+
+The second form is not a softening of the first, it is the first one applied to occupancy — and it
+had to be measured before it could be asserted, because the intuitive phrasing (*capability should
+outweigh desire on retention*) is not what the engine does. In the clinch, on **how much** tie-up
+there is, desire wins 5.6:1 against capability's 1.9:1. On **whose tie-up it is**, capability wins
+twelve to one against three. Both halves are now enforced, and the wording follows the measurement
+rather than the other way round.
+
 Nothing in the tactical layer makes anybody better at anything. A 25-wrestling fighter told to take
 it to the floor shoots constantly, misses, gets countered and empties his tank — that is a *failed
 game plan*, and producing it is the point. The clearest demonstration is range: a pressure plan
