@@ -149,25 +149,34 @@ describe('the partition is sound', () => {
 
   it('separates the two halves of the intent term, which is why both are there', () => {
     /*
-     * `clinchLean` is the transition — of the grappling he wants, how much is aimed at the fence.
-     * `clinchPersistence` is the in-state decision — having got there, does he keep it or convert
-     * it. docs/01 § 8 says those are different questions, and the clinch is where that matters most:
-     * a wrestler and a clinch fighter both route to the tie-up and only one of them is still there
-     * ten seconds later.
+     * `clinchLean` is the transition — of the grappling he wants, how much is aimed at the fence,
+     * and it reads `preferredState`. `clinchPersistence` is the in-state decision — having got
+     * there, keep the tie-up or convert it — and since D3 it reads `clinchIntent`. docs/01 § 8 says
+     * those are different questions, and the clinch is where it matters most: a wrestler and a
+     * clinch fighter both route to the tie-up and only one of them is still there ten seconds later.
+     *
+     * The two therefore move on *different fields*, which is the sharpest form of the claim: neither
+     * one alone can express a fighter who wants the fence and shoots off it, or one who wants the
+     * floor and grinds on the way.
      */
     const of = (p: GamePlan) => {
       const c = createCombatant('red', at(60), p);
       return { lean: clinchLean(c), persistence: clinchPersistence(c) };
     };
-    const clinch = of(CLINCH);
-    const top = of(TOP);
+    const fenceFirst = of(plan({ preferredState: 'clinch', clinchIntent: 'control' }));
+    const floorFirst = of(plan({ preferredState: 'top', clinchIntent: 'takedown' }));
+    // The same route in, opposite things done with it.
+    const routedToFence = of(plan({ preferredState: 'clinch', clinchIntent: 'takedown' }));
     const message =
-      `clinch lean ${clinch.lean.toFixed(2)} / persistence ${clinch.persistence.toFixed(2)} | ` +
-      `top lean ${top.lean.toFixed(2)} / persistence ${top.persistence.toFixed(2)}`;
+      `fence-first ${fenceFirst.lean.toFixed(2)}/${fenceFirst.persistence.toFixed(2)} | ` +
+      `floor-first ${floorFirst.lean.toFixed(2)}/${floorFirst.persistence.toFixed(2)} | ` +
+      `fence-then-shoot ${routedToFence.lean.toFixed(2)}/${routedToFence.persistence.toFixed(2)}`;
 
-    // Both plans want grappling; they differ on the route and, much more, on what they do there.
-    expect(clinch.lean, message).toBeGreaterThan(top.lean);
-    expect(clinch.persistence / top.persistence, message).toBeGreaterThan(clinch.lean / top.lean);
+    expect(fenceFirst.lean, message).toBeGreaterThan(floorFirst.lean);
+    expect(fenceFirst.persistence, message).toBeGreaterThan(floorFirst.persistence);
+    // The field that decides the route does not decide what happens after it.
+    expect(routedToFence.lean, message).toBeCloseTo(fenceFirst.lean, 6);
+    expect(routedToFence.persistence, message).toBeLessThan(fenceFirst.persistence * 0.5);
   });
 });
 

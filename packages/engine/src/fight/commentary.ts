@@ -340,6 +340,21 @@ export function topDisengageText(rng: Rng, attacker: Combatant): string {
   ]);
 }
 
+/**
+ * The man in control choosing to be the man at range.
+ *
+ * Not `clinchBreakText`, for the reason `topDisengageText` is not `standUpText`: breaking *out* of a
+ * tie-up is an escape and reads as one, and letting one go is a decision. A player watching a
+ * kickboxer release a body lock should be told he wanted to.
+ */
+export function clinchReleaseText(rng: Rng, actor: Combatant): string {
+  return rng.pick([
+    `${surname(actor)} shoves them off and steps back out to range.`,
+    `${surname(actor)} has seen enough of the tie-up — he breaks it himself and resets.`,
+    `${surname(actor)} pushes away, wanting no part of the grappling.`,
+  ]);
+}
+
 export function refStandUpText(): string {
   return `The referee stands them up — not enough work from the top.`;
 }

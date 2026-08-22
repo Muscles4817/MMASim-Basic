@@ -44,6 +44,7 @@ import { defaultGamePlan, normaliseGamePlan, riskProfile } from '../domain/gamep
 import {
   clinchLean,
   clinchPersistence,
+  clinchStrikeAppetite,
   controlResistance,
   expectedRangeFailure,
   expectedRangeMix,
@@ -497,13 +498,18 @@ function attemptsFor(
    */
   const underneath = 0.9 - strikeLean(a.fighter) * 0.85;
   /*
-   * And what he is doing with the top position he has. `groundStrikeAppetite` is 1 for an unplanned
-   * fighter, so this term is the same as it was for the roster the constants were measured on — it
-   * only separates the man told to ride from the man told to posture up and hit, who used to throw
-   * identically here (doc 31 § D10).
+   * And what he is doing with the control he has — on the fence and on the floor, weighted by where
+   * D11 says the control actually happened. Both appetites read exactly 1 for an unplanned fighter,
+   * so this term is the same as it was for the roster the constants were measured on. What it
+   * separates is the man told to ride from the man told to posture up and hit (doc 31 § D10), and
+   * now the man told to hold a tie-up from the man told to knee it (§ D3) — pairs that used to throw
+   * identically here.
    */
+  const fence = clinchShareOfControl(a, d);
+  const workAppetite =
+    fence * clinchStrikeAppetite(a) + (1 - fence) * groundStrikeAppetite(a);
   const position = clamp(
-    1 + ownControl * 0.26 * groundStrikeAppetite(a) - beingControlled * underneath,
+    1 + ownControl * 0.26 * workAppetite - beingControlled * underneath,
     0.3,
     1.6,
   );

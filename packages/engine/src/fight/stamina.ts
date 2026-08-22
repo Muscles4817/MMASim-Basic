@@ -16,7 +16,7 @@ import { traitMul } from '../domain/traits.js';
 import { RANGE_EXERTION } from './range.js';
 import { effect } from '../ratings/curve.js';
 import { bodyDrag } from './damage.js';
-import { GROUND_BOTTOM_COST, POSITION_COST, type Combatant } from './profile.js';
+import { CLINCH_HELD_COST, GROUND_BOTTOM_COST, POSITION_COST, type Combatant } from './profile.js';
 import type { GroundPosition, Position, Range } from './types.js';
 
 /** Fatigue added by one second of average-intensity action at distance, for Cardio 50. */
@@ -57,6 +57,9 @@ export function accrueFatigue(c: Combatant, ctx: FatigueContext): void {
     // which control time wins fights without ever landing a meaningful strike.
     positionCost *= GROUND_BOTTOM_COST[ctx.groundPosition];
   }
+  // And the same on the fence, which this function computed `isControlled` for and then ignored
+  // until D15. See `CLINCH_HELD_COST`.
+  if (ctx.position === 'clinch' && ctx.isControlled) positionCost *= CLINCH_HELD_COST;
 
   // A hard weight cut is paid for here, every second of every round.
   const cutDrag = 1 + c.cutPenalty * 0.45;

@@ -33,14 +33,14 @@ import {
 import {
   bottomBias,
   bottomExitUrgency,
-  controllingBias,
+  clinchWorkBias,
   desiredRangeOf,
   groundDenial,
   rangeUrgency,
   erodePlanIntegrity,
   finishOpportunity,
   clinchExitUrgency,
-  heldBias,
+  clinchExitBias,
   isDisplaced,
   restorePlanIntegrity,
   situationOf,
@@ -814,6 +814,36 @@ const MAINTAIN_CLINCH_SCALE = 0.42;
 const MAINTAIN_CONVEXITY = 0.6;
 
 /**
+ * What letting go of a tie-up is worth against the things a fighter could do with it instead.
+ *
+ * Sized the way `TOP_EXIT_SCALE` was and for the same reason: the action did not exist, so there is
+ * no previous behaviour to match and the sport stands in for it. At this level an unplanned fighter
+ * releases a tie-up on 11.6% of his controlling beats — a man with no instructions mostly works with
+ * what he has — a fighter told to keep the fight at range on 18–33% depending on what else he was
+ * told to do with the position, and one told to grind on the fence on 3.7%. The whole action costs
+ * the sport 2 to 6% of its clinch time, which is the price of the position having a door.
+ */
+const CLINCH_EXIT_SCALE = 0.42;
+
+/**
+ * And how much of his own hand-fighting is allowed to decide that he picks it. Invariant 1a.
+ *
+ * `clinchDefence` is built on strength and takedown defence and spans a good deal across the roster;
+ * letting the *decision* inherit that would make releasing a tie-up a property of the fighter rather
+ * than of his corner. It weighs at full strength in the contest below, where it belongs.
+ */
+const CLINCH_EXIT_CONVEXITY = 0.25;
+
+/**
+ * How much easier it is to let go of a tie-up than to escape one.
+ *
+ * The man with the grips picks the moment and the other man is not expecting it. Sized so an even
+ * matchup releases about six times in ten rather than the five the bare contest would give, which is
+ * the asymmetry without making the exit free — the failure branch still costs him the beat.
+ */
+const RELEASE_EDGE = 1.5;
+
+/**
  * What choosing to stand back up is worth against the things a fighter could do instead.
  *
  * The one number in D2 that had to be *chosen* rather than measured, because invariant 9 asks for
@@ -1086,19 +1116,19 @@ export function heldWork(
     {
       key: 'clinchStrike',
       capability: fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) * 0.32,
-      intent: heldBias(stance, 'clinchStrike', finishOpportunity(actor, target)),
+      intent: clinchWorkBias(actor, stance, 'clinchStrike', finishOpportunity(actor, target)),
       opportunity: breaking ? 0.6 : 1,
     },
     {
       key: 'reverse',
       capability: fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * 0.45,
-      intent: heldBias(stance, 'reverse'),
+      intent: clinchWorkBias(actor, stance, 'reverse'),
       opportunity: breaking ? 1.2 : 1,
     },
     {
       key: 'pummel',
       capability: fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) * 0.45,
-      intent: heldBias(stance, 'pummel'),
+      intent: clinchWorkBias(actor, stance, 'pummel'),
       opportunity: breaking ? 1.3 : 1,
     },
   ];
@@ -1116,7 +1146,7 @@ export function controllingCandidates(
   actor: Combatant,
   target: Combatant,
   stance: Stance,
-): Candidate<'takedown' | 'clinchStrike' | 'maintainPosition'>[] {
+): Candidate<'takedown' | 'clinchStrike' | 'maintainPosition' | 'clinchDisengage'>[] {
   return [
     {
       key: 'takedown',
@@ -1124,7 +1154,7 @@ export function controllingCandidates(
         fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
         traitMul(actor.fighter.traits, 'takedownRate') *
         1.2,
-      intent: controllingBias(stance, 'clinchTakedown'),
+      intent: clinchWorkBias(actor, stance, 'clinchTakedown'),
       // Trips and throws are *this* takedown — the one that comes out of a tie-up — so the entry
       // style that had no route at range gets its route here.
       opportunity: actor.plan.tactics.entry === 'tripsAndThrows' ? 1.6 : 1,
@@ -1132,7 +1162,7 @@ export function controllingCandidates(
     {
       key: 'clinchStrike',
       capability: fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) * 0.8,
-      intent: controllingBias(stance, 'clinchStrike', finishOpportunity(actor, target)),
+      intent: clinchWorkBias(actor, stance, 'clinchStrike', finishOpportunity(actor, target)),
     },
     {
       key: 'maintainPosition',
@@ -1140,7 +1170,26 @@ export function controllingCandidates(
         fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) **
           MAINTAIN_CONVEXITY *
         MAINTAIN_CLINCH_SCALE,
-      intent: controllingBias(stance, 'clinchMaintain'),
+      intent: clinchWorkBias(actor, stance, 'clinchMaintain'),
+    },
+    {
+      /*
+       * Letting go on purpose — D2's hole, one position over, and it went unnoticed for as long as
+       * it did because the *held* fighter's exit is so prominent. The man with the grips could take
+       * the fight to the floor, hit, or hold, and left the tie-up only when the referee, his
+       * opponent or the bell released him. A striker who ties somebody up, or who inherits the
+       * tie-up when a reversal fails, played clinch MMA whatever his corner wanted.
+       *
+       * In the flat list rather than a pre-beat, and keyed on `preferredState` rather than on
+       * `clinchIntent` — the two halves of D2's rule. Breaking grips and stepping back *is* the
+       * beat; and whether you want a tie-up at all is not a question the in-state field can answer.
+       */
+      key: 'clinchDisengage',
+      capability:
+        fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) **
+          CLINCH_EXIT_CONVEXITY *
+        CLINCH_EXIT_SCALE,
+      intent: clinchExitBias(stance),
     },
   ];
 }
@@ -1985,6 +2034,64 @@ function resolveTopDisengage(
 }
 
 /**
+ * Letting go of a tie-up, on purpose.
+ *
+ * The contest is shoving off against staying attached: the actor's `clinchDefence` — the rating that
+ * already governs getting *out* of a tie-up — against the other man's `clinchOffence`. It is the held
+ * fighter's escape contest with the roles swapped, which is the point: the wish is the same from
+ * both ends (`CLINCH_EXIT`) and only the grip is different. **`clinchOffence` deliberately does not
+ * appear on the actor's side**; being good at holding people is not what gets you away from them,
+ * and letting it in would make the fighters who least want to leave the best at leaving.
+ *
+ * It is easier than the held man's escape and should be: he has the grips, he picks the moment, and
+ * the other man is not expecting it. That lives in `RELEASE_EDGE` rather than in a separate contest.
+ *
+ * **What the engine cannot model, stated rather than invented:** whether either man has his back to
+ * the fence. `FightState` knows the two of them are tied up and not where in the cage they are, and
+ * a man pinned against the fence genuinely has less room to be released into. It belongs with
+ * whatever eventually gives the cage a geography, alongside the same gap on the floor (doc 31 § D2).
+ */
+function resolveClinchDisengage(
+  ctx: ExchangeContext,
+  actor: Combatant,
+  target: Combatant,
+): ExchangeOutcome {
+  const { rng, state, emit } = ctx;
+  actor.stats.clinchExitsAttempted++;
+
+  const pushing =
+    fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) * RELEASE_EDGE;
+  const clinging = fatiguedEffect(target.derived.clinchOffence, 'strength', target.fatigue);
+
+  if (rng.chance(pushing / (pushing + clinging))) {
+    actor.stats.clinchExitsLanded++;
+    state.position = 'distance';
+    state.clinchControl = undefined;
+    state.placedBy = actor.corner;
+    state.stalledSeconds = 0;
+    /*
+     * Hands range, like every separation of two men who are both already standing — and *unlike*
+     * the top disengage, where the other man starts from the floor and there is real space to be
+     * had. What differs from the held man's break is not where they end up but who is balanced when
+     * they get there: this man chose the moment and is set, so he holds the range he made for a
+     * little longer. That is the stickiness, not the range.
+     */
+    state.range = TRANSITION_RANGE.clinchRelease!;
+    state.rangeSettled = 0.45;
+    emit('clinchBreak', say.clinchReleaseText(rng, actor), actor.corner);
+    return { seconds: rng.int(5, 12) };
+  }
+
+  /*
+   * He could not shake him off. The beat is spent and the tie-up is unchanged, which is what stops
+   * this being a free exit — and the stalled seconds accrue because nothing happened, the same as
+   * any other unproductive beat in a tie-up.
+   */
+  state.stalledSeconds += 7;
+  return { seconds: rng.int(5, 12) };
+}
+
+/**
  * The clinch, from both sides.
  *
  * It used to have one side. The fighter in control chose between shooting, a knee and standing
@@ -2099,6 +2206,8 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
     const ending = throwClinchStrike(ctx, actor, target, 1);
     return { seconds: rng.int(6, 14), ending };
   }
+
+  if (intent === 'clinchDisengage') return resolveClinchDisengage(ctx, actor, target);
 
   // Pinning him on the fence: cheap for nobody, more expensive for the fighter pinned — and on a
   // clock, because a referee who will stand two men up off the floor will not watch them lean on
