@@ -806,8 +806,15 @@ describe('the deprecated flat background still works', () => {
     expect(f.naturals.motorLearning).toBe(86);
     expect(f.reputation).toBe(5);
     expect(f.starPower).toBe(1);
-    // The body, pinned for the same reason the ratings are: it is what the change was for.
-    expect([f.heightInches, f.reachInches, f.walkingWeightLbs]).toEqual([69, 73, 163]);
+    /*
+     * The body, pinned for the same reason the ratings are: it is what the change was for.
+     *
+     * 163 lb before doc 31 § 18. The frame and muscle indices are unchanged — the *body* is the same
+     * body — but the scale they sit on became right-skewed, so an index of 54/38 now describes
+     * slightly less mass than it did on the old linear one. That is the widening working as designed:
+     * index 50 was held fixed and everything below it came down a little.
+     */
+    expect([f.heightInches, f.reachInches, f.walkingWeightLbs]).toEqual([69, 73, 161]);
     // And the composition it is made of, which is now a stored primitive rather than a number
     // recomputed from a weight the division had chosen.
     expect(f.physique).toEqual({

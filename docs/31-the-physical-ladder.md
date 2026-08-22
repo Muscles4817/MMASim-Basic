@@ -1269,6 +1269,10 @@ Regenerate with `tests/statistical/body-baseline.test.ts`. The tables below are 
 one run; when a later step moves them, re-run it, put the new numbers beside these, and name the
 change that did it.
 
+> **Superseded twice since.** § 15 lowered the weigh-in floor and § 18 gave the mass and body-fat
+> scales a curve. The current numbers are at § 18.5, with the movement attributed. These are kept as
+> the step 4 reading rather than updated in place, which is what makes the attribution possible.
+
 **Men, 40,000 forward-sampled bodies**
 
 | div | share |       height |        reach |  ape |       walking | lean | camp | floor | cut % |
@@ -1793,3 +1797,125 @@ nobody is watched for being the slowest man in his division. Inventing a −2.0�
 file would be authoring to a shape instead of to evidence, which is the error § 13.9.1 caught once
 already. What it means in practice is that **the bottom of the ladder is calibrated more weakly than
 the top**, and step 7 should not read the roster as bounding it.
+
+---
+
+## 18. Can the model build the bodies it is judged against?
+
+Step 6 tunes the equations that turn a body into Power, Strength and Speed, so it has to start from
+a body model that can represent the bodies those equations will be measured against. § 15.4 found
+that it could not, and found it by accident. This is the deliberate version, done before any physical
+equation is touched. `tests/statistical/body-range-audit.test.ts` is the instrument.
+
+### 18.1 What clamps, and what each clamp means
+
+Four things in the composition chain can stop a body being built. **Only one of them is a statement
+about human beings**; the other three are artefacts of how the model is parameterised, and the whole
+difficulty was that all four presented identically — as a silent clip.
+
+| clamp               | what it was                     | what it is                                     |
+| ------------------- | ------------------------------- | ---------------------------------------------- |
+| body-fat ceiling    | 18% male / 25% female           | 30% / 32%, on a curve                          |
+| index scale ceiling | `base + fromFrame + fromMuscle` | same shape, wider, on a curve                  |
+| index granularity   | integer, ≈ ½ lb                 | unchanged                                      |
+| human limit         | **none existed**                | `MAX_FAT_FREE_MASS_INDEX` — 29 male, 23 female |
+
+### 18.2 The finding: a population coefficient was being used as an individual bound
+
+`massCoefficient` works in lean kilograms per cubic metre of height because § 2 fitted the
+_population_ that way, and that fit is good. But the scale ceiling was a **constant in those units**,
+and a constant there is not a constant limit. Divide it out into a fat-free mass index — lean kg over
+height squared, the height-independent way to say how muscular somebody is — and the ceiling the
+model was actually enforcing was:
+
+|        |  58" |  61" |  64" |  68" |  70" |  73" |  76" |  79" |
+| ------ | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| male   |    — | 23.9 | 24.9 | 26.4 | 27.2 | 28.4 | 29.5 | 30.7 |
+| female | 19.2 | 20.1 | 21.1 | 22.4 | 23.1 |    — |    — |    — |
+
+Untrained men sit near FFMI 19 and elite natural athletes near 25. So the model was telling a 4'10"
+woman she could not be more muscular than an untrained adult, and a 6'7" man that he could exceed
+anything reached without pharmacology. Nobody chose that shape. It fell out of using a population
+coefficient as an individual bound — **and it is why every body the model could not build was a short
+one.**
+
+### 18.3 The three failures, classified
+
+| fighter         | measurements               | implied FFMI | verdict                               |
+| --------------- | -------------------------- | -----------: | ------------------------------------- |
+| Mark Hunt       | 5'10", 265 lb at 15.9% fat |     **32.0** | `implausible` — the estimate is wrong |
+| Cain Velasquez  | 6'1", 250 lb at 11.4% fat  |     **29.2** | `implausible` — the estimate is wrong |
+| Jessica Andrade | 5'1", 136 lb at 17.9% fat  |         21.1 | `aboveScale` — the model is too small |
+
+That split is the deliverable, and the two halves need opposite fixes.
+
+**Hunt and Velasquez describe nobody.** 265 lb at 15.9% fat is 223 lb of lean mass on a 5'10" frame.
+But the estimates were not really judgements about them — they were artefacts of a body-fat band that
+stopped at 18% and could not express a heavyweight carrying real fat, which is the one division with
+no upper weight limit and therefore the one that keeps them. Re-authored at 26% and 15%, both build
+exactly, at FFMI 28.1 and 28.0. Hunt's Power and Strength now resolve _lower_ than before, because a
+fat 265 lb man has less contractile mass than a lean one — which is the lean-versus-carried split
+doing precisely its job.
+
+**Andrade is an ordinary body the scale could not hold.** FFMI 21.1 against a female limit of 23, and
+the scale ceiling at her height was 20.1. She is the only plausible body in the roster that the model
+could not express, and she is what sized the correction.
+
+### 18.4 What changed, and what deliberately did not
+
+Both fixes are the same device: an exponent that lets a range reach further at the top **without
+moving its middle**, so the generated population's median is exactly where § 13.7 measured it.
+
+- `fatCurve` — band widened to 30% (male) and 32% (female); index 50 still maps to 12.9% and 19.9%.
+- `massCurve` — span widened from 5.8 to 6.7 (male) and 4.8 to 6.0 (female); index 50 still maps to
+  coefficient 12.40 and 10.60.
+- `MAX_FAT_FREE_MASS_INDEX` — the first thing in the model that says what a person cannot be.
+- `solvePhysique` replaces the silent clip and returns `none` / `belowScale` / `aboveScale` /
+  `implausible`, so a caller can tell "the model is too small" from "the measurements are wrong".
+- Every authored `bodyFatIndex` was re-derived to preserve the _fat fraction_ it stood for, so no
+  fighter's body changed when the curve did. Only Hunt and Velasquez were deliberately re-estimated.
+
+**The artefact is reduced rather than eliminated, and it is worth saying so.** The index scale now
+sits above the human limit for men taller than 70.5" and women taller than 63.8"; below those heights
+it still binds first. No fighter in the roster falls in the gap — the shortest are 63" and 61" — and
+a test bounds that. Closing it completely would mean widening the scale until index 100 described a
+body nobody has, which trades a visible artefact for an invisible one.
+
+**`base`, and the coefficient range itself, were not touched.** The audit checked whether they needed
+to be and they do not: the roster's required coefficients put the median at 44–56% of the band by
+sex, which is a distribution sitting in the middle of its range rather than pressed against the top.
+The instruction not to raise `COMPOSITION` until Hunt fits was the right one — raising it would have
+been fixing the wrong thing, since Hunt's problem was never that he was too muscular to represent.
+
+What the population does now: bodies below the median come out slightly lighter and those above it
+slightly heavier, because the curve replaces a linear scale with a right-skewed one — which is what
+mass distributions look like. Body fat now rises across the divisions on its own, 12.2% at flyweight
+to 16.7% at heavyweight, which nothing put there deliberately: heavier bodies come from higher
+indices, and higher indices are fatter under the curve.
+
+### 18.5 The baseline, re-run
+
+| div |       walking | lean | body fat | camp | floor | cut req |
+| --- | ------------: | ---: | -------: | ---: | ----: | ------: |
+| FLW | 135 (120–147) |  118 |    12.2% |  127 |   114 |    7.5% |
+| LW  | 172 (161–182) |  149 |    13.2% |  160 |   144 |    9.7% |
+| WW  | 185 (173–198) |  160 |    13.6% |  172 |   154 |    8.2% |
+| HW  | 247 (226–279) |  206 |    16.7% |  221 |   198 |    0.6% |
+| WSW | 121 (104–134) |   97 |    19.6% |  112 |   100 |    6.0% |
+| WFW | 162 (149–178) |  127 |    21.3% |  146 |   132 |   10.2% |
+
+Against § 13.7: walking weights up two to four pounds, floors down six to fourteen (that is § 15's
+cut model, not this change), lean broadly unchanged. Frame remains a body variable rather than a
+division label — within-division sd 16.2–17.1 against a population 18.
+
+### 18.6 Step 6 can now proceed
+
+The mass law, physiology decoupling, the Power/Strength/Speed correlation problem, the sex-specific
+pivots and the generator-versus-roster comparison. Two things carry forward unchanged:
+
+**The withdrawn ρ ≈ 0.7 target stays withdrawn** (§ 16.2). The step 5 correlation matrix is evidence
+that distinct archetypes must be common, not a set of coefficients to fit.
+
+**The lower tail is less strongly calibrated than the upper one** (§ 17.1). All fifty extreme roster
+placements are positive, and none was invented to balance that. Absence of landmarks at the bottom is
+not evidence of absence of weak athletes, and population work must not read it as such.

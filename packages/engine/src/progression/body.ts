@@ -89,9 +89,41 @@ interface Composition {
   base: number;
   fromFrame: number;
   fromMuscle: number;
+  /**
+   * Exponent on the frame and muscle indices, so the scale reaches a real body at the top.
+   *
+   * Same device as `fatCurve` and for the same reason. The index scale used to stop at
+   * `base + fromFrame + fromMuscle`, and doc 31 § 18 measured what that meant: a *constant* in
+   * lean-kg-per-cubic-metre implies a **different human limit at every height**, running from a
+   * fat-free mass index of 19.2 at the shortest female height to 30.7 at the tallest male one. So
+   * short athletes were told they could not be muscular and tall ones that they could be anything,
+   * and every body the model could not build was a short one — Jessica Andrade at 5'1" and 136 lb
+   * is an ordinary fighter at FFMI 21.1 and the scale could not express her.
+   *
+   * The exponent is solved so index 50 lands exactly where the linear scale put it, which is what
+   * keeps the generated population's median mass where § 13.7 measured it. What changes is the
+   * spread: bodies below the median come out slightly lighter and those above it slightly heavier,
+   * which is the right direction — real mass distributions are right-skewed and this one was not.
+   */
+  massCurve: number;
   /** Body fat out of camp, at index 1 and index 100. */
   fatFloor: number;
   fatCeiling: number;
+  /**
+   * Exponent on the body-fat index, so the band can reach the top without moving its middle.
+   *
+   * The band used to be linear and to stop at 18% for men, which meant the model could not represent
+   * a fighter fatter than that — and heavyweight, the one division with no upper weight limit, is
+   * exactly where the sport keeps them. Mark Hunt at 5'10" and 265 lb needs somewhere near 24%, and
+   * asking the model for him produced 225 lb of lean mass on a 5'10" frame, which is a fat-free mass
+   * index of 31.9 and not a person.
+   *
+   * Simply widening the band would have made every generated fighter fatter, since index 50 is where
+   * the population sits. The exponent fixes the ends and leaves the middle alone: index 50 still
+   * maps to the same body fat it always did, index 100 now reaches a real heavyweight, and the low
+   * quarter tightens slightly because that is what a right-skewed distribution looks like.
+   */
+  fatCurve: number;
 }
 
 /**
@@ -105,24 +137,99 @@ interface Composition {
  * measured 10.2–10.8 across all four.
  */
 const COMPOSITION: Readonly<Record<Sex, Composition>> = {
-  male: { base: 9.5, fromFrame: 2.6, fromMuscle: 3.2, fatFloor: 0.08, fatCeiling: 0.18 },
-  female: { base: 8.2, fromFrame: 2.2, fromMuscle: 2.6, fatFloor: 0.15, fatCeiling: 0.25 },
+  male: {
+    base: 9.5,
+    fromFrame: 3.003,
+    fromMuscle: 3.697,
+    massCurve: 1.2081,
+    fatFloor: 0.08,
+    fatCeiling: 0.3,
+    fatCurve: 2.1211,
+  },
+  female: {
+    base: 8.2,
+    fromFrame: 2.75,
+    fromMuscle: 3.25,
+    massCurve: 1.3219,
+    fatFloor: 0.15,
+    fatCeiling: 0.32,
+    fatCurve: 1.7545,
+  },
 };
 
-/** Lean kilograms per cubic metre of height. The single number that says how much body this is. */
-export function massCoefficient(body: Body): number {
-  const c = COMPOSITION[body.sex];
-  return c.base + (body.frameIndex / 100) * c.fromFrame + (body.muscleIndex / 100) * c.fromMuscle;
+/**
+ * Body fat out of camp for an index, 1–100.
+ *
+ * The curve exponents are solved so that index 50 lands exactly where the old linear band put it —
+ * 12.9% for men and 19.9% for women — which is what keeps the generated population's mass
+ * distribution where § 13.7 measured it while the top of the range grows.
+ */
+export function fatFractionForIndex(sex: Sex, bodyFatIndex: Rating): number {
+  const c = COMPOSITION[sex];
+  const t = clamp((bodyFatIndex - 1) / 99, 0, 1);
+  return c.fatFloor + (c.fatCeiling - c.fatFloor) * t ** c.fatCurve;
 }
 
-/** Body fat carried out of camp, as a fraction. */
-export function bodyFatFraction(body: Body): number {
-  const c = COMPOSITION[body.sex];
-  return remap(body.bodyFatIndex, 1, 100, c.fatFloor, c.fatCeiling);
+/** The index that produces a given body fat. The inverse of `fatFractionForIndex`. */
+export function indexForFatFraction(sex: Sex, fatFraction: number): Rating {
+  const c = COMPOSITION[sex];
+  const t = clamp((fatFraction - c.fatFloor) / (c.fatCeiling - c.fatFloor), 0, 1);
+  return toRating(1 + 99 * t ** (1 / c.fatCurve));
 }
 
 const KG_PER_LB = 0.45359237;
 const M_PER_INCH = 0.0254;
+
+/**
+ * The most lean mass a human of this sex carries, as a fat-free mass index — lean kg over height in
+ * metres **squared**.
+ *
+ * This is the model's only actual statement about a human limit, and it is deliberately expressed in
+ * different units from everything around it. `massCoefficient` works in lean kg per cubic metre
+ * because doc 31 § 2 fitted the *population* that way and the fit is good. But a constant in those
+ * units is not a constant limit: divide it out and the implied FFMI ceiling ran from **19.2 at the
+ * shortest female height to 30.7 at the tallest male one**, which says a 4'10" woman may not be more
+ * muscular than an untrained adult while a 6'7" man may exceed what anybody reaches without
+ * pharmacology. Nobody chose that. It fell out of using a population coefficient as an individual
+ * bound, and it is why every body the model could not build was a short one.
+ *
+ * The numbers: untrained men sit near FFMI 19 and elite natural athletes near 25. The male value
+ * here is 29, which is past that and meant to be — it is the point beyond which a claimed body is
+ * not a person, not the point beyond which it is unusual, and heavyweight MMA contains men at 28.
+ * The female value is scaled by the same logic against a trained-athlete norm nearer 19.
+ */
+export const MAX_FAT_FREE_MASS_INDEX: Readonly<Record<Sex, number>> = { male: 29, female: 23 };
+
+/** The largest lean coefficient a body of this sex and height could plausibly carry. */
+export function maxPlausibleCoefficient(sex: Sex, heightInches: number): number {
+  return MAX_FAT_FREE_MASS_INDEX[sex] / (heightInches * M_PER_INCH);
+}
+
+/** The largest lean coefficient the index scale can express, whatever the body. */
+export function maxRepresentableCoefficient(sex: Sex): number {
+  const c = COMPOSITION[sex];
+  return c.base + c.fromFrame + c.fromMuscle;
+}
+
+/** Lean kilograms per cubic metre of height. The single number that says how much body this is. */
+export function massCoefficient(body: Body): number {
+  const c = COMPOSITION[body.sex];
+  return (
+    c.base +
+    (body.frameIndex / 100) ** c.massCurve * c.fromFrame +
+    (body.muscleIndex / 100) ** c.massCurve * c.fromMuscle
+  );
+}
+
+/** The index that puts a given share of the frame-and-muscle span on the scale. */
+function indexForMassShare(sex: Sex, share: number): number {
+  return 100 * clamp(share, 0, 1) ** (1 / COMPOSITION[sex].massCurve);
+}
+
+/** Body fat carried out of camp, as a fraction. */
+export function bodyFatFraction(body: Body): number {
+  return fatFractionForIndex(body.sex, body.bodyFatIndex);
+}
 
 /**
  * The part of a body a fighter carries around with them.
@@ -634,7 +741,7 @@ function forceIntoDivision(rng: Rng, sex: Sex, division: Division): Body {
     rng.normalClamped(APE_INDEX.mean, APE_INDEX.sd, APE_INDEX.min, APE_INDEX.max),
   );
   const bodyFatIndex = toRating(rng.normalClamped(50, 18, 3, 99));
-  const fatFraction = remap(bodyFatIndex, 1, 100, c.fatFloor, c.fatCeiling);
+  const fatFraction = fatFractionForIndex(sex, bodyFatIndex);
 
   // Invert the composition chain for the coefficient this body needs, then split what is above the
   // base between frame and muscle at a ratio drawn the way `sampleBody` draws them.
@@ -648,8 +755,8 @@ function forceIntoDivision(rng: Rng, sex: Sex, division: Division): Body {
     sex,
     heightInches,
     reachInches: heightInches + ape,
-    frameIndex: toRating(((above * frameShare) / c.fromFrame) * 100),
-    muscleIndex: toRating(((above * (1 - frameShare)) / c.fromMuscle) * 100),
+    frameIndex: toRating(indexForMassShare(sex, (above * frameShare) / c.fromFrame)),
+    muscleIndex: toRating(indexForMassShare(sex, (above * (1 - frameShare)) / c.fromMuscle)),
     bodyFatIndex,
     waterCutIndex: toRating(rng.normalClamped(50, 18, 3, 99)),
   };
@@ -837,16 +944,105 @@ export function physiqueForMeasurements(
   bodyFatIndex: Rating,
   waterCutIndex: Rating,
 ): Physique {
+  return solvePhysique(sex, heightInches, walkingWeightLbs, bodyFatIndex, waterCutIndex).physique;
+}
+
+/** Why a solved physique is not the body that was asked for. */
+export type PhysiqueSaturation =
+  /** It is. */
+  | 'none'
+  /** Below the lightest body the index scale can express — `base` with no frame and no muscle. */
+  | 'belowScale'
+  /**
+   * Past the top of the index scale, but still a body a human could have.
+   *
+   * The one that matters. This is not a statement about the fighter; it is the index scale running
+   * out before the person does, and it means the model needs a wider range rather than the
+   * measurements needing a correction.
+   */
+  | 'aboveScale'
+  /**
+   * Past what a human carries, by `MAX_FAT_FREE_MASS_INDEX`.
+   *
+   * Here the measurements are wrong, or more usually the *body-fat estimate* attached to them is:
+   * a stated weight with too little fat against it implies more lean mass than the frame can hold.
+   * This is the verdict that should be argued with rather than engineered around.
+   */
+  | 'implausible';
+
+export interface PhysiqueSolution {
+  physique: Physique;
+  /** The lean coefficient the measurements require. */
+  requiredCoefficient: number;
+  /** What the index scale could actually express. */
+  achievedCoefficient: number;
+  /** Fat-free mass index the measurements imply — the height-independent way to read the above. */
+  impliedFatFreeMassIndex: number;
+  saturated: PhysiqueSaturation;
+  /** Pounds the reconstructed body misses by. Negative means the model built somebody lighter. */
+  errorLbs: number;
+}
+
+/**
+ * Solve a physique from measurements, and say plainly when the answer is not the body asked for.
+ *
+ * `physiqueForMeasurements` used to do this silently: it clamped, returned a smaller person, and
+ * said nothing, so a caller who handed it Mark Hunt at 5'10" and 265 lb got a 226 lb man back and
+ * every number downstream — walking weight, lean mass, all five physical ratings — described that
+ * man instead. Doc 31 § 15.4 is the write-up.
+ *
+ * The two failure modes are different in kind and the caller has to be able to tell them apart.
+ * `aboveScale` says the model is too small for a real person and the model should change;
+ * `implausible` says the measurements describe nobody and the measurements should change. Collapsing
+ * both into a clamp is what made the first one invisible for as long as it was.
+ */
+export function solvePhysique(
+  sex: Sex,
+  heightInches: number,
+  walkingWeight: number,
+  bodyFatIndex: Rating,
+  waterCutIndex: Rating,
+): PhysiqueSolution {
   const c = COMPOSITION[sex];
   const heightM = heightInches * M_PER_INCH;
-  const fatFraction = remap(bodyFatIndex, 1, 100, c.fatFloor, c.fatCeiling);
-  const leanKg = walkingWeightLbs * (1 - fatFraction) * KG_PER_LB;
-  const needed = clamp(leanKg / heightM ** 3, c.base, c.base + c.fromFrame + c.fromMuscle);
-  const above = needed - c.base;
+  const fatFraction = fatFractionForIndex(sex, bodyFatIndex);
+  const leanKg = walkingWeight * (1 - fatFraction) * KG_PER_LB;
+  const required = leanKg / heightM ** 3;
 
-  // Equal indices: both terms fill at the same rate and saturate together.
-  const index = toRating((above / (c.fromFrame + c.fromMuscle)) * 100);
-  return { frameIndex: index, muscleIndex: index, bodyFatIndex, waterCutIndex };
+  const scaleCeiling = maxRepresentableCoefficient(sex);
+  const achieved = clamp(required, c.base, scaleCeiling);
+  const index = toRating(
+    indexForMassShare(sex, (achieved - c.base) / (c.fromFrame + c.fromMuscle)),
+  );
+  const physique: Physique = {
+    frameIndex: index,
+    muscleIndex: index,
+    bodyFatIndex,
+    waterCutIndex,
+  };
+
+  const impliedFfmi = leanKg / heightM ** 2;
+  const saturated: PhysiqueSaturation =
+    impliedFfmi > MAX_FAT_FREE_MASS_INDEX[sex]
+      ? 'implausible'
+      : required > scaleCeiling
+        ? 'aboveScale'
+        : required < c.base
+          ? 'belowScale'
+          : 'none';
+
+  const built =
+    (massCoefficient({ sex, heightInches, reachInches: heightInches, ...physique }) *
+      heightM ** 3) /
+    KG_PER_LB;
+  return {
+    physique,
+    requiredCoefficient: required,
+    achievedCoefficient: achieved,
+    impliedFatFreeMassIndex: impliedFfmi,
+    saturated,
+    errorLbs: built / (1 - fatFraction) - walkingWeight,
+  };
 }
 
 /**

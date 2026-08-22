@@ -51,7 +51,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_ngannou',
     name: 'Francis Ngannou',
     measured: { sex: 'male', division: HW, heightInches: 76, reachInches: 83 },
-    estimated: { walkingWeightLbs: 260, confidence: 'fair', bodyFatIndex: 30, waterCutIndex: 40 },
+    estimated: { walkingWeightLbs: 260, confidence: 'fair', bodyFatIndex: 39, waterCutIndex: 40 },
     placement: { power: 2.4, speed: 1.2, cardio: -1.5, durability: 0.2, strength: 2.2 },
     defence: {
       power:
@@ -66,7 +66,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_miocic',
     name: 'Stipe Miocic',
     measured: { sex: 'male', division: HW, heightInches: 76, reachInches: 80 },
-    estimated: { walkingWeightLbs: 245, confidence: 'fair', bodyFatIndex: 40, waterCutIndex: 45 },
+    estimated: { walkingWeightLbs: 245, confidence: 'fair', bodyFatIndex: 45, waterCutIndex: 45 },
     placement: { power: 0.3, speed: 0.5, cardio: 1.6, durability: 1.3, strength: 0.1 },
     notes:
       'The division-median-ish champion, which is why he is here. Nothing about him is freakish; the Cardio +1.6 and Durability +1.3 are what a long heavyweight title reign is actually made of. Strength +0.1 despite a wrestling base, because wrestling skill is not the same claim as absolute force.',
@@ -75,7 +75,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_lewis',
     name: 'Derrick Lewis',
     measured: { sex: 'male', division: HW, heightInches: 75, reachInches: 79 },
-    estimated: { walkingWeightLbs: 265, confidence: 'fair', bodyFatIndex: 72, waterCutIndex: 35 },
+    estimated: { walkingWeightLbs: 265, confidence: 'fair', bodyFatIndex: 59, waterCutIndex: 35 },
     placement: { power: 2.2, speed: -1.2, cardio: -1.4, durability: 0.6, strength: 0.9 },
     defence: {
       power:
@@ -88,7 +88,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_velasquez',
     name: 'Cain Velasquez',
     measured: { sex: 'male', division: HW, heightInches: 73, reachInches: 77 },
-    estimated: { walkingWeightLbs: 250, confidence: 'fair', bodyFatIndex: 35, waterCutIndex: 45 },
+    estimated: { walkingWeightLbs: 250, confidence: 'fair', bodyFatIndex: 59, waterCutIndex: 45 },
     placement: { power: 0.3, speed: 0.9, cardio: 2.9, durability: 0.8, strength: 0.8 },
     defence: {
       cardio:
@@ -99,13 +99,15 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     disagreement: {
       kind: 'outsideBodyModelRange',
       note: 'Reconstructs 7 lb light, at the same coefficient ceiling that breaks Mark Hunt: 6 foot 1 at 250 lb and low body fat needs more lean mass per cubic metre of height than the model can express. Much less severe than Hunt and the same defect. His Cardio placement is the one this file most depends on, and Cardio reads total mass rather than lean, so the error moves his rating by a point or two rather than invalidating him — but it is recorded rather than rounded away.',
+      resolution:
+        'Resolved by doc 31 section 18. The same estimate problem as Mark Hunt and much milder: 250 lb at 11.4% fat implies an FFMI of 29.2, past what the model will accept as human, and the figure was chosen under a band that topped out at 18%. Re-authored at 15%, which is an ordinary out-of-camp number for a heavyweight, he builds exactly and sits at FFMI 28.0. His Cardio placement is the one this file most depends on and Cardio reads total mass rather than lean, so it is unmoved.',
     },
   },
   {
     id: 'cal_overeem',
     name: 'Alistair Overeem',
     measured: { sex: 'male', division: HW, heightInches: 77, reachInches: 80 },
-    estimated: { walkingWeightLbs: 255, confidence: 'fair', bodyFatIndex: 35, waterCutIndex: 40 },
+    estimated: { walkingWeightLbs: 255, confidence: 'fair', bodyFatIndex: 42, waterCutIndex: 40 },
     placement: { power: 1.7, speed: 0.2, cardio: -0.4, durability: -0.9, strength: 1.1 },
     notes:
       'A suspect-durability case at the top of the sport, and one of the better documented ones: repeatedly stopped by strikes across the back half of a long career while still hitting extremely hard. Power +1.7 against Durability −0.9 is precisely the profile a correlated model cannot produce. Strength +1.1 from a heavyweight who was visibly the more muscular man in most of his fights, Speed +0.2 for a fighter who was never quick even in his prime, and Cardio −0.4 for one whose later fights were decided by how much he had left after two rounds.',
@@ -114,7 +116,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_werdum',
     name: 'Fabricio Werdum',
     measured: { sex: 'male', division: HW, heightInches: 76, reachInches: 77 },
-    estimated: { walkingWeightLbs: 248, confidence: 'poor', bodyFatIndex: 55, waterCutIndex: 40 },
+    estimated: { walkingWeightLbs: 248, confidence: 'poor', bodyFatIndex: 52, waterCutIndex: 40 },
     placement: { power: -0.4, speed: -0.4, cardio: 0.6, durability: 0.5, strength: 0 },
     notes:
       'The physically ordinary elite technician at heavyweight — a champion whose five physicals are all within half a sigma of his division and whose career was built on submission grappling. Short reach for 6\'4" as well. Power −0.4 and Speed −0.4 are both below his own division, Strength sits exactly at it, and Cardio +0.6 and Durability +0.5 are the mildest of positives — five placements inside 0.6σ on a man who beat the best heavyweight of his era. If this profile cannot win fights in the simulation, the technical half of the model is not carrying its weight.',
@@ -123,7 +125,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_aspinall',
     name: 'Tom Aspinall',
     measured: { sex: 'male', division: HW, heightInches: 77, reachInches: 78 },
-    estimated: { walkingWeightLbs: 255, confidence: 'fair', bodyFatIndex: 35, waterCutIndex: 40 },
+    estimated: { walkingWeightLbs: 255, confidence: 'fair', bodyFatIndex: 42, waterCutIndex: 40 },
     placement: { power: 1.1, speed: 2.0, cardio: 0.3, durability: 0.1, strength: 0.4 },
     defence: {
       speed:
@@ -136,7 +138,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_blaydes',
     name: 'Curtis Blaydes',
     measured: { sex: 'male', division: HW, heightInches: 76, reachInches: 80 },
-    estimated: { walkingWeightLbs: 265, confidence: 'fair', bodyFatIndex: 45, waterCutIndex: 40 },
+    estimated: { walkingWeightLbs: 265, confidence: 'fair', bodyFatIndex: 48, waterCutIndex: 40 },
     placement: { power: 0.1, speed: 0.4, cardio: 0.9, durability: -0.4, strength: 2.0 },
     defence: {
       strength:
@@ -149,7 +151,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_hunt',
     name: 'Mark Hunt',
     measured: { sex: 'male', division: HW, heightInches: 70, reachInches: 72 },
-    estimated: { walkingWeightLbs: 265, confidence: 'fair', bodyFatIndex: 80, waterCutIndex: 30 },
+    estimated: { walkingWeightLbs: 265, confidence: 'fair', bodyFatIndex: 91, waterCutIndex: 30 },
     placement: { power: 2.0, speed: -1.0, cardio: -1.2, durability: 2.2, strength: 0.5 },
     defence: {
       power:
@@ -162,13 +164,15 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     disagreement: {
       kind: 'outsideBodyModelRange',
       note: 'The body model cannot build him. Lean mass per cubic metre of height is capped at 15.3 for men and 5 foot 10 at 265 lb needs about 18, so physiqueForMeasurements returns a 226 lb man and every number this entry produces describes that man instead. He is the most extreme mass-for-height in the sport and that is precisely why he is in the file, so the entry stays exactly as transcribed and the model is what has to change. Until the ceiling moves — step 6 owns the mass coefficients — his five placements are not calibration evidence, because they resolve against the divisional median for a 226 lb heavyweight rather than a 265 lb one.',
+      resolution:
+        'Resolved by doc 31 section 18, and the model was only half the problem. The body-fat estimate was the other half: 265 lb at 15.9% fat implies 223 lb of lean mass on a 5 foot 10 frame, a fat-free mass index of 32.0, which is not a person. That estimate was not a judgement about him so much as an artefact of a band that stopped at 18% and could not express a heavyweight carrying real fat. Freed from it he is authored at 26%, which is what he visibly was, and the model builds him at 265 lb with an FFMI of 28.1 — extreme, and possible. His Power and Strength now resolve against the divisional median for the man the roster describes rather than for a 226 lb one, and they resolve lower than before, because a fat 265 lb man has less contractile mass than a lean one. That is the lean-versus-carried split doing its job.',
     },
   },
   {
     id: 'cal_dos_santos',
     name: 'Junior dos Santos',
     measured: { sex: 'male', division: HW, heightInches: 76, reachInches: 77 },
-    estimated: { walkingWeightLbs: 250, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 40 },
+    estimated: { walkingWeightLbs: 250, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 40 },
     placement: { power: 1.5, speed: 1.0, cardio: 0.2, durability: -0.8, strength: -0.1 },
     notes:
       "A second power-with-fragility case, and a useful cross-check on Overeem: stopped by strikes repeatedly in the second half of his career while remaining one of the division's heavier hitters. Strength −0.1 is low for the division and is the honest reading — he was out-wrestled routinely. Speed +1.0 for genuinely quick feet at heavyweight, Cardio +0.2 for a fighter who worked five rounds without ever looking comfortable in them, and Durability −0.8 as the other half of the fragility case.",
@@ -178,7 +182,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_volkov',
     name: 'Alexander Volkov',
     measured: { sex: 'male', division: HW, heightInches: 79, reachInches: 80 },
-    estimated: { walkingWeightLbs: 255, confidence: 'poor', bodyFatIndex: 52, waterCutIndex: 40 },
+    estimated: { walkingWeightLbs: 255, confidence: 'poor', bodyFatIndex: 51, waterCutIndex: 40 },
     placement: { power: 0.2, speed: -0.2, cardio: 0.8, durability: 0.4, strength: -0.6 },
     notes:
       'The tall-and-light-framed heavyweight: six foot seven carrying 255 lb, which is a very long body with unremarkable mass on it. Strength −0.6 is the placement that shows the frame is not the same thing as the mass — he is routinely out-muscled in the clinch by men four inches shorter. Power +0.2 is the more surprising one and is deliberate: he stops people by volume and length, not by force, and the file needs heavyweights who do not punch hard or the top of the Power ladder gets read as the divisional norm. Cardio +0.8 for a fighter who reliably works five rounds at 250 lb.',
@@ -187,7 +191,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_gane',
     name: 'Ciryl Gane',
     measured: { sex: 'male', division: HW, heightInches: 76, reachInches: 81 },
-    estimated: { walkingWeightLbs: 255, confidence: 'fair', bodyFatIndex: 45, waterCutIndex: 45 },
+    estimated: { walkingWeightLbs: 255, confidence: 'fair', bodyFatIndex: 48, waterCutIndex: 45 },
     placement: { power: 0.4, speed: 1.6, cardio: 0.6, durability: -0.3, strength: -0.8 },
     notes:
       'The second heavyweight athletic freak on Speed, and the cleanest demonstration in the division that Speed and Power are separate attributes: he moves like a middleweight at 250 lb and does not hit anything like as hard as the men around him in this file. Strength −0.8 is well evidenced — he has been taken down and held there by wrestlers, repeatedly, and could not get up. Durability −0.3 for a chin that has been found more than once. Power +0.4 rather than higher because his finishes come from accumulation and placement.',
@@ -196,7 +200,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_arlovski',
     name: 'Andrei Arlovski',
     measured: { sex: 'male', division: HW, heightInches: 76, reachInches: 77 },
-    estimated: { walkingWeightLbs: 248, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 45 },
+    estimated: { walkingWeightLbs: 248, confidence: 'poor', bodyFatIndex: 49, waterCutIndex: 45 },
     placement: { power: 0.8, speed: 0.4, cardio: 0.2, durability: -1.5, strength: -0.2 },
     defence: {
       durability:
@@ -209,7 +213,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_tybura',
     name: 'Marcin Tybura',
     measured: { sex: 'male', division: HW, heightInches: 75, reachInches: 78 },
-    estimated: { walkingWeightLbs: 248, confidence: 'poor', bodyFatIndex: 55, waterCutIndex: 45 },
+    estimated: { walkingWeightLbs: 248, confidence: 'poor', bodyFatIndex: 52, waterCutIndex: 45 },
     placement: { power: 0.0, speed: 0.0, cardio: 0.4, durability: 0.2, strength: 0.3 },
     notes:
       'Deliberately and completely ordinary — five placements inside 0.4σ, which for heavyweight means a man who hits about as hard as the division does, moves about as well, and lasts about as long. A ranked, long-tenured heavyweight who is exceptional at nothing. Heavyweight in this file is otherwise anchored by the sport’s hardest punchers, and without entries like this one the division’s Power median would be read off a sample of five outliers. Speed 0.0, Cardio +0.4, Durability +0.2 and Strength +0.3 are all within a few tenths of the divisional centre, which is the entire claim being made about him.',
@@ -219,7 +223,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_jones',
     name: 'Jon Jones',
     measured: { sex: 'male', division: LHW, heightInches: 76, reachInches: 84 },
-    estimated: { walkingWeightLbs: 230, confidence: 'good', bodyFatIndex: 35, waterCutIndex: 60 },
+    estimated: { walkingWeightLbs: 230, confidence: 'good', bodyFatIndex: 42, waterCutIndex: 60 },
     alsoFought: [HW],
     placement: { power: 0.5, speed: 1.9, cardio: 1.2, durability: 1.7, strength: 1.6 },
     defence: {
@@ -233,7 +237,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_pereira',
     name: 'Alex Pereira',
     measured: { sex: 'male', division: LHW, heightInches: 76, reachInches: 79 },
-    estimated: { walkingWeightLbs: 230, confidence: 'good', bodyFatIndex: 30, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 230, confidence: 'good', bodyFatIndex: 39, waterCutIndex: 55 },
     alsoFought: [MW],
     placement: { power: 2.2, speed: 1.4, cardio: 0.4, durability: 1, strength: 0.9 },
     defence: {
@@ -253,7 +257,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_cormier',
     name: 'Daniel Cormier',
     measured: { sex: 'male', division: LHW, heightInches: 71, reachInches: 72 },
-    estimated: { walkingWeightLbs: 230, confidence: 'good', bodyFatIndex: 70, waterCutIndex: 65 },
+    estimated: { walkingWeightLbs: 230, confidence: 'good', bodyFatIndex: 59, waterCutIndex: 65 },
     alsoFought: [HW],
     placement: { power: 0.4, speed: 0.6, cardio: 1.4, durability: 1.2, strength: 2.1 },
     defence: {
@@ -285,7 +289,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_anthony_smith',
     name: 'Anthony Smith',
     measured: { sex: 'male', division: LHW, heightInches: 76, reachInches: 76 },
-    estimated: { walkingWeightLbs: 218, confidence: 'poor', bodyFatIndex: 40, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 218, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 50 },
     placement: { power: 0.4, speed: 0.2, cardio: 0.1, durability: 0.5, strength: -1.1 },
     notes:
       'Tall and light-framed for the division — 6\'4" walking around 218 — with a reach no longer than his height. Strength −1.1 is the coverage case the criteria ask for, and it is well evidenced rather than assigned: he is put on the fence and taken down by light heavyweights as a matter of routine, and at 218 lb walking he is carrying less mass than almost anybody he faces. Physically weak for his class and competitive on skill is a combination the division needs represented. Power +0.4, Speed +0.2, Cardio +0.1 and Durability +0.5 are all close to the divisional centre, so the entry is a single sharp negative on an otherwise median light heavyweight.',
@@ -294,7 +298,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_hill',
     name: 'Jamahal Hill',
     measured: { sex: 'male', division: LHW, heightInches: 76, reachInches: 79 },
-    estimated: { walkingWeightLbs: 220, confidence: 'poor', bodyFatIndex: 35, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 220, confidence: 'poor', bodyFatIndex: 42, waterCutIndex: 50 },
     placement: { power: 1.2, speed: 1.3, cardio: 0.2, durability: -0.5, strength: -0.3 },
     notes:
       'Fast and powerful with nothing else above the line — Strength −0.3 and Cardio +0.2 on a tall, light frame. A useful shape: two attributes elevated and three ordinary, which is what most good fighters actually look like.',
@@ -313,7 +317,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_thiago_santos',
     name: 'Thiago Santos',
     measured: { sex: 'male', division: LHW, heightInches: 74, reachInches: 76 },
-    estimated: { walkingWeightLbs: 225, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 225, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 55 },
     alsoFought: [MW],
     placement: { power: 1.8, speed: 0.7, cardio: -0.8, durability: 0, strength: 0.4 },
     defence: {
@@ -329,7 +333,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_adesanya',
     name: 'Israel Adesanya',
     measured: { sex: 'male', division: MW, heightInches: 76, reachInches: 80 },
-    estimated: { walkingWeightLbs: 205, confidence: 'good', bodyFatIndex: 25, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 205, confidence: 'good', bodyFatIndex: 36, waterCutIndex: 50 },
     alsoFought: [LHW],
     placement: { power: 1.4, speed: 1.9, cardio: 0.6, durability: 0.7, strength: -0.4 },
     defence: {
@@ -343,7 +347,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_whittaker',
     name: 'Robert Whittaker',
     measured: { sex: 'male', division: MW, heightInches: 72, reachInches: 73 },
-    estimated: { walkingWeightLbs: 200, confidence: 'fair', bodyFatIndex: 35, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 200, confidence: 'fair', bodyFatIndex: 42, waterCutIndex: 55 },
     alsoFought: [WW],
     placement: { power: 0.4, speed: 1.3, cardio: 1.4, durability: 0.8, strength: 0.3 },
     notes:
@@ -353,7 +357,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_romero',
     name: 'Yoel Romero',
     measured: { sex: 'male', division: MW, heightInches: 72, reachInches: 73 },
-    estimated: { walkingWeightLbs: 205, confidence: 'fair', bodyFatIndex: 15, waterCutIndex: 60 },
+    estimated: { walkingWeightLbs: 205, confidence: 'fair', bodyFatIndex: 28, waterCutIndex: 60 },
     placement: { power: 1.9, speed: 1.7, cardio: -1.0, durability: 1.4, strength: 2.0 },
     defence: {
       power:
@@ -383,7 +387,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_till',
     name: 'Darren Till',
     measured: { sex: 'male', division: MW, heightInches: 72, reachInches: 74 },
-    estimated: { walkingWeightLbs: 205, confidence: 'good', bodyFatIndex: 55, waterCutIndex: 85 },
+    estimated: { walkingWeightLbs: 205, confidence: 'good', bodyFatIndex: 52, waterCutIndex: 85 },
     alsoFought: [WW],
     placement: { power: 0.2, speed: 0, cardio: -0.6, durability: 0.4, strength: 0.4 },
     notes:
@@ -393,7 +397,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_brunson',
     name: 'Derek Brunson',
     measured: { sex: 'male', division: MW, heightInches: 73, reachInches: 77 },
-    estimated: { walkingWeightLbs: 200, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 200, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 50 },
     placement: { power: 0.6, speed: 0.3, cardio: -0.3, durability: -0.4, strength: 0.8 },
     notes:
       'Two placements below the divisional centre and none above +0.8. A long-serving ranked contender who was never elite, which is the most common shape in the sport and the easiest to leave out of a calibration set. Power +0.6 and Strength +0.8 are mild positives from a wrestling base, Speed +0.3 is ordinary, and Cardio −0.3 with Durability −0.4 are the two below the centre, on a record of late stoppages.',
@@ -402,7 +406,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_gastelum',
     name: 'Kelvin Gastelum',
     measured: { sex: 'male', division: MW, heightInches: 69, reachInches: 71 },
-    estimated: { walkingWeightLbs: 200, confidence: 'good', bodyFatIndex: 65, waterCutIndex: 85 },
+    estimated: { walkingWeightLbs: 200, confidence: 'good', bodyFatIndex: 57, waterCutIndex: 85 },
     alsoFought: [WW],
     placement: { power: 0.6, speed: 0.2, cardio: 0.1, durability: 1.0, strength: 0.6 },
     notes:
@@ -412,7 +416,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_cannonier',
     name: 'Jared Cannonier',
     measured: { sex: 'male', division: MW, heightInches: 71, reachInches: 77 },
-    estimated: { walkingWeightLbs: 200, confidence: 'good', bodyFatIndex: 40, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 200, confidence: 'good', bodyFatIndex: 45, waterCutIndex: 70 },
     alsoFought: [LHW, HW],
     placement: { power: 1.4, speed: 0.4, cardio: -0.2, durability: 0.6, strength: 1.2 },
     notes:
@@ -432,7 +436,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_anderson_silva',
     name: 'Anderson Silva',
     measured: { sex: 'male', division: MW, heightInches: 74, reachInches: 77 },
-    estimated: { walkingWeightLbs: 205, confidence: 'fair', bodyFatIndex: 35, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 205, confidence: 'fair', bodyFatIndex: 42, waterCutIndex: 55 },
     placement: { power: 1.5, speed: 2.0, cardio: 0.3, durability: -0.6, strength: -0.5 },
     defence: {
       speed:
@@ -445,7 +449,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_uriah_hall',
     name: 'Uriah Hall',
     measured: { sex: 'male', division: MW, heightInches: 72, reachInches: 79 },
-    estimated: { walkingWeightLbs: 200, confidence: 'poor', bodyFatIndex: 38, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 200, confidence: 'poor', bodyFatIndex: 44, waterCutIndex: 50 },
     placement: { power: 1.3, speed: 1.2, cardio: -0.4, durability: -0.9, strength: 0.2 },
     notes:
       'A seven-inch ape index — the longest relative reach in the men’s file — on a genuinely explosive athlete, and a career that never matched either. Power +1.3 and Speed +1.2 are what everybody saw in the gym; Durability −0.9 and Cardio −0.4 are what happened in fights, and the pairing is the reason he belongs here. An athlete whose physicals are well above his division while his results are not is a case the simulation has to be able to represent, or physical ratings quietly become a ranking.',
@@ -455,7 +459,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_usman',
     name: 'Kamaru Usman',
     measured: { sex: 'male', division: WW, heightInches: 72, reachInches: 76 },
-    estimated: { walkingWeightLbs: 190, confidence: 'good', bodyFatIndex: 30, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 190, confidence: 'good', bodyFatIndex: 39, waterCutIndex: 70 },
     placement: { power: 0.3, speed: 0.4, cardio: 2.6, durability: 1.1, strength: 2.0 },
     defence: {
       cardio:
@@ -470,7 +474,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_gsp',
     name: 'Georges St-Pierre',
     measured: { sex: 'male', division: WW, heightInches: 70, reachInches: 76 },
-    estimated: { walkingWeightLbs: 190, confidence: 'fair', bodyFatIndex: 30, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 190, confidence: 'fair', bodyFatIndex: 39, waterCutIndex: 70 },
     alsoFought: [MW],
     placement: { power: 0.1, speed: 1.2, cardio: 1.5, durability: 0.8, strength: 1.3 },
     notes:
@@ -480,7 +484,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_covington',
     name: 'Colby Covington',
     measured: { sex: 'male', division: WW, heightInches: 71, reachInches: 72 },
-    estimated: { walkingWeightLbs: 185, confidence: 'fair', bodyFatIndex: 45, waterCutIndex: 65 },
+    estimated: { walkingWeightLbs: 185, confidence: 'fair', bodyFatIndex: 48, waterCutIndex: 65 },
     placement: { power: -1.3, speed: 0.2, cardio: 2.8, durability: 0.8, strength: 0.7 },
     defence: {
       cardio:
@@ -493,7 +497,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_woodley',
     name: 'Tyron Woodley',
     measured: { sex: 'male', division: WW, heightInches: 69, reachInches: 74 },
-    estimated: { walkingWeightLbs: 190, confidence: 'fair', bodyFatIndex: 30, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 190, confidence: 'fair', bodyFatIndex: 39, waterCutIndex: 70 },
     placement: { power: 1.8, speed: 1.3, cardio: -1.2, durability: 0.2, strength: 1.2 },
     defence: {
       power:
@@ -506,7 +510,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_wonderboy',
     name: 'Stephen Thompson',
     measured: { sex: 'male', division: WW, heightInches: 72, reachInches: 75 },
-    estimated: { walkingWeightLbs: 180, confidence: 'good', bodyFatIndex: 25, waterCutIndex: 40 },
+    estimated: { walkingWeightLbs: 180, confidence: 'good', bodyFatIndex: 36, waterCutIndex: 40 },
     placement: { power: 0.1, speed: 1.7, cardio: 0.5, durability: 0.1, strength: -1 },
     notes:
       "The competes-close-to-walking-weight case: 180 lb for a 170 lb division, the smallest margin in the men's file. Strength −1.0 is the other half of the coverage — he was routinely out-grappled by men he could not physically hold off. Power +0.1 and Durability +0.1 sit at the division median, Speed +1.7 is the attribute the entire karate style depends on, and Cardio +0.5 is the mild positive of somebody who fights at range for five rounds.",
@@ -515,7 +519,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_masvidal',
     name: 'Jorge Masvidal',
     measured: { sex: 'male', division: WW, heightInches: 71, reachInches: 74 },
-    estimated: { walkingWeightLbs: 185, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 60 },
+    estimated: { walkingWeightLbs: 185, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 60 },
     alsoFought: [LW],
     placement: { power: 0.7, speed: 0.4, cardio: -0.1, durability: 1.1, strength: -0.1 },
     notes:
@@ -525,7 +529,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_edwards',
     name: 'Leon Edwards',
     measured: { sex: 'male', division: WW, heightInches: 72, reachInches: 74 },
-    estimated: { walkingWeightLbs: 185, confidence: 'poor', bodyFatIndex: 40, waterCutIndex: 60 },
+    estimated: { walkingWeightLbs: 185, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 60 },
     placement: { power: 0.2, speed: 0.6, cardio: 0.7, durability: 0.3, strength: -0.2 },
     notes:
       'A champion with no placement above +0.7. Deliberately unremarkable across the board, because a calibration set where every titleholder is exceptional would misrepresent what winning a title requires. Power +0.2, Speed +0.6, Cardio +0.7, Durability +0.3 and Strength −0.2 are all inside three quarters of a sigma of the welterweight median, which is the whole point of the entry.',
@@ -534,7 +538,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_burns',
     name: 'Gilbert Burns',
     measured: { sex: 'male', division: WW, heightInches: 70, reachInches: 71 },
-    estimated: { walkingWeightLbs: 185, confidence: 'poor', bodyFatIndex: 40, waterCutIndex: 65 },
+    estimated: { walkingWeightLbs: 185, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 65 },
     alsoFought: [LW],
     placement: { power: 1, speed: 0.5, cardio: -0.5, durability: 0.1, strength: 0.8 },
     notes:
@@ -555,7 +559,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_nate_diaz',
     name: 'Nate Diaz',
     measured: { sex: 'male', division: WW, heightInches: 72, reachInches: 76 },
-    estimated: { walkingWeightLbs: 180, confidence: 'fair', bodyFatIndex: 40, waterCutIndex: 40 },
+    estimated: { walkingWeightLbs: 180, confidence: 'fair', bodyFatIndex: 45, waterCutIndex: 40 },
     placement: { power: -0.6, speed: 0.2, cardio: 1.9, durability: 1.7, strength: -1.2 },
     alsoFought: [LW],
     defence: {
@@ -569,7 +573,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_condit',
     name: 'Carlos Condit',
     measured: { sex: 'male', division: WW, heightInches: 74, reachInches: 76 },
-    estimated: { walkingWeightLbs: 190, confidence: 'poor', bodyFatIndex: 42, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 190, confidence: 'poor', bodyFatIndex: 46, waterCutIndex: 50 },
     placement: { power: 0.8, speed: 0.7, cardio: 1.2, durability: -0.4, strength: -0.7 },
     notes:
       'A high-volume pressure fighter who was never physically imposing. Cardio +1.2 is the attribute the style is built on and it is well attested across five-round fights. Strength −0.7 and Durability −0.4 are the costs — he was reliably taken down by the division’s wrestlers and his career ended in a run of stoppages. Power +0.8 is above the divisional centre without being remarkable, which is the honest reading of a long finishing record built on accumulation.',
@@ -579,7 +583,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_khabib',
     name: 'Khabib Nurmagomedov',
     measured: { sex: 'male', division: LW, heightInches: 70, reachInches: 70 },
-    estimated: { walkingWeightLbs: 175, confidence: 'good', bodyFatIndex: 55, waterCutIndex: 80 },
+    estimated: { walkingWeightLbs: 175, confidence: 'good', bodyFatIndex: 52, waterCutIndex: 80 },
     placement: { power: 0, speed: 0.3, cardio: 1.7, durability: 1.6, strength: 2.0 },
     defence: {
       strength:
@@ -592,7 +596,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_mcgregor',
     name: 'Conor McGregor',
     measured: { sex: 'male', division: LW, heightInches: 69, reachInches: 74 },
-    estimated: { walkingWeightLbs: 170, confidence: 'good', bodyFatIndex: 30, waterCutIndex: 65 },
+    estimated: { walkingWeightLbs: 170, confidence: 'good', bodyFatIndex: 39, waterCutIndex: 65 },
     alsoFought: [FW, WW],
     placement: { power: 2, speed: 1.9, cardio: -0.6, durability: -0.5, strength: -0.2 },
     defence: {
@@ -608,7 +612,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_ferguson',
     name: 'Tony Ferguson',
     measured: { sex: 'male', division: LW, heightInches: 71, reachInches: 76 },
-    estimated: { walkingWeightLbs: 172, confidence: 'fair', bodyFatIndex: 35, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 172, confidence: 'fair', bodyFatIndex: 42, waterCutIndex: 70 },
     placement: { power: 0, speed: 0.6, cardio: 2.4, durability: 2.5, strength: 0.3 },
     defence: {
       cardio:
@@ -623,7 +627,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_gaethje',
     name: 'Justin Gaethje',
     measured: { sex: 'male', division: LW, heightInches: 71, reachInches: 70 },
-    estimated: { walkingWeightLbs: 172, confidence: 'fair', bodyFatIndex: 35, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 172, confidence: 'fair', bodyFatIndex: 42, waterCutIndex: 70 },
     placement: { power: 1.9, speed: 0.8, cardio: 0.5, durability: 0.4, strength: 0.6 },
     defence: {
       power:
@@ -636,7 +640,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_poirier',
     name: 'Dustin Poirier',
     measured: { sex: 'male', division: LW, heightInches: 69, reachInches: 72 },
-    estimated: { walkingWeightLbs: 170, confidence: 'fair', bodyFatIndex: 45, waterCutIndex: 65 },
+    estimated: { walkingWeightLbs: 170, confidence: 'fair', bodyFatIndex: 48, waterCutIndex: 65 },
     alsoFought: [FW],
     placement: { power: 1.5, speed: 0.5, cardio: 0.6, durability: 0.3, strength: 0.4 },
     notes:
@@ -646,7 +650,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_oliveira',
     name: 'Charles Oliveira',
     measured: { sex: 'male', division: LW, heightInches: 70, reachInches: 74 },
-    estimated: { walkingWeightLbs: 172, confidence: 'fair', bodyFatIndex: 35, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 172, confidence: 'fair', bodyFatIndex: 42, waterCutIndex: 70 },
     alsoFought: [FW],
     placement: { power: 0.6, speed: 0.7, cardio: 0.6, durability: -0.6, strength: -0.3 },
     notes:
@@ -665,7 +669,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_chandler',
     name: 'Michael Chandler',
     measured: { sex: 'male', division: LW, heightInches: 68, reachInches: 71 },
-    estimated: { walkingWeightLbs: 175, confidence: 'fair', bodyFatIndex: 25, waterCutIndex: 75 },
+    estimated: { walkingWeightLbs: 175, confidence: 'fair', bodyFatIndex: 36, waterCutIndex: 75 },
     placement: { power: 1.5, speed: 1.1, cardio: -0.4, durability: 0.5, strength: 1.5 },
     notes:
       'The shortest man in the lightweight set and among the thickest. Cardio −0.4 is what keeps him from reading as a straightforward athletic freak, and it matches a career of fast starts and difficult third rounds. Power +1.5 and Strength +1.5 are both genuine and both from the same explosive wrestling base, Speed +1.1 is real, and Durability +0.5 is ordinary for a fighter who has been dropped and got up.',
@@ -690,7 +694,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_rda',
     name: 'Rafael dos Anjos',
     measured: { sex: 'male', division: LW, heightInches: 68, reachInches: 70 },
-    estimated: { walkingWeightLbs: 172, confidence: 'fair', bodyFatIndex: 42, waterCutIndex: 60 },
+    estimated: { walkingWeightLbs: 172, confidence: 'fair', bodyFatIndex: 46, waterCutIndex: 60 },
     placement: { power: 0.4, speed: 0.1, cardio: 1.1, durability: 0.6, strength: 1.2 },
     alsoFought: [WW],
     notes:
@@ -700,7 +704,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_dariush',
     name: 'Beneil Dariush',
     measured: { sex: 'male', division: LW, heightInches: 70, reachInches: 72 },
-    estimated: { walkingWeightLbs: 170, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 170, confidence: 'poor', bodyFatIndex: 49, waterCutIndex: 55 },
     placement: { power: -0.2, speed: -0.1, cardio: 0.5, durability: 0.2, strength: 0.6 },
     notes:
       "Deliberately ordinary, and the division badly needs it. Lightweight in this file is otherwise a collection of the sport's most famous punchers — McGregor, Gaethje, Poirier, Chandler — and a roster drawn only from them puts the division's Power median above welterweight's, which is the selection bias this criterion exists to catch. He is a long-tenured top-ten fighter with nothing above +0.6 in any direction, who wins on grappling and pace. Speed −0.1, Cardio +0.5, Durability +0.2 and Strength +0.6 are all within two thirds of a sigma of the division median, and none of them is the reason he wins.",
@@ -710,7 +714,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_volkanovski',
     name: 'Alexander Volkanovski',
     measured: { sex: 'male', division: FW, heightInches: 66, reachInches: 71 },
-    estimated: { walkingWeightLbs: 165, confidence: 'good', bodyFatIndex: 35, waterCutIndex: 85 },
+    estimated: { walkingWeightLbs: 165, confidence: 'good', bodyFatIndex: 42, waterCutIndex: 85 },
     alsoFought: [LW],
     placement: { power: 0.9, speed: 0.6, cardio: 1.9, durability: 1.2, strength: 2.0 },
     defence: {
@@ -726,7 +730,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_holloway',
     name: 'Max Holloway',
     measured: { sex: 'male', division: FW, heightInches: 71, reachInches: 69 },
-    estimated: { walkingWeightLbs: 160, confidence: 'fair', bodyFatIndex: 30, waterCutIndex: 60 },
+    estimated: { walkingWeightLbs: 160, confidence: 'fair', bodyFatIndex: 39, waterCutIndex: 60 },
     alsoFought: [LW],
     placement: { power: 0, speed: 0.8, cardio: 2.4, durability: 2.2, strength: -0.7 },
     defence: {
@@ -742,7 +746,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_aldo',
     name: 'José Aldo',
     measured: { sex: 'male', division: FW, heightInches: 67, reachInches: 70 },
-    estimated: { walkingWeightLbs: 163, confidence: 'good', bodyFatIndex: 35, waterCutIndex: 80 },
+    estimated: { walkingWeightLbs: 163, confidence: 'good', bodyFatIndex: 42, waterCutIndex: 80 },
     alsoFought: [BW],
     placement: { power: 1.6, speed: 1.4, cardio: -0.2, durability: 0.1, strength: 0.8 },
     notes:
@@ -752,7 +756,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_ortega',
     name: 'Brian Ortega',
     measured: { sex: 'male', division: FW, heightInches: 68, reachInches: 69 },
-    estimated: { walkingWeightLbs: 160, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 160, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 70 },
     placement: { power: -0.2, speed: -0.2, cardio: 0.8, durability: 0.9, strength: -0.2 },
     notes:
       'Physically ordinary and a title challenger twice on submission grappling and a chin. Four of five placements inside a sigma. Power −0.2, Speed −0.2 and Strength −0.2 are all just below the featherweight median, Cardio +0.8 is a mild positive, and Durability +0.9 is the one attribute that kept him in fights he was losing badly.',
@@ -761,7 +765,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_yair',
     name: 'Yair Rodríguez',
     measured: { sex: 'male', division: FW, heightInches: 71, reachInches: 71 },
-    estimated: { walkingWeightLbs: 158, confidence: 'poor', bodyFatIndex: 25, waterCutIndex: 60 },
+    estimated: { walkingWeightLbs: 158, confidence: 'poor', bodyFatIndex: 36, waterCutIndex: 60 },
     placement: { power: 0.3, speed: 1.9, cardio: 0.4, durability: -0.1, strength: -1.0 },
     defence: {
       speed:
@@ -774,7 +778,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_zombie',
     name: 'Chan Sung Jung',
     measured: { sex: 'male', division: FW, heightInches: 67, reachInches: 72 },
-    estimated: { walkingWeightLbs: 160, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 160, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 70 },
     placement: { power: 0.3, speed: 0.2, cardio: 0.6, durability: 0.5, strength: 0.1 },
     notes:
       'A five-inch ape index on a 5\'7" frame and otherwise an ordinary athlete who fought for a title on pace and toughness. Power +0.3, Speed +0.2, Cardio +0.6, Durability +0.5 and Strength +0.1 are all inside two thirds of a sigma, and the ape index is a geometric fact rather than a physical rating.',
@@ -783,7 +787,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_kattar',
     name: 'Calvin Kattar',
     measured: { sex: 'male', division: FW, heightInches: 71, reachInches: 72 },
-    estimated: { walkingWeightLbs: 160, confidence: 'poor', bodyFatIndex: 40, waterCutIndex: 60 },
+    estimated: { walkingWeightLbs: 160, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 60 },
     placement: { power: 0.8, speed: -0.1, cardio: 0.6, durability: 1.5, strength: 0.2 },
     notes:
       'Durability +1.5 on the evidence of a five-round beating he finished on his feet, with Speed −0.1 — hittable, and extremely hard to stop. The opposite trade from Rodríguez. Power +0.8 is above the divisional centre without being an anchor, Cardio +0.6 is mild, and Strength +0.2 sits at the median, so the entry rests almost entirely on the one attribute it is here to calibrate.',
@@ -792,7 +796,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_topuria',
     name: 'Ilia Topuria',
     measured: { sex: 'male', division: FW, heightInches: 67, reachInches: 69 },
-    estimated: { walkingWeightLbs: 163, confidence: 'fair', bodyFatIndex: 30, waterCutIndex: 80 },
+    estimated: { walkingWeightLbs: 163, confidence: 'fair', bodyFatIndex: 39, waterCutIndex: 80 },
     placement: { power: 1.8, speed: 0.6, cardio: 0.5, durability: 0.3, strength: 1.4 },
     defence: {
       power:
@@ -805,7 +809,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_swanson',
     name: 'Cub Swanson',
     measured: { sex: 'male', division: FW, heightInches: 68, reachInches: 71 },
-    estimated: { walkingWeightLbs: 158, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 65 },
+    estimated: { walkingWeightLbs: 158, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 65 },
     placement: { power: 0.5, speed: 0.4, cardio: 0.2, durability: -0.6, strength: -0.1 },
     notes:
       'A twenty-year contender who was never champion, with two placements below the centre. The ordinary case the division needs. Power +0.5, Speed +0.4, Cardio +0.2 and Strength −0.1 are all close to the featherweight median, and Durability −0.6 is the mild negative of a career with a long run of stoppage losses in it.',
@@ -816,7 +820,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_merab',
     name: 'Merab Dvalishvili',
     measured: { sex: 'male', division: BW, heightInches: 66, reachInches: 68 },
-    estimated: { walkingWeightLbs: 155, confidence: 'good', bodyFatIndex: 30, waterCutIndex: 80 },
+    estimated: { walkingWeightLbs: 155, confidence: 'good', bodyFatIndex: 39, waterCutIndex: 80 },
     placement: { power: -0.8, speed: 0.5, cardio: 2.9, durability: 1.4, strength: 1.4 },
     defence: {
       cardio:
@@ -835,7 +839,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_dillashaw',
     name: 'TJ Dillashaw',
     measured: { sex: 'male', division: BW, heightInches: 66, reachInches: 67 },
-    estimated: { walkingWeightLbs: 150, confidence: 'fair', bodyFatIndex: 35, waterCutIndex: 75 },
+    estimated: { walkingWeightLbs: 150, confidence: 'fair', bodyFatIndex: 42, waterCutIndex: 75 },
     alsoFought: [FLW],
     placement: { power: 0.6, speed: 1.4, cardio: 0.8, durability: 0.3, strength: 0.2 },
     notes:
@@ -845,7 +849,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_yan',
     name: 'Petr Yan',
     measured: { sex: 'male', division: BW, heightInches: 67, reachInches: 67 },
-    estimated: { walkingWeightLbs: 150, confidence: 'poor', bodyFatIndex: 40, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 150, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 70 },
     placement: { power: 0.8, speed: 0.4, cardio: 0.9, durability: 1.2, strength: 0.6 },
     notes:
       'Evenly good rather than spiky: four placements between +0.4 and +1.2 and none above. A different shape from most of this file and a common one at the top of a division. Power +0.8, Speed +0.4, Cardio +0.9, Durability +1.2 and Strength +0.6 are all modest positives and none is an outlier, which is the shape being recorded.',
@@ -854,7 +858,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_sterling',
     name: 'Aljamain Sterling',
     measured: { sex: 'male', division: BW, heightInches: 67, reachInches: 71 },
-    estimated: { walkingWeightLbs: 152, confidence: 'fair', bodyFatIndex: 35, waterCutIndex: 75 },
+    estimated: { walkingWeightLbs: 152, confidence: 'fair', bodyFatIndex: 42, waterCutIndex: 75 },
     alsoFought: [FW],
     placement: { power: -0.5, speed: 0.4, cardio: 1.2, durability: 0.5, strength: 0.7 },
     notes:
@@ -864,7 +868,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_cruz',
     name: 'Dominick Cruz',
     measured: { sex: 'male', division: BW, heightInches: 68, reachInches: 68 },
-    estimated: { walkingWeightLbs: 148, confidence: 'fair', bodyFatIndex: 35, waterCutIndex: 60 },
+    estimated: { walkingWeightLbs: 148, confidence: 'fair', bodyFatIndex: 42, waterCutIndex: 60 },
     placement: { power: -0.7, speed: 1.9, cardio: 0.8, durability: 0.2, strength: -0.6 },
     defence: {
       speed:
@@ -877,7 +881,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_omalley',
     name: "Sean O'Malley",
     measured: { sex: 'male', division: BW, heightInches: 71, reachInches: 72 },
-    estimated: { walkingWeightLbs: 150, confidence: 'fair', bodyFatIndex: 20, waterCutIndex: 65 },
+    estimated: { walkingWeightLbs: 150, confidence: 'fair', bodyFatIndex: 32, waterCutIndex: 65 },
     placement: { power: 1.1, speed: 1.1, cardio: -0.1, durability: -0.4, strength: -1.1 },
     notes:
       "The most extreme tall-and-light-framed body in the men's file: 5'11\" competing at 135, five inches taller than the divisional mean. Strength −1.1 is the price and is well documented — he is moved around by everyone who gets hold of him. Power +1.1 is real for the division, Speed +1.1 matches it, Cardio −0.1 sits at the median, and Durability −0.4 is the mild negative of a fighter who has been dropped by people much smaller than the division anchors.",
@@ -886,7 +890,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_garbrandt',
     name: 'Cody Garbrandt',
     measured: { sex: 'male', division: BW, heightInches: 68, reachInches: 65 },
-    estimated: { walkingWeightLbs: 150, confidence: 'poor', bodyFatIndex: 35, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 150, confidence: 'poor', bodyFatIndex: 42, waterCutIndex: 70 },
     placement: { power: 1.2, speed: 1.3, cardio: -0.2, durability: -1.0, strength: 0.1 },
     defence: {
       durability:
@@ -899,7 +903,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_moraes',
     name: 'Marlon Moraes',
     measured: { sex: 'male', division: BW, heightInches: 66, reachInches: 67 },
-    estimated: { walkingWeightLbs: 150, confidence: 'poor', bodyFatIndex: 40, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 150, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 70 },
     placement: { power: 1.2, speed: 0.9, cardio: -0.5, durability: -0.6, strength: 0.3 },
     notes:
       'Two placements above +0.9 and two below the centre. A title challenger whose career ended in a run of knockout losses. Power +1.2 and Speed +0.9 are the two positives, Strength +0.3 sits at the median, and Cardio −0.5 with Durability −0.6 are the two negatives that ended the career.',
@@ -908,7 +912,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_assuncao',
     name: 'Raphael Assunção',
     measured: { sex: 'male', division: BW, heightInches: 66, reachInches: 68 },
-    estimated: { walkingWeightLbs: 150, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 150, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 70 },
     placement: { power: 0, speed: -0.1, cardio: 0.1, durability: 0.3, strength: 0.5 },
     notes:
       'The bantamweight division-median entry: five placements inside 0.5σ across a decade in the rankings. Power 0.0, Speed −0.1, Cardio +0.1, Durability +0.3 and Strength +0.5 place him within half a sigma of the bantamweight median on all five, which is the entry.',
@@ -918,7 +922,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_vera',
     name: 'Marlon Vera',
     measured: { sex: 'male', division: BW, heightInches: 68, reachInches: 70 },
-    estimated: { walkingWeightLbs: 150, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 150, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 55 },
     placement: { power: 0.6, speed: -0.9, cardio: 0.6, durability: 1.6, strength: 0.3 },
     notes:
       'Slow for the class and it has never mattered. Speed −0.9 is visible in every fight — he is beaten to the punch for long stretches — and Durability +1.6 is why that is survivable: he has taken sustained damage from the division’s best strikers and been stopped by none of them. Power +0.6 is real. Bantamweight in this file is otherwise a division of fast, spiky strikers, and a roster where nobody at 135 is slow would produce a Speed median a rating point off the truth.',
@@ -927,7 +931,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_munhoz',
     name: 'Pedro Munhoz',
     measured: { sex: 'male', division: BW, heightInches: 66, reachInches: 67 },
-    estimated: { walkingWeightLbs: 150, confidence: 'poor', bodyFatIndex: 42, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 150, confidence: 'poor', bodyFatIndex: 46, waterCutIndex: 55 },
     placement: { power: 0.5, speed: -0.6, cardio: 0.4, durability: 1.4, strength: 0.7 },
     notes:
       'Short and thick for bantamweight — the men’s small-division counterpart to Carla Esparza — and the second slow fighter the division needs. Durability +1.4 on a long career of standing in the pocket without being finished by strikes, Strength +0.7 from the frame, and Speed −0.6 as the price of both. Power +0.5 is ordinary for a fighter with a reputation for heavy leg kicks, because the reputation is about damage accumulated rather than force delivered.',
@@ -946,7 +950,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_dj',
     name: 'Demetrious Johnson',
     measured: { sex: 'male', division: FLW, heightInches: 63, reachInches: 66 },
-    estimated: { walkingWeightLbs: 137, confidence: 'fair', bodyFatIndex: 30, waterCutIndex: 60 },
+    estimated: { walkingWeightLbs: 137, confidence: 'fair', bodyFatIndex: 39, waterCutIndex: 60 },
     alsoFought: [BW],
     placement: { power: 0, speed: 2.4, cardio: 2.0, durability: 0.6, strength: 0.4 },
     defence: {
@@ -962,7 +966,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_figueiredo',
     name: 'Deiveson Figueiredo',
     measured: { sex: 'male', division: FLW, heightInches: 65, reachInches: 68 },
-    estimated: { walkingWeightLbs: 145, confidence: 'good', bodyFatIndex: 40, waterCutIndex: 90 },
+    estimated: { walkingWeightLbs: 145, confidence: 'good', bodyFatIndex: 45, waterCutIndex: 90 },
     alsoFought: [BW],
     placement: { power: 1.9, speed: 0.8, cardio: 0.2, durability: 0.9, strength: 1.1 },
     defence: {
@@ -982,7 +986,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_moreno',
     name: 'Brandon Moreno',
     measured: { sex: 'male', division: FLW, heightInches: 67, reachInches: 70 },
-    estimated: { walkingWeightLbs: 138, confidence: 'fair', bodyFatIndex: 40, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 138, confidence: 'fair', bodyFatIndex: 45, waterCutIndex: 70 },
     placement: { power: 0.1, speed: 0.5, cardio: 1.2, durability: 1.7, strength: -0.2 },
     notes:
       'Tall for the division with a long reach, and carried by chin and pace rather than force. Power +0.1 on a multiple-time champion. Speed +0.5 and Strength −0.2 are both ordinary for flyweight, while Cardio +1.2 and Durability +1.7 are the two that let him win fights on volume after taking the worst of the first two rounds.',
@@ -991,7 +995,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_cejudo',
     name: 'Henry Cejudo',
     measured: { sex: 'male', division: FLW, heightInches: 64, reachInches: 64 },
-    estimated: { walkingWeightLbs: 140, confidence: 'fair', bodyFatIndex: 25, waterCutIndex: 80 },
+    estimated: { walkingWeightLbs: 140, confidence: 'fair', bodyFatIndex: 36, waterCutIndex: 80 },
     alsoFought: [BW],
     placement: { power: 0.3, speed: 1.2, cardio: 1.2, durability: 0.8, strength: 2.0 },
     defence: {
@@ -1005,7 +1009,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_benavidez',
     name: 'Joseph Benavidez',
     measured: { sex: 'male', division: FLW, heightInches: 64, reachInches: 65 },
-    estimated: { walkingWeightLbs: 138, confidence: 'poor', bodyFatIndex: 40, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 138, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 70 },
     alsoFought: [BW],
     placement: { power: 1, speed: 0.6, cardio: 0.4, durability: 0.1, strength: 0.7 },
     notes:
@@ -1015,7 +1019,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_pantoja',
     name: 'Alexandre Pantoja',
     measured: { sex: 'male', division: FLW, heightInches: 65, reachInches: 68 },
-    estimated: { walkingWeightLbs: 138, confidence: 'poor', bodyFatIndex: 40, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 138, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 70 },
     placement: { power: 0.2, speed: 0.3, cardio: 0.6, durability: 0.6, strength: 0.4 },
     notes:
       'The flyweight division-median champion: nothing above +0.6, a title won on grappling and pace. Power +0.2, Speed +0.3, Cardio +0.6, Durability +0.6 and Strength +0.4 are all mild, which is the claim: a champion who is physically a median flyweight.',
@@ -1024,7 +1028,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_kara_france',
     name: 'Kai Kara-France',
     measured: { sex: 'male', division: FLW, heightInches: 63, reachInches: 65 },
-    estimated: { walkingWeightLbs: 138, confidence: 'poor', bodyFatIndex: 35, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 138, confidence: 'poor', bodyFatIndex: 42, waterCutIndex: 70 },
     placement: { power: 1.4, speed: 0.5, cardio: -0.3, durability: 0.3, strength: 0.5 },
     notes:
       'Power well above the division with everything else ordinary. A common shape and an easy one to leave out. Speed +0.5 and Strength +0.5 are ordinary, Durability +0.3 sits at the division median despite a run of knockout losses late, and Cardio −0.3 is the mild negative.',
@@ -1033,7 +1037,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_royval',
     name: 'Brandon Royval',
     measured: { sex: 'male', division: FLW, heightInches: 68, reachInches: 70 },
-    estimated: { walkingWeightLbs: 135, confidence: 'fair', bodyFatIndex: 20, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 135, confidence: 'fair', bodyFatIndex: 32, waterCutIndex: 55 },
     placement: { power: -0.4, speed: 0.9, cardio: 0.5, durability: -0.5, strength: -1.2 },
     notes:
       "The lightest-framed body in the men's file: 5'8\" walking around 135 for a 125 lb division, and the smallest cut margin here. Strength −1.2 is the lowest men's placement in the file and is the coverage case for physically weak-for-division. Power −0.4 and Durability −0.5 are both below the flyweight centre, Speed +0.9 is the one real positive, and Cardio +0.5 is mild, which together describe a fighter winning on volume and scrambling rather than on physique.",
@@ -1042,7 +1046,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_tim_elliott',
     name: 'Tim Elliott',
     measured: { sex: 'male', division: FLW, heightInches: 67, reachInches: 68 },
-    estimated: { walkingWeightLbs: 137, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 65 },
+    estimated: { walkingWeightLbs: 137, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 65 },
     placement: { power: -0.8, speed: -0.1, cardio: 0.7, durability: 0.4, strength: -0.3 },
     notes:
       'Two placements below the centre including Power −0.8, and a long career built entirely on awkwardness and grappling volume. The technical-genius-in-an-ordinary-body case at the bottom of the ladder. Speed −0.1 and Strength −0.3 sit at or just below the flyweight median, Cardio +0.7 is a mild positive, and Durability +0.4 is ordinary on a long career with few stoppages in it.',
@@ -1051,7 +1055,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_formiga',
     name: 'Jussier Formiga',
     measured: { sex: 'male', division: FLW, heightInches: 65, reachInches: 66 },
-    estimated: { walkingWeightLbs: 137, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 137, confidence: 'poor', bodyFatIndex: 49, waterCutIndex: 50 },
     placement: { power: -0.9, speed: -0.3, cardio: 0.4, durability: -0.8, strength: -0.5 },
     notes:
       'Below the divisional centre on four of five, which no other flyweight in this file is, and a top-five fighter for most of a decade regardless. Power −0.9 is the honest reading of a career with essentially no striking finishes; Durability −0.8 of one that ended in knockouts. He won by positional grappling, which the technical attributes own and these five do not. A division where every entry is at or above its own median has a broken bottom half. Speed −0.3 and Strength −0.5 are both below the flyweight centre, and Cardio +0.4 is the only positive in the entry.',
@@ -1060,7 +1064,7 @@ export const MEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_schnell',
     name: 'Matt Schnell',
     measured: { sex: 'male', division: FLW, heightInches: 68, reachInches: 70 },
-    estimated: { walkingWeightLbs: 138, confidence: 'poor', bodyFatIndex: 58, waterCutIndex: 45 },
+    estimated: { walkingWeightLbs: 138, confidence: 'poor', bodyFatIndex: 54, waterCutIndex: 45 },
     placement: { power: -0.6, speed: 0.2, cardio: 0.5, durability: -1.3, strength: -0.9 },
     defence: {
       durability:
