@@ -53,6 +53,10 @@ interface Sample {
   opponentControlPerRound: number;
   /** Seconds red spent at distance, per round. */
   distancePerRound: number;
+  /** Seconds red spent controlling a tie-up, per round. */
+  clinchPerRound: number;
+  /** Of red's control time, the share of it that was a tie-up rather than the floor. */
+  clinchShareOfControl: number;
   submissionAttempts: number;
   strikesLandedPerMinute: number;
 }
@@ -70,6 +74,7 @@ function sample(
   let control = 0;
   let opponentControl = 0;
   let distance = 0;
+  let clinch = 0;
   let submissions = 0;
   let landed = 0;
 
@@ -85,6 +90,7 @@ function sample(
     control += r.stats.red.controlSeconds;
     opponentControl += r.stats.blue.controlSeconds;
     distance += r.stats.red.distanceSeconds;
+    clinch += r.stats.red.clinchControlSeconds;
     submissions += r.stats.red.submissionAttempts;
     landed += r.stats.red.significantStrikesLanded;
   }
@@ -94,6 +100,8 @@ function sample(
     controlPerRound: control / rounds,
     opponentControlPerRound: opponentControl / rounds,
     distancePerRound: distance / rounds,
+    clinchPerRound: clinch / rounds,
+    clinchShareOfControl: control > 0 ? clinch / control : 0,
     submissionAttempts: submissions / FIGHTS,
     strikesLandedPerMinute: landed / (seconds / 60),
   };
@@ -193,6 +201,45 @@ const CLAIMS: readonly Claim[] = [
     read: (s) => s.distancePerRound,
     direction: 'down',
     fullMovesAtLeast: 0.1,
+  },
+  {
+    what: 'wanting the tie-up buys time in the tie-up',
+    red: clone(),
+    blue: cloneOpponent,
+    from: NEUTRAL,
+    to: plan({ preferredState: 'clinch', entry: 'pressure' }),
+    read: (s) => s.clinchPerRound,
+    direction: 'up',
+    fullMovesAtLeast: 0.4,
+  },
+  {
+    what: 'wanting the fight at range costs it',
+    red: clone(),
+    blue: cloneOpponent,
+    from: NEUTRAL,
+    to: plan({ preferredState: 'outside', entry: 'movement' }),
+    read: (s) => s.clinchPerRound,
+    direction: 'down',
+    fullMovesAtLeast: 0.3,
+  },
+  {
+    /*
+     * Read as a *share of his control* rather than as seconds, and the reason is the docs/01 rule
+     * about asserting on the quantity that carries the claim. Wanting the floor does two things at
+     * once: it moves control out of the tie-up (which is this mechanism) and it buys more control
+     * overall (which is D10's). In seconds those cancel — Full nets −45%, Reduced nets −1%, because
+     * Reduced over-credits a top-position plan with control by about 1.9 to Full's 1.5. The share is
+     * where the clinch model itself lives, and there the two levels agree: 18.0% to 6.4% against
+     * 17.5% to 8.9%.
+     */
+    what: 'wanting the floor moves control out of the tie-up',
+    red: clone(),
+    blue: cloneOpponent,
+    from: NEUTRAL,
+    to: plan({ preferredState: 'top', entry: 'proactiveWrestling' }),
+    read: (s) => s.clinchShareOfControl,
+    direction: 'down',
+    fullMovesAtLeast: 0.3,
   },
   {
     what: 'riding for control rather than hitting costs striking volume',

@@ -92,7 +92,7 @@ calibrate twice.
 | **D8** | F5 — `lead` is inert | cleanup | — | barely |
 | **D9** | F8 — no badly-fatigued situation | cleanup (additive) | — | yes, situationally |
 | **D10** | Reduced's plan sensitivity is inverted on the ground *(**done**)* | architectural (Reduced) | — | Reduced only |
-| **D11** | Reduced books no clinch control at all | architectural (Reduced) | — | Reduced only |
+| **D11** | Reduced books no clinch control at all *(**done**)* | architectural (Reduced) | — | Reduced only |
 | **D12** | Reduced under-produces knockdowns from standing time | calibration (Reduced) | — | Reduced only |
 
 ### D1 — `stall` conflated two concepts *(was F9; **done**)*
@@ -595,21 +595,146 @@ guard. `tools/reduced-direction.ts` is the instrument.
 
 ---
 
-### D11 — Reduced books no clinch control at all *(found during D10)*
+### D11 — Reduced books no clinch control at all *(found during D10; **done**)*
 
-`clinchControlSeconds` is never written by `resolveFightByRound`: it is 0 for every fighter in every
-Reduced fight, while Full books 24.5 seconds a fight for a grinder on a standing plan and 11.7 on a
-top plan. Reduced has one `controlSeconds` number and no notion of *where* the control happened.
+**Built.** `resolveRound` now partitions the control it already computes into a tie-up share and a
+floor share, from three terms read off the tables `simulate.ts` already uses. It does **not** add a
+clinch phase.
 
-It is excluded from the directional invariant, and deliberately so — but honestly rather than
-conveniently, because a flat zero fails direction as surely as a sign flip would. The reason it is
-excluded is that the tie-up is not a *thinner* model at round granularity, it is an absent one:
-there is no clinch phase in `resolveRound` to give a share of. Adding one is a modelling change with
-its own evidence, not a term.
+`clinchControlSeconds` was never written by `resolveFightByRound`: 0.00 for every fighter in every
+Reduced fight, while Full books 18% of an unplanned fighter's control time on the fence and 32% of a
+clinch fighter's. Reduced had one control number and no notion of *where* the control happened.
 
-It matters for the same reason D10 did. A judoka and a wrestler are the same fighter to this
-resolver, and D3 — which gives the clinch a behaviour axis — will have nothing to reach at Reduced
-detail when it lands.
+#### Which of the four it was
+
+The brief asked whether Reduced omits the clinch as a state, folds it into generic control,
+approximates only clinch takedowns, or has the ingredients and never accounts for the clock. Grepping
+the resolver, the clinch appeared in exactly **three** places, all of them inside `controlPull`:
+`tendencies.fenceClinch` as one of four entry tendencies feeding `wants`, and `clinchOffence` /
+`clinchDefence` added to `groundControl` / `scrambling` in the `hold` term.
+
+So it is the second and the fourth together: **folded into generic control, with the ingredients
+present and the clock never accounted for.** And the folding is not neutral — it actively
+mis-attributes. Measured before the change, a clinch plan gave Reduced *more ground control than a
+top plan did* (444.6 seconds a fight against 438.1), where Full gives it far less (172.5 against
+287.8). A clinch fighter did not merely lose his tie-up in the accounting; he was reported as a
+top-position grappler.
+
+It also reaches the career layer. `lessonFrom` reads `controlSeconds − clinchControlSeconds` to decide
+whether a beaten fighter's hole is *scrambling*, so every career built in a Reduced-simulated world
+was diagnosed on the assumption that all of its control happened on the floor.
+
+#### The decomposition
+
+1,200 fights a cell. `F` is Full, `R` is Reduced, before the change:
+
+| axis | F neutral | F clinch | F outside | F top | | R neutral | R clinch | R outside | R top |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1/2 clinch entries won / fight | 1.65 | 2.59 | 0.65 | 1.05 | | — | — | — | — |
+| 2 clinch breaks / fight | 0.59 | 0.62 | 0.41 | 0.66 | | — | — | — | — |
+| 3 clinch control sec (his) | 35.8 | 69.7 | 14.4 | 17.9 | | **0.00** | **0.00** | **0.00** | **0.00** |
+| 3 clinch control sec (theirs) | 10.4 | 12.4 | 5.5 | 9.4 | | **0.00** | **0.00** | **0.00** | **0.00** |
+| 4 clinch sec per entry won | 21.7 | 26.9 | 22.3 | 17.0 | | — | — | — | — |
+| 5 sig strikes landed / fight | 13.8 | 17.3 | 13.3 | 14.2 | | 15.7 | 17.9 | 16.1 | 16.5 |
+| 6 takedown attempts / fight | 4.9 | 4.6 | 2.0 | 8.1 | | 4.1 | 6.3 | 1.6 | 6.2 |
+| 7 escapes attempted / fight | 1.07 | 0.95 | 0.58 | 1.15 | | — | — | — | — |
+| 7 ref separations / fight | 0.75 | 0.95 | 0.25 | 1.52 | | — | — | — | — |
+| 9 ground control sec / fight | 173.6 | 172.5 | 66.0 | 287.8 | | 248.8 | **444.6** | 60.4 | 438.1 |
+| 9 clinch share of fight clock | 9.5% | 15.8% | 7.1% | 4.6% | | 0% | 0% | 0% | 0% |
+
+Axes 1, 2, 4 and 7 do not exist at round granularity at all: there is no entry event, no episode and
+no break, because there is no tie-up state to enter, hold or leave. Axes 5 and 6 exist but are
+generic — a clinch strike is a strike and a clinch takedown is a takedown. Axis 3 and 9 are the ones
+that could be answered and were not.
+
+#### What was added, and what deliberately was not
+
+A **partition**, not a phase:
+
+```
+clinchControlSeconds = controlSeconds × clinchShareOfControl(a, d)
+```
+
+`controlSeconds` is untouched, so nothing is created and nothing is counted twice — the takedowns and
+strikes that same control already paid for are exactly as they were. Verified rather than asserted:
+across four plans and three matchups, `controlSeconds`, takedown attempts, strikes landed and
+knockout counts are **bit-identical** before and after, and `clinchControlSeconds ≤ controlSeconds`
+in every fight.
+
+The share is three terms, each read off a table Full already uses and each worth exactly **1** to a
+fighter with no plan:
+
+| term | what it asks | clinch plan | outside | top |
+| --- | --- | --- | --- | --- |
+| `clinchLean` | of the grappling he wants, how much is aimed at the fence — a *transition* | 1.51 | 0.93 | 0.65 |
+| `clinchPersistence` | having got there, keep the tie-up or convert it — an *in-state* decision | 1.41 | 1.07 | 0.38 |
+| retention | and can he hold it — a *contest*, not a preference | — | — | — |
+
+The two intent terms are combined as a **geometric mean rather than a product**, and that is not a
+softening. Both are read off `preferredState`, so the fighter who routes to the fence is by
+construction the same fighter who stays on it, and multiplying them charges for one preference twice
+— the error `STANDING_ALIGNMENT` already warns about in its own header. Each table alone gets one end
+of the range and misses the other: `clinchLean` separates an outside plan from a clinch plan and puts
+a top-position fighter at 11.7% against Full's 6.4%; `clinchPersistence` gets that one right and has
+a clinch plan at 25.3% against Full's 31.8%. Together, geometrically:
+
+| | Full | Reduced |
+| --- | --- | --- |
+| unplanned | 18.0% | 17.5% |
+| clinch plan | 31.8% | 25.1% |
+| outside plan | 18.2% | 17.3% |
+| top plan | 6.4% | 8.9% |
+
+**What is deliberately absent.** There is no clinch phase, so clinch striking and clinch takedowns
+stay folded into the generic ones, and axes 1, 2, 4 and 7 remain unrepresented. That is a magnitude
+limitation and it is stated rather than approximated: a `clinchSecondsModifier` fitted to Full's
+numbers would have produced the same table and taught the resolver nothing.
+
+#### Where desire stops and the fighters start
+
+The acceptance brief asked that capability affect success and retention **more than raw desire to
+attempt**. Measured at Full first, because the obvious phrasing turns out not to be what Full does:
+
+| quantity | intent span | his capability | the opponent |
+| --- | --- | --- | --- |
+| clinch seconds a fight | **5.6:1** | 1.9:1 | — |
+| share of his control that is tie-up | 1.75:1 | 1.39:1 | 1.56:1 |
+| whose tie-up it is (his ÷ theirs) | 3.3:1 | 3.7:1 | 3.4:1 |
+
+So on **how much** tie-up there is, desire wins and always did — that is invariant 1's ordinary shape,
+the plan owning the attempt. On **whose it is**, capability wins by twelve to one against three. Both
+statements are now asserted, at both levels, and the criterion is honoured on the half of it that is
+true rather than forced onto the half that is not.
+
+One bound moved during that work and the reason is worth keeping. The ownership ratio is the intuitive
+number and the wrong one to bound, because it multiplies this mechanism by how much total control each
+plan bought — which is D10's machinery, and where Reduced's remaining magnitude gap lives. Bounding
+the compound measures that gap and calls it this one; on one seed salt in five it failed for exactly
+that reason. The assertion sits on the share, which is what `clinchShareOfControl` actually computes.
+
+#### The residual, named
+
+Reduced still over-credits a clinch plan with *total* control: 444.6 seconds a fight against Full's
+242, because `grapplingAppetite` averages `takedown` and `clinchUp` and cannot tell a fence entry from
+a level change. The partition puts that time in the right column and does not shrink it. It shows up
+as the one clinch claim that has to be asserted on the share rather than on seconds — wanting the
+floor moves Full's clinch time down 45% and Reduced's down 1%, because Reduced's top-plan control
+total runs 1.9 to Full's 1.5 and cancels the share drop.
+
+It is a magnitude gap with the direction intact, which is what invariant 6a allows, and it belongs to
+whatever eventually gives `grapplingAppetite` two routes instead of one — most likely D3, which is
+now unblocked.
+
+#### What it cost
+
+Nothing on the level and nothing on the sport: `controlSeconds` is bit-identical, no constant was
+retuned, the D10 directional guards are green, and the whole existing suite passes with no allowance
+widened. The one behavioural consequence is in the career layer, and it is a correction: `lessonFrom`
+now sees a Reduced fighter's fence time as fence time, so it stops diagnosing *scrambling* as the hole
+in fights that were spent against the cage.
+
+*Enforced by* `tests/statistical/reduced-clinch.test.ts` for the partition and the authority split,
+and three more claims in `tests/statistical/reduced-direction.test.ts` for the direction.
 
 ### D12 — Reduced under-produces knockdowns from standing time *(pre-existing; **not** D10's cause)*
 
