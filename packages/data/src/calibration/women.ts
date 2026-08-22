@@ -53,7 +53,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_cyborg',
     name: 'Cris Cyborg',
     measured: { sex: 'female', division: WFW, heightInches: 68, reachInches: 68 },
-    estimated: { walkingWeightLbs: 163, confidence: 'fair', bodyFatIndex: 28, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 163, confidence: 'fair', bodyFatIndex: 36, waterCutIndex: 55 },
     placement: { power: 2.3, speed: 0.7, cardio: 1.0, durability: 1.7, strength: 1.5 },
     alsoFought: [WBW],
     defence: {
@@ -67,7 +67,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_anderson',
     name: 'Megan Anderson',
     measured: { sex: 'female', division: WFW, heightInches: 72, reachInches: 70 },
-    estimated: { walkingWeightLbs: 159, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 45 },
+    estimated: { walkingWeightLbs: 159, confidence: 'poor', bodyFatIndex: 49, waterCutIndex: 45 },
     placement: { power: 0.9, speed: -0.8, cardio: -1.1, durability: -0.7, strength: -0.4 },
     notes:
       'The tall-and-light-framed case for the women’s ladder: six foot at 145 lb is an extreme height for the division and produces a body carrying very little mass per inch. That combination is exactly what the ladder is supposed to price — the length buys her Power at +0.9 through leverage, and costs her everywhere the same frame has to be moved or fed. Speed −0.8 and Cardio −1.1 are both well attested; she faded visibly and was outworked by shorter, denser opponents. Strength −0.4 despite being the tallest woman on the roster, which is the point: height is not mass.',
@@ -89,7 +89,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_de_randamie',
     name: 'Germaine de Randamie',
     measured: { sex: 'female', division: WFW, heightInches: 69, reachInches: 71 },
-    estimated: { walkingWeightLbs: 158, confidence: 'fair', bodyFatIndex: 40, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 158, confidence: 'fair', bodyFatIndex: 44, waterCutIndex: 50 },
     placement: { power: 1.3, speed: 0.6, cardio: -0.5, durability: 0.4, strength: 0.2 },
     alsoFought: [WBW],
     notes:
@@ -99,7 +99,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_dumont',
     name: 'Norma Dumont',
     measured: { sex: 'female', division: WFW, heightInches: 67, reachInches: 67 },
-    estimated: { walkingWeightLbs: 158, confidence: 'poor', bodyFatIndex: 55, waterCutIndex: 45 },
+    estimated: { walkingWeightLbs: 158, confidence: 'poor', bodyFatIndex: 53, waterCutIndex: 45 },
     placement: { power: 0.0, speed: -0.3, cardio: 0.5, durability: 0.4, strength: 0.2 },
     notes:
       'A deliberately ordinary featherweight, and the division needs one. All five placements sit inside 0.5σ because there is genuinely nothing exceptional to report: she wins decisions, she is hard to finish without being remarkable at it, and she has never looked either fast or slow for the class. Resisting the pull to make an entry interesting is the whole job of a case like this — a roster of only memorable athletes would misdescribe the population as badly as one with no outliers. Power 0.0, Speed −0.3, Cardio +0.5, Durability +0.4 and Strength +0.2 are all inside half a sigma of the division median, which is the entire entry.',
@@ -110,7 +110,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_nunes',
     name: 'Amanda Nunes',
     measured: { sex: 'female', division: WBW, heightInches: 68, reachInches: 69 },
-    estimated: { walkingWeightLbs: 151, confidence: 'fair', bodyFatIndex: 35, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 151, confidence: 'fair', bodyFatIndex: 41, waterCutIndex: 55 },
     placement: { power: 2.2, speed: 1.1, cardio: -0.3, durability: 0.7, strength: 1.6 },
     alsoFought: [WFW],
     defence: {
@@ -126,7 +126,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_holm',
     name: 'Holly Holm',
     measured: { sex: 'female', division: WBW, heightInches: 68, reachInches: 68 },
-    estimated: { walkingWeightLbs: 149, confidence: 'fair', bodyFatIndex: 40, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 149, confidence: 'fair', bodyFatIndex: 44, waterCutIndex: 50 },
     placement: { power: -0.9, speed: 1.0, cardio: 1.8, durability: 0.6, strength: -0.4 },
     defence: {
       cardio:
@@ -139,7 +139,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_rousey',
     name: 'Ronda Rousey',
     measured: { sex: 'female', division: WBW, heightInches: 67, reachInches: 68 },
-    estimated: { walkingWeightLbs: 150, confidence: 'fair', bodyFatIndex: 38, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 150, confidence: 'fair', bodyFatIndex: 43, waterCutIndex: 50 },
     placement: { power: 0.5, speed: 0.9, cardio: -0.4, durability: -1.6, strength: 1.8 },
     defence: {
       strength:
@@ -154,7 +154,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_pena',
     name: 'Julianna Peña',
     measured: { sex: 'female', division: WBW, heightInches: 66, reachInches: 68 },
-    estimated: { walkingWeightLbs: 149, confidence: 'poor', bodyFatIndex: 52, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 149, confidence: 'poor', bodyFatIndex: 51, waterCutIndex: 50 },
     placement: { power: -0.2, speed: -0.6, cardio: 1.3, durability: 1.5, strength: 0.4 },
     notes:
       'The slow-for-the-class case at bantamweight. Speed −0.6 is visible in every fight she has had — she is beaten to the punch consistently and by a wide margin — and the file needs fighters who are genuinely below the divisional centre on something, or the ladder is only ever calibrated upwards. Durability +1.5 and Cardio +1.3 are what she wins with: she takes the exchange she loses and is still there in round five. Power −0.2 is honest; her finishes are submissions off pressure, not strikes.',
@@ -181,7 +181,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_harrison',
     name: 'Kayla Harrison',
     measured: { sex: 'female', division: WBW, heightInches: 68, reachInches: 71 },
-    estimated: { walkingWeightLbs: 172, confidence: 'good', bodyFatIndex: 30, waterCutIndex: 85 },
+    estimated: { walkingWeightLbs: 172, confidence: 'good', bodyFatIndex: 37, waterCutIndex: 85 },
     placement: { power: 1.4, speed: 0.2, cardio: 0.6, durability: 0.5, strength: 2.1 },
     defence: {
       strength:
@@ -200,7 +200,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_shevchenko',
     name: 'Valentina Shevchenko',
     measured: { sex: 'female', division: WFLW, heightInches: 65, reachInches: 67 },
-    estimated: { walkingWeightLbs: 140, confidence: 'fair', bodyFatIndex: 32, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 140, confidence: 'fair', bodyFatIndex: 39, waterCutIndex: 55 },
     placement: { power: 0.8, speed: 1.3, cardio: 1.6, durability: 1.5, strength: 0.9 },
     alsoFought: [WBW],
     notes:
@@ -210,7 +210,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_chookagian',
     name: 'Katlyn Chookagian',
     measured: { sex: 'female', division: WFLW, heightInches: 69, reachInches: 68 },
-    estimated: { walkingWeightLbs: 138, confidence: 'fair', bodyFatIndex: 55, waterCutIndex: 45 },
+    estimated: { walkingWeightLbs: 138, confidence: 'fair', bodyFatIndex: 53, waterCutIndex: 45 },
     placement: { power: -1.2, speed: 0.3, cardio: 1.4, durability: 0.8, strength: -0.9 },
     notes:
       'Tall and light-framed at flyweight, and the women’s low-Power case. Five foot nine at 125 lb is three and a half inches over the divisional norm carried on very little mass, and the ladder should price that as it does: Power −1.2 and Strength −0.9, both well below the median, against a long career in which she has almost never stopped anybody and is routinely held and controlled by shorter opponents. Cardio +1.4 is what she has instead — volume for fifteen or twenty-five minutes without a drop. Durability +0.8 for a long career at the top of the division without being finished by strikes.',
@@ -219,7 +219,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_fiorot',
     name: 'Manon Fiorot',
     measured: { sex: 'female', division: WFLW, heightInches: 66, reachInches: 66 },
-    estimated: { walkingWeightLbs: 140, confidence: 'poor', bodyFatIndex: 38, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 140, confidence: 'poor', bodyFatIndex: 43, waterCutIndex: 50 },
     placement: { power: 1.2, speed: 0.5, cardio: 0.7, durability: 0.6, strength: 1.1 },
     notes:
       'Above the divisional centre on everything but not dramatically so on anything, which is the most common shape of a good fighter and is under-represented if a file only contains anchors and median cases. Power +1.2 and Strength +1.1 are the two that stand out on tape — she visibly moves flyweights around — and Speed +0.5 is the corrective: she is not quick, she is heavy-handed, and those are different claims.',
@@ -228,7 +228,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_grasso',
     name: 'Alexa Grasso',
     measured: { sex: 'female', division: WFLW, heightInches: 65, reachInches: 65 },
-    estimated: { walkingWeightLbs: 138, confidence: 'fair', bodyFatIndex: 45, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 138, confidence: 'fair', bodyFatIndex: 47, waterCutIndex: 50 },
     placement: { power: 0.1, speed: 0.9, cardio: 0.4, durability: 0.3, strength: -0.5 },
     notes:
       'A boxer’s profile: Speed +0.9 for genuinely quick, accurate hands, and everything else at or slightly below the divisional centre. Strength −0.5 is not a slight — she is out-wrestled by the stronger flyweights and has to fight to stay standing, which is a physical fact about her and not a hole in her game. Power +0.1 because her stoppages come from accumulation and one submission, not from force.',
@@ -237,7 +237,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_blanchfield',
     name: 'Erin Blanchfield',
     measured: { sex: 'female', division: WFLW, heightInches: 64, reachInches: 65 },
-    estimated: { walkingWeightLbs: 139, confidence: 'poor', bodyFatIndex: 42, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 139, confidence: 'poor', bodyFatIndex: 45, waterCutIndex: 55 },
     placement: { power: -0.3, speed: 0.2, cardio: 0.8, durability: 0.4, strength: 1.0 },
     notes:
       'Strong for the division and unremarkable everywhere else — a grappler who wins by taking bigger flyweights down and holding them there, with Strength +1.0 the only placement outside 0.8σ. Power −0.3 is honest about a striking record with no knockouts in it. Speed +0.2 and Durability +0.4 are both ordinary for flyweight, and Cardio +0.8 is a mild positive that supports the grappling volume.',
@@ -246,7 +246,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_maia_j',
     name: 'Jennifer Maia',
     measured: { sex: 'female', division: WFLW, heightInches: 65, reachInches: 66 },
-    estimated: { walkingWeightLbs: 138, confidence: 'poor', bodyFatIndex: 52, waterCutIndex: 50 },
+    estimated: { walkingWeightLbs: 138, confidence: 'poor', bodyFatIndex: 51, waterCutIndex: 50 },
     placement: { power: 0.3, speed: -0.2, cardio: 0.4, durability: 0.6, strength: 0.1 },
     notes:
       'Deliberately ordinary. A long-tenured flyweight whose physicals give the division its centre of mass: nothing here is more than 0.6σ from the median, and the division needs at least two entries like this one to stop the percentile tables being read off a set of outliers. Power +0.3, Speed −0.2, Cardio +0.4, Durability +0.6 and Strength +0.1 are all within two thirds of a sigma of the division median.',
@@ -257,7 +257,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_zhang',
     name: 'Zhang Weili',
     measured: { sex: 'female', division: WSW, heightInches: 64, reachInches: 63 },
-    estimated: { walkingWeightLbs: 133, confidence: 'fair', bodyFatIndex: 25, waterCutIndex: 75 },
+    estimated: { walkingWeightLbs: 133, confidence: 'fair', bodyFatIndex: 34, waterCutIndex: 75 },
     placement: { power: 1.8, speed: 1.0, cardio: 0.6, durability: 0.5, strength: 1.6 },
     defence: {
       power:
@@ -276,7 +276,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_jedrzejczyk',
     name: 'Joanna Jędrzejczyk',
     measured: { sex: 'female', division: WSW, heightInches: 66, reachInches: 65 },
-    estimated: { walkingWeightLbs: 136, confidence: 'good', bodyFatIndex: 35, waterCutIndex: 80 },
+    estimated: { walkingWeightLbs: 136, confidence: 'good', bodyFatIndex: 41, waterCutIndex: 80 },
     placement: { power: 0.2, speed: 1.3, cardio: 2.0, durability: 0.3, strength: -0.4 },
     defence: {
       cardio:
@@ -295,7 +295,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_namajunas',
     name: 'Rose Namajunas',
     measured: { sex: 'female', division: WSW, heightInches: 65, reachInches: 65 },
-    estimated: { walkingWeightLbs: 126, confidence: 'fair', bodyFatIndex: 45, waterCutIndex: 60 },
+    estimated: { walkingWeightLbs: 126, confidence: 'fair', bodyFatIndex: 47, waterCutIndex: 60 },
     placement: { power: 1.1, speed: 1.2, cardio: 0.3, durability: -0.3, strength: -0.6 },
     alsoFought: [WFLW],
     notes:
@@ -305,7 +305,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_andrade',
     name: 'Jessica Andrade',
     measured: { sex: 'female', division: WSW, heightInches: 61, reachInches: 62 },
-    estimated: { walkingWeightLbs: 136, confidence: 'good', bodyFatIndex: 30, waterCutIndex: 85 },
+    estimated: { walkingWeightLbs: 136, confidence: 'good', bodyFatIndex: 37, waterCutIndex: 85 },
     placement: { power: 2.0, speed: 0.4, cardio: 1.2, durability: 1.3, strength: 1.9 },
     alsoFought: [WFLW, WBW],
     defence: {
@@ -319,13 +319,15 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     disagreement: {
       kind: 'outsideBodyModelRange',
       note: 'Reconstructs 6 lb light against the female coefficient ceiling of 13.0. Five foot one carrying a bantamweight lean mass is the female counterpart of the Mark Hunt problem and hits the same wall for the same reason. Her Power and Strength placements are the roster low-height anchors, so the shortfall matters more here than the six pounds suggests: it is exactly the dimension she was included to calibrate.',
+      resolution:
+        'Resolved by doc 31 section 18, and this entry is the reason the index scale changed rather than the estimate. At 5 foot 1 and 136 lb she implies a fat-free mass index of 21.1 against a female limit of 23 — an ordinary, buildable body — and the model still could not express her, because the old scale ceiling was a constant in lean-kg-per-cubic-metre and therefore a different human limit at every height. Hers was 20.1. She was the only plausible body in the roster the scale could not hold, and she is what sized the correction.',
     },
   },
   {
     id: 'cal_esparza',
     name: 'Carla Esparza',
     measured: { sex: 'female', division: WSW, heightInches: 61, reachInches: 63 },
-    estimated: { walkingWeightLbs: 130, confidence: 'fair', bodyFatIndex: 45, waterCutIndex: 65 },
+    estimated: { walkingWeightLbs: 130, confidence: 'fair', bodyFatIndex: 47, waterCutIndex: 65 },
     placement: { power: -0.8, speed: -0.4, cardio: 0.7, durability: 0.9, strength: 1.5 },
     notes:
       'Short and thick like Andrade and almost her physical opposite everywhere except Strength, which is why both belong in the file. A decade-long career at the top of the division with essentially no stopping power — Power −0.8 — built entirely on getting inside, taking people down and holding them there, at Strength +1.5. Speed −0.4 is consistent with being hit on the way in for ten years. This is the shape the ladder should produce for a wrestler, and it is not the shape it produces for a puncher.',
@@ -334,7 +336,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_suarez',
     name: 'Tatiana Suarez',
     measured: { sex: 'female', division: WSW, heightInches: 64, reachInches: 64 },
-    estimated: { walkingWeightLbs: 134, confidence: 'poor', bodyFatIndex: 32, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 134, confidence: 'poor', bodyFatIndex: 39, waterCutIndex: 70 },
     placement: { power: 0.3, speed: 0.1, cardio: 0.4, durability: 0.1, strength: 2.0 },
     defence: {
       strength:
@@ -362,7 +364,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_dern',
     name: 'Mackenzie Dern',
     measured: { sex: 'female', division: WSW, heightInches: 64, reachInches: 63 },
-    estimated: { walkingWeightLbs: 141, confidence: 'good', bodyFatIndex: 55, waterCutIndex: 70 },
+    estimated: { walkingWeightLbs: 141, confidence: 'good', bodyFatIndex: 53, waterCutIndex: 70 },
     placement: { power: -0.2, speed: -0.5, cardio: -0.6, durability: 0.4, strength: 0.2 },
     notes:
       'A physically unremarkable athlete with a world-class skill, which is a combination the roster must contain or the ladder will be quietly read as a talent scale. Every placement here is inside 0.6σ; she is a black-belt grappler and that is a fact about her skills, not about her body. Cardio −0.6 and Speed −0.5 are visible in her stand-up. She is also the file’s clearest weight-management case, which is why the walking-weight estimate is `good`: her struggles making 115 have been public and repeated. Power −0.2, Durability +0.4 and Strength +0.2 are all near the division median, completing a set of five placements none of which is remarkable.',
@@ -377,7 +379,7 @@ export const WOMEN_CALIBRATION: readonly CalibrationEntry[] = [
     id: 'cal_rodriguez_m',
     name: 'Marina Rodriguez',
     measured: { sex: 'female', division: WSW, heightInches: 65, reachInches: 66 },
-    estimated: { walkingWeightLbs: 131, confidence: 'poor', bodyFatIndex: 48, waterCutIndex: 55 },
+    estimated: { walkingWeightLbs: 131, confidence: 'poor', bodyFatIndex: 49, waterCutIndex: 55 },
     placement: { power: 0.4, speed: 0.5, cardio: 0.6, durability: 0.2, strength: -0.3 },
     notes:
       'Deliberately ordinary, and the strawweight companion to Jennifer Maia. Nothing outside 0.6σ in either direction. A long career against top opposition without ever being described as fast, strong, powerful or gassed, which is the most honest evidence there is for a set of median placements. Speed +0.5, Cardio +0.6, Durability +0.2 and Strength −0.3 are all inside two thirds of a sigma of the strawweight median.',
