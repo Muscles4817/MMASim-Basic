@@ -9,6 +9,13 @@
  *
  * This suite exists so the *shipped* roster is the thing under test.
  *
+ * **Per division, see `ladder-falsifiers.test.ts`.** Doc 31 § 12 step 7 asked for this file to be
+ * rewritten by division, and that is where it landed instead: the same 35,627 pairings, split by
+ * weight class, reporting § 9's ten falsifiers. Running both would simulate the roster twice for
+ * one answer. What stays here is the aggregate finish profile — the thing the damage constants were
+ * tuned against and the guard that catches a global drift, which a per-division table is worse at
+ * seeing than a single number is.
+ *
  * ---
  *
  * **It was measuring the wrong world.** `createNewGame()` defaults to the 2020 era — 139
