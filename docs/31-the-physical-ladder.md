@@ -1072,6 +1072,10 @@ engine tuned against one has to be tuned again.
 7. **Simulate, play, iterate** (§9, §10) — **the first step allowed to touch an engine constant.**
    Run §9's twelve measurements plus S1–S5 and D1. `roster-profile.test.ts` rewritten per division;
    `BASE_KD_HAZARD` re-anchored globally, once, against a finished body model.
+   **Done — see §20.** Two departures from the plan, both recorded there: the per-division rewrite
+   landed as `ladder-falsifiers.test.ts` rather than in `roster-profile.test.ts`, so the roster is
+   not simulated twice for one answer; and `BASE_KD_HAZARD` was **not** re-anchored, because the
+   measurements say it does not need to be. S4 could not be measured at all.
 8. **Lock the scale.** `docs/02` rewritten to match.
 9. **Backgrounds → priors and realisation.** `arrivalFactor(key, age)` becomes
    `arrivalFactor(key, age, history)`. Split `trackAndField` into sprint/jumps and throws;
@@ -2089,3 +2093,124 @@ motor learning is 67, and a quarter of it used to be counted as Speed.
 - **The residual index-scale artefact below 70.5" / 63.8"** (§ 18.4).
 - **The lower tail of the roster is weakly calibrated** (§ 17.1) — all fifty extreme placements are
   positive, and population work must not read that as evidence about weak athletes.
+
+---
+
+## 20. Step 7: the ladder, measured against the fights it produces
+
+Everything before this validated the ladder against itself. § 9's ten measurements and § 9.1's
+controlled experiments ask the only question that finally matters: **does a world built on this
+ladder fight like the sport does?**
+
+Two instruments. `ladder-falsifiers.test.ts` runs every same-division pairing in the shipped 2026
+roster — **35,627 fights across twelve divisions** — and reports § 9 by division.
+`mass-experiments.test.ts` builds fighters identical in every rating and differing only in the one
+variable under test, because a population statistic can say something is wrong and is very bad at
+saying what.
+
+### 20.1 The population, by division
+
+```
+  div     fights    KD/100 head   KO%   sub%   dec%   R3+ finishes   mean sec   R3:R1
+  FLW      4,560          3.06   25.2   18.1   53.9           12.4        632    0.552
+  BW       4,278          4.85   39.6   13.3   44.2           11.3        554    0.549
+  FW       3,916          4.92   36.3   14.8   46.0           10.6        567    0.563
+  LW       4,465          4.81   31.5   17.7   48.0           13.0        587    0.569
+  WW       4,095          5.38   40.8   14.5   42.7           11.4        537    0.590
+  MW       4,371          5.92   39.3   16.0   41.9           11.9        552    0.600
+  LHW      4,278          7.74   49.4    8.3   39.1            9.1        498    0.624
+  HW       4,005          7.42   46.3   10.9   39.4            8.3        509    0.621
+```
+
+**Measurement 1, the cleanest single test, passes.** Knockdowns per 100 head strikes landed run
+**3.06 at flyweight to 7.42 at heavyweight, a ratio of 2.42×**. § 9 says this isolates
+β_power − β_durability from pace and volume, and that the ladder fails if heavyweight comes out only
+1.4× a flyweight. It does not.
+
+**Measurements 2, 3, 6 and 8 pass.** KO rate 25.2% → 46.3% (1.84× against a real ≈ 2.6×, directionally
+right and short); decisions 53.9% → 39.4% against a real 55–60% → 30–35%, with the flyweight end
+exact and the heavyweight end conservative; mean duration falls 632s → 509s; and a flyweight at p95
+still reaches a heavyweight's median on every one of the five, so the divisions overlap and the
+ladder has not become a caste system.
+
+**S3 and S5 pass.** Control time per grappling exchange runs 48.7 → 55.6 seconds across the men's
+ladder, a 1.14× spread — flat, as § 9.1 predicts, so big men are not winning position on mass.
+Submission finish rate declines mildly, 18.1% → 10.9%, which is the predicted shape and is never
+acted on alone anyway.
+
+**D1 passes.** Two points of Durability against identical absolute Power move the drop rate by
+**−3.1%** — a few per cent, not tens, exactly as § 9.1 predicts for an exponent of +0.10.
+
+### 20.2 Measurement 4 cannot be taken from a population
+
+§ 9 calls round-3 volume decay the measurement that isolates β_cardio "directly and with nothing else
+in the way". Over the roster it does no such thing, and it comes out backwards: flyweights fall to
+0.552 of their round-one volume and heavyweights only to 0.621.
+
+The confound is survivorship and it is large. A fight contributes only if it _reached_ round three,
+and heavyweight fights mostly do not — 8.3% of heavyweight finishes come in round three or later
+against 12.4% at flyweight, on a mean duration of 509 seconds against 632. The heavyweight bouts that
+see a third round are the ones between two men who could still stand, which is a sample selected on
+precisely the trait being measured.
+
+So it is reported rather than asserted, and the question moved to a controlled experiment where
+nothing is selected.
+
+### 20.3 Two disagreements, both engine-side
+
+**Strength barely reaches the grappling (S1, S2).** Eight points of Strength — roughly two divisions
+on the ladder — with every other rating held identical produces a control-time ratio of **1.07**
+against § 9.1's predicted 1.3–1.7, and the stronger man wins **48.3%** of 1,200 bouts. Swept from 38
+to 98 against an unchanged opponent, Strength moves the win rate **8.4 points where Wrestling moves
+21.6** — it is worth 39% of Wrestling.
+
+Two readings fit and one experiment cannot choose between them. Either the engine under-reads
+Strength, or § 9.1's band was set by intuition and predicts an effect larger than the wiring can
+deliver: Strength enters the clinch at 0.35 of `clinchOffence` and 0.45 of `clinchDefence`, so eight
+points move those by 2.8 and 3.6 out of 55, and a five per cent edge producing a 40% control swing
+would be the engine _over_-reading it.
+
+§ 8.4's rule is that `D_strength` moves only on S1, S2 and S4 together — and **S4 cannot be measured
+yet**. `FightStats` has no bottom-position time and no reversal counter, so escape rate from bottom
+is not available without a position-transition counter that does not exist. Recorded as a gap rather
+than approximated, because an approximation here would look like evidence about β_strength and would
+not be.
+
+**Cardio is wired but under-powered (C1).** With both fighters in each pair matched, so nothing is
+selected on conditioning:
+
+```
+  cardio   round 1   round 3   R3:R1
+      25      20.2      11.2   0.553
+      55      21.6      10.9   0.504
+      85      20.9      12.9   0.619
+```
+
+Round one is flat, as it should be. Round three moves from 11.2 to 12.9 — **sixty points of Cardio,
+six standard deviations, the entire width of the professional population, buys about 15% more
+third-round output.** In the sport the difference between a gas tank and no gas tank late is not 15%.
+
+Note also that the _ratio_ column is U-shaped and misleading: two exhausted fighters at Cardio 25
+throw little when fresh and little when tired, which flatters their decay. Absolute third-round
+volume is the question the sport asks.
+
+### 20.4 `BASE_KD_HAZARD` was not re-anchored, and that is the finding
+
+§ 12 step 7 anticipated re-anchoring it once against a finished body model. The measurements say it
+does not need it. Measurement 1 passes at 2.42×, and `roster-profile.test.ts` — which is what the
+constant was tuned against — still reports the shipped roster at 49.5% finishes and 30.1% KO against
+a real sport at roughly 48% and 31%.
+
+A constant the plan expected to move and the evidence says to leave alone is worth recording as
+plainly as one that moved. **No fight-engine constant changed in step 7.**
+
+### 20.5 What step 8 inherits
+
+The scale is ready to lock on the evidence of § 20.1: the ladder's predictions about how fighting
+changes with weight are borne out on 35,627 fights, on the measurement § 9 nominated as the cleanest
+single test, and on the two controlled experiments that could be run.
+
+The two disagreements in § 20.3 are **engine consumption**, not ladder shape. Neither indicts an
+exponent, a pivot or a `D`. They are the next decision rather than part of this one, and they need
+what step 7 could not build: S4's position-transition counter, so that the Strength question has the
+second witness § 8.4 requires before anything moves.
