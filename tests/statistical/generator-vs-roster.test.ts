@@ -24,7 +24,6 @@ import {
   createRng,
   divisionsFor,
   generateFighter,
-  getDivision,
   type PhysicalScaleKey,
   type Sex,
 } from '@mmasim/engine';
@@ -37,8 +36,6 @@ const flush = () => {
 };
 
 const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
-const pct = (xs: number[], p: number) =>
-  [...xs].sort((a, b) => a - b)[Math.min(xs.length - 1, Math.floor(p * xs.length))]!;
 
 /** Generated potentials, keyed by division. */
 const GENERATED = new Map<string, Record<PhysicalScaleKey, number[]>>();

@@ -18,9 +18,6 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  ARCHETYPES,
-  asDivisionId,
-  createRng,
   getDivision,
   isDecisionMethod,
   isKoMethod,
@@ -37,8 +34,6 @@ const flush = () => {
   if (pending.length > 0) console.log(pending.join('\n'));
   pending.length = 0;
 };
-
-const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
 
 /**
  * A fighter of stated ratings, competing at a stated division.
