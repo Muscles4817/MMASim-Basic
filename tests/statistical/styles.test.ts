@@ -233,13 +233,17 @@ describe('G1 — separation between the six disciplines', () => {
      * range**, and the two arts that had been closest in the entire file are 0.590 against 0.290
      * on where they stand.
      *
-     * Bounded on both sides for the same reason as before. It must not return to zero — that
-     * would mean the standing phase stopped expressing — and it must not silently become all six,
-     * because the grappling family is *not* separated at present: wrestling against jiu-jitsu
-     * fell back below the bar when the jiu-jitsu exemplar stopped being routed through the clinch,
-     * which is a fix that is right on its own terms and cost a pair on this one. Judo remains
-     * what the file has always said it is — a midpoint that moves toward one art whenever it is
-     * separated from the other.
+     * Bounded on both sides for the same reason as before: it must not return to zero, which would
+     * mean the standing phase stopped expressing, and it must not silently become all six.
+     *
+     * **D4 separated wrestling from jiu-jitsu**, and the paragraph this replaces said that pair was
+     * below the bar and named the reason — the jiu-jitsu exemplar had no way to say what it wanted.
+     * `preferredState` offered `top` and `submission`, both of which mean *get it to the floor*, and
+     * the only field that could say *and I mean to be underneath* was `bottomIntent`, which was
+     * simultaneously choosing his route out and his work. Given a `bottom` preference the two arts
+     * stop being the same instruction with different attributes. Judo remains what this file has
+     * always said it is — a midpoint that moves toward one art whenever it is separated from the
+     * other.
      */
     const striking: CombatDiscipline[] = ['boxing', 'kickboxing', 'karate'];
     const grappling: CombatDiscipline[] = ['wrestling', 'jiuJitsu', 'judo'];
@@ -269,12 +273,11 @@ describe('G1 — separation between the six disciplines', () => {
     expect(names.length, `${message} — this should not quietly become every pair`).toBeLessThan(
       sameFamily.length,
     );
-    for (const [a, b] of met) {
-      expect(
-        striking.includes(a) && striking.includes(b),
-        `${message} — the grappling family started separating`,
-      ).toBe(true);
-    }
+    // Both families are expected to contribute now. What is not expected is one of them going quiet.
+    expect(
+      met.some(([a, b]) => striking.includes(a) && striking.includes(b)),
+      `${message} — the striking family stopped separating`,
+    ).toBe(true);
   });
 
   it('tells the throwing art from the shooting art, and not the two submission arts', () => {

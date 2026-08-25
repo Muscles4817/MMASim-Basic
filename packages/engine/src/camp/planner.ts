@@ -143,7 +143,28 @@ function pickPreferredState(fighter: Fighter, opponent: Fighter): PreferredState
    * and where most of it is spent.
    */
   const best = Math.max(score.striking, score.clinch, score.top);
-  if (score.submission >= best + 1.5 && ground > 66) return 'submission';
+  if (score.submission >= best + 1.5 && ground > 66) {
+    /*
+     * D4 split this branch in two, because *my best phase is the floor* was answering a question
+     * with two answers. A fighter who can finish people and can also hold them down wants the floor
+     * either way, which is `submission`; a fighter who can finish people and cannot hold anybody
+     * down wants it from underneath, which is what `bottom` now says and what `submission` used to
+     * have to mean as well.
+     *
+     * Read as a margin over his own top game rather than an absolute, the same correction
+     * `pickTopIntent` and `pickBottomIntent` both record: an absolute bar on `submissions` hands the
+     * branch to most of the roster's grapplers.
+     */
+    /*
+     * The margin is wide and the `scrambling` gate is not decoration. Choosing to fight off your
+     * back is the most punishing preference in the vocabulary — it is the one that ends with you
+     * being hit — so it has to be a specialist's answer rather than the arithmetic residue of
+     * "my submissions beat my wrestling". At `+8` and no gate it took 10% of a random roster and
+     * pushed the share of it too hurt to be booked from 24% to 26%. At `+12` with guard retention
+     * it takes about 5%, which is roughly how many of these fighters there are.
+     */
+    return a.submissions > top + 12 && a.scrambling > 55 ? 'bottom' : 'submission';
+  }
 
   /*
    * **For a fighter who can hold people down, the clinch is a means and the floor is the end.**
@@ -297,11 +318,16 @@ function pickBottomIntent(fighter: Fighter): BottomIntent {
    * `strikeLean` is the honest test, because it already knows the difference between a fighter
    * who owns a submission game and one who merely has the attribute.
    */
-  if (strikeLean(fighter) > 0.55) return a.scrambling > 62 ? 'scramble' : 'standUp';
+  /*
+   * Re-read for D4, which took the exit half of this question away: how badly he wants off the floor
+   * is `preferredState`'s now, and what is left here is what he does with his hands while he is
+   * there. So the striker branch no longer picks between two ways of leaving — it picks the busy,
+   * unambitious guard that keeps him alive until his `preferredState` gets him up.
+   */
+  if (strikeLean(fighter) > 0.55) return a.scrambling < 45 && a.durability < 60 ? 'recover' : 'defend';
   if (a.submissions > 66 && a.submissions > topGame + 2) return 'attack';
-  if (a.submissions > 56 && bottomGame > topGame + 2) return 'playGuard';
-  if (a.scrambling > 62) return 'scramble';
-  return a.scrambling < 45 && a.takedownDefence < 55 ? 'recover' : 'standUp';
+  if (a.submissions > 56 && bottomGame > topGame + 2) return 'attack';
+  return a.scrambling < 45 && a.takedownDefence < 55 ? 'recover' : 'defend';
 }
 
 /**

@@ -244,13 +244,18 @@ export function CampScreen() {
     if (tactics.bottomIntent === 'attack' && a.submissions < 55) {
       out.push({
         title: 'Off your back is the worst place for you',
-        body: 'Told to attack from underneath, your fighter will stay there and threaten nothing. If you cannot submit people, the instruction you want is Stand up.',
+        body: 'Told to attack from underneath, your fighter will threaten nothing and give up position doing it. If you cannot submit people, the instruction you want is Defend.',
       });
     }
-    if (tactics.bottomIntent === 'standUp' && a.scrambling < 45 && a.submissions > 60) {
+    if (
+      tactics.bottomIntent === 'defend' &&
+      PREFERRED_STATE_META[tactics.preferredState].standing &&
+      a.scrambling < 45 &&
+      a.submissions > 60
+    ) {
       out.push({
         title: 'You are better off there than you think',
-        body: 'Scrambling is low and your submissions are real. Wall-walking against a good top game mostly means giving up position; Play guard keeps the threat alive.',
+        body: 'Scrambling is low and your submissions are real. Wall-walking against a good top game mostly means giving up position — asking for the fight underneath and attacking off your back keeps the threat alive.',
       });
     }
     if (PREFERRED_STATE_META[tactics.preferredState].standing && a.takedownDefence < 50 && shootThreat !== undefined && shootThreat > 0.6) {

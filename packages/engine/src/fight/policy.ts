@@ -118,6 +118,7 @@ const STANDING_ALIGNMENT: Readonly<Record<StandingAction, Alignment>> = {
     pocket: 0.7,
     clinch: 0.1,
     top: -0.25,
+    bottom: -0.3,
     submission: -0.3,
     adaptive: 0,
   },
@@ -127,6 +128,7 @@ const STANDING_ALIGNMENT: Readonly<Record<StandingAction, Alignment>> = {
     pocket: -0.2,
     clinch: -0.45,
     top: -0.35,
+    bottom: -0.35,
     submission: -0.35,
     adaptive: 0,
   },
@@ -136,6 +138,12 @@ const STANDING_ALIGNMENT: Readonly<Record<StandingAction, Alignment>> = {
     pocket: -0.6,
     clinch: 0.15,
     top: 1,
+    /*
+     * Positive, and well below `top`. Shooting is how the fight gets to the floor, which is where a
+     * bottom fighter wants it — and it lands him on the wrong end of it, which is not what he came
+     * for. The engine has no pull-guard, so this is the only route he has (see `PREFERRED_STATE_META`).
+     */
+    bottom: 0.35,
     submission: 0.9,
     adaptive: 0,
   },
@@ -145,6 +153,7 @@ const STANDING_ALIGNMENT: Readonly<Record<StandingAction, Alignment>> = {
     pocket: -0.45,
     clinch: 1,
     top: 0.45,
+    bottom: 0.15,
     submission: 0.25,
     adaptive: 0,
   },
@@ -200,7 +209,8 @@ const CLINCH_WORK_ALIGNMENT: Readonly<Record<ClinchWork, Readonly<Record<ClinchI
  */
 export type TopAction = 'advancePosition' | 'groundStrike' | 'submission' | 'maintainPosition';
 
-export type BottomAction = 'standUp' | 'sweep' | 'submission' | 'defend';
+export type BottomRoute = 'standUp' | 'sweep';
+export type BottomWork = 'submission' | 'defend';
 
 const TOP_ALIGNMENT: Readonly<Record<TopAction, Readonly<Record<TopIntent, number>>>> = {
   advancePosition: { control: 0.15, groundAndPound: -0.2, advance: 1, submit: 0.5 },
@@ -233,40 +243,64 @@ const TOP_EXIT: Alignment = {
   pocket: 0.5,
   clinch: -0.35,
   top: -1,
+  // He wanted the other end of this, and standing up is not how he gets there.
+  bottom: -0.85,
   submission: -0.9,
   adaptive: 0,
 };
 
-const BOTTOM_ALIGNMENT: Readonly<Record<BottomAction, Readonly<Record<BottomIntent, number>>>> = {
-  standUp: { standUp: 1, scramble: 0.5, playGuard: -0.6, recover: 0.15, attack: -0.5 },
-  sweep: { standUp: -0.1, scramble: 1, playGuard: 0.2, recover: -0.35, attack: 0.2 },
-  // The row this module exists for: a striker told to get up does not hunt a guillotine.
-  submission: { standUp: -1, scramble: -0.2, playGuard: 0.7, recover: -0.8, attack: 1 },
-  /*
-   * Framing, hand-fighting, denying the pass — the in-state work that was missing entirely, and
-   * without which "get up" had nothing to mean but "attempt an escape or do nothing".
-   *
-   * `recover` is its natural home and reads highest. `standUp` is positive because a fighter
-   * working for the exit stays busy while he does it — that is the whole invariant. `attack` is
-   * the only strongly negative column: a fighter hunting a finish off his back is not the one
-   * playing it safe.
-   */
-  defend: { standUp: 0.35, scramble: 0.1, playGuard: 0.5, recover: 1, attack: -0.6 },
+/**
+ * Which way out he goes for, once he has decided to go — **keyed on `preferredState`.**
+ *
+ * The route is a question about *where he is heading*, not about what he does on his back, so it
+ * belongs to the field that answers that. A fighter who wants the fight standing wall-walks; one who
+ * wants top position turns it over. Before D4 both rows lived on `bottomIntent`, which meant the
+ * bottom was the last position in the engine where one field answered *where do I want the fight*,
+ * *how do I get there* and *what do I do here* at once (docs/01 § 1b).
+ */
+const BOTTOM_ROUTE: Readonly<Record<'standUp' | 'sweep', Alignment>> = {
+  standUp: {
+    outside: 1,
+    boxing: 0.95,
+    pocket: 0.8,
+    clinch: 0.4,
+    top: -0.3,
+    bottom: -0.9,
+    submission: -0.5,
+    adaptive: 0,
+  },
+  sweep: {
+    outside: -0.2,
+    boxing: -0.15,
+    pocket: 0,
+    clinch: 0.5,
+    top: 1,
+    /*
+     * Positive even for a fighter who wants to be underneath, and it is not a contradiction: this
+     * row is only read once the exit roll has already said he is going. Asked *given that you are
+     * leaving, how*, the man who likes the floor turns it over rather than standing up.
+     */
+    bottom: 0.3,
+    submission: 0.7,
+    adaptive: 0,
+  },
 };
 
 /**
- * How urgently a fighter wants to *leave* the floor at all, by bottom intent.
+ * And what he does while he is still there — **the whole of what `bottomIntent` means now.**
  *
- * Separate from the alignment table because it scales the whole bottom decision rather than
- * ranking within it: a guard player is not merely choosing differently from a wrestler
- * underneath, he is *less bothered*, and that shows up as a smaller bias in every direction.
+ * Two actions, three instructions, and the honest question between them is how much of the position
+ * he will spend to threaten a finish. `recover` is the answer that spends nothing, and it earns its
+ * place in the vocabulary by costing him less of the tank as well (see `recoveryIntensity`).
  */
-const BOTTOM_CONVICTION: Readonly<Record<BottomIntent, number>> = {
-  standUp: 1,
-  scramble: 0.8,
-  playGuard: 0.85,
-  recover: 0.7,
-  attack: 0.95,
+const BOTTOM_WORK_ALIGNMENT: Readonly<Record<BottomWork, Readonly<Record<BottomIntent, number>>>> = {
+  // The row this module exists for: a striker told to get up does not hunt a guillotine.
+  submission: { attack: 1, defend: -0.35, recover: -0.8 },
+  /*
+   * Framing, hand-fighting, denying the pass — the in-state work that was missing entirely, and
+   * without which "get up" had nothing to mean but "attempt an escape or do nothing".
+   */
+  defend: { attack: -0.6, defend: 0.8, recover: 1 },
 };
 
 // --- Urgency -------------------------------------------------------------------------------
@@ -448,23 +482,49 @@ export const clinchExitBias = (stance: Stance): number =>
 /**
  * The bottom of the fight, where the reported defect lived.
  *
- * Scaled by `BOTTOM_CONVICTION` on top of the shared urgency, because how much a fighter minds
- * being underneath is a property of their bottom game and not of their game plan's conviction:
- * a guard player and a wrestler both underneath are not equally unhappy about it.
+ * It used to carry a second dial — `BOTTOM_CONVICTION`, a per-intent scale on the urgency — which
+ * existed because the five old instructions had to express *how much a fighter minds being
+ * underneath* and the alignment alone could not. D4 moved minding-it to `preferredState`, so the
+ * dial was two ways of saying the same thing about the same three rows. Removed rather than
+ * re-keyed: a table whose job another table already does is a second place to get it wrong.
  */
-export const bottomBias = (
+export const bottomWorkBias = (
   c: Combatant,
   stance: Stance,
-  action: BottomAction,
+  action: BottomWork,
   opportunity = 0,
 ): number => {
-  const intent = c.plan.tactics.bottomIntent;
   return bias(
-    BOTTOM_ALIGNMENT[action][intent],
-    stance.urgency * BOTTOM_CONVICTION[intent],
+    BOTTOM_WORK_ALIGNMENT[action][c.plan.tactics.bottomIntent],
+    stance.urgency,
     opportunity,
   );
 };
+
+/**
+ * What `recover` buys that `defend` does not: a cheaper beat.
+ *
+ * D6's other half, and the reason the value survived the cut from five bottom instructions to three.
+ * It used to be a slightly softer `standUp` — 0.816 exit urgency against 0.909, and within a point
+ * of it on everything else — so it was a word rather than an instruction, and D4 took the axis it
+ * differed on away entirely.
+ *
+ * A fighter told to weather it is not working at the same rate as one framing to deny the pass, and
+ * `accrueFatigue` has taken an `intensity` since it was written. This is the only place in the
+ * engine that reads it per fighter rather than per position, and that is the point: **it is what a
+ * plan can do about the tank**, which nothing else could say. Sized against the position multipliers
+ * it sits beside — the floor charges 1.15 and the fence 1.45 — so a fifth off is a real saving and
+ * not a different sport.
+ *
+ * The price is in `BOTTOM_WORK_ALIGNMENT`: he threatens nothing while he does it.
+ */
+export function recoveryIntensity(c: Combatant): number {
+  return c.plan.tactics.bottomIntent === 'recover' ? 0.8 : 1;
+}
+
+/** Which way out he goes for, once he has decided to go. Reads `preferredState`; see `BOTTOM_ROUTE`. */
+export const bottomRouteBias = (stance: Stance, action: BottomRoute, opportunity = 0): number =>
+  bias(BOTTOM_ROUTE[action][stance.desired], stance.urgency, opportunity);
 
 /**
  * What a top intent costs in position — the other half of choosing one.
@@ -588,6 +648,7 @@ export function rangeForState(state: PreferredState): Range {
     case 'pocket':
     case 'clinch':
     case 'top':
+    case 'bottom':
     case 'submission':
       return 'pocket';
     case 'adaptive':
@@ -599,7 +660,7 @@ export function desiredRangeOf(c: Combatant): Range {
   return rangeForState(c.plan.tactics.preferredState);
 }
 
-const GRAPPLING_STATES: readonly PreferredState[] = ['clinch', 'top', 'submission'];
+const GRAPPLING_STATES: readonly PreferredState[] = ['clinch', 'top', 'bottom', 'submission'];
 
 /**
  * How hard this fighter pushes for the range they want, 0–1.
@@ -677,10 +738,16 @@ export function grapplingAppetite(c: Combatant): number {
   return (standingBias(stance, 'takedown') + standingBias(stance, 'clinchUp')) / 2;
 }
 
-/** How hard they work to not be held there. Reads the bottom instruction, as `simulate.ts` does. */
+/**
+ * How hard they work to not be held there.
+ *
+ * Reads `preferredState` since D4, because that is where the urge to leave the floor now lives —
+ * the same move that gave `bottomExitUrgency` its table. A fighter who wants the fight standing is a
+ * fighter you hold for less of the round whatever he does with his hands while you try.
+ */
 export function controlResistance(c: Combatant): number {
   const stance = neutralStance(c);
-  return bottomBias(c, stance, 'standUp');
+  return bias(BOTTOM_EXIT[stance.desired], stance.urgency);
 }
 
 /**
@@ -885,25 +952,34 @@ const CLINCH_EXIT: Alignment = {
   pocket: 0.65,
   clinch: -1,
   top: -0.1,
+  bottom: -0.15,
   submission: -0.2,
   adaptive: 0,
 };
 
-const BOTTOM_EXIT: Readonly<Record<BottomIntent, number>> = {
-  standUp: 1,
-  scramble: 0.7,
-  recover: 0.15,
+const BOTTOM_EXIT: Alignment = {
+  outside: 1,
+  boxing: 0.9,
+  pocket: 0.75,
+  clinch: 0.6,
+  /*
+   * A top-position fighter wants off his back as badly as a striker does; what differs is where he
+   * is going, and `BOTTOM_ROUTE` answers that. Splitting the two is the point — before it, "get up"
+   * and "turn him over" were the same instruction wearing different numbers.
+   */
+  top: 0.8,
   /*
    * The two "stay" rows read close to the full negative on purpose.
    *
    * Anchoring the scale at what an unplanned fighter does costs the plan some of its reach in the
-   * downward direction — the neutral is 0.8, so a mild negative barely moves it. Measured, -0.6
-   * for `playGuard` left a guard player attempting the exit on 52% of beats against a stand-up
-   * plan's 94%, and the difference in time spent underneath came out at 7%, where it needs to be
-   * the difference between two recognisable fighters. At -0.9 it reads 38% against 92%.
+   * downward direction — the neutral is 0.8, so a mild negative barely moves it. Measured before
+   * D4, -0.6 for the old `playGuard` left a guard player attempting the exit on 52% of beats
+   * against a stand-up plan's 94%, where it needs to be the difference between two recognisable
+   * fighters.
    */
-  playGuard: -0.9,
-  attack: -1,
+  bottom: -1,
+  submission: -0.7,
+  adaptive: 0,
 };
 
 /*
@@ -916,8 +992,8 @@ const BOTTOM_EXIT_RATE = { neutral: 0.8, floor: 0.25, ceiling: 0.94 };
 const CLINCH_EXIT_RATE = { neutral: 0.56, floor: 0.18, ceiling: 0.92 };
 
 /** How hard this fighter is working to get out from underneath, as a probability per beat. */
-export function bottomExitUrgency(c: Combatant, stance: Stance): number {
-  return exitUrgency(BOTTOM_EXIT[c.plan.tactics.bottomIntent], stance.urgency, BOTTOM_EXIT_RATE);
+export function bottomExitUrgency(stance: Stance): number {
+  return exitUrgency(BOTTOM_EXIT[stance.desired], stance.urgency, BOTTOM_EXIT_RATE);
 }
 
 /** The same, for a fighter being held in a tie-up he may or may not want. */
@@ -928,7 +1004,7 @@ export function clinchExitUrgency(stance: Stance): number {
 /** How much they go looking for the finish once the fight is on the floor. */
 export function submissionAppetite(c: Combatant, fromTop: boolean): number {
   const stance = neutralStance(c);
-  return fromTop ? topBias(c, stance, 'submission') : bottomBias(c, stance, 'submission');
+  return fromTop ? topBias(c, stance, 'submission') : bottomWorkBias(c, stance, 'submission');
 }
 
 // --- Plan integrity --------------------------------------------------------------------------
@@ -981,7 +1057,9 @@ export function isDisplaced(
   if (!causedByOpponent) return false;
   switch (where) {
     case 'distance':
-      return stance === 'top' || stance === 'submission' || stance === 'clinch';
+      return (
+        stance === 'top' || stance === 'bottom' || stance === 'submission' || stance === 'clinch'
+      );
     case 'clinch':
       // The pocket is a step from the tie-up, so a pocket fighter dragged into it is less
       // displaced than an outside fighter who has been walked all the way across the cage.
@@ -989,7 +1067,8 @@ export function isDisplaced(
     case 'top':
       return stance === 'outside' || stance === 'boxing' || stance === 'pocket';
     case 'bottom':
-      return stance !== 'submission';
+      // The two preferences that asked to be here. Everybody else was put here.
+      return stance !== 'submission' && stance !== 'bottom';
   }
 }
 

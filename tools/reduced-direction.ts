@@ -49,13 +49,13 @@ const STANDING = plan({
   preferredState: 'outside',
   entry: 'reactiveShot',
   topIntent: 'groundAndPound',
-  bottomIntent: 'standUp',
+  bottomIntent: 'defend',
 });
 const TOP = plan({
   preferredState: 'top',
   entry: 'proactiveWrestling',
   topIntent: 'control',
-  bottomIntent: 'scramble',
+  bottomIntent: 'defend',
 });
 const FOE = plan({
   preferredState: 'submission',

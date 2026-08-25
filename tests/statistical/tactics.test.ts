@@ -370,7 +370,7 @@ describe('the plan decides what happens once it is there', () => {
      * the three bottom actions were drawn from weights that happened to be close together and
      * nothing in the plan was in the room.
      */
-    const standUp = forRed({ preferredState: 'outside', bottomIntent: 'standUp' });
+    const standUp = forRed({ preferredState: 'outside', bottomIntent: 'defend' });
     const attack = forRed({ preferredState: 'submission', bottomIntent: 'attack' });
     const message = `standUp ${describeProfile(standUp)} | attack ${describeProfile(attack)}`;
 
@@ -392,13 +392,13 @@ describe('the plan decides what happens once it is there', () => {
     const getUp = profile(
       striker,
       wrestler,
-      planWith({ preferredState: 'outside', entry: 'counter', bottomIntent: 'standUp' }),
+      planWith({ preferredState: 'outside', entry: 'counter', bottomIntent: 'defend' }),
       foePlan,
     );
     const guard = profile(
       striker,
       wrestler,
-      planWith({ preferredState: 'outside', entry: 'counter', bottomIntent: 'playGuard' }),
+      planWith({ preferredState: 'bottom', entry: 'reactiveShot', bottomIntent: 'attack' }),
       foePlan,
     );
     const message = `getUp ${describeProfile(getUp)} | guard ${describeProfile(guard)}`;
@@ -454,7 +454,7 @@ describe('intent is not ability', () => {
     const sensible = profile(
       striker,
       wrestler,
-      planWith({ preferredState: 'outside', entry: 'counter', bottomIntent: 'standUp' }),
+      planWith({ preferredState: 'outside', entry: 'counter', bottomIntent: 'defend' }),
       neutralPlan,
     );
     const message = `asked ${describeProfile(asked)} | sensible ${describeProfile(sensible)}`;
@@ -509,7 +509,7 @@ describe('the fighter, not just the plan', () => {
     const plan = planWith({
       preferredState: 'outside',
       entry: 'movement',
-      bottomIntent: 'standUp',
+      bottomIntent: 'defend',
     });
     const disciplined = profile(of(85, 85), wrestler, plan, neutralPlan);
     const wild = profile(of(20, 25), wrestler, plan, neutralPlan);
@@ -684,8 +684,14 @@ describe('the fight a player asked for is the fight they got', () => {
     const asked = (tactics: Partial<TacticalPlan>) =>
       profile(striker, wrestler, planWith(tactics), wrestlerPlan);
 
-    const getUp = asked({ preferredState: 'outside', entry: 'movement', bottomIntent: 'standUp' });
-    const stay = asked({ preferredState: 'outside', entry: 'movement', bottomIntent: 'attack' });
+    /*
+     * **Both fields, since D4.** *Get up* and *work from your back* were one instruction while
+     * `bottomIntent` owned the exit as well as the work; they are two now, and the original
+     * complaint needs both of them to be reproducible — the striker who wants the fight standing
+     * and frames while he is down, against the man who asked to be there and hunts.
+     */
+    const getUp = asked({ preferredState: 'outside', entry: 'movement', bottomIntent: 'defend' });
+    const stay = asked({ preferredState: 'bottom', entry: 'reactiveShot', bottomIntent: 'attack' });
     const unplanned = profile(striker, wrestler, defaultGamePlan(), wrestlerPlan);
     const message =
       `getUp ${describeProfile(getUp)} | stay ${describeProfile(stay)} | ` +

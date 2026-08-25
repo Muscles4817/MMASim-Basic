@@ -228,15 +228,21 @@ describe('the fight plan survives leaving the screen', () => {
     await bookAFight(user);
 
     expect(await screen.findByText(/When you are underneath/i)).toBeTruthy();
-    const standUp = await screen.findByRole('button', { name: /Stand up/i });
-    await user.click(standUp);
-    await waitFor(() => expect(standUp.getAttribute('aria-pressed')).toBe('true'));
+    /*
+     * `Recover` rather than `Stand up` since D4. Getting up is not a thing you do underneath, it is
+     * a thing you do *instead of* being underneath — so it moved to the preference control above
+     * with the rest of *where do I want the fight*, and this control is now what he does with the
+     * time. Same claim, and the label the screen offers for it changed.
+     */
+    const recover = await screen.findByRole('button', { name: /Spend nothing/i });
+    await user.click(recover);
+    await waitFor(() => expect(recover.getAttribute('aria-pressed')).toBe('true'));
 
     // And it survives the round trip, like everything else on this screen.
     goTo('#/rankings');
     await screen.findByText(/not on ability/i);
     goTo('#/camp');
-    const again = await screen.findByRole('button', { name: /Stand up/i });
+    const again = await screen.findByRole('button', { name: /Spend nothing/i });
     expect(again.getAttribute('aria-pressed')).toBe('true');
   });
 

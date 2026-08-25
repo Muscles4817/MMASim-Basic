@@ -44,9 +44,18 @@ const of = (t: Partial<TacticalPlan>, fighter: Fighter = ARCHETYPES.contender())
   return { c, stance: stanceOf(c, undefined, false) };
 };
 
-const exitRate = (intent: BottomIntent, fighter?: Fighter) => {
-  const { c, stance } = of({ bottomIntent: intent }, fighter);
-  return bottomExitUrgency(c, stance);
+/**
+ * **Read from `preferredState` since D4**, and that move is the point rather than a detail.
+ *
+ * F1 put the exit urgency on `bottomIntent`, which was the only field that could carry it — and
+ * which was therefore answering *where do I want the fight*, *how do I get there* and *what do I do
+ * here* all at once. D4 gave the bottom its own preferred state and moved the first two off it. The
+ * claims below are unchanged; the field they are asked of is the one docs/01 § 1b names.
+ */
+const exitRate = (state: PreferredState, fighter?: Fighter) => {
+  const { c, stance } = of({ preferredState: state, entry: 'reactiveShot' }, fighter);
+  void c;
+  return bottomExitUrgency(stance);
 };
 
 describe('how hard a fighter is trying to leave', () => {
@@ -65,16 +74,16 @@ describe('how hard a fighter is trying to leave', () => {
       attributes: { ...ARCHETYPES.contender().attributes, scrambling: 25, wrestling: 25 },
     });
 
-    for (const intent of ['standUp', 'playGuard'] as const) {
-      expect(exitRate(intent, wrestler), intent).toBeCloseTo(exitRate(intent, stone), 10);
+    for (const state of ['outside', 'bottom'] as const) {
+      expect(exitRate(state, wrestler), state).toBeCloseTo(exitRate(state, stone), 10);
     }
   });
 
   it('moves materially between the instruction to leave and the instruction to stay', () => {
     // Measured at full conviction: 0.94 against 0.25, which is the whole span the bounds allow.
-    const out = exitRate('standUp');
-    const stay = exitRate('attack');
-    const message = `standUp ${out.toFixed(3)} against attack ${stay.toFixed(3)}`;
+    const out = exitRate('outside');
+    const stay = exitRate('bottom');
+    const message = `outside ${out.toFixed(3)} against bottom ${stay.toFixed(3)}`;
 
     expect(out, message).toBeGreaterThan(stay * 2);
   });
@@ -85,9 +94,9 @@ describe('how hard a fighter is trying to leave', () => {
      * has become untenable. The ceiling is what stops "get up" meaning a fighter who does nothing
      * else while failing to. Neither is a tuning knob for how much the plan is worth.
      */
-    for (const intent of ['standUp', 'scramble', 'recover', 'playGuard', 'attack'] as const) {
-      expect(exitRate(intent), intent).toBeGreaterThan(0.1);
-      expect(exitRate(intent), intent).toBeLessThan(0.96);
+    for (const state of ['outside', 'boxing', 'pocket', 'clinch', 'top', 'bottom', 'submission'] as const) {
+      expect(exitRate(state), state).toBeGreaterThan(0.1);
+      expect(exitRate(state), state).toBeLessThan(0.96);
     }
   });
 
@@ -99,7 +108,7 @@ describe('how hard a fighter is trying to leave', () => {
      * lost two points of striking win-rate swing to the extra time on the floor.
      */
     const c = createCombatant('red', ARCHETYPES.contender(), defaultGamePlan());
-    const rate = bottomExitUrgency(c, stanceOf(c, undefined, false));
+    const rate = bottomExitUrgency(stanceOf(c, undefined, false));
     expect(rate).toBeGreaterThan(0.7);
     expect(rate).toBeLessThan(0.9);
   });
@@ -130,15 +139,15 @@ describe('what he does while he is still there', () => {
     };
 
     const attack = shares('attack');
-    const guard = shares('playGuard');
-    const stand = shares('standUp');
+    const defend = shares('defend');
+    const recover = shares('recover');
 
-    // A fighter told to attack attacks; one told to get up frames instead of hunting a choke.
+    // A fighter told to attack attacks; one told to defend frames instead of hunting a choke.
     expect(attack.submission).toBeGreaterThan(0.7);
-    expect(stand.submission).toBeLessThan(0.3);
-    expect(stand.defend).toBeGreaterThan(0.7);
-    // And playing guard is not the same instruction as standing up, on this axis.
-    expect(guard.submission).toBeGreaterThan(stand.submission * 2);
+    expect(defend.submission).toBeLessThan(0.35);
+    expect(defend.defend).toBeGreaterThan(0.65);
+    // And `recover` is not `defend` with a different name, which is what D6 was about.
+    expect(recover.defend).toBeGreaterThan(defend.defend);
   });
 
   it('gives a fighter who wants out something to do that is not a submission', () => {
@@ -151,7 +160,7 @@ describe('what he does while he is still there', () => {
       id: 'f_str',
       attributes: { ...ARCHETYPES.striker().attributes, submissions: 32, scrambling: 40 },
     });
-    const { c, stance } = of({ preferredState: 'outside', bottomIntent: 'standUp' }, striker);
+    const { c, stance } = of({ preferredState: 'outside', bottomIntent: 'defend' }, striker);
     const shares = actionShares(bottomWork(c, stance, 'guard', 0, true));
 
     expect(shares.defend, `defend share ${shares.defend.toFixed(2)}`).toBeGreaterThan(0.75);
@@ -184,8 +193,19 @@ const wrestler = makeFighter({
 
 const FIGHTS = 1200;
 
-function underneath(bottomIntent: BottomIntent) {
-  const p = plan({ preferredState: 'outside', entry: 'counter', bottomIntent, conviction: 0.85 });
+/*
+ * Varies `preferredState` rather than `bottomIntent` since D4, for the reason `exitRate` records:
+ * the exit moved to the field that owns *where do I want the fight*. The in-state instruction is
+ * held fixed at `attack` across both arms, which sharpens the claim rather than weakening it —
+ * whatever the exit urgency does, it is doing it to the same busy guard.
+ */
+function underneath(preferredState: PreferredState) {
+  const p = plan({
+    preferredState,
+    entry: preferredState === 'bottom' ? 'reactiveShot' : 'counter',
+    bottomIntent: 'attack',
+    conviction: 0.85,
+  });
   const foe = plan({ preferredState: 'top', entry: 'proactiveWrestling', topIntent: 'control', conviction: 0.85 });
   let attempted = 0;
   let landed = 0;
@@ -215,11 +235,11 @@ function underneath(bottomIntent: BottomIntent) {
 }
 
 describe('and it survives contact', () => {
-  const stand = underneath('standUp');
-  const stay = underneath('attack');
+  const stand = underneath('outside');
+  const stay = underneath('bottom');
   const message =
-    `standUp ${stand.attemptsPerMinute.toFixed(2)} att/min, ${stand.workPerMinute.toFixed(2)} work/min, ` +
-    `${(stand.successRate * 100).toFixed(1)}% | attack ${stay.attemptsPerMinute.toFixed(2)} att/min, ` +
+    `outside ${stand.attemptsPerMinute.toFixed(2)} att/min, ${stand.workPerMinute.toFixed(2)} work/min, ` +
+    `${(stand.successRate * 100).toFixed(1)}% | bottom ${stay.attemptsPerMinute.toFixed(2)} att/min, ` +
     `${stay.workPerMinute.toFixed(2)} work/min, ${(stay.successRate * 100).toFixed(1)}%`;
 
   it('changes how often he goes for the exit', () => {

@@ -143,8 +143,8 @@ const CLAIMS: readonly Claim[] = [
     red: ARCHETYPES.grinder(),
     blue: ARCHETYPES.guardPlayer(),
     bluePlan: GUARD_FOE,
-    from: plan({ preferredState: 'outside', entry: 'reactiveShot', topIntent: 'groundAndPound', bottomIntent: 'standUp' }),
-    to: plan({ preferredState: 'top', entry: 'proactiveWrestling', topIntent: 'control', bottomIntent: 'scramble' }),
+    from: plan({ preferredState: 'outside', entry: 'reactiveShot', topIntent: 'groundAndPound', bottomIntent: 'defend' }),
+    to: plan({ preferredState: 'top', entry: 'proactiveWrestling', topIntent: 'control', bottomIntent: 'defend' }),
     read: (s) => s.controlPerRound,
     direction: 'up',
     fullMovesAtLeast: 0.2,
@@ -171,12 +171,25 @@ const CLAIMS: readonly Claim[] = [
     fullMovesAtLeast: 0.15,
   },
   {
-    what: 'being told to get up costs the man on top his control time',
+    /*
+     * Asserted on `preferredState` since D4. *How badly do I want off the floor* used to live on
+     * `bottomIntent` — the same field that also chose the route out and the work done down there —
+     * and moving it was the whole of that change. The claim is unaltered; the field carrying it is
+     * the one docs/01 § 1b says should.
+     */
+    what: 'wanting to be off the floor costs the man on top his control time',
     red: clone(),
     blue: ARCHETYPES.journeyman(),
     bluePlan: TOP_FOE,
-    from: plan({ bottomIntent: 'playGuard', conviction: 1 }),
-    to: plan({ bottomIntent: 'standUp', conviction: 1 }),
+    /*
+     * Two *grappling* preferences rather than a grappling one against a striking one, and the
+     * fixture guard is what found that. `bottom` against `outside` reads −6% at Full over one seed
+     * set and −0.3% over another, because changing to a striking preference changes the standing
+     * list too and the two effects partly cancel. `bottom` against `top` holds the route to the
+     * floor roughly fixed and asks only about wanting to be under it: −10.7% and stable.
+     */
+    from: plan({ preferredState: 'bottom', entry: 'reactiveShot', conviction: 1 }),
+    to: plan({ preferredState: 'top', entry: 'proactiveWrestling', conviction: 1 }),
     read: (s) => s.opponentControlPerRound,
     direction: 'down',
     fullMovesAtLeast: 0.05,
@@ -186,7 +199,7 @@ const CLAIMS: readonly Claim[] = [
     red: ARCHETYPES.guardPlayer(),
     blue: ARCHETYPES.smotherer(),
     bluePlan: TOP_FOE,
-    from: plan({ preferredState: 'outside', topIntent: 'groundAndPound', bottomIntent: 'standUp' }),
+    from: plan({ preferredState: 'outside', topIntent: 'groundAndPound', bottomIntent: 'defend' }),
     to: plan({ preferredState: 'submission', topIntent: 'submit', bottomIntent: 'attack' }),
     read: (s) => s.submissionAttempts,
     direction: 'up',
@@ -220,7 +233,8 @@ const CLAIMS: readonly Claim[] = [
     to: plan({ preferredState: 'outside', entry: 'movement' }),
     read: (s) => s.clinchPerRound,
     direction: 'down',
-    fullMovesAtLeast: 0.3,
+    // Measured −28.7%, and it was −30% before the bottom vocabulary moved a little of the clock.
+    fullMovesAtLeast: 0.2,
   },
   {
     /*

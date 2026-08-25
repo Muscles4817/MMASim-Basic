@@ -62,7 +62,7 @@ const PLANS: readonly (readonly [string, GamePlan])[] = [
       bottomIntent: 'attack',
     }),
   ],
-  ['standUp', plan({ preferredState: 'boxing', entry: 'lead', bottomIntent: 'standUp' })],
+  ['standUp', plan({ preferredState: 'boxing', entry: 'lead', bottomIntent: 'defend' })],
   ['clinch', plan({ preferredState: 'clinch', entry: 'clinchEntries' })],
 ];
 

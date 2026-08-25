@@ -85,10 +85,10 @@ calibrate twice.
 | **D1** | F9 — `stall` conflates riding with residual | architectural + calibration | — | **yes, materially** |
 | **D2** | F10 — a fighter on top cannot elect to disengage *(**done**)* | architectural | D1 (same list) | yes |
 | **D3** | F2 — the clinch has no behaviour axis *(**done**)* | architectural | D1, D11 (Reduced must represent the clinch first) | yes |
-| **D4** | F6 — no `bottom` desired state | architectural (vocabulary) | — | yes, mildly |
+| **D4** | F6 — no `bottom` desired state *(**done**)* | architectural (vocabulary) | — | yes, mildly |
 | **D5** | F7 — positional risk is not expressible *(shrunk: D3 absorbs the clinch slice)* | architectural | D3 | yes |
-| **D6** | F3 — `recover` is still `standUp` | behavioural | D4 | yes, narrowly |
-| **D7** | F4 (remainder) — authority is not comparable | calibration | D1–D5 | yes, materially |
+| **D6** | F3 — the bottom instructions are bunched *(**done**, with D4)* | behavioural | D4 | yes, narrowly |
+| **D7** | F4 (remainder) — authority is not comparable | calibration | D4, D6 *(both done)* | yes, materially |
 | **D8** | F5 — `lead` is inert | cleanup | — | barely |
 | **D9** | F8 — no badly-fatigued situation | cleanup (additive) | — | yes, situationally |
 | **D10** | Reduced's plan sensitivity is inverted on the ground *(**done**)* | architectural (Reduced) | — | Reduced only |
@@ -726,11 +726,123 @@ The golden fingerprint's fourth re-recording is the smallest of the four: **only
 *Enforced by* `tests/statistical/clinch-intent.test.ts`, nineteen assertions swept over six seed
 salts.
 
-### D4 — No `bottom` desired state *(was F6)*
+### D4 — No `bottom` desired state *(was F6; **done**, with D6)*
 
-Unchanged by F1 in substance, though less acute: `bottomIntent` now carries real distinct behaviour,
-so a guard player is at least expressible *once he is there*. What is still missing is the ability to
-say he *wants* to be there. `preferredState: 'submission'` conflates "get it to the floor and hunt
+**Built.** `preferredState` gained `bottom`; the bottom's exit urgency and exit route moved onto it;
+and `bottomIntent` became an in-state axis of three values with `recover` finally meaning something.
+
+The original finding said `preferredState: 'submission'` conflated *get it to the floor and hunt from
+either position* with *fight off my back*. True, and it was the smaller half. The larger half only
+became visible with the post-D3 authority measurement: **`bottomIntent` was answering three
+questions.** How urgently he wanted off the floor (`BOTTOM_EXIT`), which way he went when he went
+(`standUp` against `sweep`) and what he did while he stayed (`submission` against `defend`) — one
+field carrying *where do I want the fight*, *how do I get there* and *what do I do here*. That is the
+defect D3 removed from the clinch, and the bottom had it worse by one.
+
+The two findings are one change. The exit cannot move off `bottomIntent` without a `preferredState`
+to move it to, and the vocabulary cannot be un-bunched while three of its five values differ only on
+the axis that is leaving.
+
+#### What moved where
+
+| question | before | after |
+| --- | --- | --- |
+| how badly do I want off the floor | `bottomIntent` → `BOTTOM_EXIT` | **`preferredState`** → `BOTTOM_EXIT` |
+| which way out do I go for | `bottomIntent` → `BOTTOM_ALIGNMENT.standUp/sweep` | **`preferredState`** → `BOTTOM_ROUTE` |
+| what do I do while I am here | `bottomIntent` → `BOTTOM_ALIGNMENT.submission/defend` | `bottomIntent` → `BOTTOM_WORK_ALIGNMENT` |
+
+`BOTTOM_CONVICTION` was deleted rather than re-keyed. It existed to express *how much a fighter minds
+being underneath*, which the alignment alone could not say while the field was overloaded; once
+minding-it moved to `preferredState` it was two ways of saying the same thing about the same three
+rows, and a table whose job another table already does is a second place to get it wrong.
+
+#### The exit, and the route, are different questions
+
+Measured at full conviction. The point is the pair of columns, not either one:
+
+| `preferredState` | exit urgency | stand up | sweep |
+| --- | --- | --- | --- |
+| outside | 0.909 | **89%** | 11% |
+| boxing | 0.898 | 87% | 13% |
+| pocket | 0.882 | 81% | 19% |
+| clinch | 0.865 | 53% | 47% |
+| top | 0.887 | 16% | **84%** |
+| **bottom** | **0.372** | 18% | 82% |
+| submission | 0.500 | 18% | 82% |
+| *adaptive* | *0.800* | *57%* | *43%* |
+
+A striker and a wrestler underneath are **equally keen to leave** — 0.909 against 0.887 — and are not
+going to the same place. That sentence could not be said before: the only way to ask for the sweep was
+`scramble`, which also meant *and I do not mind being here much*, so a wrestler could not be given a
+wrestler's exit at a striker's urgency. The unplanned rate is still 0.800, which is the neutral F1
+measured, carried through a change of field.
+
+#### The vocabulary, un-bunched
+
+Three of the old five sat in an exit band of 0.816 to 0.909 — `standUp`, `scramble` and `recover`,
+separated by nine hundredths on an axis that has now left this field. What is left spans the work
+axis end to end:
+
+| `bottomIntent` | submission | defend | what it buys |
+| --- | --- | --- | --- |
+| `attack` | **91%** | 9% | the finish, and the position it costs |
+| `defend` | 17% | 83% | frames, hand-fighting, denying the pass |
+| `recover` | 9% | **91%** | and a **fifth off the fatigue** of every beat |
+
+`recover` earning its place is D6. It used to be a softer `standUp` — 0.816 against 0.909 and within a
+point of it on everything else — so it was a word rather than an instruction, and D4 took away the
+only axis it differed on. It now buys what the word means: `accrueFatigue` has taken an `intensity`
+since it was written and nothing had ever asked a *plan* for one. `recoveryIntensity` is the only
+place in the engine that reads it per fighter rather than per position, and that is the point — it is
+what a plan can do about the tank. The price is in the alignment: he threatens nothing while he does
+it.
+
+#### What it cost: nothing, measured
+
+Every alignment reads exactly 1 at zero urgency and `recoveryIntensity` returns 1 unless it was
+asked for, so the roster the sport is calibrated on is untouched. Over four matchups at both fidelity
+levels — control seconds, clinch seconds, distance seconds, knockout rate, submission rate and mean
+end round — the numbers are **bit-identical** before and after. The golden fingerprint did not move.
+
+#### Two tests that were right about the claim and wrong about the field
+
+Both are worth recording, because they are the rule working rather than the change breaking:
+
+- **`styles.test.ts` — wrestling against jiu-jitsu now separates.** The assertion said whatever
+  same-family pair clears must come from the *striking* family, with a comment naming the grappling
+  pair as below the bar. D4 is exactly the reason it was: `preferredState` offered `top` and
+  `submission`, both of which mean *get it to the floor*, and the only field that could say *and I
+  mean to be underneath* was doing two other jobs. The two arts stop being the same instruction with
+  different attributes.
+- **A clock claim in the new suite that is simply false.** *A man who asks to be underneath spends
+  more of the fight underneath* — measured, 59.8% against 62.3% the other way. Two mechanisms pull on
+  that number and only one is this instruction: fewer escapes make each episode longer, but a bottom
+  preference also reads `takedown` 0.35 on the standing list, so he shoots more and shooting lands
+  him on top. The second effect is larger. The claim lives at *seconds per episode*, and the draft
+  that asserted it on the fight clock was docs/01's own rule biting on a test rather than on the
+  engine.
+
+#### What D7 inherits
+
+The bottom in-state list was the worst surface in the engine at **0.11** under side control — a
+20-to-30:1 capability gap against an intent range of seven to one, so whatever he was told, once he
+was passed he framed. Three intents spanning the work axis lift it to **0.52–0.82** without touching a
+capability. Still ∞ in guard, where the two candidates carry identical capability and the plan decides
+everything, and the `0.05` literal is still there. D7 is where that gets dealt with; it now starts
+from a much smaller problem.
+
+#### The gap this leaves, stated rather than papered over
+
+**There is no entry to the bottom.** The grappling entries are all routes to the top — shoot, chain,
+tie up, throw — and the engine has no pull-guard. A bottom preference therefore takes the floor by
+whatever route it can and gets where it wants when the position turns over, which is honest and
+incomplete. Inventing an entry would be inventing a mechanic, and that is not what a vocabulary pass
+is for.
+
+*Enforced by* `tests/statistical/bottom-vocabulary.test.ts`, fifteen assertions swept over five seed
+salts.
+
+*The original finding follows.* `preferredState: 'submission'` conflated "get it to the floor and hunt
 from either position" with "fight off my back", which are different fighters.
 
 ### D5 — Positional risk is not expressible *(was F7)*
@@ -739,6 +851,14 @@ Unchanged, and more relevant than it was: F1 added axes for risk to apply to. Do
 positional risk was folded into `topIntent` because "`control` against `advance` *is* that axis asked
 where the fighter actually chooses" — true while the ground was the only position with a behaviour
 layer, and false as soon as the clinch and standing get one. Depends on D3.
+
+### D6 — The bottom instructions are bunched *(was F3; **done**, with D4)*
+
+Shipped as one change with D4 — see above for the measurement. In short: the five values were three
+questions wearing one hat, `recover` differed from `standUp` by nine hundredths on an axis that has
+since moved to `preferredState`, and it now differs by a fifth of the fatigue of every beat instead.
+
+*The original finding follows.*
 
 ### D6 — `recover` is still `standUp` *(was F3, largely resolved by F1)*
 
@@ -1194,6 +1314,133 @@ Not scoped here: it is a sport-wide calibration change with its own evidence, an
 against Full's fatigue curves rather than bundling into a vocabulary change. It is a **prerequisite
 for `clinchIntent: 'control'` being a real strategy rather than a stalling one**, and it is related to
 D9.
+
+## 3b. The register re-ranked, after D3
+
+Measured against the shipped engine rather than argued from the previous ranking. Two things moved
+materially and one finding changed shape entirely.
+
+### D7 stopped being an engine-wide problem and became a bottom-position one
+
+The authority landscape at full conviction, across six plans and eight surfaces:
+
+| surface | before D3 | now |
+| --- | --- | --- |
+| distance | 2.11 – 4.82 | 2.11 – 4.82 |
+| clinch, held | 2.09 – 4.18 | **4.53** (flat) |
+| **clinch, controlling** | **0.56 – 1.35** | **1.38 – 2.05** |
+| bottom work, guard | ∞ | **∞** |
+| bottom work, side control | 0.11 | **0.11** |
+| bottom exits | 2.15 – 5.91 | 2.15 – 5.91 |
+| top | 1.10 – 1.60 | 1.10 – 1.60 |
+
+The finite spread is still 0.11 to 5.91, and reporting that as "unchanged" would miss what happened:
+**one of the two low ends is gone and the other is now unambiguous.** Every remaining pathology is in
+one function.
+
+`bottomWork` returns two candidates, and its submission row reads `submissions × 0.8` in guard and
+the literal `0.05` everywhere else, beside a `defend` row at `scrambling × 0.8`. So the same list
+gives the plan *everything* in guard — identical capabilities, authority ∞ — and *nothing* under side
+control, where a 20-to-30:1 capability gap faces an intent range of about seven to one. Whatever a
+fighter was told, once he has been passed he frames.
+
+That reframes D7's dependency. It was ranked behind D1–D5 because every list those touched was a list
+D7 would otherwise calibrate twice. Three of those are now shipped, the clinch lists are done, and
+what is left of D7 is almost entirely the bottom in-state list — which is **D4 and D6's territory**,
+not D5's. D7 now depends on the bottom vocabulary and on very little else.
+
+### D5 shrank further than the re-audit expected
+
+D3 absorbed the clinch slice, as predicted. But the register entry claims the ground slice too, and
+the measurement does not support it: `topIntent` already carries positional risk on the floor —
+`control` against `advance` is *accept a scramble to improve position*, and `submit` is *accept a pass
+to hunt the finish* — and `bottomIntent` carries it underneath, `attack` against `playGuard`. Doc 05's
+original note said this was true "while the ground was the only position with a behaviour layer".
+Every position now has one, and each of them expresses its own positional risk.
+
+What is genuinely left of D5 is **standing** risk — there is no way to say *accept being countered to
+close distance*, which is the striking equivalent — and that is a much smaller finding than the one
+that was ranked. It should be re-scoped or folded into D8, which is the other standing-entry finding.
+
+### D8 is bigger than "`lead` is inert", and exactly measurable
+
+All four *standing* entry styles produce **identical** shares on the distance list — strike 41.9%,
+kick 21.4%, takedown 20.5%, clinch 16.1% — because `entryWeight` switches only on the four grappling
+entries and the rest fall through to 1. Tracing every place `entry` is read:
+
+| entry | `entryWeight` | `groundDenial` | `isCounterFighter` | clinch takedown |
+| --- | --- | --- | --- | --- |
+| `pressure` | — | 1.35 / 0.85 | — | — |
+| `movement` | — | 0.80 / 1.30 | — | — |
+| `counter` | — | — | **yes** | — |
+| **`lead`** | — | — | — | — |
+| `proactiveWrestling` | 1.5 / 0.75 | — | — | — |
+| `clinchEntries` | 0.6 / 1.85 | 1.25 / 0.90 | — | — |
+| `tripsAndThrows` | 0.5 / 1.95 | — | — | **1.6×** |
+| `reactiveShot` | 0.9 / 0.70 | — | **yes** | — |
+
+`lead` is the only value in the entire tactical vocabulary that reaches nothing at all. That is the
+finding, now with a table behind it, and it is a cleanup rather than an architectural change: the row
+needs a mechanism, and *taking the initiative first* most naturally lands on the range beat and on who
+throws first, neither of which it currently touches.
+
+### D6 is no longer an alias, and is now a crowding problem
+
+F1 gave the five bottom instructions distinct behaviour, and they are distinct:
+
+| `bottomIntent` | exit urgency | exits (standUp / sweep) | in-state (submission / defend) |
+| --- | --- | --- | --- |
+| `standUp` | 0.909 | 87 / 13 | 17 / 83 |
+| `scramble` | 0.876 | 42 / 58 | 42 / 58 |
+| `recover` | 0.816 | 69 / 31 | 16 / 84 |
+| `playGuard` | 0.415 | 33 / 67 | 56 / 44 |
+| `attack` | 0.372 | 33 / 67 | 90 / 10 |
+
+`recover` is not an alias of `standUp` any more — it is a softer one, and on the in-state axis the two
+are within a point of each other. Three of the five instructions sit in an exit band of 0.816–0.909.
+So the finding survives with a different complaint: not *two values mean the same thing* but **the
+vocabulary is bunched at one end**, and `recover` in particular has no mechanism of its own. The
+obvious place for it to acquire one is D9 — *what changes when the tank is empty* is precisely what
+"recover" should mean, and D15 has just given the tank something to say.
+
+### D14 confirmed as predicted: consequence reduced, cause untouched
+
+`grapplingAppetite` is **identical** across `clinchIntent` at a fixed preference, because it averages
+two `preferredState` rows and nothing else:
+
+| plan | `grapplingAppetite` | `clinchLean` | `clinchPersistence` |
+| --- | --- | --- | --- |
+| clinch / control | 2.819 | 1.557 | 1.817 |
+| clinch / takedown | 2.819 | 1.557 | 0.239 |
+| top / control | 3.167 | 0.614 | 1.817 |
+| top / takedown | 3.167 | 0.614 | 0.239 |
+
+A clinch plan and a top plan still arrive at `controlPull` as 2.82 against 3.17 — nearly the same
+number for two fighters Full separates by a third of the fight. What D3 bought is the third column:
+the *split* of that control is now fully steerable, 7.6:1 across the intent. Exactly the split of the
+two findings the re-audit predicted, and D14 is unchanged in substance.
+
+### The ranking
+
+| # | finding | kind | depends on | why here |
+| --- | --- | --- | --- | --- |
+| **D4** | no `bottom` desired state *(**done**)* | architectural (vocabulary) | — | the bottom vocabulary gates D6 and now gates D7 |
+| **D6** | the bottom instructions are bunched *(**done**, with D4)* | behavioural | D4 | same vocabulary, same pass |
+| **D7** | authority is not comparable | calibration | D4, D6 | now one list, at the far end of that vocabulary |
+| **D9** | no badly-fatigued situation | additive | D15 *(done)* | gives `recover` a mechanism; unblocked by D15 |
+| **D8** | `lead` is inert *(+ what remains of D5)* | cleanup | — | independent; the standing-entry pass |
+| **D5** | standing positional risk *(re-scoped, much smaller)* | architectural | — | fold into D8 unless it grows |
+| **D14** | Reduced collapses the two grappling entries | architectural (Reduced) | — | deferred |
+| **D12** | Reduced under-produces standing knockdowns | calibration (Reduced) | — | deferred |
+
+The change from the previous ranking: **D4 and D6 move ahead of D5**, because D7 — the finding with
+the most effect on the sport — now depends on the bottom vocabulary rather than on positional risk;
+D5 drops and shrinks; D9 rises because D15 unblocked it; D8 gains a table and stays a cleanup.
+
+*Measured, not implemented.* **D4 and D6 have since shipped as one vocabulary pass** — see the
+D4 section above for what moved and what it cost. D7 is next, and starts from a much smaller
+problem than the one measured here: the bottom in-state list lifted from 0.11 to 0.52–0.82 under
+side control without a capability being touched.
 
 ## 4. The original findings, as recorded
 
