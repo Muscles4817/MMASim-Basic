@@ -43,9 +43,9 @@ const plan = (t: Partial<TacticalPlan>): GamePlan => ({
 });
 
 /** Wants the fight standing. Ends up on top anyway, because fights do that. */
-const STANDING = plan({ preferredState: 'outside', entry: 'reactiveShot', topIntent: 'groundAndPound', bottomIntent: 'standUp' });
+const STANDING = plan({ preferredState: 'outside', entry: 'reactiveShot', topIntent: 'groundAndPound', bottomIntent: 'defend' });
 /** Fought for top position and means to keep it. */
-const GROUND = plan({ preferredState: 'top', entry: 'proactiveWrestling', topIntent: 'control', bottomIntent: 'scramble' });
+const GROUND = plan({ preferredState: 'top', entry: 'proactiveWrestling', topIntent: 'control', bottomIntent: 'defend' });
 /** The man underneath, in every matchup below: he wants the fight exactly where it is. */
 const OFF_HIS_BACK = plan({ preferredState: 'submission', entry: 'reactiveShot', topIntent: 'submit', bottomIntent: 'attack' });
 

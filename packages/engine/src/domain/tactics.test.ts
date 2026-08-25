@@ -36,7 +36,7 @@ describe('normalising a plan that came from outside the type system', () => {
       preferredState: 'pocket',
       entry: 'pressure',
       topIntent: 'groundAndPound',
-      bottomIntent: 'standUp',
+      bottomIntent: 'attack',
       finishing: 'huntFinish',
       conviction: 0.85,
     };

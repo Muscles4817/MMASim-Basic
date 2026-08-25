@@ -65,6 +65,7 @@ export const PREFERRED_STATES = [
   'pocket',
   'clinch',
   'top',
+  'bottom',
   'submission',
   'adaptive',
 ] as const;
@@ -118,6 +119,25 @@ export const PREFERRED_STATE_META: Readonly<Record<PreferredState, PreferredStat
     key: 'top',
     label: 'Ground — Top',
     blurb: 'Take them down and stay on top of them.',
+    standing: false,
+  },
+  /*
+   * D4. `submission` used to carry this as well — *get it to the floor and hunt from either
+   * position* — and the two are different fighters. A guard player who wants the fight on his back
+   * and a wrestler who wants it on the floor either way were the same instruction, so the only
+   * thing that could say "I mean to be underneath" was `bottomIntent`, which was already saying two
+   * other things (see `BOTTOM_INTENTS`).
+   *
+   * **The gap this leaves, stated rather than papered over:** there is no *entry* to the bottom. The
+   * grappling entries are all routes to the top — shoot, chain, tie up, throw — and the engine has
+   * no pull-guard. A bottom preference therefore takes the floor by whatever route it can and gets
+   * where it wants when the position turns over, which is honest but incomplete. Inventing an entry
+   * would be inventing a mechanic, and that is not what a vocabulary pass is for.
+   */
+  bottom: {
+    key: 'bottom',
+    label: 'Ground — Bottom',
+    blurb: 'Off your back on purpose. Guard, sweeps, and the finish from underneath.',
     standing: false,
   },
   submission: {
@@ -188,8 +208,43 @@ export function entriesFor(state: PreferredState): readonly EntryStyle[] {
 export const TOP_INTENTS = ['control', 'groundAndPound', 'advance', 'submit'] as const;
 export type TopIntent = (typeof TOP_INTENTS)[number];
 
-export const BOTTOM_INTENTS = ['standUp', 'scramble', 'playGuard', 'recover', 'attack'] as const;
+/**
+ * And underneath — **what he does down there, and nothing else.**
+ *
+ * It used to do three jobs. `standUp | scramble | playGuard | recover | attack` set how urgently he
+ * wanted off the floor (`BOTTOM_EXIT`), which route he took when he went (`standUp` against `sweep`)
+ * *and* what he did while he stayed (`submission` against `defend`) — one field answering *where do
+ * I want the fight*, *how do I get there* and *what do I do here*. That is the defect D3 removed
+ * from the clinch, and the bottom had it worse.
+ *
+ * The first two are now `preferredState`'s, which is what D4's `bottom` state exists to make
+ * sayable, and this is the third. Three values against the old five, because there are two in-state
+ * actions and the honest question about them is how much of the fight you are willing to lose to
+ * hunt a finish — with `recover` as the answer that spends nothing at all.
+ *
+ * That leaves the vocabulary un-bunched, which was D6: three of the old five sat in an exit band of
+ * 0.816 to 0.909 and differed on the axis that no longer lives here.
+ */
+export const BOTTOM_INTENTS = ['attack', 'defend', 'recover'] as const;
 export type BottomIntent = (typeof BOTTOM_INTENTS)[number];
+
+/** What an old five-value bottom instruction was saying about the *work*, which is all this is now. */
+export function bottomIntentFor(legacy: string): BottomIntent {
+  switch (legacy) {
+    case 'attack':
+      return 'attack';
+    case 'recover':
+      return 'recover';
+    /*
+     * `playGuard` maps here rather than to `attack`, and it is the one place the migration loses
+     * something. It meant *I am comfortable down here and I work my guard* — half exit, half work —
+     * and the exit half now belongs to `preferredState: 'bottom'`, which a migration cannot choose
+     * on the player's behalf. The work half is a busy defensive guard, which is this.
+     */
+    default:
+      return 'defend';
+  }
+}
 
 /**
  * And in a tie-up, which until D3 was the one position with no instruction of its own.
@@ -230,11 +285,16 @@ export const TOP_INTENT_META: Readonly<Record<TopIntent, { label: string; blurb:
 
 export const BOTTOM_INTENT_META: Readonly<Record<BottomIntent, { label: string; blurb: string }>> =
   {
-    standUp: { label: 'Stand up', blurb: 'Wall-walk and get out. Nothing else matters.' },
-    scramble: { label: 'Scramble', blurb: 'Make it chaotic. Reverse it or get up in the mess.' },
-    playGuard: { label: 'Play guard', blurb: 'Comfortable here. Work from your back.' },
-    recover: { label: 'Recover', blurb: 'Survive, frame, get back to guard. Take no risks.' },
-    attack: { label: 'Attack', blurb: 'Threaten submissions off your back.' },
+    attack: { label: 'Attack', blurb: 'Hunt the finish off your back. Let the position go.' },
+    defend: { label: 'Defend', blurb: 'Frame, hand-fight, deny the pass. Give them nothing.' },
+    /*
+     * D6 gave this one a mechanism of its own, which is why it survived the cut from five values to
+     * three. It used to be a slightly softer `standUp` — 0.816 exit urgency against 0.909, and the
+     * two within a point of each other on everything else — so it was a word rather than an
+     * instruction. It now buys what the word means: he works at a lower intensity and burns less of
+     * the tank doing it, which `accrueFatigue` has been able to express all along.
+     */
+    recover: { label: 'Recover', blurb: 'Spend nothing. Weather it and get your wind back.' },
   };
 
 // --- 4. What will you trade? ---------------------------------------------------------------
@@ -278,7 +338,7 @@ export const BOTTOM_INTENT_META: Readonly<Record<BottomIntent, { label: string; 
  * instructions are opt-in.
  */
 export function clinchIntentFor(state: PreferredState): ClinchIntent {
-  return state === 'top' || state === 'submission' ? 'takedown' : 'damage';
+  return state === 'top' || state === 'submission' || state === 'bottom' ? 'takedown' : 'damage';
 }
 
 export const CLINCH_INTENT_META: Readonly<Record<ClinchIntent, { label: string; blurb: string }>> = {
@@ -402,6 +462,7 @@ const BASE_CONVICTION: Readonly<Record<PreferredState, number>> = {
   pocket: 0.75,
   clinch: 0.8,
   top: 0.85,
+  bottom: 0.9,
   submission: 0.9,
   adaptive: 0,
 };
@@ -422,7 +483,7 @@ export function defaultTactics(): TacticalPlan {
     preferredState: 'adaptive',
     entry: 'lead',
     topIntent: 'control',
-    bottomIntent: 'scramble',
+    bottomIntent: 'defend',
     clinchIntent: 'damage',
     finishing: 'disciplined',
     situational: {},
@@ -464,7 +525,9 @@ export function normaliseTactics(plan: TacticalPlan): TacticalPlan {
     // An entry style left over from a previous preference is not a plan, it is a stale control.
     entry: entries.includes(plan.entry) ? plan.entry : entries[0]!,
     topIntent: oneOf(TOP_INTENTS, plan.topIntent, fallback.topIntent),
-    bottomIntent: oneOf(BOTTOM_INTENTS, plan.bottomIntent, fallback.bottomIntent),
+    // A five-value instruction from before D4 is not missing a value, it had one — see
+    // `bottomIntentFor`, which asks what it was saying about the *work*.
+    bottomIntent: oneOf(BOTTOM_INTENTS, plan.bottomIntent, bottomIntentFor(plan.bottomIntent)),
     /*
      * A plan written before this field existed is not missing an instruction, it *had* one — the
      * clinch read `preferredState` — so the migration asks what that plan was implicitly saying

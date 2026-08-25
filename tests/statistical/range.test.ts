@@ -124,8 +124,8 @@ const base = (id: string, overrides: Partial<Fighter['attributes']> = {}, reach 
     },
   });
 
-const OUTSIDE = plan({ preferredState: 'outside', entry: 'movement', bottomIntent: 'standUp' });
-const POCKET = plan({ preferredState: 'pocket', entry: 'pressure', bottomIntent: 'standUp' });
+const OUTSIDE = plan({ preferredState: 'outside', entry: 'movement', bottomIntent: 'defend' });
+const POCKET = plan({ preferredState: 'pocket', entry: 'pressure', bottomIntent: 'defend' });
 const NEUTRAL = defaultGamePlan();
 
 describe('range is state, and the plan only asks for it', () => {

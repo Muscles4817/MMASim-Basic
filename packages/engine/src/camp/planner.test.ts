@@ -88,10 +88,14 @@ describe('the plan reads the fighter', () => {
      */
     for (const archetype of [ARCHETYPES.striker(), ARCHETYPES.bomber()]) {
       const plan = planFor(archetype, ARCHETYPES.smotherer()).tactics;
-      expect(
-        ['standUp', 'scramble'],
-        `${archetype.lastName} was told to ${plan.bottomIntent} underneath`,
-      ).toContain(plan.bottomIntent);
+      const message = `${archetype.lastName}: ${plan.preferredState} / ${plan.bottomIntent}`;
+      /*
+       * Asserted on `preferredState` since D4, because that is where *do I want to be down there*
+       * now lives — `bottomIntent` no longer has an opinion about leaving, only about what he does
+       * with his hands while he is there. The claim is the same one; the field carrying it moved.
+       */
+      expect(plan.preferredState, message).not.toBe('bottom');
+      expect(plan.bottomIntent, message).not.toBe('attack');
     }
   });
 
@@ -99,9 +103,10 @@ describe('the plan reads the fighter', () => {
     // The other side of the same claim: the instruction has to be able to say "you are fine
     // there" or it is not an instruction, it is a global rule about strikers.
     const guard = planFor(ARCHETYPES.guardPlayer(), ARCHETYPES.smotherer()).tactics;
-    expect(['attack', 'playGuard'], `guard player got ${guard.bottomIntent}`).toContain(
-      guard.bottomIntent,
-    );
+    const message = `guard player got ${guard.preferredState} / ${guard.bottomIntent}`;
+    // Both halves, now that there are two fields to say it with.
+    expect(['bottom', 'submission'], message).toContain(guard.preferredState);
+    expect(guard.bottomIntent, message).toBe('attack');
   });
 
   it('gives the route as well as the destination', () => {

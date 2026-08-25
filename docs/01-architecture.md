@@ -152,6 +152,15 @@ So `standUpFromTop` reads `preferredState` (D2) and `clinchDisengage` reads it t
 `clinchIntent` owns the takedown out of a tie-up (D3) exactly as `topIntent` owns the guard pass. The
 test is not *does this action change the state* — most of them do — but *does it leave the grappling*.
 
+**1c. A field answers one question.** The corollary the D-series kept rediscovering, and the reason
+it is worth its own line: `preferredState` says where the fight should be, an intent says what to do
+having arrived, and `entry` says how to get there. Every position that put two of those on one field
+measured the same way — the field's authority collapsed at the decision it was not really about. The
+clinch had two on `preferredState` (D3, controlling clinch authority 0.56); the bottom had **three**
+on `bottomIntent` (D4, in-state authority 0.11 under side control), which also made two of its five
+values differ only on the axis that did not belong there. Both were found by measuring
+`intentAuthority` per surface rather than by reading the code.
+
 ### 4. Standing is three states: `outside | boxing | pocket`.
 
 Not two, and not one with a flag. Two was tried and could not carry a boxer — a rear straight is

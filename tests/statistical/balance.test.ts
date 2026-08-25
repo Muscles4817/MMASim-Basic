@@ -217,7 +217,7 @@ describe('preparation is worth more than a few rating points', () => {
       ...defaultTactics(),
       preferredState: 'outside',
       entry: 'counter',
-      bottomIntent: 'standUp',
+      bottomIntent: 'defend',
       conviction: convictionFor('outside'),
     },
     campQuality: 0.95,

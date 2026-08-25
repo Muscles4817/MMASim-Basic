@@ -31,12 +31,14 @@ import {
   targetFitness,
 } from './range.js';
 import {
-  bottomBias,
+  bottomRouteBias,
+  bottomWorkBias,
   bottomExitUrgency,
   clinchWorkBias,
   desiredRangeOf,
   groundDenial,
   rangeUrgency,
+  recoveryIntensity,
   erodePlanIntegrity,
   finishOpportunity,
   clinchExitUrgency,
@@ -657,7 +659,11 @@ function applyPassiveEffects(
       range: start.range,
       groundPosition: start.groundPosition,
       isControlled,
-      intensity: start.position === 'distance' ? 1 : 1.15,
+      intensity:
+        (start.position === 'distance' ? 1 : 1.15) *
+        // The one term a plan has over the tank, and it only applies where it was asked for: a
+        // fighter told to weather it from underneath, actually underneath. See `recoveryIntensity`.
+        (isControlled && start.position === 'ground' ? recoveryIntensity(c) : 1),
       seconds,
     });
     // What tonight has done to the game plan, before the hurt state is decayed away — a fighter
@@ -1216,13 +1222,13 @@ export function bottomExits(
       key: 'standUp',
       capability:
         fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * legImpairment(actor),
-      intent: bottomBias(actor, stance, 'standUp'),
+      intent: bottomRouteBias(stance, 'standUp'),
       opportunity: 1 - GROUND_DOMINANCE[groundPosition] * 0.7,
     },
     {
       key: 'sweep',
       capability: fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * 0.6,
-      intent: bottomBias(actor, stance, 'sweep'),
+      intent: bottomRouteBias(stance, 'sweep'),
     },
   ];
 }
@@ -1258,7 +1264,7 @@ export function bottomWork(
         groundPosition === 'guard'
           ? fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) * 0.8
           : 0.05,
-      intent: bottomBias(actor, stance, 'submission', subChance),
+      intent: bottomWorkBias(actor, stance, 'submission', subChance),
       opportunity: escaping ? 0.5 : 1,
     },
     {
@@ -1269,7 +1275,7 @@ export function bottomWork(
        * submission row already carries so that neither is a bare constant relative to the other.
        */
       capability: fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * 0.8,
-      intent: bottomBias(actor, stance, 'defend'),
+      intent: bottomWorkBias(actor, stance, 'defend'),
       opportunity: escaping ? 1.5 : 1,
     },
   ];
@@ -2266,7 +2272,7 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
    * had no way to say he was still fighting. That is doc 01 § 8 and it is the whole of F1.
    */
   const exits = bottomExits(actor, stance, state.groundPosition);
-  const goingForIt = rng.chance(bottomExitUrgency(actor, stance));
+  const goingForIt = rng.chance(bottomExitUrgency(stance));
 
   let escaping = false;
   if (goingForIt) {
