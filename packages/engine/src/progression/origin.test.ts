@@ -622,10 +622,20 @@ describe('what a created fighter is physically', () => {
       { ...karate, talent: 'grinder' },
       { build: 'rangy', allocation: { speed: 5 } },
     );
-    // Measured 81 / 77 / 72 across the three tiers. Every one of them is a quick fighter, and
-    // they are quick to visibly different degrees.
+    /*
+     * Measured 84.7 against 80.5, and the gap was wider before doc 31 § 19.
+     *
+     * It narrowed for a reason worth keeping: every physical used to blend in `motorLearning` at
+     * 5–25%, so a talent tier reached Speed **twice** — once through explosiveness and again
+     * through how fast the fighter learns skills. Step 6 took motor learning out of the physicals,
+     * because how quickly somebody picks up a jab is not a claim about how quickly they move, and
+     * what is left is the one channel that should have been there all along.
+     *
+     * The freak is still visibly the quicker fighter and still clears 79. He is no longer quicker
+     * *because he is a fast learner*.
+     */
     expect(freak.speed).toBeGreaterThan(79);
-    expect(grinder.speed).toBeLessThan(freak.speed - 5);
+    expect(grinder.speed).toBeLessThan(freak.speed - 3);
   });
 
   it('leaves room above the fighter, so investing does not close the door', () => {
@@ -799,11 +809,23 @@ describe('the deprecated flat background still works', () => {
      * means different things depending on what it is made of.
      */
     const f = legacy();
+    /*
+     * Re-pinned at doc 31 § 19, and the movement is the whole of step 6 visible in one fighter.
+     *
+     * Power 62 → 57, Speed 80 → 42, Cardio 65 → 57, Durability 77 → 63. The five physicals now come
+     * from the ladder rather than from a blend of indices, so this man is read as what he is: a
+     * 161 lb lightweight of ordinary explosiveness whose Speed used to be carrying a 25% share of
+     * his motor learning, which was 86. Take the skill term out of a physical and a good learner
+     * stops being fast for it.
+     *
+     * The ten technical attributes are almost unmoved, which is the check that step 6 stayed inside
+     * its own scope.
+     */
     expect(ATTRIBUTE_KEYS.map((k) => f.attributes[k])).toEqual([
-      62, 80, 65, 77, 57, 46, 44, 47, 61, 60, 51, 44, 44, 47, 45,
+      57, 42, 57, 63, 57, 47, 45, 47, 60, 57, 51, 47, 45, 44, 44,
     ]);
     expect(f.naturals.explosiveness).toBe(78);
-    expect(f.naturals.motorLearning).toBe(86);
+    expect(f.naturals.motorLearning).toBe(67);
     expect(f.reputation).toBe(5);
     expect(f.starPower).toBe(1);
     /*

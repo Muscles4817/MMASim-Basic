@@ -386,8 +386,18 @@ const RAW_ROOM: Readonly<Partial<Record<AttributeKey, number>>> = {
  * Half rather than all, because a discipline's bias is doing two jobs at once — a karateka is
  * quick partly because he is quick and partly because he has spent ten years learning to move —
  * and only the first half is a claim about the body.
+
  */
 const ORIGIN_TO_BODY = 0.5;
+
+/**
+ * How far a point of Speed-over-Strength emphasis moves the force–velocity bias.
+ *
+ * Five allocated points into Speed with none into Strength is a clear statement, and it should land
+ * a fighter most of a standard deviation toward the velocity end — enough to be the fighter the
+ * player asked for, not so much that the roll stops mattering.
+ */
+const BIAS_PER_LEAN_POINT = 2.4;
 
 /**
  * The same, for the points the player spends themselves.
@@ -463,6 +473,7 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
   }
 
   const origin = resolveSpecOrigin(spec);
+  const allocation = spec.allocation ?? {};
 
   const build = BUILD_NATURALS[spec.build ?? 'balanced'];
 
@@ -504,6 +515,35 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
         96,
       ),
     ),
+    /*
+     * Flat and independent, exactly as `generateNaturals` draws it: this is which way a
+     * neuromuscular system expresses itself, not how good it is, so neither the origin's centre nor
+     * the player's build should push it. A build that raised it would be a build that made you
+     * faster *and* weaker, which is not a choice anybody would take.
+     */
+    /*
+     * Where on the force–velocity curve the player has asked to sit.
+     *
+     * Drawn flat like every generated fighter's, and then moved by what the player actually chose.
+     * Doc 31 § 19.3 makes this the axis that separates Speed from Strength, so leaving it to the
+     * dice would mean a player who spent every point on speed rolling force-biased half the time
+     * and getting a slow fighter anyway — which is what the origin tests caught the moment step 6
+     * landed: a karate natural built for speed debuted at 64 against an expected 77.
+     *
+     * The lean is the difference between what was spent on Speed and what was spent on Strength,
+     * from the discipline and the allocation together, because that difference is exactly the
+     * question the curve answers. It is a genuine trade rather than a free upgrade: buying velocity
+     * bias costs maximal force, and buying either extreme costs a little Power, which is the shape
+     * of the curve and the reason the choice is interesting.
+     */
+    forceVelocityBias: toRating(
+      rng.normalClamped(50, 17.5, 5, 95) +
+        BIAS_PER_LEAN_POINT *
+          ((allocation.speed ?? 0) +
+            (origin.attributes.speed ?? 0) -
+            (allocation.strength ?? 0) -
+            (origin.attributes.strength ?? 0)),
+    ),
     engine: toRating(
       rng.normalClamped(centre + (origin.naturals.engine ?? 0) + (build.engine ?? 0), 11, 30, 96),
     ),
@@ -530,7 +570,6 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
   const potential = ceilingsFromNaturals(naturals, body, rng);
 
   // --- Current attributes ------------------------------------------------------------------
-  const allocation = spec.allocation ?? {};
   const attributes = {} as Attributes;
 
   for (const key of ATTRIBUTE_KEYS) {

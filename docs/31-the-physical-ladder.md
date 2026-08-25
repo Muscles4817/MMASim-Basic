@@ -1919,3 +1919,173 @@ that distinct archetypes must be common, not a set of coefficients to fit.
 **The lower tail is less strongly calibrated than the upper one** (§ 17.1). All fifty extreme roster
 placements are positive, and none was invented to balance that. Absence of landmarks at the bottom is
 not evidence of absence of weak athletes, and population work must not read it as such.
+
+---
+
+## 19. Step 6: the ladder reaches the generator
+
+The change the whole redesign has been building toward. Until now the ladder existed in
+`physicalScale.ts` and in the calibration roster, and the generator computed its physicals a
+completely different way — five ad-hoc linear blends on a 1–100 index scale, every coefficient a
+guess:
+
+```
+power    = explosiveness × 0.60 + lean × 0.25 + skill × 0.15
+strength = (explosiveness + lean) / 2 × 0.90 + skill × 0.10
+cardio   = engine × 0.85 + skill × 0.15 − max(0, (carried − 60) / 40) × 8
+```
+
+Each of the five is now the ladder itself:
+
+```
+rating = medianRatingAtMass(key, sex, walking, lean) + individual × ratingSd(key)
+```
+
+### 19.1 What comes for free, and what left
+
+**The sex pivot arrives in generation.** `medianRatingAtMass` takes a sex and reads
+`PIVOT_WALKING_WEIGHT_LBS`, so § 2.3's per-sex pivot finally applies to the world and not only to
+the roster. Before this, a 135 lb woman and a 135 lb man got the same Power ceiling from the same
+`explosiveness`. Nothing in the new code says "female" anywhere.
+
+**Lean against carried stops being a coefficient.** Power, Strength and Durability read lean mass;
+Speed and Cardio read everything the fighter has to move. That is `PHYSICAL_SCALE[key].basis`.
+
+**`carriedPenalty` is gone.** Cardio's mass exponent is −0.25, so a heavyweight's engine falls out of
+the same equation that raises his Power. The old hinge at carried-index 60 was that fact drawn by
+hand, and it applied to nobody below the hinge.
+
+**Motor learning leaves the physicals.** All five blended it at 5–25%, making every physical partly a
+function of how fast the fighter learns _skills_ — a shared latent inflating § 13.1's correlations,
+and a category error besides.
+
+### 19.2 The mass law alone made the correlation problem worse
+
+Worth recording because it is counter-intuitive and it is the reason the decoupling could not be
+skipped. Power × Strength went from **0.85 to 0.92**: both read `explosiveness`, and now both also
+read lean mass with a positive exponent, so the ladder added a second shared term to a pair that
+already had one.
+
+### 19.3 The force–velocity curve
+
+Maximal force and unloaded velocity are two ends of one curve and a muscle cannot sit at both. So
+`explosiveness` keeps its job as _how good the neuromuscular system is_, and one new natural —
+**`forceVelocityBias`** — says _where on the curve it sits_. Drawn flat and independent of
+`athletic`, because it is not a quality: a world-class athlete is no likelier to be force-biased
+than a club fighter, and centring it on athleticism would have made it a fifth measure of how good
+somebody is.
+
+Three consequences, in order of how much work they do:
+
+**Peak Power sits on the force side of the curve, not the middle.** The textbook vertex is central,
+and the first draft put it there — which made "powerful but not especially fast" a 2.3% shape
+against "fast but not especially powerful" at 5.3%, because a force-biased fighter was docked as
+hard as a velocity-biased one. The sport says otherwise and so does the mechanics: a strike lands
+momentum and the mass behind it is part of the product. The three hardest hitters in the roster are
+Ngannou, Lewis and Hunt, and none of them is quick. The vertex moves half a sigma toward force.
+
+**Strength reads muscle share.** Maximal force scales with contractile cross-section, and
+`frameIndex` and `muscleIndex` are already independent body variables saying exactly that. Their
+_difference_ is used, because total lean mass is in the ladder's mass term already and reading it
+twice would count the same fact twice. This is what makes "strong but not explosive" — gym strength
+with no snap, one of the most ordinary shapes in the sport — reachable at all.
+
+**Speed and Strength take a smaller share of `explosiveness` than Power does**, which is what lets
+the ends of the curve separate from its middle.
+
+### 19.4 The acceptance criterion is archetype frequency, not a coefficient
+
+Per § 16.2. `tests/statistical/physical-archetypes.test.ts` measures the population directly, on
+within-division percentiles, because the question is about the fighter and not his weight class.
+
+| archetype                               | share | per 30-man division |
+| --------------------------------------- | ----: | ------------------: |
+| powerful, not especially fast           |  4.6% |                 1.4 |
+| fast, not especially powerful           |  7.8% |                 2.3 |
+| strong, not explosive                   |  3.3% |                 1.0 |
+| powerful, poor cardio                   |  3.6% |                 1.1 |
+| technically gifted, physically ordinary |  1.6% |                 0.5 |
+| freakish and uneven                     |  7.5% |                 2.3 |
+
+And the other half, which stops the criterion being satisfiable by making everything independent
+noise: **4.2%** of fighters are uniformly strong or uniformly weak across all five. Five independent
+attributes would give 0.5%; one shared scalar would give most of the roster. Shared physiology is
+supposed to be visible, and it is.
+
+The correlations that fell out — never fitted to:
+
+| pair                | before step 6 |     after | roster |
+| ------------------- | ------------: | --------: | -----: |
+| power × strength    |          0.85 |  **0.72** |   0.65 |
+| power × speed       |          0.89 |  **0.20** |  −0.10 |
+| speed × strength    |             — | **−0.22** |  −0.33 |
+| cardio × durability |             — |      0.35 |   0.33 |
+| power × cardio      |             — |      0.21 |  −0.65 |
+
+### 19.5 Two things the comparison itself got wrong
+
+**§ 13.9.3 compared the wrong columns.** It read the roster's ρ = 0.34 for Power × Strength against
+the generator's 0.85 — but 0.34 was measured on the **sigma placements**, which exclude the mass
+term entirely, and 0.85 on ratings, which do not. The comparable roster figure is 0.65. The
+conclusion that the generator was collapsing distinct profiles was right; the size of the gap was
+overstated by roughly half.
+
+**Power × Cardio still disagrees in sign** — roster −0.65, generator +0.21 — and the cause is
+composition rather than physiology. The roster holds nine to fourteen fighters in every division, so
+mass variation dominates it; a quarter of generated men are welterweights, so mass varies less and
+the shared `athletic` centre shows through. Recorded rather than tuned away, because the shape it
+stands for is measured directly: "powerful with poor cardio" is 3.6% of the population.
+
+### 19.6 The landmarks are rare, and that is arithmetic
+
+An early draft of `generator-vs-roster.test.ts` asserted every roster rating fell inside the range of
+a 600-fighter generated division. It failed on eleven entries, nine of them Cardio — and the
+assertion was wrong, not the generator. A roster entry is placed in sigmas above his _major
+promotion_ division; a generated division is everybody. Dvalishvili at +2.9σ over the UFC median sits
+at **+3.54σ** over the population one, which is rarer than one in six hundred by construction.
+
+Asked properly — how far into its own tail must the generator reach? — the answer is that the most
+extreme landmark in the file is Covington's Cardio at **+3.80σ**, and nothing exceeds four. These are
+fighters the world will produce given enough of them, which is what a landmark should be.
+
+### 19.7 What it broke, and why each break was correct
+
+Five tests failed, and none of them was re-baselined without an argument.
+
+**Player builds had no say in the force–velocity bias.** A created fighter who spent every
+discretionary point on Speed rolled his bias at random and got a slow fighter half the time —
+a karate natural built for speed debuted at 64 against an expected 77. The bias is now moved by the
+difference between what was spent on Speed and what was spent on Strength, from discipline and
+allocation together. That is a real trade rather than a free upgrade: velocity bias costs maximal
+force, and either extreme costs a little Power.
+
+**Talent separates the physicals less than it did**, and should. Freak against grinder on Speed was
+a five-point gap and is now 4.2. Every physical used to blend in `motorLearning` at 5–25%, so a
+talent tier reached Speed _twice_ — once through explosiveness and again through how fast the
+fighter learns skills. The freak is still visibly quicker; he is no longer quicker _because he is a
+fast learner_.
+
+**"Elite physical ceiling ≥ 80" stopped being a sensible threshold.** `talent-axes.test.ts` wanted
+more than 3% of local-level fighters to clear it, and the old model gave 6.8%. On the absolute
+ladder that reading says one regional fighter in fifteen is better than the best lightweight in the
+UFC — § 4.3 puts a major-promotion lightweight's best-of-thirty Power at 78. The requirement it stood
+for is kept and asked against the population instead: what share of local fighters are top-5% of the
+whole sport at something?
+
+**The physical spread bound pointed at an artefact.** It bounded each physical against what the
+pre-ladder generator happened to produce — cardio 13.8, which was `engine × 0.85 + motorLearning ×
+0.15` inheriting the widest natural in the model. The ladder states the answer: within a population
+at one mass the spread is `ratingSd(key)`, 9.7 to 11.3. Bounding against the doc's own number is
+bounding against the design.
+
+**One golden fighter moved**, and the movement is step 6 in a single case: Power 62 → 57, Speed
+80 → 42, Cardio 65 → 57, Durability 77 → 63, with the ten technical attributes almost unmoved. His
+motor learning is 67, and a quarter of it used to be counted as Speed.
+
+### 19.8 Still open
+
+- **`constitution` has not been split** into neurological and structural robustness (§ 14).
+- **Cardio's equation shape** (§ 14.4) — capacity × conditioning rather than one additive term.
+- **The residual index-scale artefact below 70.5" / 63.8"** (§ 18.4).
+- **The lower tail of the roster is weakly calibrated** (§ 17.1) — all fifty extreme placements are
+  positive, and population work must not read that as evidence about weak athletes.

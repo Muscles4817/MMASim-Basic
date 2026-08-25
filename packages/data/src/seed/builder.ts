@@ -102,6 +102,13 @@ function deriveNaturals(spec: FighterSpec): Naturals {
 
   return {
     explosiveness: toRating(a.power * 0.55 + a.speed * 0.35 + a.strength * 0.1),
+    /*
+     * Which way this fighter's neuromuscular system leans, read off the gap between the two
+     * attributes that sit at either end of the force–velocity curve. A seeded fighter whose Speed
+     * outruns his Strength is velocity-biased and vice versa, and one whose are level sits at 50 —
+     * which is where the curve puts peak Power, so the derivation and the ceiling agree.
+     */
+    forceVelocityBias: toRating(50 + (a.speed - a.strength) * 0.6),
     engine: toRating(a.cardio * 0.85 + a.composure * 0.15),
     constitution: toRating(a.durability * 0.9 + a.strength * 0.1),
     recovery: toRating(a.cardio * 0.5 + a.durability * 0.3 + a.composure * 0.2),

@@ -65,6 +65,7 @@ export const TEST_DAY: GameDay = 0;
 export function makeNaturals(overrides: Partial<Naturals> = {}): Naturals {
   return {
     explosiveness: 50,
+    forceVelocityBias: 50,
     engine: 50,
     constitution: 50,
     recovery: 50,

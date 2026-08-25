@@ -39,13 +39,14 @@ import {
 } from '../ratings/attributes.js';
 import { generateName } from './names.js';
 import {
-  carriedMassIndex,
-  leanMassIndex,
+  leanMassLbs,
   physiqueOf,
   sampleBodyForDivision,
+  walkingWeightLbs,
   walkingWeightLbs as walkingWeightOf,
   type Body,
 } from './body.js';
+import { medianRatingAtMass, ratingSd, type PhysicalScaleKey } from '../ratings/physicalScale.js';
 
 export interface GenerationOptions {
   id: string;
@@ -226,6 +227,17 @@ export function generateNaturals(rng: Rng, tier: number): Naturals {
 
   return {
     explosiveness: body(14),
+    /*
+     * Drawn flat, and independent of everything else on purpose.
+     *
+     * Every other body natural is centred on `athletic`, because being a better athlete really does
+     * raise all of them together — that shared centre is what produces the plausible correlation
+     * doc 31 § 16.2 asks for. This one is not a quality at all. It is *which way* a given
+     * neuromuscular system expresses itself, and a world-class athlete is no more likely to be
+     * force-biased than a club fighter is. Centring it on `athletic` would make it a fifth
+     * measure of how good somebody is, which is the failure the whole redesign exists to avoid.
+     */
+    forceVelocityBias: toRating(rng.fork('fvb').normalClamped(50, 17.5, 5, 95)),
     engine: body(14),
     constitution: body(13),
     recovery: body(12),
@@ -240,59 +252,152 @@ export function generateNaturals(rng: Rng, tier: number): Naturals {
 }
 
 /**
- * Per-attribute ceilings implied by a set of naturals.
+ * Where a natural sits in the professional population, in standard deviations.
  *
- * Each attribute is capped by the physical qualities it actually depends on, plus a skill
- * term from motor learning. This is why there is no single "potential" number: a fighter
- * can have a 90 ceiling in wrestling and a 55 ceiling in power, and those are different
- * facts about their body.
+ * Measured rather than assumed: over 6,000 debutants drawn the way `replenish` draws them — the
+ * eight-and-a-half per cent prospect draw included — every body natural comes out at mean 58 with a
+ * standard deviation of 17.5. The mapping is stated here as a constant and re-measured by
+ * `generation-profile.test.ts`, so if the naturals pipeline is ever retuned the drift shows up as a
+ * failing test rather than as a quietly wrong ladder.
+ *
+ * The offset matters. `medianRatingAtMass` returns rating 50 for the median professional of that sex
+ * at that mass, so a fighter has to map to **zero sigma at the population centre** or the whole
+ * generated world sits off the scale it is supposed to share with the calibration roster.
+ */
+const POPULATION_NATURAL = { mean: 58, sd: 17.5 };
+
+const naturalSigma = (natural: number): number =>
+  (natural - POPULATION_NATURAL.mean) / POPULATION_NATURAL.sd;
+
+/**
+ * The attribute ceilings a body and a set of naturals imply.
+ *
+ * **The five physicals now come from the ladder.** Doc 31 § 12 step 6, and the change the whole
+ * redesign has been building toward. What was here before was five ad-hoc linear combinations on a
+ * 1–100 index scale:
+ *
+ * ```
+ *   power    = explosiveness × 0.60 + lean × 0.25 + skill × 0.15
+ *   strength = (explosiveness + lean) / 2 × 0.90 + skill × 0.10
+ *   cardio   = engine × 0.85 + skill × 0.15 − max(0, (carried − 60) / 40) × 8
+ * ```
+ *
+ * Every coefficient there was a guess, and the arithmetic could not express the thing § 2 spent its
+ * length establishing — that each physical is a logarithm of a measurable quantity, with its own
+ * exponent and its own mass basis. Each of the five is now:
+ *
+ * ```
+ *   rating = medianRatingAtMass(key, sex, walking, lean) + individual × ratingSd(key)
+ * ```
+ *
+ * Four things fall out that the old form had to be told, or could not be told at all.
+ *
+ * **The sex pivot arrives.** `medianRatingAtMass` takes a sex and reads `PIVOT_WALKING_WEIGHT_LBS`,
+ * so the female ladder is finally the female ladder in generation and not only in the calibration
+ * roster. Nothing below says "female" anywhere.
+ *
+ * **Lean against carried stops being a coefficient.** Power, Strength and Durability read lean mass
+ * because fat is not contractile; Speed and Cardio read everything the fighter has to move. That is
+ * `PHYSICAL_SCALE[key].basis`, not a weight somebody picked.
+ *
+ * **`carriedPenalty` is gone.** Cardio's mass exponent is −0.25, so a heavyweight's engine falls out
+ * of the same equation that raises his Power. The old hinge at carried-index 60 was that fact drawn
+ * by hand, and it applied to nobody below the hinge.
+ *
+ * **Motor learning leaves the physicals entirely.** All five used to blend it in at 5–25%, which
+ * made every physical partly a function of how fast the fighter learns *skills* — one more shared
+ * latent inflating the correlations § 13.1 measured, and a category error besides. How quickly
+ * somebody picks up a jab has nothing to do with how hard they punch.
+ *
+ * The ten technical attributes are untouched. They are index blends and step 6 is not their step.
  */
 export function ceilingsFromNaturals(naturals: Naturals, body: Body, rng: Rng): Attributes {
   const skill = naturals.motorLearning;
   const noise = () => rng.range(-6, 6);
 
+  const walking = walkingWeightLbs(body);
+  const lean = leanMassLbs(body);
+
+  /** A physical, on the ladder: the median for this body, moved by this fighter's own quality. */
+  const physical = (key: PhysicalScaleKey, sigma: number): number =>
+    toRating(medianRatingAtMass(key, body.sex, walking, lean) + sigma * ratingSd(key) + noise());
+
   /*
-   * Doc 31 § 12 step 4. These three replace `naturals.frame`, which was `walkingWeight / 300 × 100`
-   * and therefore a proxy for the division before the body model landed.
+   * The force–velocity curve, which is what stops Power, Speed and Strength being one number.
    *
-   * The coefficients below are untouched: `leanMassIndex` is scaled to land where `frame` landed, so
-   * this is a substitution of the *variable* rather than a retune of the equations. What changes is
-   * that the number now knows the difference between a lean fighter and a soft one of the same
-   * weight, and that Power, Strength and Durability read contractile mass while Cardio reads
-   * everything the fighter has to carry.
-   */
-  const lean = leanMassIndex(body);
-  const carried = carriedMassIndex(body);
-
-  const cap = (physical: number, skillWeight: number): number =>
-    toRating(physical * (1 - skillWeight) + skill * skillWeight + noise());
-
-  /*
-   * Frame enters power and durability. Doc 23 § 4.4.
+   * Doc 31 § 13.1 measured them at rho 0.85 and 0.89 in the generated population against 0.34 and
+   * 0.30 across the calibration roster, and the cause was never subtle: all three read
+   * `explosiveness` and nothing else. Putting the mass law underneath them made it *worse* — Power
+   * and Strength both read lean mass with a positive exponent, so they went to 0.92.
    *
-   * On a scale doc 02 declares *absolute across divisions*, a 135 lb bantamweight and a 265 lb
-   * heavyweight with the same explosiveness had identical punch-force ceilings. Body mass is a
-   * primary determinant of peak punch force, and head and neck mass is what resists head
-   * acceleration. `strength` already read `(explosiveness + frame)/2` and is the template.
+   * The physiology the old form was missing is that maximal force and unloaded velocity are the two
+   * ends of one curve, and a muscle cannot sit at both. `explosiveness` is how good the
+   * neuromuscular system is; `forceVelocityBias` is where on the curve it sits. A fighter at the
+   * force end is strong and slow, one at the velocity end is fast and weak, and **Power peaks in the
+   * middle** — which is not a modelling convenience but the actual shape of the curve, since
+   * mechanical power is force times velocity and maximising a product means balancing its terms.
+   *
+   * So the quadratic is the load-bearing part. It is what makes Power something other than a
+   * rescaling of the other two: a fighter can be exceptional at Power while being unremarkable at
+   * both Strength and Speed, and two fighters with identical Strength can differ by a division's
+   * worth of Power. `POWER_BIAS_PENALTY` is subtracted against its own mean so that the average
+   * fighter is not quietly docked for having a bias at all.
    */
-  const withMass = (physical: number, massWeight: number, skillWeight: number): number =>
-    toRating(
-      physical * (1 - massWeight - skillWeight) + lean * massWeight + skill * skillWeight + noise(),
-    );
+  const quality = naturalSigma(naturals.explosiveness);
+  const bias = (naturals.forceVelocityBias - 50) / POPULATION_NATURAL.sd;
 
   /*
-   * And it works against cardio, for the same physiology read the other way: aerobic capacity is
-   * measured per kilogram, so a heavyweight does not have a lightweight's engine however he
-   * trains. The same fact appears again as the interference effect in `development.ts`.
+   * How much of this body's lean mass is muscle rather than skeleton.
+   *
+   * Maximal force scales with contractile cross-section, and `frameIndex` and `muscleIndex` are
+   * already independent variables that say exactly this — a big-boned fighter carrying moderate
+   * muscle and a small-framed one carrying a lot can weigh the same and are not equally strong.
+   * The *difference* is used rather than the muscle index alone because total lean mass is already
+   * in the ladder's mass term, and reading it twice would be counting the same fact twice; the
+   * share is what is left over once mass is accounted for.
+   *
+   * This is what makes "strong but not explosive" reachable. Without it, Strength was a rescaling
+   * of `explosiveness` and a bias, so gym strength with no snap — one of the most ordinary shapes
+   * in the sport — could only happen by noise.
    */
-  const carriedPenalty = Math.max(0, (carried - 60) / 40) * 8;
+  const MUSCLE_SHARE_SPREAD = 24;
+  const density = (body.muscleIndex - body.frameIndex) / MUSCLE_SHARE_SPREAD;
+
+  const BIAS_SPLIT = 1.0;
+  const DENSITY_ON_STRENGTH = 0.6;
+  const QUALITY_ON_ENDS = 0.78;
+  const POWER_BIAS_PENALTY = 0.34;
+
+  /*
+   * Peak Power sits on the **force** side of the curve, not at its midpoint.
+   *
+   * A textbook power curve peaks in the middle, and the first draft of this put it there — which
+   * made "powerful but not especially fast" a 2.3% shape against "fast but not especially powerful"
+   * at 5.3%, because a force-biased fighter was docked exactly as hard as a velocity-biased one.
+   * The sport says otherwise, and so does the mechanics: a strike lands momentum, and the mass
+   * behind it is part of the product. The hardest hitters in the file are Ngannou, Lewis and Hunt,
+   * none of whom is quick.
+   *
+   * So the vertex moves half a sigma toward force. The subtracted term is the mean of the quadratic
+   * at that vertex, `var(bias) + peak²`, so that shifting it changes who is powerful without
+   * changing how powerful the average fighter is.
+   */
+  const POWER_BIAS_PEAK = -0.5;
+  const powerCurve = (b: number): number =>
+    POWER_BIAS_PENALTY * ((b - POWER_BIAS_PEAK) ** 2 - (1 + POWER_BIAS_PEAK ** 2));
+
+  const cap = (physicalInput: number, skillWeight: number): number =>
+    toRating(physicalInput * (1 - skillWeight) + skill * skillWeight + noise());
 
   return {
-    power: withMass(naturals.explosiveness, 0.25, 0.15),
-    speed: cap(naturals.explosiveness, 0.25),
-    cardio: toRating(cap(naturals.engine, 0.15) - carriedPenalty),
-    durability: withMass(naturals.constitution, 0.15, 0.05),
-    strength: cap((naturals.explosiveness + lean) / 2, 0.1),
+    power: physical('power', quality - powerCurve(bias)),
+    speed: physical('speed', QUALITY_ON_ENDS * quality + BIAS_SPLIT * bias),
+    cardio: physical('cardio', naturalSigma(naturals.engine)),
+    durability: physical('durability', naturalSigma(naturals.constitution)),
+    strength: physical(
+      'strength',
+      QUALITY_ON_ENDS * quality - BIAS_SPLIT * bias + DENSITY_ON_STRENGTH * density,
+    ),
     strikingOffence: cap(naturals.explosiveness, 0.7),
     kicking: cap(naturals.explosiveness, 0.7),
     strikingDefence: cap((naturals.explosiveness + naturals.recovery) / 2, 0.7),
