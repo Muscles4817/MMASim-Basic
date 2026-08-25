@@ -357,6 +357,16 @@ export const TRANSITION_RANGE: Readonly<Record<string, Range>> = {
   neutral: 'outside',
   /** A clean break out of the tie-up. Hands range, not kicking range. */
   clinchBreak: 'boxing',
+  /**
+   * The man *holding* the tie-up choosing to let go of it.
+   *
+   * Hands range too, and that is not laziness: two men who are both already standing when they
+   * separate are within arm's reach of each other however it happened, which is exactly what the
+   * top disengage is not. What differs is booked in the stickiness instead — this man picked the
+   * moment and is balanced when the space appears, so he keeps it a little longer than somebody who
+   * has just wrestled his way free.
+   */
+  clinchRelease: 'boxing',
   /** The referee separating a stalled tie-up: he steps between them and waves them on. */
   refSeparation: 'outside',
   /** Wall-walked up with the other man disengaging. */

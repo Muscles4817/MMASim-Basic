@@ -222,9 +222,18 @@ interface Fingerprint {
  * A tactical change that moves these on purpose *should* fail this test and rewrite the numbers
  * with its own measurement. That is the guard working, not the guard being in the way.
  *
- * **Re-recorded three times so far**, by the transition split, by rebasing positional maintenance
- * onto control capability, and by giving the man on top a voluntary exit. Every time it failed on
- * all three matchups, which is what it is for.
+ * **Re-recorded four times so far**, by the transition split, by rebasing positional maintenance
+ * onto control capability, by giving the man on top a voluntary exit, and by giving the tie-up an
+ * instruction of its own. Every time it failed on all three matchups, which is what it is for.
+ *
+ * The fourth re-recording, by D3 + D13 + D15, and it is the smallest of the four: **only `punches`
+ * failed**, by 0.3%, 1.1% and 1.1%. Everything else was already inside the recorded precision. That
+ * is the shape a change should have when its three parts are each level-neutral for a fighter with
+ * no plan — every new alignment reads exactly 1 at zero urgency, and the archetypes here have no
+ * plan. What moved is the clinch: 42.2 seconds a fight to 39.7, 25.3 to 24.0 and 74.4 to 71.8, as
+ * the man holding a tie-up gained the option of letting go of it, with the punches following the
+ * time back out to range.
+ *
  *
  * The third re-recording, by D2. The largest movement the fingerprint has recorded, and every part
  * of it is the new action: standing time up 12%, 8% and 12% across the three matchups, ground time
@@ -247,22 +256,22 @@ interface Fingerprint {
  */
 const BASELINE: Readonly<Record<string, Fingerprint>> = {
   'striker-v-grinder': {
-    punches: 20.448, kicks: 8.423, takedowns: 6.572, submissions: 6.205,
-    clinchEntries: 2.107, getUps: 2.005, advances: 3.8, sweeps: 1.152,
-    distanceSeconds: 327.917, clinchSeconds: 42.15, groundSeconds: 438.443,
-    koRate: 0.247, submissionRate: 0.168, meanRound: 2.39,
+    punches: 20.382, kicks: 8.53, takedowns: 6.412, submissions: 5.972,
+    clinchEntries: 2.105, getUps: 1.955, advances: 3.685, sweeps: 1.087,
+    distanceSeconds: 330.867, clinchSeconds: 39.68, groundSeconds: 424.123,
+    koRate: 0.27, submissionRate: 0.18, meanRound: 2.355,
   },
   'contender-v-canFodder': {
-    punches: 12.687, kicks: 3.582, takedowns: 2.977, submissions: 4.192,
-    clinchEntries: 1.16, getUps: 0.782, advances: 1.873, sweeps: 0.268,
-    distanceSeconds: 149.403, clinchSeconds: 26.4, groundSeconds: 211.823,
-    koRate: 0.605, submissionRate: 0.308, meanRound: 1.565,
+    punches: 12.823, kicks: 3.738, takedowns: 2.923, submissions: 4.142,
+    clinchEntries: 1.212, getUps: 0.753, advances: 1.892, sweeps: 0.258,
+    distanceSeconds: 156.473, clinchSeconds: 23.968, groundSeconds: 208.59,
+    koRate: 0.63, submissionRate: 0.288, meanRound: 1.56,
   },
   'guardPlayer-v-smotherer': {
-    punches: 15.912, kicks: 3.482, takedowns: 8.538, submissions: 10.112,
-    clinchEntries: 3.592, getUps: 2.008, advances: 4.72, sweeps: 1.522,
-    distanceSeconds: 323.787, clinchSeconds: 74.36, groundSeconds: 549.885,
-    koRate: 0.032, submissionRate: 0.203, meanRound: 2.725,
+    punches: 16.093, kicks: 3.528, takedowns: 8.452, submissions: 10.098,
+    clinchEntries: 3.702, getUps: 2.072, advances: 4.782, sweeps: 1.517,
+    distanceSeconds: 334.35, clinchSeconds: 71.802, groundSeconds: 551.758,
+    koRate: 0.032, submissionRate: 0.205, meanRound: 2.735,
   },
 };
 

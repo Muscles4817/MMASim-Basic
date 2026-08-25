@@ -87,6 +87,18 @@ Stated precisely, because the two halves land in different places in the code:
 > **Tactical intent primarily controls attempt selection and frequency. Capability and opposition
 > primarily control success.**
 
+Stated for a *state* rather than for an action, which is the form D11 needed:
+
+> **Tactical desire primarily controls how much of a state the fighter seeks. Capability and
+> opposition primarily determine who wins and controls that state.**
+
+The second form is not a softening of the first, it is the first one applied to occupancy — and it
+had to be measured before it could be asserted, because the intuitive phrasing (*capability should
+outweigh desire on retention*) is not what the engine does. In the clinch, on **how much** tie-up
+there is, desire wins 5.6:1 against capability's 1.9:1. On **whose tie-up it is**, capability wins
+twelve to one against three. Both halves are now enforced, and the wording follows the measurement
+rather than the other way round.
+
 Nothing in the tactical layer makes anybody better at anything. A 25-wrestling fighter told to take
 it to the floor shoots constantly, misses, gets countered and empties his tank — that is a *failed
 game plan*, and producing it is the point. The clearest demonstration is range: a pressure plan
@@ -131,6 +143,14 @@ fighters, and that it is neutral across the population — unless moving the pop
 explicit, named purpose.
 
 *Enforced by* `tests/statistical/shape-not-level.test.ts`.
+
+**1b. Intents own what stays within or advances the grappling; `preferredState` owns the exits back
+to the feet.** Where the two fields meet, and it was learned twice before it was stated. `topIntent`
+already contains `advance` and `submit`, both of which change the state — what it cannot contain is
+*do I want to be on the floor at all*, because that is the question `preferredState` exists to answer.
+So `standUpFromTop` reads `preferredState` (D2) and `clinchDisengage` reads it too (D13), while
+`clinchIntent` owns the takedown out of a tie-up (D3) exactly as `topIntent` owns the guard pass. The
+test is not *does this action change the state* — most of them do — but *does it leave the grappling*.
 
 ### 4. Standing is three states: `outside | boxing | pocket`.
 

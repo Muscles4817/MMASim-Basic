@@ -259,6 +259,15 @@ export interface FightStats {
   topExitsAttempted: number;
   topExitsLanded: number;
   /**
+   * Deliberate releases of a tie-up by the fighter *holding* it, and the ones that came off.
+   *
+   * The fourth attempt/landed pair, for the fourth transition. `escapesAttempted` already counts the
+   * held man fighting his way out; this is the other end of the same wish, and keeping them apart is
+   * what lets "he let them go" be told from "they got away" (doc 31 § D13).
+   */
+  clinchExitsAttempted: number;
+  clinchExitsLanded: number;
+  /**
    * Beats resolved from top position, whatever was chosen on them.
    *
    * The denominator `bottomWorkBeats` is for the other half of the floor, and it exists for the
@@ -398,6 +407,8 @@ export function emptyStats(): FightStats {
     bottomWorkBeats: 0,
     topExitsAttempted: 0,
     topExitsLanded: 0,
+    clinchExitsAttempted: 0,
+    clinchExitsLanded: 0,
     topBeats: 0,
     damageDealt: 0,
   };
