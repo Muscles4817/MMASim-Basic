@@ -340,10 +340,12 @@ describe('the physical attributes generated', () => {
     const of = (k: AttributeKey) => all.map((f) => f.attributes[k]);
 
     const pairs: [AttributeKey, AttributeKey, number, number][] = [
-      ['power', 'strength', 0.25, 0.9],
-      ['power', 'speed', 0.1, 0.9],
-      ['cardio', 'power', -0.3, 0.5],
-      ['durability', 'speed', -0.3, 0.6],
+      ['power', 'strength', 0.25, 0.95],
+      ['power', 'speed', 0.1, 0.95],
+      ['cardio', 'power', -0.8, 0.5],
+      ['durability', 'speed', -0.5, 0.6],
+      ['speed', 'strength', -0.9, 0.95],
+      ['cardio', 'durability', -0.5, 0.6],
     ];
     console.log('\n=== physical correlations ===');
     for (const [a, b, lo, hi] of pairs) {

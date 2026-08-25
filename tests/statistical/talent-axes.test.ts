@@ -38,8 +38,10 @@ import {
   createRng,
   generateFighter,
   overallRating,
+  ratingSd,
   type AttributeKey,
   type Fighter,
+  type PhysicalScaleKey,
 } from '@mmasim/engine';
 
 const PHYSICAL = ATTRIBUTES_BY_GROUP.physical;
@@ -205,17 +207,36 @@ describe('every kind of fighter the sport contains can be generated', () => {
      * Measured at local level, share with any physical ceiling of 80 or better:
      * **0.8% before, 6.8% after** — one in a hundred and twenty-five, to one in fifteen.
      */
+    /*
+     * **Re-expressed at doc 31 § 19, because a flat 80 stopped being a sensible threshold.**
+     *
+     * This asked for a physical ceiling of 80 or better and wanted more than 3% of local fighters
+     * to clear it. Once step 6 put the physicals on the absolute ladder, that question changed
+     * meaning: § 4.3 puts a major-promotion lightweight's *best-of-thirty* Power at 78, so one
+     * local fighter in fifteen at 80+ would have said the regional circuit is full of men better
+     * than the best lightweight in the UFC. The old model said exactly that, at 6.8%.
+     *
+     * The requirement it was standing in for is real and is kept: a regional show has to be able to
+     * contain somebody worth scouting. So the question is now asked against the population instead
+     * of against a number — what share of local fighters would be in the top 5% of the whole sport
+     * at something?
+     */
     const local = inBand(BANDS[0]);
+    const topFive = {} as Record<(typeof PHYSICAL)[number], number>;
+    for (const key of PHYSICAL) {
+      const all = fighters.map((f) => f.potential[key]).sort((a, b) => a - b);
+      topFive[key] = all[Math.floor(0.95 * (all.length - 1))]!;
+    }
     const elite =
-      local.filter((f) => PHYSICAL.some((k) => f.potential[k] >= 80)).length / local.length;
+      local.filter((f) => PHYSICAL.some((k) => f.potential[k] >= topFive[k])).length / local.length;
     expect(
       elite,
-      `${(elite * 100).toFixed(1)}% of local-level fighters have an elite physical ceiling`,
-    ).toBeGreaterThan(0.03);
+      `${(elite * 100).toFixed(1)}% of local-level fighters are top-5% at some physical`,
+    ).toBeGreaterThan(0.02);
     // And still rare, or "elite" has stopped meaning anything.
     expect(
       elite,
-      `${(elite * 100).toFixed(1)}% of local-level fighters have an elite physical ceiling`,
+      `${(elite * 100).toFixed(1)}% of local-level fighters are top-5% at some physical`,
     ).toBeLessThan(0.2);
   });
 
@@ -297,20 +318,31 @@ describe('the split did not narrow physical diversity', () => {
    *   after     11.4    14.4    14.2       13.7       8.9
    * ```
    */
-  it('keeps every physical attribute at least as spread as it was', () => {
-    const BEFORE: Record<string, number> = {
-      power: 11.2,
-      speed: 14.2,
-      cardio: 13.8,
-      durability: 13.0,
-      strength: 8.7,
-    };
+  it('keeps every physical spread as wide as the ladder says it should be', () => {
+    /*
+     * **Re-pointed at doc 31 § 19.** This used to bound each physical's spread against what the
+     * pre-ladder generator happened to produce — power 11.2, speed 14.2, cardio 13.8 — on the
+     * reasoning that the step 3 split must not narrow the population. That was the right guard
+     * against step 3 and the wrong one against step 6, because those numbers were never a design
+     * target. They were the output of five ad-hoc index blends, and cardio's 13.8 in particular was
+     * `engine × 0.85 + motorLearning × 0.15` inheriting the widest natural in the model.
+     *
+     * The ladder states the answer instead. Within a population at one mass, a physical's spread is
+     * `ratingSd(key) = D · log₂(1 + CV)` — between 9.7 and 11.3 for the five — and this cohort is
+     * all lightweights, so that is very nearly the whole of it. Bounding against the doc's own
+     * number is bounding against the design; bounding against the old output was bounding against
+     * an artefact.
+     */
     for (const key of PHYSICAL) {
       const spread = sd(fighters.map((f) => f.attributes[key]));
+      const designed = ratingSd(key as PhysicalScaleKey);
       expect(
         spread,
-        `${key} sd ${spread.toFixed(2)} against ${BEFORE[key]} before the split`,
-      ).toBeGreaterThan(BEFORE[key]! * 0.9);
+        `${key} sd ${spread.toFixed(2)} against a designed ${designed.toFixed(1)}`,
+      ).toBeGreaterThan(designed * 0.75);
+      expect(spread, `${key} sd ${spread.toFixed(2)} has blown past its own ladder`).toBeLessThan(
+        designed * 1.6,
+      );
     }
   });
 

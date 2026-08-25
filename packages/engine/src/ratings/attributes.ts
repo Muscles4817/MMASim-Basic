@@ -235,6 +235,7 @@ export function ratingBand(rating: Rating): (typeof RATING_BANDS)[number] {
 
 export const NATURAL_KEYS = [
   'explosiveness',
+  'forceVelocityBias',
   'engine',
   'constitution',
   'recovery',
@@ -314,6 +315,10 @@ export const NATURAL_META: Readonly<Record<NaturalKey, { label: string; blurb: s
   explosiveness: {
     label: 'Explosiveness',
     blurb: 'Fast-twitch ceiling. Caps Power and wrestling burst. First thing age takes.',
+  },
+  forceVelocityBias: {
+    label: 'Force–velocity bias',
+    blurb: 'Whether that fast twitch comes out as strength or as speed. Middle is best for Power.',
   },
   engine: { label: 'Engine', blurb: 'Aerobic ceiling. Caps Cardio. Declines slowly.' },
   constitution: {
