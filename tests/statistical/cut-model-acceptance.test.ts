@@ -443,14 +443,8 @@ describe('the corrected cut model — acceptance criteria', () => {
         continue;
       }
       if (r.fit === 'notViable') continue;
-      if (d.kind === 'outsideBodyModelRange') {
-        // Genuinely still open: this PR fixed the split, not the ceiling, and step 6 owns the rest.
-        expect(
-          d.resolution,
-          `${r.entry.name} is filed as out of range but claims to be resolved`,
-        ).toBeUndefined();
-        continue;
-      }
+      // outsideBodyModelRange follows the reconstruction, not the cut — checked in criterion 9.
+      if (d.kind === 'outsideBodyModelRange') continue;
       expect(
         d.resolution,
         `${r.entry.name} is now ${r.fit} but the disagreement still reads as open`,
@@ -498,10 +492,14 @@ describe('the corrected cut model — acceptance criteria', () => {
         r.entry.estimated.waterCutIndex,
       );
       if (Math.abs(error) < 1) {
-        expect(
-          r.entry.disagreement?.kind,
-          `${r.entry.name} reconstructs cleanly but is filed as outsideBodyModelRange`,
-        ).not.toBe('outsideBodyModelRange');
+        // A filing that has been acted on keeps its evidence and records the outcome, per §14.6's
+        // rule that a disagreement is not deleted when it is fixed.
+        if (r.entry.disagreement?.kind === 'outsideBodyModelRange') {
+          expect(
+            r.entry.disagreement.resolution,
+            `${r.entry.name} builds correctly now but the filing still reads as open`,
+          ).toBeDefined();
+        }
         continue;
       }
       missed.push(`${r.entry.name} ${error.toFixed(1)} lb`);
@@ -509,15 +507,19 @@ describe('the corrected cut model — acceptance criteria', () => {
         r.entry.disagreement?.kind,
         `${r.entry.name} reconstructs ${error.toFixed(1)} lb off and nothing says so`,
       ).toBe('outsideBodyModelRange');
+      expect(
+        r.entry.disagreement?.resolution,
+        `${r.entry.name} still misses but claims to be resolved`,
+      ).toBeUndefined();
     }
     say(`\n\n═══ Bodies the model cannot build ═══\n\n  ${missed.join('\n  ')}`);
     say(
-      '\n  Three of 115, and they are not random: all three are extreme mass-for-height, which is\n' +
-        '  the one dimension the coefficient ceiling truncates. Two of them — Hunt and Andrade — are\n' +
-        '  in the roster *because* they are extreme mass-for-height, so the model is failing exactly\n' +
-        '  where it is being asked the hardest question.',
+      missed.length === 0
+        ? '\n  None. Doc 31 § 18 closed the last of them; the three filings that remain in the roster\n' +
+            '  carry resolutions rather than open disagreements.'
+        : '\n  These are not random: extreme mass-for-height is the one dimension the scale truncates.',
     );
     flush();
-    expect(missed.length).toBeLessThanOrEqual(3);
+    expect(missed.length).toBe(0);
   });
 });
