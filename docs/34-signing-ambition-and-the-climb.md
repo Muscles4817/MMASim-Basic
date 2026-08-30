@@ -1,12 +1,14 @@
-# 28 — Signing, ambition, and the climb
+# 34 — Signing, ambition, and the climb
 
-**Status:** proposal. Nothing in §3 onward is implemented. Every claim in §2 was checked against
+**Status:** proposal. Nothing in §3 onward is implemented — with one exception recorded in
+[35 §0](./35-ways-to-build-doc-34.md): the inter-promotion mobility defect that prompted this
+document was fixed on master by `50d1c1a`, and the fix measures well. Every claim in §2 was checked against
 the source at `656b6d4`, and each row names the file and line it was read from.
 
 > **Corrections, from three independent reviews of this document.** §2's audit was wrong in eight
 > places, and the method that produced it — grepping `packages/` for `handling:` — is the reason
 > for two of them: it excluded `.tsx`, and it missed ES6 shorthand. Each correction below has been
-> verified at the named line. [29 — ways to build this](./29-ways-to-build-doc-28.md) records them
+> verified at the named line. [35 — ways to build this](./35-ways-to-build-doc-34.md) records them
 > in full and rules on what they change.
 >
 > 1. **`Fighter.handling` is not dead.** `PromoterRosterScreen.tsx:129-132` writes it and `:143`
@@ -26,10 +28,10 @@ the source at `656b6d4`, and each row names the file and line it was read from.
 >    anywhere estimates `Fighter.potential`. That is a new subsystem, not wiring.
 > 7. **A reservation price already exists.** `money.ts:172 askingPrice` — market value ×
 >    `purseDemand` × loyalty — with test-only callers. §3.3 claims the game does not have one.
->    It is also a fourth dead money function §2.2 missed, and doc 29 makes it the recommended spine.
+>    It is also a fourth dead money function §2.2 missed, and doc 35 makes it the recommended spine.
 > 8. **§6.1 reopens a settled ruling.** Doc 13's Money section holds that purses are committed on
 >    the contract and that at card time the only live money decisions are the bonus pool and the
->    marketing spend. A negotiated per-bout purse is out; see doc 29 for the derived form that is
+>    marketing spend. A negotiated per-bout purse is out; see doc 35 for the derived form that is
 >    not.
 >
 > Two further defects found by the reviews and not in §2 at all: **an idle world fighter's bank
@@ -58,7 +60,7 @@ the source at `656b6d4`, and each row names the file and line it was read from.
 
 Read alongside [16 — contracts, free agency and managers](./16-contracts-free-agency-managers.md)
 (the contract layer this builds on), [21 — activity, offers and patience](./21-activity-offers-and-patience.md)
-(the promotion's side of a fighter not fighting), [26 — the unsigned pool](./26-the-unsigned-pool.md)
+(the promotion's side of a fighter not fighting), [26 — division depth and the pyramid](./26-division-depth-and-the-pyramid.md)
 (without which the bottom of this document has no population), and
 [13 — promoter mode](./13-promoter-mode.md).
 
@@ -130,7 +132,7 @@ starting position than a dead field: the vocabulary is built, rendered and under
 
 It also means §5 and §16 contradict each other. §5 specifies the plan "per promotion per fighter";
 `Fighter.handling` is a scalar with one owner. Under doc 26's pool a fighter has no promotion while
-several evaluate them at once, and a stored map would be `F × P` of derived state. Doc 29 resolves
+several evaluate them at once, and a stored map would be `F × P` of derived state. Doc 35 resolves
 this at the read site instead.
 
 ### 2.2 The fighter's side

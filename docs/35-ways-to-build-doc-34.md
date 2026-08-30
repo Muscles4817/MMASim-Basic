@@ -1,29 +1,34 @@
-# 29 — Ways to build doc 28
+# 35 — Ways to build doc 34
 
 **Status:** decision document. Nothing implemented. Companion to
-[28 — signing, ambition and the climb](./28-signing-ambition-and-the-climb.md), which describes
+[34 — signing, ambition and the climb](./34-signing-ambition-and-the-climb.md), which describes
 *what* should exist; this one describes *how*, at four different sizes, and records what three
-independent reviews found wrong with doc 28 on the way.
+independent reviews found wrong with doc 34 on the way.
 
-> **The short version.** Doc 28 proposed twelve weights, two utility functions and eleven phases.
+> **The short version.** Doc 34 proposed twelve weights, two utility functions and eleven phases.
 > Three reviews — realism, systems design, and game design — each produced their own candidate
 > implementations, then cross-reviewed and converged. They converged on something smaller and
-> differently shaped than doc 28 proposed:
+> differently shaped than doc 34 proposed:
 >
 > - **The spine is a price in pounds, not a weighted sum.** `money.ts:172 askingPrice` already
->   exists, already applies `purseDemand` and `reSignDiscount`, and has never been called. Doc 28's
+>   exists, already applies `purseDemand` and `reSignDiscount`, and has never been called. Doc 34's
 >   twelve weights become multipliers on one number with a unit — which is cheaper to build, far
 >   cheaper to tune, and satisfies doc 16's "always a price, never a wall" literally rather than by
 >   analogy.
 > - **`handling` is derived at the read site, never written.** A stored plan is exactly the derived
->   state doc 28's own rules forbid, it cannot express doc 26's unsigned fighters, and an AI writer
+>   state doc 34's own rules forbid, it cannot express doc 26's unsigned fighters, and an AI writer
 >   would stamp over the human promoter's own choices.
-> - **Two things must come first, and neither is in doc 28's phasing.** An idle world fighter's
+> - **Two things must come first, and neither is in doc 34's phasing.** An idle world fighter's
 >   bank cannot move, so nobody is ever broke and half the design has no population to act on. And
->   no test in the repo drives `advanceWorld` on the default era, so doc 28 §19 cannot be measured
+>   no test in the repo drives `advanceWorld` on the default era, so doc 34 §19 cannot be measured
 >   at all.
 >
-> **And one thing all four of us missed.** Doc 28 was written from an essay about how fighters
+> **Route 0 has since shipped and is verified — see §0.** The down-to-up ratio went from 2.01:1 to
+> **0.69:1**, lateral churn from 65% to 30%, and a regional starting cohort now puts 132 fighters
+> into a major or the global promotion across a decade where it managed four. What remains open is
+> the *volume* of movement, which nobody has examined.
+>
+> **And one thing all four of us missed.** Doc 34 was written from an essay about how fighters
 > decide, but the concern that prompted it was that fighters do not *move between promotions*.
 > Measured (§1.5), that turns out to be the opposite of what is happening: there are ~300 moves a
 > year, running **two down for every one up**, with 65% pure lateral churn — because
@@ -34,7 +39,7 @@ independent reviews found wrong with doc 28 on the way.
 
 ## How this document was produced
 
-Three reviewers were each given doc 28 and the source, told to verify rather than trust, and asked
+Three reviewers were each given doc 34 and the source, told to verify rather than trust, and asked
 for 4–6 candidate implementations spanning minimal to maximal. They then exchanged positions and
 ruled on the conflicts. Every source claim reproduced here was independently checked at the named
 line before being written down — including one an agent overclaimed, noted in §1.3.
@@ -43,9 +48,9 @@ line before being written down — including one an agent overclaimed, noted in 
 
 ## 1. What the reviews changed
 
-### 1.1 Doc 28's audit was wrong in eight places
+### 1.1 Doc 34's audit was wrong in eight places
 
-All eight are recorded in doc 28's own corrections block and verified at the named lines. The three
+All eight are recorded in doc 34's own corrections block and verified at the named lines. The three
 that change what is cheap and what is not:
 
 | Correction | Consequence |
@@ -54,7 +59,7 @@ that change what is cheap and what is not:
 | The blocking offer inbox item already exists (`world.ts:1955-1995`) | §9's phone call is an existing item with two fields changed, not a new mechanic |
 | A reservation price already exists (`money.ts:172 askingPrice`, test-only callers) | §3's utility function has a cheaper alternative shape — see approach E |
 
-### 1.2 Two defects doc 28 did not find at all
+### 1.2 Two defects doc 34 did not find at all
 
 **An idle world fighter's bank cannot move.** `world.ts:1046` computes
 `net = gross * 0.35 - campCost(8, 55)` — a flat multiplier and a camp at a gym they do not train at
@@ -63,10 +68,10 @@ anywhere; `livingCostPerMonth` (`money.ts:254`) and the real `netPurse` breakdow
 reached through `app/src/game/money.ts:187`.
 
 So being out of the cage is free, and only fighting can cost you money. That is the inverse of the
-sport, and it has a specific consequence for doc 28: `solvency(bank, campCost)` flips on `bank < 0`,
+sport, and it has a specific consequence for doc 34: `solvency(bank, campCost)` flips on `bank < 0`,
 world banks move only by a constant tied to purse size, and purse size is tied to promotion tier —
 so **`solvency` today is a tier check wearing a costume.** Wire `desperationDiscount` onto it and
-small-show fighters accept everything for reasons that have nothing to do with being broke. Doc 28
+small-show fighters accept everything for reasons that have nothing to do with being broke. Doc 34
 §19.3 ("a broke fighter takes fights a solvent one refuses") and §19.5 (journeymen) would both pass
 for entirely the wrong reason, and §19.5's stated target — *rising* bank balances — is currently
 satisfied by every fighter in the world, because banks only ever rise.
@@ -84,11 +89,78 @@ whole method is that a claim is worth what its verification is worth.
 
 ---
 
+## 0. Status: Route 0 has landed, and it worked
+
+**Written before `50d1c1a`; verified after it.** Route 0 (§4) was specified here and then
+implemented independently on master by `50d1c1a` — "One market for offers, a floor under generated
+divisions, and a tape that does not know the result" — which arrived at the same diagnosis from the
+same evidence. Its own comments record the symptom this document measured: *"over five simulated
+years the leader went from 204 fighters to 57"*, against §1.5's finding that 82 of 152 fighters who
+started at the top ended up regional.
+
+What it changed, all of which §4's Route 0 asked for:
+
+- `fRng.pick(pool)` — the uniform draw — replaced by a step-up branch (70% take a step up when one
+  is on the table), then incumbent stickiness, then a need-weighted draw over who has room.
+- The `prestige <= 42 + reputation * 0.9` gate replaced by `standardOf` — the promotion's own
+  signing standard against the fighter's overall rating — because reputation could not tell a
+  regional journeyman from a contender (median 25–27 on every promotion but the leader's 40).
+- The incumbent is always in the pool, closing the one-way valve where a fighter could not re-sign
+  where they already were.
+- Seeded rosters get written contracts, with implicit terms staggered across three years, so the
+  roster is no longer scattered on the first quarterly tick.
+
+It went further than Route 0 specified in one respect: division-depth weighting, so a promotion at
+its roster target but two deep at 185 still signs a middleweight.
+
+### Re-measured, same tool, same seed
+
+`npx vite-node tools/mobility-trace.ts`, ten years, 2026 era, seed `mobility`:
+
+| Criterion (§4's acceptance test) | Target | Before | After |
+| --- | --- | --- | --- |
+| Down-to-up ratio | < 1.3:1 | 2.01:1 | **0.69:1** |
+| Lateral share of tier moves | < 35% | 65% | **29.6%** |
+| Regional cohort reaching major or global in ten years | 15+ | 4 | **132** |
+| Global cohort still global | 60%+ | 17% | **57%** |
+
+| Started | Still active | Ended global | major | regional |
+| --- | ---: | ---: | ---: | ---: |
+| regional | 277 | 67 | 65 | 139 |
+| major | 210 | 70 | 69 | 68 |
+| global | 159 | 90 | 37 | 31 |
+
+Three of four pass, the fourth by two points. **The ladder now runs upward**: 1,146 up-moves against
+789 down over a decade, where it was 311 up against 625 down.
+
+### What the re-measurement leaves open
+
+Three things, none of which block anything, all of which are now the interesting questions:
+
+1. **Retention at the top is 57%, not 60%.** Probably correct rather than a miss — under merit-based
+   movement a fighter who declines *should* fall, and 90 of 159 holding a global roster spot across
+   a decade is a defensible number for the sport. Recorded rather than tuned; the criterion was
+   written blind, before anyone knew what good looked like.
+2. **The volume of movement did not change, only its direction.** ~300 moves a year among ~850
+   fighters, and 79% of fighters end the decade somewhere other than where they started — against
+   83% before. Roughly a third of the sport changes promotion every year, which is a great deal more
+   than the real sport does. Direction was the defect; **volume is now the open question**, and
+   nobody has looked at it.
+3. **Reputation still decays** — p50 26 at the start, 19 after ten years. It no longer gates
+   signings, so it matters less than it did, but `standingScore` and the rankings still read it.
+
+### What this does to the rest of this document
+
+Route 0 is **done**. Route 3's ordering (`P1 → M → …`) becomes `P1 → …`, and P1 — the harness —
+is now the only remaining prerequisite. Everything else below stands as written.
+
+---
+
 ## 1.5 The measurement none of us took, and what it found
 
-Doc 28 was written from an essay about how fighters and promoters *decide*. The concern that
+Doc 34 was written from an essay about how fighters and promoters *decide*. The concern that
 prompted it was narrower and different: **fighters do not move between promotions as their
-circumstances change.** Neither doc 28 nor any of the three reviews measured that, and all four
+circumstances change.** Neither doc 34 nor any of the three reviews measured that, and all four
 approach sets were shaped around decision-making instead. `tools/mobility-trace.ts` measures it —
 ten years of the real `advanceWorld` loop on the 2026 era, seed `mobility`, counting where every
 fighter *goes* rather than where they are.
@@ -169,7 +241,7 @@ Two aggravating factors, both cheap to fix:
 
 ### What this means for the routes below
 
-**Routes 1, 2 and 3 do not fix this.** They were built around doc 28's framing. Route 1 is a UI fix;
+**Routes 1, 2 and 3 do not fix this.** They were built around doc 34's framing. Route 1 is a UI fix;
 route 2 changes matchmaking *within* a promotion; route 3's price governs which *fights* a fighter
 accepts, not which *promotion* signs them. Route 4 fixes it only incidentally, buried among twenty
 other sections. Hence **Route 0**, below, which is new, small, and is the only one aimed at the
@@ -179,11 +251,11 @@ problem.
 
 ## 2. Two prerequisites
 
-Neither is optional, neither is in doc 28's §17, and both are small.
+Neither is optional, neither is in doc 34's §17, and both are small.
 
 ### 2.1 P1 — The harness (`tests/long-sim/world-tick.test.ts`)
 
-Doc 28 §19 says its criteria are "measurable on a twenty-year world". They are not measurable at
+Doc 34 §19 says its criteria are "measurable on a twenty-year world". They are not measurable at
 all today:
 
 - `tests/long-sim/twenty-years.test.ts` **never calls `advanceWorld`** — it drives its own booking
@@ -266,7 +338,7 @@ displayed), and the existing heat hint.
 **Measurement.** Across 20 careers, what fraction of accepted offers are not the lowest-step option?
 If it does not move, the spread is too narrow to be a trade.
 
-> **Note.** Doc 28 §6.1 proposed a *negotiated* per-bout purse. That reopens doc 13's ruling that
+> **Note.** Doc 34 §6.1 proposed a *negotiated* per-bout purse. That reopens doc 13's ruling that
 > purses are committed on the contract and that at card time the only live money decisions are the
 > bonus pool and the marketing spend. It is rejected. The derived form above is not a money
 > decision at card time — it is arithmetic on money already agreed.
@@ -287,8 +359,8 @@ options.handling ?? subject.handling ?? handlingFor(subject, promotion, ctx)
 **Why the read site and not a writer.** Three reasons, and all three reviewers converged on it:
 
 1. A promotion's plan is derived from record, age and need — all of which change under it. Storing
-   it is precisely the drift doc 28 §3.1 forbids.
-2. `Fighter.handling` is a **scalar**, but doc 28 §5 specifies the plan "per promotion per fighter".
+   it is precisely the drift doc 34 §3.1 forbids.
+2. `Fighter.handling` is a **scalar**, but doc 34 §5 specifies the plan "per promotion per fighter".
    Under doc 26's pool a fighter has no promotion while several evaluate them at once. A stored map
    would be `F × P` of derived state.
 3. The field already has an owner. An AI writer would stamp over the human promoter's own
@@ -347,7 +419,7 @@ Card fill is a hard ceiling: bouts per night must not fall.
 
 ### D — Call Carlos (goodwill, on the agreement)
 
-> The most defensible mechanic in doc 28, because matchmakers describe it out loud.
+> The most defensible mechanic in doc 34, because matchmakers describe it out loud.
 
 **Scope.** Three counters alongside the existing `refusedBouts` — `acceptedCount`,
 `acceptedShortNotice`, and recency — **on `PromotionalAgreement`, not on `Fighter`.** Two reviewers
@@ -359,7 +431,7 @@ Plus the career-mode short-notice call: reuse `promoting.ts:667 replacementsFor`
 pull-out path, and write `shortNotice: true` through `AftermathInput` so `standing.ts:86`'s +2 and
 `FightRecord.tsx:203`'s existing display both come alive.
 
-**One realism correction to doc 28 §9:** the real predictor of who takes a short-notice fight is
+**One realism correction to doc 34 §9:** the real predictor of who takes a short-notice fight is
 *camp state* — already in camp, fought recently, walking around near the limit — not personality.
 The game has `freshness`, `lastTrained`, `readyOnDay` and `walkingWeightLbs`, and §9 names none of
 them.
@@ -370,7 +442,7 @@ them.
 
 | Pros | Cons |
 | --- | --- |
-| Unambiguous real-world referent, and the sport's single most characteristic event | Doc 28 overstates what goodwill buys — it buys card position and the next call, not much patience during a skid |
+| Unambiguous real-world referent, and the sport's single most characteristic event | Doc 34 overstates what goodwill buys — it buys card position and the next call, not much patience during a skid |
 | Uses the blocking inbox item that already exists and is already good | Authored moments repeat: the same scene twice in one career reads as a script |
 | No save-size exposure once it is on the agreement | Needs C and P2 to mean anything |
 
@@ -379,7 +451,7 @@ unranked, recently active, low-bank fighters. Uniform across the roster means th
 
 ### E — The reservation price
 
-> Replace doc 28 §3's twelve-weight sum with one number in pounds. The weights become multipliers.
+> Replace doc 34 §3's twelve-weight sum with one number in pounds. The weights become multipliers.
 
 **Scope.** Extend `money.ts:172 askingPrice` — which already returns
 `marketValue × purseDemand × loyalty` and already has a test file — with situation multipliers, each
@@ -390,14 +462,14 @@ one line: step, age past 30, an unbeaten record, `releaseRisk` (a roster spot at
 multiplier as its existing `concern` string — **signature unchanged**, so `promoting.ts:575/689` and
 `CardBuilderScreen.tsx:621` are untouched.
 
-Doc 28 §3.3's whole negotiation collapses into one comparison: `askingPrice` against `marketValue`.
+Doc 34 §3.3's whole negotiation collapses into one comparison: `askingPrice` against `marketValue`.
 
-**Why this beats doc 28 §3's kernel, on all three axes:**
+**Why this beats doc 34 §3's kernel, on all three axes:**
 
 - **Cheaper to build.** ~60 lines in an existing module with an existing test file, against ~1,500
   for a kernel plus two weight-vector modules.
 - **Cheaper to tune.** A weight in a twelve-term sum is unitless and interpretable only against the
-  other eleven — doc 28 §20 concedes they "need measuring rather than choosing". A multiplier on a
+  other eleven — doc 34 §20 concedes they "need measuring rather than choosing". A multiplier on a
   price is interpretable alone: *"desperation cuts the ask 40%"* is checkable against
   `desperationDiscount`'s existing 0.4 and against the sport.
 - **Cheaper to be wrong about.** A bad weight produces globally strange behaviour with no culprit. A
@@ -427,7 +499,7 @@ it is a wall in a price's clothing). Still a fraction of twelve weights.
 
 ### F — Promises, and the non-monetary term
 
-> Two of the four moves in doc 28 §3.3's negotiation are not money.
+> Two of the four moves in doc 34 §3.3's negotiation are not money.
 
 **Scope.** `PromotionalAgreement.promises` — *"title eliminator, if you win"* — with a renderer on
 the hub, a countdown, and a breach path at a stated relationship cost. Plus the manager converting a
@@ -446,7 +518,7 @@ tax. Plus the one-line merge of the player-facing signing path (`progression.ts:
 
 ### G — Five people in a room
 
-> Doc 28 §20 asks whether a promoter's multi-objective score can be shown without becoming a
+> Doc 34 §20 asks whether a promoter's multi-objective score can be shown without becoming a
 > spreadsheet, and declines to answer. This is the answer.
 
 **Scope.** The two missing negative terms — `PurseCost` and `AssetDestruction` — plus card need and
@@ -466,7 +538,7 @@ timing as matchmaking inputs. Then a panel on `CardBuilderScreen` where booking 
 | Pros | Cons |
 | --- | --- |
 | Exactly the shape doc 13 demands, and the precedent already works (`describeLevel`, `unmatchableTerms` are prose, not numbers) | Career mode gets almost nothing |
-| Answers a doc 28 open question for free | Five sentences on a nine-bout card is nine screens of reading on a phone — restrict to main and co-main |
+| Answers a doc 34 open question for free | Five sentences on a nine-bout card is nine screens of reading on a phone — restrict to main and co-main |
 | Builds on B, which it needs anyway | Promoter mode has fewer players than career mode |
 
 **Measurement.** Do two promotions with different `MATCHMAKING_STYLES` produce measurably different
@@ -475,7 +547,7 @@ opening the panel? If it never flips a decision it is decoration.
 
 ### H — The consequence bus
 
-> Doc 28 §13 is not a utility function. It is a subscriber list.
+> Doc 34 §13 is not a utility function. It is a subscriber list.
 
 **Scope.** A `CareerEvent` union emitted from `runCardBout`, `resolveFreeAgency` and `releaseIfCut`,
 with small pure handlers for career reassessment, the financial pivot, comebacks and goodwill.
@@ -497,7 +569,10 @@ with small pure handlers for career reassessment, the financial pivot, comebacks
 
 ## 4. The routes
 
-### Route 0 — Movement (the one aimed at the actual problem)
+### Route 0 — Movement (the one aimed at the actual problem) — **SHIPPED in `50d1c1a`**
+
+> Kept as written, because it is the specification the shipped change is measured against. See
+> §0 for what actually landed and what it measured.
 
 **P1 + M.**
 
@@ -515,7 +590,7 @@ with small pure handlers for career reassessment, the financial pivot, comebacks
 4. **A move down needs a cause.** Being cut, or a lapsed deal with no better offer — never a coin
    flip. This is what kills the lateral churn, which is 65% of all movement and narrates as nothing.
 
-- **Covers:** the originating concern directly. Doc 28 §10 (getting signed), §2.3's three-signing-path
+- **Covers:** the originating concern directly. Doc 34 §10 (getting signed), §2.3's three-signing-path
   defect, and the parts of §8 that are about *where* a career goes rather than what it accepts.
 - **Drops:** everything about how fighters choose fights. Nobody refuses anything, nobody has a
   price, promotions still have no plan for anybody.
@@ -526,7 +601,7 @@ with small pure handlers for career reassessment, the financial pivot, comebacks
 
 | Pros | Cons |
 | --- | --- |
-| The only route that targets the measured defect | Does nothing for doc 28's fighter model |
+| The only route that targets the measured defect | Does nothing for doc 34's fighter model |
 | Gives `offersFor`, `appetite` and `standingScore` their first world-side callers | Needs P1 first, or you cannot tell whether it worked |
 | Makes the ladder a ladder: up requires merit, down requires a cause | Exposes doc 26's real gap — if the regional tier has nobody worth signing, merit-based promotion has nothing to promote |
 
@@ -541,7 +616,7 @@ years (from 4), and the global cohort retaining **60%+** of its starters rather 
 
 Ship the harness, then make the offer slate show what each fight actually pays. Nothing else.
 
-- **Covers:** doc 28 §6, and the measurement infrastructure everything else needs.
+- **Covers:** doc 34 §6, and the measurement infrastructure everything else needs.
 - **Drops:** all twenty other sections.
 - **Why it is defensible on its own:** it fixes a decision the player makes every fight that is
   currently degenerate, and it costs no new state, no migration and no re-tuning. If the project
@@ -568,7 +643,7 @@ Add: the promotions get a plan, and idleness costs money.
 **P1 + M + P2 + A + B + C + E + D**, in that order, measuring after each.
 
 > **Amended after §1.5.** The three reviewers converged on this set without `M`, because none of
-> them had measured mobility and doc 28 does not name it. `M` goes second — immediately after the
+> them had measured mobility and doc 34 does not name it. `M` goes second — immediately after the
 > harness — because it is the originating concern, because it is small, and because every later
 > step is easier to read once movement has a shape.
 
@@ -576,10 +651,10 @@ This is what all three reviewers signed off. Roughly: measure, then make promoti
 let fighters have a price, then let them say no, then let the relationship remember.
 
 - **Covers:** §2.2, §3 in substance, §5, §6, §8, §9, §11.1–11.4, §12's leverage, §14.1 —
-  most of doc 28's load-bearing content.
+  most of doc 34's load-bearing content.
 - **Drops:** §4 (amateur careers), §13 (results change people), §15 (career state reaches the cage),
   §7 (manager objective — the advice record already carries the observable).
-- **Why this order:** every step is measurable before the next is written, which is doc 28 §17's own
+- **Why this order:** every step is measurable before the next is written, which is doc 34 §17's own
   instruction and the safest sentence in that document. E before D because goodwill is only
   meaningful once refusal has a reason behind it.
 - **Risk:** E is where the tuning lives. If `ceiling / price` does not cluster sensibly, the
@@ -594,7 +669,7 @@ let fighters have a price, then let them say no, then let the relationship remem
 - **Why it is not recommended as a plan:** doc 26 is a hard prerequisite for anything involving
   refusal at scale (a world where you can refuse but nobody else is bookable is worse than one where
   you cannot). §4's amateur career is a new *mode*, not a section. H needs the `runCardBout`
-  refactor. And doc 28 §20 concedes that `OpportunityCost` has no in-sport source at all.
+  refactor. And doc 34 §20 concedes that `OpportunityCost` has no in-sport source at all.
 - **Honest framing:** this is a destination, not a route. Each piece is reachable from Route 3 when
   something needs it.
 
@@ -602,10 +677,10 @@ let fighters have a price, then let them say no, then let the relationship remem
 
 | Rejected | Why |
 | --- | --- |
-| **Doc 28 §3's twelve-weight kernel** | Superseded by E on build cost, tuning cost and diagnosis cost. All three reviewers dropped their own version of it. |
+| **Doc 34 §3's twelve-weight kernel** | Superseded by E on build cost, tuning cost and diagnosis cost. All three reviewers dropped their own version of it. |
 | **A negotiated per-bout purse (§6.1)** | Reopens doc 13's contract ruling. The derived form in A gets the decision without the conflict. |
 | **"Bright neighbourhood"** (run the real model only near the player) | Buys performance with determinism: the world's evolution becomes a function of who the player is. Its own acceptance test requires building the full model anyway, and every mechanic gets written twice, forever. |
-| **Shipping the simulation with no UI** | The repo already contains six written, tested, never-called functions. Doc 28 §2 is substantially a catalogue of them. The correct test is not visible-vs-invisible but **specified-vs-speculative**: substrate earns its place when a moment the player will experience is already specified and blocked on it. |
+| **Shipping the simulation with no UI** | The repo already contains six written, tested, never-called functions. Doc 34 §2 is substantially a catalogue of them. The correct test is not visible-vs-invisible but **specified-vs-speculative**: substrate earns its place when a moment the player will experience is already specified and blocked on it. |
 | **`Fighter.selfBelief` as a stored field (§16)** | Stored derived state. The free correct answer is a content-addressed seed — `createRng(worldSeed:self:fighterId:record.length)` is deterministic, costs zero bytes, and delivers §4.2's "shrinks with results" because the bout count is in the key. Strike it from §16. |
 
 ---
@@ -616,8 +691,8 @@ let fighters have a price, then let them say no, then let the relationship remem
 | --- | --- |
 | Game design wanted per-offer purses; realism said doc 13 forbids it | **Both right.** Doc 13 forbids a money *decision* at card time, not differing displayed numbers. Card position and win probability are contract-derived. Approach A. |
 | Systems ranked wiring first; realism ranked it fifth ("you will measure a broken model") | **Systems conceded rank, realism conceded safety.** Wiring is safe once amended to slate-level weighting, and phase C's test is *forbidden* from asserting a refusal rate. The baseline systems needs is mechanical; the claim realism fears is behavioural. Different artifacts. |
-| Realism wanted a `handling` writer; systems wanted a read-site override | **Read site, unanimously.** Realism supplied the decisive argument against its own position: a stored plan is the derived-state drift doc 28's own §3.1 forbids, and a matchmaker does not hold a persistent dossier — they form a view when they sit down to build a card. |
-| Doc 28 said refusals should be "a few percent"; realism first said 25–50% | **Realism withdrew its own figure** as conflating refusal with slot-filling. Settled at 12–20% of proposed pairings, with three binding conditions that matter more than the headline. |
+| Realism wanted a `handling` writer; systems wanted a read-site override | **Read site, unanimously.** Realism supplied the decisive argument against its own position: a stored plan is the derived-state drift doc 34's own §3.1 forbids, and a matchmaker does not hold a persistent dossier — they form a view when they sit down to build a card. |
+| Doc 34 said refusals should be "a few percent"; realism first said 25–50% | **Realism withdrew its own figure** as conflating refusal with slot-filling. Settled at 12–20% of proposed pairings, with three binding conditions that matter more than the headline. |
 | Where goodwill lives | **Converged independently on the agreement**, from opposite directions — realism on "goodwill dies with the deal", systems on doc 20's save-size budget. |
 
 ---
@@ -661,7 +736,7 @@ Stated so the gap is a decision rather than an oversight.
 - **What does the eliminator promise cost, in pounds?** F only works if a non-monetary term has a
   price on both sides, and E's unit forces the question. The title multiplier at ×0.3 is a
   hard-coded fact rather than an emergent one — defensible, because it is a hard fact in the sport.
-- **Does the fighter model advise the player or act for them?** Doc 28 §20 leaves this open;
+- **Does the fighter model advise the player or act for them?** Doc 34 §20 leaves this open;
   `world.ts:780-783` on `runCardBout` arguably already settled it — one function, two call sites,
   because "a second implementation would drift within a week".
 - **Is 12–20% right?** Nobody knows, and the honest observable is not a rate: *in a 20-year sim, at
