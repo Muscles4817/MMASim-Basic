@@ -9,6 +9,7 @@ architecture before they are implemented — some may have changed shape.**
 | F1 | **done** for the two positions that needed it — bottom and the held clinch. Distance already had the architecture; holding-clinch and top do not need it. See the audit below. |
 | D1 | **done.** `stall` is split into `maintainPosition`, which is capability-backed, and residual inactivity, which is no longer a candidate. |
 | the rest | re-ranked by architectural dependency as **D2–D9** in § 3, which is the live register. F3 is largely resolved by F1 as a side effect; two new findings were raised by the F1 audit. |
+| D16–D19 | **new, and D16 is upstream of D7.** A submission report against a created fighter found that no term in the engine can say a technique is *not in a fighter's game* — capability is a ratio of two attributes rather than an absolute. D17–D19 are the three places that lack shows. |
 
 The range split (doc 05, doc 01 § invariants) fixed the standing half of a problem that is larger
 than standing. This document is the audit of what is left, and it deliberately stops before the
@@ -97,6 +98,10 @@ calibrate twice.
 | **D13** | The controlling fighter in a clinch cannot let go *(**done**)* | architectural | shipped with D3 | yes |
 | **D14** | Reduced collapses the two grappling entries into one appetite | architectural (Reduced) | — | Reduced only |
 | **D15** | A tie-up costs both men the same *(**done**)* | calibration | shipped with D3 | yes, sport-wide |
+| **D16** | Repertoire is not representable — capability is a *ratio*, never an absolute | architectural (engine-wide) | — | **yes, materially** |
+| **D17** | `pickTopIntent` hands `submit` on a relative read with no floor | cleanup (planner) | D16 decides how far it has to go | yes, sport-wide |
+| **D18** | Reduced pays an unconditional submission floor and cannot see the rating | architectural (Reduced) | D16 | Reduced only |
+| **D19** | The player's own booking defaults to *no plan at all* | cleanup (app) | — | yes, for one fighter |
 
 ### D1 — `stall` conflated two concepts *(was F9; **done**)*
 
@@ -1314,6 +1319,167 @@ Not scoped here: it is a sport-wide calibration change with its own evidence, an
 against Full's fatigue curves rather than bundling into a vocabulary change. It is a **prerequisite
 for `clinchIntent: 'control'` being a real strategy rather than a stalling one**, and it is related to
 D9.
+
+### D16 — Repertoire is not representable *(raised by the submission report; the root cause of D17–D19)*
+
+**The report.** A created fighter — a former Olympic boxer, `submissions: 12`, a game plan built
+entirely around staying on his feet and getting back up — kept hunting submissions.
+
+He does. `tests/statistical/style-identity.test.ts` is the fence around it and
+`tools/style-identity.ts` is the table every number below comes from.
+
+**The finding is not that the number is too high.** It is that *there is no term in the engine that
+can say a technique is not in a fighter's game.* A decision is `capability × intent × opportunity`
+(§ F4, `fight/decide.ts`) and none of the three is about repertoire:
+
+- **`capability` is `effect()`, which is a multiplier and never a gate.** Across the whole 1–100
+  `submissions` scale it spans about 13:1 and bottoms out at 0.24 rather than at 0. That curve is
+  right for a *contest* — a 12-submissions fighter who somehow locks up an armbar should have a tiny
+  chance, not zero — and it is wrong for a *choice*.
+- **Worse, the candidate is not compared against nothing.** The bottom in-state list is two entries:
+  a submission at `effect(submissions)` and a `defend` at `effect(scrambling)`. A weighted draw is a
+  softmax over the logs, so **the share is a function of the gap between two ratings and of nothing
+  else.** `submissions` has no absolute reading at the point of choosing at all.
+- **`intent` spans 45:1 at conviction 1** and about 3:1 at the conviction a real plan carries, so the
+  corner can argue and cannot win.
+- **`opportunity` is asymmetric.** `submissionOpportunity` only ever *lifts* suppression — that is its
+  documented job, the escape hatch that stops "keep it standing" passing up a fight-ending choke.
+  Nothing anywhere deepens it. Compare the takedown candidate, which carries `entryWeight ×
+  ENTRY_EASE × exploitFactor`, three terms that all suppress. That asymmetry is the mechanism.
+
+**The falsifier.** Hold the plan fixed and vary only the two attributes:
+
+```
+                    scrambling 30   scrambling 60   scrambling 90
+  submissions 30            17.0%            9.1%            4.6%
+  submissions 50            28.0%           15.9%            8.4%
+  submissions 70            43.0%           26.8%           15.1%
+  submissions 90            60.7%              —            26.8%
+```
+
+Read the diagonal. **A fighter with `submissions: 70` reaches for a submission less often than one
+with `submissions: 30`**, provided he is the better scrambler — and `submissions: 90` with
+`scrambling: 90` lands on exactly the 26.8% of `submissions: 70` with `scrambling: 60`. Two fighters
+eighty points apart on the rating that names the action choose it equally often.
+
+It is not confined to contrived fixtures. On the shipped roster the grinder (`submissions: 62`,
+`scrambling: 80`) reaches for a submission **less often than the journeyman** (`submissions: 50`,
+`scrambling: 50`).
+
+**Why the boxer specifically.** His `scrambling: 48` is not a hole — getting up is the first grappling
+skill a converted boxer trains, and it is the whole of *always looks to get back up*. So the gap that
+decides his submission rate is 12 against 48, and the engine reads a modest gap where the truth is a
+categorical absence. **The better we make him at the thing he actually does, the more submissions he
+attempts.** That is the defect stated exactly.
+
+**Measured floor**, at the most favourable case for the plan being obeyed — fresh, unhurt, displaced,
+conviction 0.9, told to stay standing:
+
+```
+  bottomIntent: defend    bottom 3.9%   top 2.3%
+  bottomIntent: recover   bottom 1.3%
+```
+
+Shares of *beats*, so small numbers with a long reach. Over a six-man field at Full detail that is
+**0.25 submission attempts a fight on the planner's own instructions** — five a career — and each one
+is narrated, which is why the player sees it long before a statistic would.
+
+**What a fix has to be.** Not a coefficient. The missing concept is a **repertoire gate**: a second,
+sharply convex read of the governing attribute, used only where the question is *would this fighter
+reach for this at all*, and distinct from `effect()`, which answers *how well would it go*. It has to
+be absolute rather than comparative, it has to apply to every action rather than to submissions, and
+it belongs on the `opportunity` side of `Candidate` — the side that already knows how to say "not
+available" — rather than in the alignment tables, which are about what a fighter *wants*.
+
+Sizing it is a behaviour change and it moves the sport's finish mix, so it lands with
+`roster-profile.test.ts` and `balance.test.ts`, not before them. **D7 should not be attempted first:**
+choosing the intent baselines against a capability term that is measuring the wrong thing calibrates
+the plan to shout over a number nobody meant.
+
+---
+
+### D17 — `pickTopIntent` hands `submit` on a relative read with no floor *(raised with D16)*
+
+```ts
+if (a.submissions > a.groundControl + 2) return 'submit';
+```
+
+It asks *which of your two ground ratings is the better one* and gives `submit` — "expose yourself to
+attack the finish" — to anybody whose answer is `submissions`, **including a striker who dumped points
+out of both**:
+
+```
+  submissions 20, groundControl 15   →   submit
+  submissions 30, groundControl 25   →   submit
+  submissions 45, groundControl 30   →   submit
+  submissions 12, groundControl 22   →   control   (only because he is even worse at it)
+```
+
+The comment on that line records why the absolute bar came out — `submissions > 68` was rare enough
+that almost everybody got `control`, and the sport's submission rate fell from 19.6% to 16.1%. That
+diagnosis was right and the remedy reached for the wrong lever: it raised the rate by handing the
+*instruction* to fighters who should never receive it, rather than by letting genuine specialists hunt
+harder. And it is not only a legibility problem — a 20-submissions fighter told to attack the finish
+is a worse fighter than one told to hold position, so the planner is losing fights it should win.
+
+`pickBottomIntent` is the shape this needs and does not have: it reads `strikeLean` *and* keeps an
+absolute floor (`submissions > 66`, `submissions > 56`) beneath `attack`. Fixing D17 is small. It is
+listed after D16 only because D16 decides how much of the work is left once repertoire gates the
+choice anyway.
+
+---
+
+### D18 — Reduced pays an unconditional submission floor and cannot see the rating *(raised with D16)*
+
+`resolveFightByRound` builds submission attempts as
+
+```
+  SUBMISSION_FLOOR + SUBMISSION_PER_CONTROL × control share × appetite   (× a backTake term)
+```
+
+and **`SUBMISSION_FLOOR` is 0.2 per round, unconditional** — paid by every fighter in every round
+regardless of control time, position, plan, or whether he has attempted a submission in his life.
+Over three rounds that is 0.6 before anything about the fighter is consulted, and the jitter rounds up
+often enough that essentially every fighter in a Reduced world attempts one in essentially every
+fight:
+
+```
+                   Full: per fight / % of fights     Reduced: per fight / % of fights
+  olympic boxer         0.25   18.4%                     0.76   96.8%
+  point karateka        0.16   12.8%                     0.89   97.7%
+  journeyman            0.32   20.8%                     1.28   99.9%
+```
+
+The only rating-sensitive term in the expression is `tendencies.backTake`, which spans about 1.5:1
+between a 12-submissions boxer and a 92-submissions specialist. The comment above the constants argues
+that attempts are bought with position and the rating buys conversion — right about *position*, silent
+about *identity*. It explains why a guard player attempts fewer than a smotherer; it does not explain
+why a boxer attempts any.
+
+This is invariant 6 (Full is the reference) failing in the direction that matters most, because **the
+world's entire pre-history is simulated at Reduced detail** (`newWorld.ts`), so every record the player
+is matched against was built in a different sport from the one they are shown. It is the same shape as
+D10 and D11 and should be fixed the same way: give Reduced a term that reads what Full reads, rather
+than a floor that reads nothing.
+
+---
+
+### D19 — The player's own booking defaults to *no plan at all* *(raised with D16; not an engine defect)*
+
+`packages/app/src/game/career.ts` creates a booking with `defaultGamePlan()`, which is `adaptive` at
+conviction 0 — by construction, **every policy term is exactly 1.0.** That is the correct neutral for a
+fighter nobody planned for and the wrong default for the player's own, because the game-plan screen is
+the only place *stay standing* can be said.
+
+Measured, it is the single largest term in the original report: **three times** the submission attempts
+of the same fighter on the planner's own reading of him — 0.75 a fight against 0.25, fifteen a career
+against five — and the planner is not even trying to keep him off the floor.
+
+`planFor` is deterministic, is already what every other fighter in the world gets, and is right there.
+A player who books a fight and taps through should get their corner's honest reading of them, and the
+screen should be where they *change* it rather than where they *supply* it.
+
+---
 
 ## 3b. The register re-ranked, after D3
 
