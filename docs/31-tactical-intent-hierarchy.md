@@ -9,7 +9,7 @@ architecture before they are implemented — some may have changed shape.**
 | F1 | **done** for the two positions that needed it — bottom and the held clinch. Distance already had the architecture; holding-clinch and top do not need it. See the audit below. |
 | D1 | **done.** `stall` is split into `maintainPosition`, which is capability-backed, and residual inactivity, which is no longer a candidate. |
 | the rest | re-ranked by architectural dependency as **D2–D9** in § 3, which is the live register. F3 is largely resolved by F1 as a side effect; two new findings were raised by the F1 audit. |
-| D16–D19 | **new, and D16 is upstream of D7.** A submission report against a created fighter found that no term in the engine can say a technique is *not in a fighter's game* — capability is a ratio of two attributes rather than an absolute. D17–D19 are the three places that lack shows. |
+| D16–D19 | **D16 is done and was upstream of D7.** A submission report against a created fighter found that no term in the engine could say a technique is *not in a fighter's game* — capability was a ratio of two attributes rather than an absolute. `repertoire` is the fourth term on `Candidate` that says it, anchored on doc 02's own scale bands. D17 and D19 are still open; D18 is half done. |
 
 The range split (doc 05, doc 01 § invariants) fixed the standing half of a problem that is larger
 than standing. This document is the audit of what is left, and it deliberately stops before the
@@ -98,9 +98,9 @@ calibrate twice.
 | **D13** | The controlling fighter in a clinch cannot let go *(**done**)* | architectural | shipped with D3 | yes |
 | **D14** | Reduced collapses the two grappling entries into one appetite | architectural (Reduced) | — | Reduced only |
 | **D15** | A tie-up costs both men the same *(**done**)* | calibration | shipped with D3 | yes, sport-wide |
-| **D16** | Repertoire is not representable — capability is a *ratio*, never an absolute | architectural (engine-wide) | — | **yes, materially** |
+| **D16** | Repertoire is not representable — capability is a *ratio*, never an absolute *(**done**)* | architectural (engine-wide) | — | **yes, for fighters below 38** |
 | **D17** | `pickTopIntent` hands `submit` on a relative read with no floor | cleanup (planner) | D16 decides how far it has to go | yes, sport-wide |
-| **D18** | Reduced pays an unconditional submission floor and cannot see the rating | architectural (Reduced) | D16 | Reduced only |
+| **D18** | Reduced pays an unconditional submission floor and cannot see the rating *(**half done**: the floor is gated, the position model is not)* | architectural (Reduced) | D16 *(done)* | Reduced only |
 | **D19** | The player's own booking defaults to *no plan at all* | cleanup (app) | — | yes, for one fighter |
 
 ### D1 — `stall` conflated two concepts *(was F9; **done**)*
@@ -1320,81 +1320,111 @@ against Full's fatigue curves rather than bundling into a vocabulary change. It 
 for `clinchIntent: 'control'` being a real strategy rather than a stalling one**, and it is related to
 D9.
 
-### D16 — Repertoire is not representable *(raised by the submission report; the root cause of D17–D19)*
+### D16 — Repertoire is not representable *(**done**; D17 and D19 still open, D18 half done)*
 
 **The report.** A created fighter — a former Olympic boxer, `submissions: 12`, a game plan built
 entirely around staying on his feet and getting back up — kept hunting submissions.
 
-He does. `tests/statistical/style-identity.test.ts` is the fence around it and
-`tools/style-identity.ts` is the table every number below comes from.
+**The cause.** A decision is `capability × intent × opportunity` (§ F4, `fight/decide.ts`) and none
+of the three could say *this technique is not in his game*:
 
-**The finding is not that the number is too high.** It is that *there is no term in the engine that
-can say a technique is not in a fighter's game.* A decision is `capability × intent × opportunity`
-(§ F4, `fight/decide.ts`) and none of the three is about repertoire:
+- **`capability` is `effect()`, a multiplier and never a gate.** It spans about 13:1 across the
+  whole 1–100 scale and bottoms out at 0.24 rather than 0. Right for a *contest* — a 12-submissions
+  fighter who somehow locks up an armbar should keep his tiny chance — and wrong for a *choice*.
+- **The candidate is not compared against nothing.** The bottom in-state list is a submission at
+  `effect(submissions)` against a `defend` at `effect(scrambling)`, and a weighted draw is a softmax
+  over the logs — so **the share was a function of the gap between two ratings and nothing else.**
+- **`intent`** spans 45:1 at conviction 1 and about 3:1 at a real plan's, so the corner could argue
+  and not win. **`opportunity`** was asymmetric: `submissionOpportunity` only ever *lifts*
+  suppression, where the takedown candidate carries three terms that all suppress.
 
-- **`capability` is `effect()`, which is a multiplier and never a gate.** Across the whole 1–100
-  `submissions` scale it spans about 13:1 and bottoms out at 0.24 rather than at 0. That curve is
-  right for a *contest* — a 12-submissions fighter who somehow locks up an armbar should have a tiny
-  chance, not zero — and it is wrong for a *choice*.
-- **Worse, the candidate is not compared against nothing.** The bottom in-state list is two entries:
-  a submission at `effect(submissions)` and a `defend` at `effect(scrambling)`. A weighted draw is a
-  softmax over the logs, so **the share is a function of the gap between two ratings and of nothing
-  else.** `submissions` has no absolute reading at the point of choosing at all.
-- **`intent` spans 45:1 at conviction 1** and about 3:1 at the conviction a real plan carries, so the
-  corner can argue and cannot win.
-- **`opportunity` is asymmetric.** `submissionOpportunity` only ever *lifts* suppression — that is its
-  documented job, the escape hatch that stops "keep it standing" passing up a fight-ending choke.
-  Nothing anywhere deepens it. Compare the takedown candidate, which carries `entryWeight ×
-  ENTRY_EASE × exploitFactor`, three terms that all suppress. That asymmetry is the mechanism.
+**The falsifier**, holding the plan fixed and varying only the two attributes: a fighter with
+`submissions: 70` and `scrambling: 90` reached for a submission **less often** (15.1%) than one with
+30 and 30 (17.0%), and 90/90 landed on exactly the 26.8% of 70/60. On the shipped roster the grinder
+(62) reached for one less often than the journeyman (50). The boxer's `scrambling: 48` is not a hole
+— it is the whole of *always looks to get back up* — so **making him better at what he actually does
+made him attempt more submissions.**
 
-**The falsifier.** Hold the plan fixed and vary only the two attributes:
+---
 
-```
-                    scrambling 30   scrambling 60   scrambling 90
-  submissions 30            17.0%            9.1%            4.6%
-  submissions 50            28.0%           15.9%            8.4%
-  submissions 70            43.0%           26.8%           15.1%
-  submissions 90            60.7%              —            26.8%
-```
+#### The fix: `repertoire`, a fourth term on `Candidate`
 
-Read the diagonal. **A fighter with `submissions: 70` reaches for a submission less often than one
-with `submissions: 30`**, provided he is the better scrambler — and `submissions: 90` with
-`scrambling: 90` lands on exactly the 26.8% of `submissions: 70` with `scrambling: 60`. Two fighters
-eighty points apart on the rating that names the action choose it equally often.
+`ratings/curve.ts`. A gate in 0–1 on the raw rating, read at the moment of choosing, sitting on the
+capability side of the draw and of `intentAuthority` as its own named field. Not folded into
+`effect` — that would change every contest in the game. Not expressed as intent — no instruction
+should be able to give a boxer a submission game or take a specialist's away.
 
-It is not confined to contrived fixtures. On the shipped roster the grinder (`submissions: 62`,
-`scrambling: 80`) reaches for a submission **less often than the journeyman** (`submissions: 50`,
-`scrambling: 50`).
-
-**Why the boxer specifically.** His `scrambling: 48` is not a hole — getting up is the first grappling
-skill a converted boxer trains, and it is the whole of *always looks to get back up*. So the gap that
-decides his submission rate is 12 against 48, and the engine reads a modest gap where the truth is a
-categorical absence. **The better we make him at the thing he actually does, the more submissions he
-attempts.** That is the defect stated exactly.
-
-**Measured floor**, at the most favourable case for the plan being obeyed — fresh, unhurt, displaced,
-conviction 0.9, told to stay standing:
+**The anchors are doc 02's own scale bands**, which said this in words and were read by nothing:
 
 ```
-  bottomIntent: defend    bottom 3.9%   top 2.3%
-  bottomIntent: recover   bottom 1.3%
+  38–49   Below major-promotion level. A hole opponents will find.  → his. The gate is 1.
+  20–37   A genuine liability. This is how you lose.               → the ramp, convex.
+   1–19   Effectively absent from their game.                      → the floor, 0.03.
 ```
 
-Shares of *beats*, so small numbers with a long reach. Over a six-man field at Full detail that is
-**0.25 submission attempts a fight on the planner's own instructions** — five a career — and each one
-is narrated, which is why the player sees it long before a statistic would.
+So the gate spans exactly the band the doc calls *a genuine liability*, and above it a technique is
+his — badly, which is what `effect` has always been able to say.
 
-**What a fix has to be.** Not a coefficient. The missing concept is a **repertoire gate**: a second,
-sharply convex read of the governing attribute, used only where the question is *would this fighter
-reach for this at all*, and distinct from `effect()`, which answers *how well would it go*. It has to
-be absolute rather than comparative, it has to apply to every action rather than to submissions, and
-it belongs on the `opportunity` side of `Candidate` — the side that already knows how to say "not
-available" — rather than in the alignment tables, which are about what a fighter *wants*.
+**Result.** The Olympic boxer's share of his bottom beats falls from 3.9% to 0.12%, and his measured
+attempts from **0.25 a fight (one fight in five) to 0.01 (one in a hundred)**. The point karateka
+(28) goes 0.16 → 0.03. Every fighter reading 50 or better is unchanged to the tenth of a per cent:
+journeyman 32.9% → 32.9%, grinder 16.7% → 16.7%, chain wrestler 25.7% → 25.7%, guard player 92.0% →
+92.0%.
 
-Sizing it is a behaviour change and it moves the sport's finish mix, so it lands with
-`roster-profile.test.ts` and `balance.test.ts`, not before them. **D7 should not be attempted first:**
-choosing the intent baselines against a capability term that is measuring the wrong thing calibrates
-the plan to shout over a number nobody meant.
+#### Three things the build got wrong first, all found by measurement
+
+**1. Gating every row of a list reproduces the defect it fixes.** A weighted draw renormalises, so a
+gate on every candidate cancels out of the shares — and worse than cancels, because the rows are
+gated by different amounts. Gating `defend` alongside `submission` took a fighter with
+`submissions: 50` and `scrambling: 30` from 28% of his beats hunting a submission to **75%**: the man
+least able to frame became the man most committed to attacking.
+
+So each list has a **residual** — the thing a fighter does when he is not electing to do something
+else — and the residual carries no gate. Throwing hands at range, hand-fighting in a tie-up you are
+held in, keeping the grips in one you own, framing off your back, riding the position on top. The
+elective actions are gated *against* it, which means **the gate can only ever move share toward the
+basic thing**. A hole can make a fighter simpler; it can never make him busier.
+
+**Exits are ungated for a related reason.** Gating the door would charge a fighter for the same hole
+twice — once when the position is imposed on him and again when he tries to leave it — so the man
+least able to survive on the floor would be the man least able to get off it. That is not a
+repertoire model, it is a trap. It also matches doc 31's own division: exits belong to
+`preferredState` and are about wanting out, which is why `exitUrgency` takes no capability at all.
+
+**2. The anchor was set against the wrong population.** The first cut put *owned* at 50, the bottom
+of doc 02's *average for a major-promotion roster*. That reads correctly and describes the wrong
+world: the shipped 2026 roster is a pyramid of 858 fighters from regional to elite, and **its median
+sits at 44 on every attribute with more than 60% below 50.** The mean gate came out at 0.60 on
+*striking offence*, so the term stopped being a gate on a missing technique and became a tax on being
+an ordinary fighter — and because each list's residual is ungated, and the residual at range is
+throwing hands, **every fighter in the world became a puncher and the roster's knockout rate went
+from 31% to 50%.** `roster-profile.test.ts` caught it: `KO:submission` 1.91 → 4.87, first-round
+finishes 35.1% → 39.6%. At 38 the same measurements are back inside their bounds.
+
+**3. The gate must not read fatigue.** The first cut used `repertoire(fatigued(rating, ...))` on the
+argument that a tired fighter stops throwing what he is unsure of. That argument is about
+*execution*, which `fatiguedEffect` already prices, so it double-counted — and it silently broke the
+inertness the whole term rests on: `FATIGUE_SENSITIVITY` for wrestling is 0.35, so a `wrestling: 40`
+fighter dropped through the gate in the second round and a term advertised as inert above 38 was
+firing on most of the roster for most of every fight. `reduced-fidelity.test.ts` found it — Full's
+head damage in one matchup moved 4% while Reduced's did not. A black belt is still a black belt in
+round three.
+
+#### What it cost
+
+`intent-authority.test.ts`'s equivalence guard moved on **one** of its three recorded matchups, and
+the one it moved is `contender-v-canFodder` — the single fixture in the file built to be bad
+(`kicking: 34`, `submissions: 32`, `groundControl: 36`). The other two are byte-identical to three
+decimal places, which is the whole claim: the gate reaches the fighters it is for and nobody else.
+
+#### What it deliberately does not fix
+
+`southpawSniper` has `submissions: 40` — doc 02's *a hole opponents will find*, which is a submission
+game, a bad one — and the gate is inert there. He measures 8.3% of his bottom beats before and after.
+That is the right division of labour rather than a gap: **repertoire answers absence, intent answers
+preference.** A fighter who owns a poor submission game and chooses not to use it is what
+`bottomIntent` is for, and it moves him — `recover` takes him to 2.9%. If a future report is about
+*that* fighter, the fix is a planner that gives him `recover`, not a wider gate.
 
 ---
 
@@ -1429,7 +1459,7 @@ choice anyway.
 
 ---
 
-### D18 — Reduced pays an unconditional submission floor and cannot see the rating *(raised with D16)*
+### D18 — Reduced pays an unconditional submission floor and cannot see the rating *(**half done**)*
 
 `resolveFightByRound` builds submission attempts as
 
@@ -1458,9 +1488,23 @@ why a boxer attempts any.
 
 This is invariant 6 (Full is the reference) failing in the direction that matters most, because **the
 world's entire pre-history is simulated at Reduced detail** (`newWorld.ts`), so every record the player
-is matched against was built in a different sport from the one they are shown. It is the same shape as
-D10 and D11 and should be fixed the same way: give Reduced a term that reads what Full reads, rather
-than a floor that reads nothing.
+is matched against was built in a different sport from the one they are shown.
+
+**Half fixed with D16.** `repertoire` is applied to the whole expression, *floor included* — a floor
+that survives the gate is a floor that says a boxer hunts chokes — so the boxer goes 0.76 → 0.04 a
+fight and the karateka 0.89 → 0.22. Both resolvers now agree on the sign, which is D10's rule.
+
+**A correction to the measurement above, which overstated one number.** *~97% of Reduced fights
+contained a submission attempt* was not a sound comparison: **Reduced writes a fractional
+`submissionAttempts` into `stats`** — an expected value rather than a count of events, where Full
+increments an integer — so "share of fights with a non-zero total" is close to 1 whenever the mean is
+above zero, and it measures the resolver's arithmetic rather than the sport. That is a real,
+separate, pre-existing finding about every counter Reduced writes, and it is worth its own entry; the
+per-fight totals were and are the sound comparison, and they were genuinely 3–6× apart.
+
+**What is left** is that Reduced still runs about 4× Full on a near-zero base, because its attempts
+are bought from a control share rather than from a position it does not model. That is D14's
+territory rather than this one's.
 
 ---
 

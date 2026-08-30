@@ -56,7 +56,7 @@ import {
 import { ENTRY_EASE, RANGE_HAZARD, REFERENCE_MIX, expectedKickShare } from './range.js';
 import { defaultJudges, defaultReferee } from '../domain/officials.js';
 import { traitMul } from '../domain/traits.js';
-import { effect, fatiguedEffect } from '../ratings/curve.js';
+import { effect, fatiguedEffect, repertoire } from '../ratings/curve.js';
 import { WEAPON_PROFILE, knockdownHazard, legImpairment, strikeDamage } from './damage.js';
 import {
   createCombatant,
@@ -203,6 +203,28 @@ const BASE_TAKEDOWN_ATTEMPTS = 1.6;
  */
 const SUBMISSION_FLOOR = 0.2;
 const SUBMISSION_PER_CONTROL = 3.8;
+
+/**
+ * **And how much of it is in his game at all** — doc 31 § D18, the Reduced half of D16.
+ *
+ * The comment above is right about position and was silent about identity, and the silence had a
+ * cost this file could not see: `SUBMISSION_FLOOR` was paid by **every fighter in every round**,
+ * unconditionally, whatever his rating, his control time or his plan. Over three rounds that is
+ * 0.6 attempts before anything about the fighter is consulted, and the jitter rounded it up often
+ * enough that ~97% of Reduced fights contained a submission attempt against 13–21% at Full. The
+ * only rating-sensitive term in the whole expression was `backTake`, which spans about 1.5:1 from
+ * one end of the roster to the other.
+ *
+ * So the same gate Full applies at the moment of choosing is applied here to the whole expression,
+ * **floor included**, which is the point: a floor that survives the gate is a floor that says a
+ * boxer hunts chokes. `repertoire` is 1 at `submissions` 50 and above, so this is exactly inert
+ * for an average or better grappler and every calibrated number in `reduced-fidelity.test.ts`
+ * that was measured on one is untouched.
+ *
+ * Read on the raw `submissions` rather than through `submissionAppetite`, because the appetite is
+ * the *plan* and this is the *fighter* — the same separation `decide.ts` keeps between `intent`
+ * and the capability side, kept here so the two levels of detail cannot drift apart on it.
+ */
 
 /**
  * Where a fighter's landed strikes go, as shares that sum to one.
@@ -875,7 +897,8 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
           SUBMISSION_PER_CONTROL *
             (own * submissionAppetite(a, true) +
               under * 0.15 * submissionAppetite(a, false))) *
-          (0.75 + a.tendencies.backTake * 0.5),
+          (0.75 + a.tendencies.backTake * 0.5) *
+          repertoire(a.attrs.submissions),
         0.4,
       );
 

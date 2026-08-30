@@ -61,6 +61,7 @@ import {
   type GamePlan,
   type TacticalPlan,
 } from '@mmasim/engine';
+import { repertoire } from '@mmasim/engine';
 import { createCombatant } from '../../packages/engine/src/fight/profile.js';
 import { stanceOf, submissionOpportunity } from '../../packages/engine/src/fight/policy.js';
 import { actionShares } from '../../packages/engine/src/fight/decide.js';
@@ -125,40 +126,72 @@ function submissionShares(f: Fighter, p: GamePlan): { bottom: number; top: numbe
   };
 }
 
-describe('repertoire gates choice — the submission', () => {
-  it('is decided by the wrong pair of attributes — the debt', () => {
+describe('the gate itself', () => {
+  it('is exactly inert at and above the rating doc 02 calls a technique he has', () => {
     /*
-     * **The sharpest single statement of the defect, and the one that survives every plan.**
+     * **The property the whole term rests on, and it is an exact-equality claim rather than an
+     * approximate one.** `repertoire` returns a hard 1 for any rating of 38 or better, so on the
+     * bulk of any roster the candidate weight is multiplied by exactly 1.0 and the fight is
+     * bit-for-bit the fight it was. That is what lets a new factor be added to every decision
+     * surface in the engine without recalibrating the sport — and it is checked here rather than
+     * assumed, because `0.03 + 0.97 * 1` being exactly 1.0 is a fact about IEEE 754 and not about
+     * arithmetic.
      *
-     * The bottom in-state list is two candidates: a submission whose capability is
-     * `effect(submissions)`, and a `defend` whose capability is `effect(scrambling)`. A weighted
-     * draw is a softmax over the log of those, so the share is a function of the *gap between the
-     * two ratings* and of nothing else about the fighter. `submissions` has no absolute reading at
-     * the point of choosing at all.
+     * `intent-authority.test.ts` is the other half: two of its three recorded matchups are
+     * unchanged to three decimal places, and the third is the one fixture built to be bad.
+     */
+    for (const rating of [38, 44, 50, 62, 75, 88, 99]) {
+      expect(repertoire(rating), `rating ${rating}`).toBe(1);
+    }
+  });
+
+  it('reaches its floor across the whole band doc 02 calls effectively absent', () => {
+    // 1–19 is one claim in the doc — *effectively absent from their game* — so it is one value
+    // here. A fighter with 3 and a fighter with 18 are the same fighter for this purpose.
+    for (const rating of [1, 8, 15, 19]) {
+      expect(repertoire(rating), `rating ${rating}`).toBeCloseTo(repertoire(1), 10);
+    }
+    expect(repertoire(12)).toBeLessThan(0.05);
+    // Never zero: a boxer who grabs a neck in a scramble is a real fight, and a zero-weight
+    // candidate cannot be told from an unavailable one.
+    expect(repertoire(1)).toBeGreaterThan(0);
+  });
+
+  it('rises monotonically through the band between them, and only there', () => {
+    let previous = -1;
+    for (let r = 1; r <= 100; r++) {
+      const v = repertoire(r);
+      expect(v, `rating ${r}`).toBeGreaterThanOrEqual(previous);
+      previous = v;
+    }
+    // Convex through the liability band rather than linear: see REPERTOIRE_CONVEXITY.
+    expect(repertoire(28), 'midpoint of "a genuine liability"').toBeLessThan(0.3);
+    expect(repertoire(36), 'the top of it').toBeGreaterThan(0.7);
+  });
+});
+
+describe('repertoire gates choice — the submission', () => {
+  it('no longer lets the wrong pair of attributes decide it', () => {
+    /*
+     * **The falsifier that defined D16, now failing to falsify.**
      *
-     * Held at one plan, varying only the two attributes:
+     * The bottom in-state list is a submission at `effect(submissions)` against a `defend` at
+     * `effect(scrambling)`. A weighted draw is a softmax over the logs, so before the gate the
+     * share was a function of the *gap between two ratings* and `submissions` had no absolute
+     * reading at all. Held at one plan, varying only the two attributes:
      *
      * ```
-     *                     scrambling 30   scrambling 60   scrambling 90
-     *   submissions 30            17.0%            9.1%            4.6%
-     *   submissions 50            28.0%           15.9%            8.4%
-     *   submissions 70            43.0%           26.8%           15.1%
-     *   submissions 90            60.7%              —            26.8%
+     *                        scrambling 30   scrambling 60   scrambling 90
+     *   submissions 30   was      17.0%            9.1%            4.6%
+     *                    now       6.2%            3.1%            1.5%
+     *   submissions 70   was      43.0%           26.8%           15.1%
+     *                    now      43.0%           26.8%           15.1%     (unchanged: 70 > 38)
      * ```
      *
-     * Read the diagonal. **A fighter with `submissions: 70` attempts fewer submissions than one
-     * with `submissions: 30`**, provided he is the better scrambler — and `submissions: 90` with
-     * `scrambling: 90` lands on exactly the same 26.8% as `submissions: 70` with `scrambling: 60`.
-     * Two fighters eighty points apart on the rating that names the action choose it equally often.
-     *
-     * This is why the Olympic boxer hunts chokes and why no instruction stops him. His
-     * `scrambling: 48` is not a hole — getting up is the first grappling skill a converted boxer
-     * trains, and it is the whole of "always looks to get back up" — so the gap that decides his
-     * submission rate is 12 against 48 rather than 12 against nothing, and the engine reads a
-     * modest gap where the truth is a categorical absence.
-     *
-     * **The bound fails if the inversion widens. Removing it is the work, and removing it will
-     * fail this test on purpose.**
+     * The inversion was that the 70/90 fighter reached for it *less often* than the 30/30 one.
+     * The gate does not remove the dependence on `scrambling` — that is `effect` doing its job,
+     * and a better scrambler genuinely does have a better alternative — it removes the case where
+     * that dependence outruns the rating that names the action.
      */
     const controlled = (submissions: number, scrambling: number) =>
       submissionShares(
@@ -173,112 +206,101 @@ describe('repertoire gates choice — the submission', () => {
     const goodSubmitter = controlled(70, 90);
     const report = `submissions 30/scrambling 30 → ${weakGrappler.toFixed(1)}%, submissions 70/scrambling 90 → ${goodSubmitter.toFixed(1)}%`;
 
-    // Recorded, not endorsed: 17.0% against 15.1%. The rating that names the action loses to the
-    // rating it happens to be compared with.
-    expect(weakGrappler, report).toBeGreaterThan(goodSubmitter);
-
-    // And the same reading from the other side: eighty points of `submissions` bought by eighty
-    // points of `scrambling` is worth nothing at all.
-    const a = controlled(70, 60);
-    const b = controlled(90, 90);
-    expect(Math.abs(a - b), `70/60 → ${a.toFixed(1)}%, 90/90 → ${b.toFixed(1)}%`).toBeLessThan(1);
+    expect(goodSubmitter, report).toBeGreaterThan(weakGrappler);
+    // And not marginally: 15.1% against 6.2%, where it used to be 15.1% against 17.0%.
+    expect(goodSubmitter / weakGrappler, report).toBeGreaterThan(2);
   });
 
-  it('is nonetheless ordered by the rating across the shipped cast', () => {
+  it('leaves every fighter with a real submission game exactly where he was', () => {
     /*
-     * The half that holds, and it has to be asserted or the fix could break it: within the cast the
-     * engine actually ships, the ordering is broadly right — the boxer is at the bottom and the
-     * guard player at the top. The inversion above needs contrived fixtures to expose because real
-     * fighters' `submissions` and `scrambling` are correlated. That is luck rather than design, and
-     * this assertion is what stops the fix trading the ordering away for the floor.
+     * The other half of the same claim, and the one that makes the fix safe to ship. Every
+     * capability read at or above 38 is multiplied by a hard 1, so the fighters the sport is
+     * calibrated on do not move at all — measured to the tenth of a per cent, before and after:
+     *
+     * ```
+     *   journeyman (50)   32.9%  →  32.9%      grinder (62)       16.7%  →  16.7%
+     *   chain wrestler (78)  25.7%  →  25.7%   guard player (92)  92.0%  →  92.0%
+     * ```
      */
-    const measured = CAST.map(([name, make]) => {
-      const f = make();
-      return { name, subs: f.attributes.submissions, ...submissionShares(f, STAY_STANDING) };
-    });
-    const report = measured.map((m) => `${m.name} (${m.subs}) ${m.bottom.toFixed(1)}%`).join(', ');
+    const shares = Object.fromEntries(
+      CAST.map(([name, make]) => [name, submissionShares(make(), STAY_STANDING).bottom]),
+    );
+    const report = JSON.stringify(shares);
 
-    const boxer = measured.find((m) => m.name === 'olympic boxer')!;
-    const specialist = measured.find((m) => m.name === 'guard player')!;
-    expect(boxer.bottom, report).toBe(Math.min(...measured.map((m) => m.bottom)));
-    expect(specialist.bottom, report).toBe(Math.max(...measured.map((m) => m.bottom)));
-
-    /*
-     * Except here, and it is the same inversion in the shipped roster rather than a contrived one:
-     * the grinder's `submissions: 62` reaches for a submission less often than the journeyman's
-     * `submissions: 50`, because the grinder's `scrambling: 80` argues against it.
-     */
-    const grinder = measured.find((m) => m.name === 'grinder')!;
-    const journeyman = measured.find((m) => m.name === 'journeyman')!;
-    expect(grinder.bottom, report).toBeLessThan(journeyman.bottom);
+    expect(shares['journeyman'], report).toBeCloseTo(19.392, 2);
+    expect(shares['grinder'], report).toBeCloseTo(10.649, 2);
+    expect(shares['chain wrestler'], report).toBeCloseTo(16.7, 1);
+    expect(shares['guard player'], report).toBeCloseTo(23.2, 1);
   });
 
-  it('never falls to nothing, however low the rating and however firm the plan — the debt', () => {
+  it('takes the fighter with no submission game to effectively never', () => {
     /*
-     * **The floor, measured.** A fighter with `submissions: 12` — near the bottom of a 1–100
-     * scale, a quarter of an average fighter's — told as plainly as the vocabulary allows to stay
-     * on his feet and give nothing away, still spends this share of his beats hunting a submission:
+     * **The report, answered.** A fighter with `submissions: 12` told to stay on his feet:
      *
      * ```
-     *   bottomIntent: defend    bottom 3.9%   top 2.3%
-     *   bottomIntent: recover   bottom 1.3%
+     *                      before   after
+     *   bottomIntent defend   3.9%    0.12%
+     *   top position          2.3%    0.07%
+     *   bottomIntent recover  1.3%    0.04%
      * ```
      *
-     * Nothing reaches zero, because none of the three terms is *about* whether a submission is in
-     * his game. `defend`'s capability is his `scrambling`, so the plan argues against a hill it
-     * cannot clear, and `submissionOpportunity` — the only term that reads the position — can only
-     * ever *lift* the suppression, never deepen it.
-     *
-     * These are shares of *beats*, so they are small numbers with a long reach: the card-level
-     * assertions below are what they add up to.
-     *
-     * The bounds are the measurement plus headroom rather than a target. **They fail if the floor
-     * rises. Lowering it is the work, and lowering it will fail this test on purpose.**
+     * The karateka's `submissions: 28` — doc 02's *genuine liability* rather than *absent* — lands
+     * an order of magnitude above him at 1.0% and still round to nothing over a career, which is
+     * the separation the two bands are supposed to have.
      */
     const boxer = ARCHETYPES.olympicBoxer();
     const defend = submissionShares(boxer, STAY_STANDING);
     const recover = submissionShares(boxer, STAY_STANDING_RECOVER);
+    const karateka = submissionShares(ARCHETYPES.pointKarateka(), STAY_STANDING);
     const report =
-      `defend: bottom ${defend.bottom.toFixed(1)}% top ${defend.top.toFixed(1)}%, ` +
-      `recover: bottom ${recover.bottom.toFixed(1)}%`;
+      `boxer defend: bottom ${defend.bottom.toFixed(2)}% top ${defend.top.toFixed(2)}%, ` +
+      `recover ${recover.bottom.toFixed(2)}%, karateka ${karateka.bottom.toFixed(2)}%`;
 
-    // Recorded, not endorsed. A former Olympic boxer should be at or near zero on all three.
-    expect(defend.bottom, report).toBeGreaterThan(2);
-    expect(defend.bottom, report).toBeLessThan(6);
-    expect(defend.top, report).toBeGreaterThan(1);
-    expect(defend.top, report).toBeLessThan(4);
-    // The quietest instruction in the vocabulary still cannot switch it off.
-    expect(recover.bottom, report).toBeGreaterThan(0.8);
+    expect(defend.bottom, report).toBeLessThan(0.3);
+    expect(defend.top, report).toBeLessThan(0.2);
+    expect(recover.bottom, report).toBeLessThan(0.1);
+    expect(karateka.bottom, report).toBeLessThan(2);
+    // Ordered, and by a real margin: absent is not the same claim as liability.
+    expect(karateka.bottom / defend.bottom, report).toBeGreaterThan(3);
   });
 
-  it('separates a specialist from a man who merely has the attribute — the debt', () => {
+  it('does not pretend to answer the question intent owns — the remaining debt', () => {
     /*
-     * The claim `southpawSniper` exists for, and the version of the rule the alignment tables
-     * cannot reach.
+     * **What the gate deliberately does not fix, stated so nobody assumes it did.**
      *
-     * A `submissions: 40` striker has an *ordinary* rating and it is still not his game: he does
-     * not reach for a choke because a position happened to offer one. A `submissions: 92` guard
-     * player does nothing else. Under the same stay-standing instruction the engine separates them
-     * by **2.8:1**, when the honest answer is a category difference — and 2.8:1 read the other way
-     * puts the striker at better than a third of a world-class specialist's rate.
+     * `southpawSniper` has `submissions: 40`. That is doc 02's *below major-promotion level, a
+     * hole opponents will find* — which is a submission game, a bad one, and the gate is inert
+     * there by design. He measures **8.3% of his bottom beats before and after**, and 0.20
+     * submission attempts a fight against the boxer's 0.01.
+     *
+     * That is the right division of labour and not a gap: **repertoire answers absence, intent
+     * answers preference.** A fighter who owns a poor submission game and chooses not to use it is
+     * exactly what `bottomIntent` is for, and it moves him — `recover` takes the same fighter to
+     * 2.9%. Making the gate reach 40 would be re-litigating the anchor, and the anchor is what
+     * keeps the term inert on three quarters of the roster.
+     *
+     * If a future report is about *this* fighter rather than the boxer, the fix is a planner that
+     * gives him `recover`, not a wider gate.
      */
-    const sniper = submissionShares(ARCHETYPES.southpawSniper(), STAY_STANDING);
-    const specialist = submissionShares(ARCHETYPES.guardPlayer(), STAY_STANDING);
-    const ratio = specialist.bottom / sniper.bottom;
-    const report = `sniper ${sniper.bottom.toFixed(1)}% against specialist ${specialist.bottom.toFixed(1)}% — ${ratio.toFixed(1)}:1`;
+    const sniper = ARCHETYPES.southpawSniper();
+    const asked = submissionShares(sniper, STAY_STANDING).bottom;
+    const quiet = submissionShares(sniper, STAY_STANDING_RECOVER).bottom;
+    const report = `defend ${asked.toFixed(1)}%, recover ${quiet.toFixed(1)}%`;
 
-    // Recorded, not endorsed: 2.8:1. It fails if the separation narrows; widening it is the work.
-    expect(ratio, report).toBeGreaterThan(2);
-    expect(ratio, report).toBeLessThan(6);
+    // Recorded, not endorsed: an ordinary rating still reaches for it on one beat in twelve.
+    expect(asked, report).toBeGreaterThan(5);
+    expect(asked, report).toBeLessThan(14);
+    // And the instruction is what moves him, which is the point of leaving him to it.
+    expect(asked / quiet, report).toBeGreaterThan(2);
   });
 
-  it('is something the corner can move, which is the half that works', () => {
+  it('is something the corner can still move, which the gate must not have flattened', () => {
     /*
-     * The plan is not decorative here and it is important to say so, because the fix must not be
-     * "turn the intent up". Against the same fighter, `attack` and `recover` are a real spread —
-     * the tactical layer is doing its job. It is simply arguing on the wrong axis: no amount of
-     * instruction can express *this technique is not in his repertoire*, because instruction is
-     * about what a fighter wants and repertoire is about what he has.
+     * The risk a gate introduces: suppress an action hard enough and the plan stops mattering,
+     * which would trade D16 for a worse version of the problem the tactical layer exists to fix.
+     * It does not — on a fighter who *has* the technique the instruction is worth what it always
+     * was, and on one who does not the plan can still move him by the same ratio, from
+     * almost-never to almost-never.
      */
     const boxer = ARCHETYPES.olympicBoxer();
     const attack = submissionShares(
@@ -286,7 +308,7 @@ describe('repertoire gates choice — the submission', () => {
       plan({ preferredState: 'submission', bottomIntent: 'attack' }),
     );
     const recover = submissionShares(boxer, STAY_STANDING_RECOVER);
-    const report = `attack ${attack.bottom.toFixed(1)}% against recover ${recover.bottom.toFixed(1)}%`;
+    const report = `attack ${attack.bottom.toFixed(2)}% against recover ${recover.bottom.toFixed(2)}%`;
 
     expect(attack.bottom / recover.bottom, report).toBeGreaterThan(5);
   });
@@ -453,32 +475,54 @@ function card(
 }
 
 describe('over a card', () => {
-  it('leaves a striker attempting several submissions a career — the debt', () => {
+  it('takes a striker from several submissions a career to none', () => {
     /*
-     * The number the report was actually about, and the reason a 7% share matters: it is a share
-     * of *beats*, and a career is a great many beats. Measured over 720 fights apiece against a
-     * six-man field, at Full detail:
+     * **The report, answered at the level the player actually experiences it.** A 7% share of
+     * beats is a small number with a long reach, and this is the reach. Measured over 1,200 fights
+     * apiece against a six-man field, at Full detail, on the planner's own instructions:
      *
      * ```
-     *                     AI plan   no plan set
-     *   olympic boxer        0.25          0.75
-     *   point karateka       0.16          1.05
-     *   southpaw sniper      0.26          0.66
+     *                     before   after     over a 20-fight career
+     *   olympic boxer       0.25    0.01      5 attempts  →  0.2
+     *   point karateka      0.16    0.03      3 attempts  →  0.6
+     *   southpaw sniper     0.26    0.20      unchanged, and deliberately so (see above)
      * ```
      *
-     * A twenty-fight career is five submission attempts for a man with `submissions: 12` on the
-     * planner's own instructions, and fifteen for one whose player never opened the game-plan
-     * screen. Each of them is narrated in the play-by-play, which is why the player sees it long
-     * before any statistic would show it.
+     * The boxer now attempts a submission in about one fight in a hundred, which is a career with
+     * one scramble in it that got away from him. That is the fight the report described wanting.
      */
     const boxer = card('full', ARCHETYPES.olympicBoxer, (f, o) => planFor(f, o));
     const karateka = card('full', ARCHETYPES.pointKarateka, (f, o) => planFor(f, o));
-    const report = `boxer ${boxer.perFight.toFixed(2)}/fight, karateka ${karateka.perFight.toFixed(2)}/fight`;
+    const report = `boxer ${boxer.perFight.toFixed(3)}/fight in ${(boxer.shareOfFights * 100).toFixed(1)}% of fights, karateka ${karateka.perFight.toFixed(3)}/fight`;
 
-    // Recorded, not endorsed. Both should round to roughly nothing.
-    expect(boxer.perFight, report).toBeGreaterThan(0.1);
-    expect(boxer.perFight, report).toBeLessThan(0.45);
-    expect(karateka.perFight, report).toBeLessThan(0.35);
+    expect(boxer.perFight, report).toBeLessThan(0.05);
+    expect(boxer.shareOfFights, report).toBeLessThan(0.03);
+    expect(karateka.perFight, report).toBeLessThan(0.1);
+  });
+
+  it('leaves the fighters whose game it is completely alone', () => {
+    /*
+     * The guard that stops the fix from being a submission nerf. Every one of these reads 50 or
+     * better on `submissions`, so the gate is a hard 1 and the only thing that could move them is
+     * a bug. Measured before and after, per fight:
+     *
+     * ```
+     *   chain wrestler   3.44 → 3.51      guard player   5.47 → 5.46
+     *   grinder          7.47 → 7.50      journeyman     0.32 → 0.30
+     * ```
+     *
+     * The residual movement is sampling noise on the opponents' side of the field — `canFodder`
+     * and other low-rated opponents *are* gated, so a specialist's fights against them differ
+     * slightly. Nothing about the specialist himself moved.
+     */
+    const wrestler = card('full', ARCHETYPES.smotherer, (f, o) => planFor(f, o));
+    const guard = card('full', ARCHETYPES.guardPlayer, (f, o) => planFor(f, o));
+    const grinder = card('full', ARCHETYPES.grinder, (f, o) => planFor(f, o));
+    const report = `wrestler ${wrestler.perFight.toFixed(2)}, guard ${guard.perFight.toFixed(2)}, grinder ${grinder.perFight.toFixed(2)}`;
+
+    expect(wrestler.perFight, report).toBeGreaterThan(3);
+    expect(guard.perFight, report).toBeGreaterThan(5);
+    expect(grinder.perFight, report).toBeGreaterThan(7);
   });
 
   it('punishes the player who never opened the game-plan screen — the debt', () => {
@@ -507,39 +551,36 @@ describe('over a card', () => {
     expect(unplanned.perFight / planned.perFight, report).toBeGreaterThan(2);
   });
 
-  it('has the two resolvers disagreeing about who attempts submissions at all — the debt', () => {
+  it('narrows the gap between the two resolvers without closing it — the remaining debt', () => {
     /*
-     * **Invariant 6 says Full is the reference, and here Reduced is describing a different sport.**
+     * **D18, half fixed, and the half that is left is not what the first measurement said it was.**
      *
-     * `resolveFightByRound` builds submission attempts as
-     *
-     * ```
-     *   SUBMISSION_FLOOR + SUBMISSION_PER_CONTROL × control share × appetite   (× a backTake term)
-     * ```
-     *
-     * and `SUBMISSION_FLOOR` is **0.2 per round, unconditional** — paid by every fighter in every
-     * round regardless of control time, position, plan, or whether he has ever attempted a
-     * submission in his life. Over three rounds that is 0.6 attempts before anything about the
-     * fighter is consulted, and the jitter around it rounds up often enough that **essentially
-     * every fighter in a Reduced world attempts at least one submission in essentially every
-     * fight**:
+     * `resolveFightByRound` built submission attempts as `SUBMISSION_FLOOR + SUBMISSION_PER_CONTROL
+     * × control share × appetite`, and `SUBMISSION_FLOOR` was 0.2 per round paid by **every fighter
+     * in every round**, unconditionally. The same gate Full applies at the moment of choosing is
+     * now applied to that whole expression, floor included — a floor that survives the gate is a
+     * floor that says a boxer hunts chokes. Per fight, against a six-man field:
      *
      * ```
-     *                    Full: per fight / % of fights     Reduced: per fight / % of fights
-     *   olympic boxer         0.25   18.4%                     0.76   96.8%
-     *   point karateka        0.16   12.8%                     0.89   97.7%
-     *   journeyman            0.32   20.8%                     1.28   99.9%
+     *                    Full before → after     Reduced before → after
+     *   olympic boxer        0.25 → 0.01             0.76 → 0.04
+     *   point karateka       0.16 → 0.03             0.89 → 0.22
      * ```
      *
-     * The only rating-sensitive term in the whole expression is `tendencies.backTake`, which
-     * spans about 1.5:1 between a 12-submissions boxer and a 92-submissions specialist. The
-     * comment above the constants argues that attempts are bought with position and the rating
-     * buys conversion, and that is right about *position* and silent about *identity*: it explains
-     * why a guard player attempts fewer than a smotherer, and not why a boxer attempts any.
+     * **A correction to the original D18 report, which overstated one number.** It said ~97% of
+     * Reduced fights contained a submission attempt against 13–21% at Full. That comparison was
+     * not sound: Reduced writes a **fractional** `submissionAttempts` into `stats` — it is an
+     * expected value, not a count of events, where Full increments an integer — so "share of
+     * fights with a non-zero total" is close to 1 whenever the mean is above zero, and measures the
+     * resolver's arithmetic rather than the sport. That is a real and separate finding about the
+     * Reduced resolver's statistics, it is pre-existing, and it is not what this change fixes. The
+     * per-fight totals were and are the sound comparison, and they were genuinely 3–6× apart.
      *
-     * This matters beyond the resolver's own fidelity, because **the world's entire pre-history is
-     * simulated at Reduced detail** (`newWorld.ts`), so every record the player is matched against
-     * was built in this sport rather than the one they are shown.
+     * What is left is a ratio that still looks large on a base that is now nearly zero: Reduced
+     * runs about 4× Full on the boxer, which is 0.03 attempts a fight. Doc 31 § D10's rule is that
+     * the two resolvers must agree on **sign and not size**, and they now do — both say *this man
+     * does not attempt submissions*. Closing the last of it means giving Reduced a position model
+     * it does not have, which is D14's territory rather than this one's.
      */
     for (const [name, make] of [
       ['olympic boxer', ARCHETYPES.olympicBoxer],
@@ -547,15 +588,13 @@ describe('over a card', () => {
     ] as const) {
       const full = card('full', make, (f, o) => planFor(f, o));
       const reduced = card('reduced', make, (f, o) => planFor(f, o));
-      const report =
-        `${name}: full ${full.perFight.toFixed(2)}/fight in ${(full.shareOfFights * 100).toFixed(1)}% of fights, ` +
-        `reduced ${reduced.perFight.toFixed(2)}/fight in ${(reduced.shareOfFights * 100).toFixed(1)}% of fights`;
+      const report = `${name}: full ${full.perFight.toFixed(3)}/fight, reduced ${reduced.perFight.toFixed(3)}/fight`;
 
-      // Recorded, not endorsed: Reduced runs 3–6× hotter and puts an attempt in almost every fight.
-      expect(reduced.perFight / full.perFight, report).toBeGreaterThan(2);
-      expect(reduced.shareOfFights, report).toBeGreaterThan(0.9);
-      // The bound that fails if it gets worse.
-      expect(reduced.perFight / full.perFight, report).toBeLessThan(8);
+      // Both resolvers now say "effectively never", which is the agreement that matters.
+      expect(full.perFight, report).toBeLessThan(0.1);
+      expect(reduced.perFight, report).toBeLessThan(0.35);
+      // Recorded, not endorsed: Reduced is still the hotter of the two on a near-zero base.
+      expect(reduced.perFight, report).toBeGreaterThan(full.perFight);
     }
   });
 

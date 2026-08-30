@@ -39,9 +39,14 @@ import type { Rng } from '../core/rng.js';
 /**
  * One thing a fighter could do next.
  *
- * The three fields are multiplied in the order they are declared, which is the order the original
- * expressions used — a candidate is `capability × intent × opportunity` and nothing else. Keeping
- * the order is what makes this refactor arithmetically identical rather than merely equivalent.
+ * Four fields, multiplied. Three of them — `capability`, `opportunity`, `repertoire` — are facts
+ * about the fighter and the fight; `intent` is the only one his corner owns, which is what makes
+ * `intentAuthority` a meaningful ratio rather than an arbitrary one.
+ *
+ * `repertoire` is the newest and is doc 31 § D16: without it a candidate's share was decided by
+ * the *ratio* between the attribute naming it and whatever attribute named the candidate beside
+ * it, so nothing could say that a technique was not in a fighter's game. It is `undefined`
+ * wherever there is no technique to have.
  */
 export interface Candidate<K extends string> {
   key: K;
@@ -59,11 +64,69 @@ export interface Candidate<K extends string> {
   intent: number;
   /** What the fight itself offers: position, distance, dominance, an opening in the other man. */
   opportunity?: number;
+  /**
+   * **Is this technique in his game at all?** 0–1, `undefined` meaning "not a question here".
+   *
+   * The fourth term, and the one whose absence was doc 31 § D16. `capability` says how well an
+   * action would go and is a multiplier that never reaches zero; this says whether he would reach
+   * for it, and it is a gate. Keeping them apart is the same argument that separated the first
+   * three: a draw is a softmax over the log of everything on the capability side, so a candidate's
+   * share was decided by the *ratio* between the attribute naming it and whatever attribute named
+   * the candidate beside it — and a fighter with `submissions: 70` reached for a submission less
+   * often than one with `submissions: 30` who scrambled worse.
+   *
+   * It lives on the capability side of the draw and of `intentAuthority`, because it is a fact
+   * about the fighter rather than about his corner. `repertoire` in `ratings/curve.ts` computes it,
+   * anchored on doc 02's own scale bands, and is exactly 1 for any rating of 50 or better — so on
+   * an average-or-better fighter this field changes nothing at all.
+   *
+   * ### Exactly one candidate in every list must be left ungated, and it is not a convention
+   *
+   * **A weighted draw renormalises**, so a gate applied to every row of a list cancels out of the
+   * shares entirely — and worse than cancels, because the rows are gated by *different* amounts. It
+   * was tried that way first: gating `defend` alongside `submission` took a fighter with
+   * `submissions: 50` and `scrambling: 30` from 28% of his beats hunting a submission to **75%**,
+   * because crushing his framing left the submission the only thing on the list. The man least able
+   * to defend became the man most committed to attacking, which is the relativity this whole term
+   * exists to remove, reproduced with an extra factor.
+   *
+   * So each list has a **residual** — the thing a fighter does when he is not electing to do
+   * something else — and the residual carries no gate. Throwing hands at range, hand-fighting in a
+   * tie-up you are held in, keeping the grips in one you own, framing off your back, riding the
+   * position on top. The elective actions are gated *against* it, which means the gate can only
+   * ever move share **toward** the basic thing and never away from it. That monotonicity is the
+   * property that makes it safe: a hole can make a fighter simpler, never busier.
+   *
+   * Left `undefined` in two other places: on a bare positional constant, which is not something a
+   * fighter can be bad at, and on every **exit** — see `standUpFromTop` in `simulate.ts` for why
+   * gating the door would charge a fighter for the same hole twice.
+   */
+  repertoire?: number;
 }
 
-/** The weight a candidate actually draws with. */
-const weigh = <K extends string>(c: Candidate<K>): number =>
-  c.opportunity === undefined ? c.capability * c.intent : c.capability * c.intent * c.opportunity;
+/**
+ * The weight a candidate actually draws with.
+ *
+ * **The multiplication order is load-bearing and must stay `capability × intent × opportunity ×
+ * repertoire`.** Floating-point multiplication is not associative, so reordering these moves the
+ * last bits of a weight, and `pickWeighted` is deterministic on exactly those bits — a reorder
+ * silently reshuffles every draw in every fight in the game. The original three are in the order
+ * the pre-`decide.ts` expressions used, which is what made that refactor arithmetically identical
+ * rather than merely equivalent; `repertoire` is appended rather than inserted for the same reason,
+ * and the ternaries keep an absent field from contributing a `× 1` that would do the same thing.
+ */
+const weigh = <K extends string>(c: Candidate<K>): number => {
+  const base =
+    c.opportunity === undefined ? c.capability * c.intent : c.capability * c.intent * c.opportunity;
+  return c.repertoire === undefined ? base : base * c.repertoire;
+};
+
+/**
+ * Everything on the fighter-and-fight side of the draw: what he brings, what is available to him,
+ * and whether it is in his game. Everything except his corner, which is what `intent` is.
+ */
+const available = <K extends string>(c: Candidate<K>): number =>
+  c.capability * (c.opportunity ?? 1) * (c.repertoire ?? 1);
 
 /**
  * Pick one, weighted.
@@ -123,9 +186,7 @@ export function intentAuthority<K extends string>(candidates: readonly Candidate
    * instruction behind it read as the plan having more authority than it did.
    */
   const drawable = candidates.filter((c) => weigh(c) > 0);
-  const capabilitySpan = logSpan(
-    drawable.map((c) => (c.opportunity === undefined ? c.capability : c.capability * c.opportunity)),
-  );
+  const capabilitySpan = logSpan(drawable.map(available));
   const intentSpan = logSpan(drawable.map((c) => c.intent));
   if (capabilitySpan <= 0) return intentSpan > 0 ? Number.POSITIVE_INFINITY : 0;
   return intentSpan / capabilitySpan;
