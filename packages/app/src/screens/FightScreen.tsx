@@ -1395,16 +1395,33 @@ function TacticalInspector({
           </span>
         )}
 
-        {attempted > 0 && (
-          <span className="row" style={{ justifyContent: 'space-between' }}>
-            <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
-              Range changes won
-            </span>
-            <span className="numeric">
-              {landed} <span className="muted">of {attempted}</span>
-            </span>
+        {/*
+         * **Shown even at zero, and that is the case it exists for.**
+         *
+         * This was gated on `attempted > 0`, which hid the row precisely when the panel had the
+         * most to say. The whole reason attempts and arrivals are two counters is that *he tried
+         * eleven times and got there twice* and *he never tried* are different problems with the
+         * same `rangeSeconds` — and the second one rendered as nothing at all, leaving a player
+         * whose plan never happened with a panel that declined to mention the plan.
+         *
+         * It became reachable when `bookFight` started seeding the corner's plan (doc 31 § D19): a
+         * fighter who is handed the range he asked for has no reason to fight for it, so zero
+         * attempts is now an ordinary, and readable, result.
+         */}
+        <span className="row" style={{ justifyContent: 'space-between' }}>
+          <span className="muted" style={{ fontSize: 'var(--text-sm)' }}>
+            Range changes won
           </span>
-        )}
+          <span className="numeric">
+            {attempted === 0 ? (
+              <span className="muted">never contested</span>
+            ) : (
+              <>
+                {landed} <span className="muted">of {attempted}</span>
+              </>
+            )}
+          </span>
+        </span>
       </div>
     </div>
   );
