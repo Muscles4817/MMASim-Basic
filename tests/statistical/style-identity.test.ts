@@ -63,7 +63,11 @@ import {
 } from '@mmasim/engine';
 import { repertoire } from '@mmasim/engine';
 import { createCombatant } from '../../packages/engine/src/fight/profile.js';
-import { stanceOf, submissionOpportunity } from '../../packages/engine/src/fight/policy.js';
+import {
+  stanceOf,
+  submissionOpportunity,
+  topControlFocus,
+} from '../../packages/engine/src/fight/policy.js';
 import { actionShares } from '../../packages/engine/src/fight/decide.js';
 import { bottomWork, topCandidates } from '../../packages/engine/src/fight/simulate.js';
 
@@ -356,48 +360,64 @@ describe('the corner reads the fighter it has', () => {
     expect(state(ARCHETYPES.guardPlayer())).toBe('bottom');
   });
 
-  it('tells a man who cannot submit anybody to hunt submissions — the debt', () => {
+  it('no longer tells a man who cannot submit anybody to hunt submissions', () => {
     /*
-     * **`pickTopIntent`'s first line, and it is the clearest single defect in this file.**
+     * **D17, fixed.** `pickTopIntent`'s first line was a relative read with no floor —
      *
      * ```ts
      *   if (a.submissions > a.groundControl + 2) return 'submit';
      * ```
      *
-     * A relative read with no floor under it. It asks *which of your two ground ratings is the
-     * better one*, and hands `submit` — "expose yourself to attack the finish" — to anybody whose
-     * answer is `submissions`, **including a striker who dumped points out of both**:
-     *
-     * ```
-     *   submissions 20, groundControl 15   →   submit
-     *   submissions 30, groundControl 25   →   submit
-     *   submissions 45, groundControl 30   →   submit
-     *   submissions 12, groundControl 22   →   control   (only because he is even worse at it)
-     * ```
-     *
-     * The comment on that line records why the absolute bar was removed — `submissions > 68` was
-     * rare enough that almost everybody got `control`, and the sport's submission rate fell from
-     * 19.6% to 16.1%. That diagnosis was right and the remedy reached for the wrong lever: it
-     * raised the sport's submission rate by handing the *instruction* to people who should never
-     * receive it, rather than by letting genuine specialists hunt harder. A fighter with 20
-     * submissions being told to attack the finish is a worse fighter than one told to hold
-     * position, so this is not only a legibility problem — it is a plan that loses fights.
-     *
-     * **Fixing it will fail this test on purpose**, and it will move the sport's finish mix, which
-     * is why `roster-profile.test.ts` and `balance.test.ts` are the other half of the change.
+     * — so it asked *which of your two ground ratings is the better one* and handed `submit`,
+     * "expose yourself to attack the finish", to anybody whose answer was `submissions`, including
+     * strikers who had dumped points out of both. It now carries `SUBMIT_FROM_TOP_FLOOR`, which is
+     * `pickBottomIntent`'s own lower bar reused rather than chosen: the two functions ask the same
+     * question about the same attribute, and answering it two ways was the whole finding.
      */
-    const cases: readonly (readonly [number, number])[] = [
+    for (const [subs, gc] of [
       [20, 15],
       [30, 25],
       [45, 30],
-    ];
-    const got = cases.map(
-      ([s, g]) => `${s}/${g} → ${planFor(strikerWith(s, g), FOE).tactics.topIntent}`,
-    );
-
-    for (const [s, g] of cases) {
-      expect(planFor(strikerWith(s, g), FOE).tactics.topIntent, got.join(', ')).toBe('submit');
+      [55, 20],
+    ] as const) {
+      const got = planFor(strikerWith(subs, gc), FOE).tactics.topIntent;
+      expect(got, `submissions ${subs} / groundControl ${gc}`).not.toBe('submit');
     }
+  });
+
+  it('still tells a genuine submission grappler to hunt, which the floor must not have cost', () => {
+    /*
+     * The other half, and the reason the floor sits under the relative test rather than replacing
+     * it. An earlier absolute-only bar of `submissions > 68` handed almost everybody `control` and
+     * took the sport's submission rate from 19.6% to 16.1%; the relative comparison is what tells a
+     * submission-leaning grappler from a control-leaning one, and it survives.
+     */
+    expect(planFor(strikerWith(75, 40), FOE).tactics.topIntent).toBe('submit');
+    expect(planFor(ARCHETYPES.guardPlayer(), FOE).tactics.topIntent).toBe('submit');
+    // ...and a man whose top game is his control is still a controller, whatever his submissions.
+    expect(planFor(ARCHETYPES.smotherer(), FOE).tactics.topIntent).not.toBe('submit');
+  });
+
+  it('costs the sport almost nothing, because those fighters never finished anybody — the measurement', () => {
+    /*
+     * **The measurement the original removal of the absolute bar did not take**, and the reason
+     * this change is safe. Taking the instruction off a quarter of the roster moves the sport by
+     * less than a point, measured over every same-division pairing on the shipped 2026 world:
+     *
+     * ```
+     *                   submit%  control%   KO%    sub%   KO:sub
+     *   before            34.5      56.7   39.7    13.9     2.85
+     *   floor 56          13.7      77.7   40.0    13.0     3.08
+     * ```
+     *
+     * A fighter with `submissions: 30` told to hunt was not producing submissions; he was paying
+     * `topControlFocus` 0.7 — the worst hold in the game — for nothing. `roster-profile.test.ts`
+     * holds the population bounds; this asserts the mechanism, that a fighter who loses the
+     * instruction lands on `control` and therefore gets his position back.
+     */
+    const displaced = strikerWith(45, 30);
+    expect(planFor(displaced, FOE).tactics.topIntent).toBe('control');
+    expect(topControlFocus(createCombatant('red', displaced, planFor(displaced, FOE)))).toBe(1);
   });
 
   it('never tells one of the style exemplars to hunt from the bottom', () => {
@@ -525,30 +545,31 @@ describe('over a card', () => {
     expect(grinder.perFight, report).toBeGreaterThan(7);
   });
 
-  it('punishes the player who never opened the game-plan screen — the debt', () => {
+  it('is why an unplanned fighter is a worse fighter, which is what D19 was about', () => {
     /*
-     * **The finding with the shortest route to a fix, and it is not in the engine.**
+     * **The measurement that motivated D19, kept now that D19 is fixed** — because it is a claim
+     * about the *engine* and remains true, and because it is the evidence for why the app's default
+     * mattered so much.
      *
-     * A new booking is created with `defaultGamePlan()` (`packages/app/src/game/career.ts`), which
-     * is `adaptive` at conviction 0 — by construction, *every policy term is exactly 1.0*. That is
-     * the correct neutral for a fighter nobody planned for, and it is the wrong default for the
-     * player's own fighter, because the game-plan screen is the only place the intent to stay
-     * standing can be expressed. A player who books a fight and taps through gets a striker who
-     * behaves like a man with no instructions.
+     * `defaultGamePlan()` is `adaptive` at conviction 0, which by construction makes every term in
+     * `policy.ts` exactly 1.0. That is not a mild plan, it is *no plan*: the same fighter attempts
+     * roughly three times the submissions with no instructions as he does on his own corner's
+     * reading of him, 0.75 a fight against 0.25 before the repertoire gate and the same ratio after.
      *
-     * Measured, it is the single largest term in the complaint: **three times** the submission
-     * attempts of the same fighter on the planner's own reading of him, and the planner is not
-     * even trying to keep him off the floor.
-     *
-     * The engine is behaving correctly here. The defect is that the default is neutral rather than
-     * the corner's honest reading of the fighter — `planFor` is right there, is deterministic, and
-     * is already what every other fighter in the world gets.
+     * What changed is who gets handed it. `bookFight` used to create the player's booking with
+     * this exact plan, so a player who tapped through the camp screen fought the whole of their
+     * career unplanned; it now books `planFor`, and `tests/integration/booking-plan.test.ts` is the
+     * assertion for that. The neutral plan is still correct for a fighter nobody planned for, and
+     * every calibrated number in the statistical tier is still measured against it — which is
+     * exactly why it must stay this quiet.
      */
     const planned = card('full', ARCHETYPES.olympicBoxer, (f, o) => planFor(f, o));
     const unplanned = card('full', ARCHETYPES.olympicBoxer, () => defaultGamePlan());
-    const report = `planned ${planned.perFight.toFixed(2)}/fight against unplanned ${unplanned.perFight.toFixed(2)}/fight`;
+    const report = `planned ${planned.perFight.toFixed(3)}/fight against unplanned ${unplanned.perFight.toFixed(3)}/fight`;
 
     expect(unplanned.perFight / planned.perFight, report).toBeGreaterThan(2);
+    // And the neutral plan is genuinely neutral, which is the property the tier rests on.
+    expect(defaultGamePlan().tactics.conviction).toBe(0);
   });
 
   it('narrows the gap between the two resolvers without closing it — the remaining debt', () => {

@@ -263,18 +263,65 @@ function pickEntry(fighter: Fighter, opponent: Fighter, state: PreferredState): 
   return a.durability < o.power ? 'movement' : 'lead';
 }
 
+/**
+ * The lowest `submissions` at which *hunt the finish from top* is an instruction worth giving.
+ *
+ * **`pickBottomIntent`'s own lower bar, deliberately reused rather than chosen.** The two functions
+ * are answering the same question about the same attribute — *is his submission game real enough to
+ * build an instruction around* — and doc 31 § D17's whole complaint is that they answered it
+ * differently. One number, one answer.
+ *
+ * It is a floor under a relative test and not a replacement for it: the comparison against
+ * `groundControl` is doing real work, telling a submission-leaning grappler from a control-leaning
+ * one, and it stays.
+ */
+const SUBMIT_FROM_TOP_FLOOR = 56;
+
 /** What they do on top, from their floor game rather than from their plan. */
 function pickTopIntent(fighter: Fighter): TopIntent {
   const a = fighter.attributes;
   /*
-   * Read against the fighter's own top game, not an absolute bar — the same correction
-   * `pickBottomIntent` needed, found the same way. `submissions > 68` is rare enough on the
-   * shipped roster that almost everybody was handed `control`, and since `topBias` suppresses
-   * submissions hard for a controller, **the sport's submission rate fell from 19.6% to 16.1%
-   * and its knockout-to-submission ratio rose from 1.51 to 2.18.** A default that quiet is a
-   * design decision nobody made.
+   * **Relative, and floored — doc 31 § D17.**
+   *
+   * The relative half is right and stays; an earlier absolute-only bar of `submissions > 68` handed
+   * almost everybody `control`, and since `topBias` suppresses submissions hard for a controller the
+   * sport's submission rate fell from 19.6% to 16.1%. Removing that bar fixed it and left nothing
+   * underneath, so the line became *which of your two ground ratings is the better one* — and gave
+   * `submit`, which `TOP_INTENT_META` glosses as **"expose yourself to attack the finish"**, to
+   * anybody whose answer was `submissions`, including strikers who had dumped points out of both:
+   *
+   * ```
+   *   submissions 20, groundControl 15   →   submit
+   *   submissions 30, groundControl 25   →   submit
+   *   submissions 45, groundControl 30   →   submit
+   * ```
+   *
+   * Measured over every same-division pairing on the shipped roster, that was **34.5% of the sport
+   * told to hunt from top position**, with a median `submissions` of 50, sixty-five of them under
+   * 38 — doc 02's *effectively absent from their game* — and a minimum of 20.
+   *
+   * It is not only a legibility problem. `topControlFocus` charges `submit` **0.7**, the worst hold
+   * in the game, so a fighter with no submission game was being told to give up a third of his
+   * control to chase something he cannot finish. The planner was losing fights it should win.
+   *
+   * **And the floor costs the sport almost nothing**, which is the measurement that matters and the
+   * one the original removal did not take: taking the instruction off a quarter of the roster moves
+   * the submission rate by 0.9 points and `KO:submission` from 2.85 to 3.08, because those fighters
+   * were never finishing anybody. The instruction was noise that made them worse.
    */
-  if (a.submissions > a.groundControl + 2) return 'submit';
+  if (a.submissions > SUBMIT_FROM_TOP_FLOOR && a.submissions > a.groundControl + 2) return 'submit';
+  /*
+   * **These two are the same defect wearing an absolute bar, and they are not fixed here.**
+   *
+   * `power + groundControl > 150` and `groundControl > 68` are both set for a stronger population
+   * than the one that ships: the 2026 roster's medians are 49 power and 44 ground control, so the
+   * two branches reach **2.7% of pairings each** while `control` takes the rest. Giving `submit` a
+   * floor pushes it from 34.5% to 13.7% and `control` from 56.7% to 77.7%, which is a more honest
+   * distribution and still a lopsided one.
+   *
+   * Left alone on purpose. Re-keying them is a second behaviour change with its own measurement,
+   * and it belongs to its own finding (doc 31 § D20) rather than being smuggled into this one.
+   */
   if (a.power + a.groundControl > 150) return 'groundAndPound';
   return a.groundControl > 68 ? 'advance' : 'control';
 }

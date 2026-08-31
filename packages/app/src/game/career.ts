@@ -384,7 +384,12 @@ export function bookFight(
     // Officials are assigned at booking and shown before the fight, so a prepared player can
     // factor a stand-up-happy referee into their game plan. That is the point of showing it.
     refereeId: referees.length ? rng.pick(referees).id : undefined,
-    judgeIds: judges.length ? rng.shuffle(judges).slice(0, 3).map((j) => j.id as string) : undefined,
+    judgeIds: judges.length
+      ? rng
+          .shuffle(judges)
+          .slice(0, 3)
+          .map((j) => j.id as string)
+      : undefined,
     // The booth is part of the card too, and a biased one will misread the fight in front
     // of the player. See engine `fight/broadcast.ts`.
     commentatorId: commentators.length ? rng.pick(commentators).id : undefined,
@@ -399,7 +404,43 @@ export function bookFight(
   const booking: Booking = {
     bout,
     opponentId: opponent.id as string,
-    plan: defaultGamePlan(),
+    /*
+     * **The corner's reading of this matchup, not the neutral default** — doc 31 § D19.
+     *
+     * This was `defaultGamePlan()`, which is `adaptive` at conviction 0 and therefore, by
+     * construction, makes *every* term in `fight/policy.ts` exactly 1.0. That is the right neutral
+     * for a fighter nobody planned for, and it was the wrong default for the player's own, because
+     * the game-plan screen is the only place an intent like *stay standing* can be expressed. A
+     * player who booked a fight and tapped through got a striker who behaved like a man with no
+     * instructions — measured, **three times the submission attempts** of the same fighter on his
+     * own corner's reading of him, 0.75 a fight against 0.25, and the corner was not even trying to
+     * keep him off the floor.
+     *
+     * `planFor` is deterministic, is what every other fighter in the world already gets
+     * (`world.ts`, `night.ts`, and the opponent in `runBookedFight`), and reads this specific
+     * opponent. So the screen becomes where the player *changes* the plan rather than where they
+     * have to *supply* one, which is what a corner is for.
+     *
+     * It is a starting point and nothing more: `saveBookingPlan` overwrites it wholesale the moment
+     * the player touches anything, and `normaliseGamePlan` still runs on the way into the cage.
+     *
+     * **Only `tactics` is taken, and the rest of the plan stays the neutral default.** `planFor`
+     * builds a whole `GamePlan` because an AI fighter has no camp screen to build one on, and two
+     * of its other fields are not the corner's to give:
+     *
+     *  - `preppedReads` is a **scarce resource the player allocates** — four at most, sharing one
+     *    camp's `drillQuality` between them — and the camp screen exists to spend it. Seeding it
+     *    handed the player three drilled reads they never chose and never paid for, and silently
+     *    switched off the "You have drilled nothing" warning that tells them they have not.
+     *  - `campQuality` is `AI_CAMP_QUALITY`, a flat 0.7 standing in for a camp nobody simulates.
+     *    The player's is computed from the camp they actually run.
+     *
+     * `targeting` and `riskLevel` are left alone for the milder version of the same reason: each
+     * has its own control on the screen, each is a dial rather than an instruction, and D19 is
+     * about the *tactical* plan being `adaptive` at conviction 0. Widening it to every field would
+     * be a different change wearing this one's name.
+     */
+    plan: { ...defaultGamePlan(), tactics: planFor(fighter, opponent).tactics },
     campStartDay: world.day,
   };
   writeJson(BOOKING_KEY, booking);
@@ -543,8 +584,7 @@ export function answerBoutOffer(
   if (actionId === 'decline') {
     const agreement = fighter.agreementId
       ? (db.agreements.findById(fighter.agreementId as string) as
-          | (PromotionalAgreement & Entity)
-          | undefined)
+          (PromotionalAgreement & Entity) | undefined)
       : undefined;
     if (agreement) {
       db.agreements.upsert(refuseBout(agreement) as PromotionalAgreement & Entity);
@@ -791,7 +831,8 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
     if (forfeit > 0) {
       db.fighters.upsert({
         ...(db.fighters.getById(red.id as string) as Fighter),
-        bank: Math.round(((db.fighters.getById(red.id as string) as Fighter).bank - forfeit) * 10) / 10,
+        bank:
+          Math.round(((db.fighters.getById(red.id as string) as Fighter).bank - forfeit) * 10) / 10,
       } as Fighter & { id: string });
     }
     weighInNotes.push(
@@ -820,10 +861,9 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
     // rather than under a promotion id from a world this save is not in.
     promotionId: (booking.bout.promotionId ?? red.promotionId) as PromotionId,
     // Where it happened, so reputation is worth what the room is worth.
-    promotionPrestige: (
-      booking.bout.promotionId
-        ? (db.promotions.findById(booking.bout.promotionId as string) as Promotion | undefined)
-        : undefined
+    promotionPrestige: (booking.bout.promotionId
+      ? (db.promotions.findById(booking.bout.promotionId as string) as Promotion | undefined)
+      : undefined
     )?.prestige,
     isTitleFight: booking.bout.isTitleFight,
     rng: createRng(`${world.seed}:aftermath:${booking.bout.id}`),
@@ -861,8 +901,7 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
   db.fighters.upsert({
     ...settleInjuries(aftermath.blue, 'blue'),
     readyOnDay:
-      booking.bout.day +
-      readinessDelay(aftermath.blue, opponentLost ? result.method : undefined),
+      booking.bout.day + readinessDelay(aftermath.blue, opponentLost ? result.method : undefined),
   } as Fighter & { id: string });
 
   // Pay the man. Until this existed the purse was printed on two screens and discarded.
@@ -930,9 +969,7 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
       const winner = result.winnerId === red.id ? aftermath.red : aftermath.blue;
 
       if (previousChampion !== winner.id) {
-        db.promotions.upsert(
-          setChampion(promotion, booking.bout.divisionId, winner.id) as never,
-        );
+        db.promotions.upsert(setChampion(promotion, booking.bout.divisionId, winner.id) as never);
         titleNotes.push(
           previousChampion
             ? `${winner.lastName} is the new champion.`

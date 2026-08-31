@@ -9,7 +9,7 @@ architecture before they are implemented — some may have changed shape.**
 | F1 | **done** for the two positions that needed it — bottom and the held clinch. Distance already had the architecture; holding-clinch and top do not need it. See the audit below. |
 | D1 | **done.** `stall` is split into `maintainPosition`, which is capability-backed, and residual inactivity, which is no longer a candidate. |
 | the rest | re-ranked by architectural dependency as **D2–D9** in § 3, which is the live register. F3 is largely resolved by F1 as a side effect; two new findings were raised by the F1 audit. |
-| D16–D19 | **D16 is done and was upstream of D7.** A submission report against a created fighter found that no term in the engine could say a technique is *not in a fighter's game* — capability was a ratio of two attributes rather than an absolute. `repertoire` is the fourth term on `Candidate` that says it, anchored on doc 02's own scale bands. D17 and D19 are still open; D18 is half done. |
+| D16–D19 | **D16 is done and was upstream of D7.** A submission report against a created fighter found that no term in the engine could say a technique is *not in a fighter's game* — capability was a ratio of two attributes rather than an absolute. `repertoire` is the fourth term on `Candidate` that says it, anchored on doc 02's own scale bands. **D17 and D19 are now done too**, and D17 raised **D20**: the other two branches of `pickTopIntent` carry absolute bars set for a stronger population than the one that ships, so they reach 2.7% of pairings each. D18 is half done. |
 
 The range split (doc 05, doc 01 § invariants) fixed the standing half of a problem that is larger
 than standing. This document is the audit of what is left, and it deliberately stops before the
@@ -99,9 +99,10 @@ calibrate twice.
 | **D14** | Reduced collapses the two grappling entries into one appetite | architectural (Reduced) | — | Reduced only |
 | **D15** | A tie-up costs both men the same *(**done**)* | calibration | shipped with D3 | yes, sport-wide |
 | **D16** | Repertoire is not representable — capability is a *ratio*, never an absolute *(**done**)* | architectural (engine-wide) | — | **yes, for fighters below 38** |
-| **D17** | `pickTopIntent` hands `submit` on a relative read with no floor | cleanup (planner) | D16 decides how far it has to go | yes, sport-wide |
+| **D17** | `pickTopIntent` hands `submit` on a relative read with no floor *(**done**)* | cleanup (planner) | D16 *(done)* | yes: 34.5% of the roster loses a bad instruction, for 0.9pt of submission rate |
 | **D18** | Reduced pays an unconditional submission floor and cannot see the rating *(**half done**: the floor is gated, the position model is not)* | architectural (Reduced) | D16 *(done)* | Reduced only |
-| **D19** | The player's own booking defaults to *no plan at all* | cleanup (app) | — | yes, for one fighter |
+| **D19** | The player's own booking defaults to *no plan at all* *(**done**)* | cleanup (app) | — | yes, for one fighter |
+| **D20** | `advance` and `groundAndPound` are unreachable on the shipped roster *(new, raised by D17)* | cleanup (planner) | D17 *(done)* | distribution only |
 
 ### D1 — `stall` conflated two concepts *(was F9; **done**)*
 
@@ -1320,7 +1321,7 @@ against Full's fatigue curves rather than bundling into a vocabulary change. It 
 for `clinchIntent: 'control'` being a real strategy rather than a stalling one**, and it is related to
 D9.
 
-### D16 — Repertoire is not representable *(**done**; D17 and D19 still open, D18 half done)*
+### D16 — Repertoire is not representable *(**done**; D17 and D19 done too, D18 half done, D20 raised)*
 
 **The report.** A created fighter — a former Olympic boxer, `submissions: 12`, a game plan built
 entirely around staying on his feet and getting back up — kept hunting submissions.
@@ -1428,34 +1429,78 @@ preference.** A fighter who owns a poor submission game and chooses not to use i
 
 ---
 
-### D17 — `pickTopIntent` hands `submit` on a relative read with no floor *(raised with D16)*
+### D17 — `pickTopIntent` hands `submit` on a relative read with no floor *(**done**)*
 
 ```ts
 if (a.submissions > a.groundControl + 2) return 'submit';
 ```
 
-It asks *which of your two ground ratings is the better one* and gives `submit` — "expose yourself to
-attack the finish" — to anybody whose answer is `submissions`, **including a striker who dumped points
-out of both**:
+A relative read with nothing under it. It asked *which of your two ground ratings is the better
+one* and handed `submit` — which `TOP_INTENT_META` glosses as **"expose yourself to attack the
+finish"** — to anybody whose answer was `submissions`, **including a striker who dumped points out
+of both**:
 
 ```
   submissions 20, groundControl 15   →   submit
   submissions 30, groundControl 25   →   submit
   submissions 45, groundControl 30   →   submit
-  submissions 12, groundControl 22   →   control   (only because he is even worse at it)
 ```
 
-The comment on that line records why the absolute bar came out — `submissions > 68` was rare enough
-that almost everybody got `control`, and the sport's submission rate fell from 19.6% to 16.1%. That
-diagnosis was right and the remedy reached for the wrong lever: it raised the rate by handing the
-*instruction* to fighters who should never receive it, rather than by letting genuine specialists hunt
-harder. And it is not only a legibility problem — a 20-submissions fighter told to attack the finish
-is a worse fighter than one told to hold position, so the planner is losing fights it should win.
+**Measured over every same-division pairing on the shipped 2026 roster, that was 34.5% of the sport
+told to hunt from top position** — a median `submissions` of 50, sixty-five of them under 38 (doc
+02's *effectively absent from their game*), and a minimum of **20**.
 
-`pickBottomIntent` is the shape this needs and does not have: it reads `strikeLean` *and* keeps an
-absolute floor (`submissions > 66`, `submissions > 56`) beneath `attack`. Fixing D17 is small. It is
-listed after D16 only because D16 decides how much of the work is left once repertoire gates the
-choice anyway.
+It is not only a legibility problem. `topControlFocus` charges `submit` **0.7**, the worst hold in
+the game, so a fighter with no submission game was giving up a third of his control to chase
+something he could not finish. The planner was losing fights it should win.
+
+**The fix** is a floor under the relative test, not a replacement for it — the comparison against
+`groundControl` is doing real work, telling a submission-leaning grappler from a control-leaning
+one, and an earlier absolute-*only* bar of `submissions > 68` is what caused the original problem:
+it handed almost everybody `control` and took the sport's submission rate from 19.6% to 16.1%.
+
+`SUBMIT_FROM_TOP_FLOOR` is **56**, and it is `pickBottomIntent`'s own lower bar reused rather than
+chosen. The two functions ask the same question about the same attribute — *is his submission game
+real enough to build an instruction around* — and answering it two different ways was the whole
+finding. One number, one answer.
+
+**And it costs the sport almost nothing, which is the measurement the original removal never took.**
+Over every same-division pairing:
+
+```
+                submit%  control%    KO%    sub%   KO:sub    R1
+  before           34.5      56.7   39.7    13.9     2.85  36.8%
+  floor 56         13.7      77.7   40.0    13.0     3.08  36.3%
+```
+
+Nine tenths of a point of submission rate, for taking a bad instruction off a quarter of the roster.
+Those fighters were never finishing anybody; the instruction was noise that made them worse.
+
+---
+
+### D20 — `advance` and `groundAndPound` are unreachable on the shipped roster *(new, raised by D17)*
+
+The other two branches of the same function are the same defect wearing an absolute bar:
+
+```ts
+if (a.power + a.groundControl > 150) return 'groundAndPound';
+return a.groundControl > 68 ? 'advance' : 'control';
+```
+
+Both thresholds are set for a stronger population than the one that ships. The 2026 roster's medians
+are **49 power and 44 ground control**, so each branch reaches **2.7% of pairings** and `control`
+takes everything else. Giving `submit` its floor moves `control` from 56.7% to 77.7% — a more honest
+distribution than handing a third of the sport an instruction it cannot use, and still a lopsided
+one: a four-value vocabulary in which two values are effectively unused.
+
+Deliberately not fixed with D17. Re-keying them is a second behaviour change needing its own
+measurement, and D17's whole complaint is about a function that answered one question two ways —
+fixing that by smuggling in two more re-keyings would repeat the mistake at a larger scale.
+
+The shape they need is the one `pickBottomIntent` and D17 now share: **read against the fighter's
+own game, with an absolute floor where the instruction is risky.** Note that it is a *distribution*
+finding rather than a correctness one — unlike D17, nobody is currently given an instruction that
+hurts them; some are simply never given one that would help.
 
 ---
 
@@ -1508,23 +1553,48 @@ territory rather than this one's.
 
 ---
 
-### D19 — The player's own booking defaults to *no plan at all* *(raised with D16; not an engine defect)*
+### D19 — The player's own booking defaults to *no plan at all* *(**done**; was never an engine defect)*
 
-`packages/app/src/game/career.ts` creates a booking with `defaultGamePlan()`, which is `adaptive` at
-conviction 0 — by construction, **every policy term is exactly 1.0.** That is the correct neutral for a
-fighter nobody planned for and the wrong default for the player's own, because the game-plan screen is
-the only place *stay standing* can be said.
+`bookFight` in `packages/app/src/game/career.ts` created the booking with `defaultGamePlan()`, which
+is `adaptive` at conviction 0 — by construction, **every term in `policy.ts` exactly 1.0.** That is
+the correct neutral for a fighter nobody planned for and the wrong default for the player's own,
+because the game-plan screen is the only place *stay standing* can be said.
 
-Measured, it is the single largest term in the original report: **three times** the submission attempts
-of the same fighter on the planner's own reading of him — 0.75 a fight against 0.25, fifteen a career
-against five — and the planner is not even trying to keep him off the floor.
+Measured, it was the single largest term in the report that produced this whole register: **three
+times** the submission attempts of the same fighter on his own corner's reading of him — 0.75 a
+fight against 0.25 — and the corner was not even trying to keep him off the floor. A player who
+booked a fight and tapped through fought their entire career unplanned.
 
-`planFor` is deterministic, is already what every other fighter in the world gets, and is right there.
-A player who books a fight and taps through should get their corner's honest reading of them, and the
-screen should be where they *change* it rather than where they *supply* it.
+Now `planFor(fighter, opponent)`, which is deterministic, reads this specific opponent, and is
+already what every other fighter in the world gets (`world.ts`, `night.ts`, and the opponent in
+`runBookedFight`). The screen becomes where the player *changes* the plan rather than where they
+have to *supply* one, which is what a corner is for.
+
+**The neutral plan is untouched and must stay this quiet**, because every calibrated number in the
+statistical tier is measured against it — `tactics.test.ts`'s "leaves an unplanned fight exactly as
+it was" is the guard. What changed is who is handed it, not what it does.
+`tests/integration/booking-plan.test.ts` covers the claims, including that `saveBookingPlan` still
+overwrites it wholesale: a default the player cannot get out from under would be worse than the
+neutral one it replaced.
+
+**Only `tactics` is taken**, and finding out why is the useful part of this entry. Seeding the whole
+of `planFor` handed the player three drilled `preppedReads` — a scarce resource, four at most,
+sharing one camp's `drillQuality` — that they had never chosen and never paid for, and it silently
+switched off the camp screen's *"You have drilled nothing"* warning, which is the only thing that
+tells a player they have not spent it. `campQuality` came across as `AI_CAMP_QUALITY`, a flat 0.7
+standing in for a camp nobody simulates. The corner has an opinion about the fight; it does not get
+to run the camp. `targeting` and `riskLevel` are left alone for the milder version of the same
+reason: each has its own control on the screen, and each is a dial rather than an instruction.
+
+**It also surfaced a real gap in the post-fight inspector.** *Where the fight happened* showed its
+range contest only when `rangeChangesAttempted > 0`, which hid the row in exactly the case the two
+counters exist to distinguish: *tried eleven times, got there twice* and *never tried* have the same
+`rangeSeconds` and are different problems. A fighter handed the range he asked for has no reason to
+fight for it, so zero attempts became an ordinary result the moment the plan was seeded — and a
+player whose plan never happened was getting a panel that declined to mention the plan. It now reads
+*never contested* rather than vanishing.
 
 ---
-
 ## 3b. The register re-ranked, after D3
 
 Measured against the shipped engine rather than argued from the previous ranking. Two things moved

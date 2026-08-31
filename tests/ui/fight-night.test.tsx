@@ -277,7 +277,22 @@ describe('after it', () => {
     // Asked for against got, and the contest that decided it.
     expect(text).toMatch(/You asked for/i);
     expect(text).toMatch(/of the standing time/i);
+
+    /*
+     * **Unconditionally, including when the answer is zero.** The row used to be gated on
+     * `attempted > 0`, which hid it in exactly the case the two counters exist to tell apart:
+     * *he tried eleven times and got there twice* and *he never tried* have the same
+     * `rangeSeconds` and are different problems. A player whose plan never happened got a panel
+     * that declined to mention the plan.
+     *
+     * It stopped being hypothetical when `bookFight` began seeding the corner's plan (doc 31
+     * § D19) — a fighter handed the range he asked for has no reason to fight for it, and this
+     * suite's own fixture started producing zero attempts.
+     */
     expect(text).toMatch(/Range changes won/i);
+    expect(text, `the contest must read as a number or as "never contested": ${text}`).toMatch(
+      /Range changes won\s*(never contested|\d+\s*of\s*\d+)/i,
+    );
   });
 
   it('says how the building took it', async () => {
