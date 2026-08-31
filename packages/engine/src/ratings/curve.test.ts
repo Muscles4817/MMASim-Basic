@@ -7,6 +7,9 @@ import {
   effectToRating,
   fatigued,
   fatiguedEffect,
+  REPERTOIRE_ABSENT,
+  REPERTOIRE_OWNED,
+  repertoire,
 } from './curve.js';
 import { ATTRIBUTE_KEYS, ATTRIBUTE_META, uniformAttributes } from './attributes.js';
 
@@ -128,5 +131,68 @@ describe('fatigue', () => {
     const ratingDrop = 1 - fatigued(95, 'power', 1) / 95;
     const effectDrop = 1 - gassed / fresh;
     expect(effectDrop).toBeGreaterThan(ratingDrop);
+  });
+});
+
+/**
+ * The repertoire gate — doc 31 § D16, and doc 02's scale bands finally read by something.
+ *
+ * `effect` answers *how well would it go*; this answers *would he reach for it*. The unit claims
+ * are here; what it does to a fight is `tests/statistical/style-identity.test.ts`.
+ */
+describe('repertoire', () => {
+  it('is exactly 1 from the rating doc 02 calls a technique he has, upward', () => {
+    /*
+     * **An exact-equality claim, deliberately.** Every decision surface in the engine multiplies by
+     * this, so anything other than a hard 1 above the threshold would move the last bits of every
+     * candidate weight in the game — and `pickWeighted` is deterministic on exactly those bits.
+     * `0.03 + 0.97 * 1 === 1` is a fact about IEEE 754 rather than about arithmetic, so it is
+     * asserted rather than assumed.
+     */
+    for (let r = REPERTOIRE_OWNED; r <= 100; r++) {
+      expect(repertoire(r), `rating ${r}`).toBe(1);
+    }
+  });
+
+  it('is one value across the whole band doc 02 calls effectively absent', () => {
+    // 1–19 is a single claim in the doc, so it is a single value here: a fighter with 3 and a
+    // fighter with 18 are the same fighter for the purpose of "does he reach for this".
+    for (let r = 1; r <= REPERTOIRE_ABSENT; r++) {
+      expect(repertoire(r), `rating ${r}`).toBe(repertoire(1));
+    }
+  });
+
+  it('never reaches zero, because nothing in a fight is strictly impossible', () => {
+    /*
+     * Three reasons, in ascending order of how badly zero breaks things: a boxer who grabs a neck
+     * in a scramble is a real fight; a zero-weight candidate cannot be told from an *unavailable*
+     * one, which `intentAuthority` depends on; and a fighter terrible at everything on a list would
+     * hand `pickWeighted` a total of zero, which is a crash rather than a fight.
+     */
+    expect(repertoire(1)).toBeGreaterThan(0);
+    expect(repertoire(1)).toBeLessThan(0.05);
+  });
+
+  it('rises monotonically and convexly through the liability band', () => {
+    for (let r = 2; r <= 100; r++) {
+      expect(repertoire(r), `rating ${r}`).toBeGreaterThanOrEqual(repertoire(r - 1));
+    }
+    // Convex rather than linear: the doc's 20–37 band is not one claim end to end, so its midpoint
+    // must not read as half. A straight ramp would put 28 at 0.50 and 32 at 0.71.
+    expect(repertoire(28)).toBeLessThan(0.3);
+    expect(repertoire(32)).toBeLessThan(0.55);
+    expect(repertoire(36)).toBeGreaterThan(0.7);
+  });
+
+  it('does not read fatigue, which effect already prices', () => {
+    /*
+     * There is no fatigued form of this and the first cut had one. Repertoire is what a fighter
+     * knows and that does not change in round three; what he loses is the ability to finish the
+     * thing, which is `fatiguedEffect`'s job. Reading fatigue here charged it twice — and quietly
+     * broke the inertness above, because `FATIGUE_SENSITIVITY` for wrestling is 0.35, so a
+     * `wrestling: 40` fighter dropped through the gate by the second round.
+     */
+    expect(repertoire(fatigued(40, 'wrestling', 0.5))).toBeLessThan(1);
+    expect(repertoire(40)).toBe(1);
   });
 });

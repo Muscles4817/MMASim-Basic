@@ -355,6 +355,119 @@ export const ARCHETYPES = {
    * same id and silently breaks win-rate accounting.
    */
   journeyman2: (): Fighter => makeFighter({ id: 'fighter_journeyman_2', lastName: 'Everyman' }),
+
+  /*
+   * The three below are *style* exemplars rather than rating exemplars, and they exist for a
+   * different question than the seven above.
+   *
+   * The originals span the rating range — how good, and at what. These span the range of fighters
+   * the sport actually contains: shapes a viewer would name on sight, chosen so that a fight
+   * between any two of them should look like a fight between those two men and not like generic
+   * MMA. `tests/statistical/style-identity.test.ts` is what they are for, and the defect that
+   * produced them is that a former Olympic boxer with `submissions: 12` was hunting chokes.
+   *
+   * Every one of them has a hole, per the fourth non-negotiable, and the holes are the point: the
+   * boxer cannot wrestle, the sniper has no tank, the karateka has no power.
+   */
+
+  /**
+   * A former Olympic boxer, three fights into a conversion. The hands are world class and nothing
+   * below the waist has ever been trained.
+   *
+   * `submissions: 12` is deliberately near the floor of the scale rather than merely low. The
+   * claim this fixture is here to test is not "he is bad at submissions" — the effect curve says
+   * that and says it quietly — it is **submissions are not a thing this man does**, which is a
+   * claim about his repertoire that the engine has no term for. He is the falsifier.
+   */
+  olympicBoxer: (): Fighter =>
+    makeFighter({
+      id: 'fighter_olympic_boxer',
+      firstName: 'Danny',
+      lastName: 'Kerrigan',
+      nickname: 'The Olympian',
+      age: 29,
+      attributes: {
+        strikingOffence: 92,
+        strikingDefence: 89,
+        speed: 88,
+        power: 78,
+        fightIq: 82,
+        composure: 80,
+        cardio: 74,
+        durability: 70,
+        strength: 55,
+        // A boxer's feet are for standing on. This is the second half of "only fights on his feet".
+        kicking: 30,
+        wrestling: 25,
+        takedownDefence: 45,
+        groundControl: 22,
+        submissions: 12,
+        // Not a hole. Getting up is the one grappling skill a converted boxer trains first, and
+        // it is what makes him a fighter who *looks to get back up* rather than one who cannot.
+        scrambling: 48,
+      },
+      personality: { aggression: 60, discipline: 78, resilience: 70 },
+    }),
+
+  /**
+   * Left hand, front kick, and no interest in the floor from either end of it.
+   *
+   * The distinction from `olympicBoxer` is the one the engine keeps failing: this man has an
+   * ordinary fighter's `submissions` rather than none, and still should almost never attempt one,
+   * because attempting one is not what he does with a position. Rating and repertoire are
+   * different questions and 40 is where they come apart.
+   */
+  southpawSniper: (): Fighter =>
+    makeFighter({
+      id: 'fighter_southpaw_sniper',
+      lastName: 'Sniper',
+      attributes: {
+        strikingOffence: 94,
+        kicking: 72,
+        strikingDefence: 76,
+        speed: 90,
+        power: 88,
+        fightIq: 84,
+        composure: 72,
+        cardio: 60,
+        durability: 64,
+        strength: 58,
+        wrestling: 42,
+        takedownDefence: 58,
+        groundControl: 38,
+        submissions: 40,
+        scrambling: 55,
+      },
+      personality: { aggression: 82, discipline: 55, resilience: 60 },
+    }),
+
+  /**
+   * Karate range, side-on, everything off the counter. The one exemplar whose plan is about
+   * *where* rather than *what*, so a fight he loses control of is legible as a range failure.
+   */
+  pointKarateka: (): Fighter =>
+    makeFighter({
+      id: 'fighter_point_karateka',
+      lastName: 'Karateka',
+      attributes: {
+        strikingOffence: 84,
+        kicking: 92,
+        strikingDefence: 92,
+        speed: 89,
+        power: 68,
+        fightIq: 88,
+        composure: 82,
+        cardio: 76,
+        durability: 68,
+        strength: 54,
+        wrestling: 38,
+        takedownDefence: 70,
+        groundControl: 30,
+        submissions: 28,
+        scrambling: 58,
+      },
+      personality: { aggression: 40, discipline: 85, resilience: 72 },
+    }),
 } as const;
 
 /**

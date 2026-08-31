@@ -67,6 +67,44 @@ describe('choosing an action', () => {
     const withOne = actionShares(candidates([['a', 10, 1, 1], ['b', 10, 1]]));
     expect(withOne.a).toBeCloseTo(withOne.b, 10);
   });
+
+  it('treats a missing repertoire the same way, and an absent one as a gate', () => {
+    // The fourth term, doc 31 § D16. Same contract as `opportunity` when it is not there...
+    const withOne = actionShares([
+      { key: 'a', capability: 10, intent: 1, repertoire: 1 },
+      { key: 'b', capability: 10, intent: 1 },
+    ]);
+    expect(withOne.a).toBeCloseTo(withOne.b, 10);
+
+    // ...and a plain multiplier on the capability side when it is.
+    const gated = actionShares([
+      { key: 'a', capability: 10, intent: 1, repertoire: 0.1 },
+      { key: 'b', capability: 10, intent: 1 },
+    ]);
+    expect(gated.a).toBeCloseTo(1 / 11, 10);
+  });
+
+  it('leaves the weight bit-for-bit unchanged when no candidate declares a repertoire', () => {
+    /*
+     * **The property the gate's safety rests on, asserted as exact equality.**
+     *
+     * Floating-point multiplication is not associative and `pickWeighted` is deterministic on the
+     * last bits of a weight, so adding a fourth factor to `weigh` had to leave the three-factor
+     * path arithmetically identical — not merely equivalent — or every draw in every fight in the
+     * game would silently reshuffle. `repertoire` is therefore appended rather than inserted, and
+     * skipped entirely when absent.
+     */
+    const withField = actionShares([
+      { key: 'a', capability: 0.7, intent: 1.3, opportunity: 0.9, repertoire: 1 },
+      { key: 'b', capability: 1.1, intent: 0.6, opportunity: 1.7, repertoire: 1 },
+    ]);
+    const without = actionShares([
+      { key: 'a', capability: 0.7, intent: 1.3, opportunity: 0.9 },
+      { key: 'b', capability: 1.1, intent: 0.6, opportunity: 1.7 },
+    ]);
+    expect(withField.a).toBe(without.a);
+    expect(withField.b).toBe(without.b);
+  });
 });
 
 describe('measuring how much the plan got to say', () => {

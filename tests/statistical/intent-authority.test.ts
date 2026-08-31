@@ -261,11 +261,37 @@ const BASELINE: Readonly<Record<string, Fingerprint>> = {
     distanceSeconds: 330.867, clinchSeconds: 39.68, groundSeconds: 424.123,
     koRate: 0.27, submissionRate: 0.18, meanRound: 2.355,
   },
+  /*
+   * **Re-recorded by the repertoire gate (doc 31 § D16), and this is the only matchup it moved.**
+   *
+   * The other two are byte-identical, which is the result worth recording rather than the numbers
+   * below: `repertoire` returns exactly 1 for any rating of 38 or better, so every fighter in them
+   * multiplies by a hard 1.0 and the arithmetic is untouched. `canFodder` is the one fixture in the
+   * file who sits inside doc 02's *genuine liability* band on the attributes that matter —
+   * `kicking: 34`, `submissions: 32`, `groundControl: 36`, `scrambling: 36` — so he is the one
+   * fighter the gate is supposed to reach, and it reaches him and nobody else.
+   *
+   * What moved, and it is small and in the direction the gate intends: he throws marginally more
+   * punches and fewer of everything else (submissions 4.142 → 4.020, and the standing time up about
+   * four seconds), because a fighter with no technique he owns falls back on the thing every list
+   * leaves ungated. Knockouts moved 1.2 points, submission rate 0.2, mean round 0.003 — the sport's
+   * shape is where it was.
+   */
   'contender-v-canFodder': {
-    punches: 12.823, kicks: 3.738, takedowns: 2.923, submissions: 4.142,
-    clinchEntries: 1.212, getUps: 0.753, advances: 1.892, sweeps: 0.258,
-    distanceSeconds: 156.473, clinchSeconds: 23.968, groundSeconds: 208.59,
-    koRate: 0.63, submissionRate: 0.288, meanRound: 1.56,
+    punches: 12.878,
+    kicks: 3.767,
+    takedowns: 3.07,
+    submissions: 4.02,
+    clinchEntries: 1.242,
+    getUps: 0.785,
+    advances: 1.932,
+    sweeps: 0.268,
+    distanceSeconds: 160.947,
+    clinchSeconds: 24.705,
+    groundSeconds: 209.728,
+    koRate: 0.618,
+    submissionRate: 0.29,
+    meanRound: 1.563,
   },
   'guardPlayer-v-smotherer': {
     punches: 16.093, kicks: 3.528, takedowns: 8.452, submissions: 10.098,

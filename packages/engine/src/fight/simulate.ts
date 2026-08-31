@@ -57,7 +57,7 @@ import {
 import type { Judge, Referee } from '../domain/officials.js';
 import { defaultJudges, defaultReferee } from '../domain/officials.js';
 import { traitMul } from '../domain/traits.js';
-import { fatiguedEffect } from '../ratings/curve.js';
+import { fatiguedEffect, repertoire } from '../ratings/curve.js';
 import * as say from './commentary.js';
 import {
   applyStrike,
@@ -1053,6 +1053,12 @@ export function distanceCandidates(
       capability: fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue),
       intent: standingBias(stance, 'strike', finishOpportunity(actor, target)),
       opportunity: exploitFactor(actor, actor.attrs.strikingOffence, target.attrs.strikingDefence),
+      /*
+       * **No gate, because this is the list's residual** — see `Candidate.repertoire`. Throwing
+       * hands is what a fighter does at range when he is not electing to do something else, so it
+       * is the thing the elective actions are gated *against*. A boxer with `kicking: 30` throws
+       * more punches; he does not stop fighting.
+       */
     },
     {
       key: 'kick',
@@ -1060,11 +1066,25 @@ export function distanceCandidates(
         fatiguedEffect(actor.attrs.kicking, 'kicking', actor.fatigue) * legImpairment(actor),
       intent: standingBias(stance, 'kick'),
       opportunity: exploitFactor(actor, actor.attrs.kicking, target.attrs.strikingDefence),
+      /*
+       * The gate that makes a boxer a boxer. `kicking: 30` is doc 02's *genuine liability* band,
+       * and before D16 the only thing standing between him and a head kick was that his hands were
+       * better — a ratio, so a fighter merely bad at both threw them evenly.
+       */
+      repertoire: repertoire(actor.attrs.kicking),
     },
     {
       key: 'takedown',
       capability: fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue),
       intent: standingBias(stance, 'takedown'),
+      /*
+       * Read off the derived rating the capability reads, not off `wrestling` — the two say
+       * different things and the derived one is the honest answer here. `chainWrestling` averages
+       * in cardio and strength, so a boxer's reads 46 rather than 25 and the gate barely touches
+       * his shots: a man who cannot wrestle can still fall on somebody, and the three suppressing
+       * `opportunity` terms below already price how badly it goes.
+       */
+      repertoire: repertoire(actor.derived.chainWrestling),
       /*
        * `takedownRate` is how often they shoot, which is what the trait means. It was on the
        * takedown *contest* instead — better shots rather than more of them — and no trait in the
@@ -1082,6 +1102,7 @@ export function distanceCandidates(
       key: 'clinchUp',
       capability: fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue),
       intent: standingBias(stance, 'clinchUp'),
+      repertoire: repertoire(actor.derived.clinchOffence),
       opportunity:
         entryWeight(actor, 'clinch') *
         ENTRY_EASE[range] *
@@ -1124,18 +1145,21 @@ export function heldWork(
       capability: fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) * 0.32,
       intent: clinchWorkBias(actor, stance, 'clinchStrike', finishOpportunity(actor, target)),
       opportunity: breaking ? 0.6 : 1,
+      repertoire: repertoire(actor.derived.clinchOffence),
     },
     {
       key: 'reverse',
       capability: fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * 0.45,
       intent: clinchWorkBias(actor, stance, 'reverse'),
       opportunity: breaking ? 1.2 : 1,
+      repertoire: repertoire(actor.attrs.scrambling),
     },
     {
       key: 'pummel',
       capability: fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue) * 0.45,
       intent: clinchWorkBias(actor, stance, 'pummel'),
       opportunity: breaking ? 1.3 : 1,
+      // The residual of this list. Hand-fighting is what being in a tie-up consists of.
     },
   ];
 }
@@ -1164,11 +1188,14 @@ export function controllingCandidates(
       // Trips and throws are *this* takedown — the one that comes out of a tie-up — so the entry
       // style that had no route at range gets its route here.
       opportunity: actor.plan.tactics.entry === 'tripsAndThrows' ? 1.6 : 1,
+      repertoire: repertoire(actor.derived.chainWrestling),
     },
     {
       key: 'clinchStrike',
-      capability: fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) * 0.8,
+      capability:
+        fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue) * 0.8,
       intent: clinchWorkBias(actor, stance, 'clinchStrike', finishOpportunity(actor, target)),
+      repertoire: repertoire(actor.attrs.strikingOffence),
     },
     {
       key: 'maintainPosition',
@@ -1177,6 +1204,7 @@ export function controllingCandidates(
           MAINTAIN_CONVEXITY *
         MAINTAIN_CLINCH_SCALE,
       intent: clinchWorkBias(actor, stance, 'clinchMaintain'),
+      // The residual of this list: he already has the grips, and keeping them is the default.
     },
     {
       /*
@@ -1266,6 +1294,14 @@ export function bottomWork(
           : 0.05,
       intent: bottomWorkBias(actor, stance, 'submission', subChance),
       opportunity: escaping ? 0.5 : 1,
+      /*
+       * **The row D16 was reported against.** Before this the share here was `effect(submissions)`
+       * against `effect(scrambling)` and nothing else — a ratio, so an Olympic boxer's `submissions:
+       * 12` was read against his `scrambling: 48` and came out a modest 3.2:1 rather than a
+       * categorical absence, and improving the skill his whole game plan is built on made him hunt
+       * *more* chokes.
+       */
+      repertoire: repertoire(actor.attrs.submissions),
     },
     {
       key: 'defend',
@@ -1277,6 +1313,15 @@ export function bottomWork(
       capability: fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) * 0.8,
       intent: bottomWorkBias(actor, stance, 'defend'),
       opportunity: escaping ? 1.5 : 1,
+      /*
+       * **The residual, and leaving it ungated is what makes the gate work at all.**
+       *
+       * Gating both rows was tried first and was worse than gating neither: a weighted draw
+       * renormalises, so suppressing framing *inflated* the submission. A fighter with
+       * `submissions: 50` and `scrambling: 30` went from 28% of his beats hunting a submission to
+       * **75%** — the man least able to frame became the man most committed to attacking, which is
+       * the relativity D16 exists to remove, reproduced with an extra term.
+       */
     },
   ];
 }
@@ -1303,6 +1348,7 @@ export function topCandidates(
       capability:
         fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue) * (1 - dominance),
       intent: topBias(actor, stance, 'advancePosition'),
+      repertoire: repertoire(actor.attrs.groundControl),
     },
     {
       key: 'groundStrike',
@@ -1310,12 +1356,14 @@ export function topCandidates(
         fatiguedEffect(actor.derived.groundAndPound, 'groundControl', actor.fatigue) *
         (0.4 + dominance),
       intent: topBias(actor, stance, 'groundStrike', finishOpportunity(actor, target)),
+      repertoire: repertoire(actor.derived.groundAndPound),
     },
     {
       key: 'submission',
       capability:
         fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) * (0.3 + dominance),
       intent: topBias(actor, stance, 'submission', subChance),
+      repertoire: repertoire(actor.attrs.submissions),
     },
     {
       /*
@@ -1337,6 +1385,18 @@ export function topCandidates(
         TOP_EXIT_SCALE,
       intent: topExitBias(stance),
       /*
+       * **No `repertoire` here, and the omission is the rule rather than an oversight.** The gate
+       * asks *is this technique in his game*, and it is applied to what a fighter **does** and
+       * never to how he **leaves** - `clinchDisengage` and both `bottomExits` are the same.
+       *
+       * Two reasons, and the second is the one that would have bitten. Doc 31's own division says
+       * exits belong to `preferredState` and are about wanting out rather than about a technique,
+       * which is why `exitUrgency` takes no capability at all. And gating the door would charge a
+       * fighter for his hole twice - once when the position is imposed on him and again when he
+       * tries to leave it - so the man least able to survive on the floor would be the man least
+       * able to get off it. That is not a repertoire model, it is a trap.
+       */
+      /*
        * How much of the position the other man still has hold of. Standing out of a closed guard
        * means breaking grips off your own hips; standing off side control or mount means standing
        * up. `GROUND_DOMINANCE` runs 0.3 in guard to 1.0 on the back, so this runs about 0.5 to 1.2.
@@ -1356,6 +1416,7 @@ export function topCandidates(
        * available to him depending where he is.
        */
       opportunity: 0.7 + dominance * 0.6,
+      // The residual of this list: he is already on top, and staying there is the default.
     },
   ];
 }
