@@ -9,7 +9,7 @@ architecture before they are implemented — some may have changed shape.**
 | F1 | **done** for the two positions that needed it — bottom and the held clinch. Distance already had the architecture; holding-clinch and top do not need it. See the audit below. |
 | D1 | **done.** `stall` is split into `maintainPosition`, which is capability-backed, and residual inactivity, which is no longer a candidate. |
 | the rest | re-ranked by architectural dependency as **D2–D9** in § 3, which is the live register. F3 is largely resolved by F1 as a side effect; two new findings were raised by the F1 audit. |
-| D16–D19 | **D16 is done and was upstream of D7.** A submission report against a created fighter found that no term in the engine could say a technique is *not in a fighter's game* — capability was a ratio of two attributes rather than an absolute. `repertoire` is the fourth term on `Candidate` that says it, anchored on doc 02's own scale bands. **D17 and D19 are now done too**, and D17 raised **D20**: the other two branches of `pickTopIntent` carry absolute bars set for a stronger population than the one that ships, so they reach 2.7% of pairings each. D18 is half done. |
+| D16–D19 | **D16 is done and was upstream of D7.** A submission report against a created fighter found that no term in the engine could say a technique is *not in a fighter's game* — capability was a ratio of two attributes rather than an absolute. `repertoire` is the fourth term on `Candidate` that says it, anchored on doc 02's own scale bands. **D17, D19 and D20 are now done too.** D17 raised D20 — the other two branches of `pickTopIntent` carried absolute bars set for a stronger population than the one that ships — and all four top instructions are now reachable. D18 is half done and is the only one left. |
 
 The range split (doc 05, doc 01 § invariants) fixed the standing half of a problem that is larger
 than standing. This document is the audit of what is left, and it deliberately stops before the
@@ -102,7 +102,7 @@ calibrate twice.
 | **D17** | `pickTopIntent` hands `submit` on a relative read with no floor *(**done**)* | cleanup (planner) | D16 *(done)* | yes: 34.5% of the roster loses a bad instruction, for 0.9pt of submission rate |
 | **D18** | Reduced pays an unconditional submission floor and cannot see the rating *(**half done**: the floor is gated, the position model is not)* | architectural (Reduced) | D16 *(done)* | Reduced only |
 | **D19** | The player's own booking defaults to *no plan at all* *(**done**)* | cleanup (app) | — | yes, for one fighter |
-| **D20** | `advance` and `groundAndPound` are unreachable on the shipped roster *(new, raised by D17)* | cleanup (planner) | D17 *(done)* | distribution only |
+| **D20** | `advance` and `groundAndPound` are unreachable on the shipped roster *(**done**)* | cleanup (planner) | D17 *(done)* | yes: control 77.8% → 53.8%, and the sport moves toward the real one |
 
 ### D1 — `stall` conflated two concepts *(was F9; **done**)*
 
@@ -1321,7 +1321,7 @@ against Full's fatigue curves rather than bundling into a vocabulary change. It 
 for `clinchIntent: 'control'` being a real strategy rather than a stalling one**, and it is related to
 D9.
 
-### D16 — Repertoire is not representable *(**done**; D17 and D19 done too, D18 half done, D20 raised)*
+### D16 — Repertoire is not representable *(**done**; D17, D19 and D20 done too, D18 half done)*
 
 **The report.** A created fighter — a former Olympic boxer, `submissions: 12`, a game plan built
 entirely around staying on his feet and getting back up — kept hunting submissions.
@@ -1478,29 +1478,79 @@ Those fighters were never finishing anybody; the instruction was noise that made
 
 ---
 
-### D20 — `advance` and `groundAndPound` are unreachable on the shipped roster *(new, raised by D17)*
+### D20 — `advance` and `groundAndPound` are unreachable on the shipped roster *(**done**)*
 
-The other two branches of the same function are the same defect wearing an absolute bar:
+The other two branches of `pickTopIntent` were D17's defect wearing an absolute bar instead of no
+bar at all:
 
 ```ts
 if (a.power + a.groundControl > 150) return 'groundAndPound';
 return a.groundControl > 68 ? 'advance' : 'control';
 ```
 
-Both thresholds are set for a stronger population than the one that ships. The 2026 roster's medians
-are **49 power and 44 ground control**, so each branch reaches **2.7% of pairings** and `control`
-takes everything else. Giving `submit` its floor moves `control` from 56.7% to 77.7% — a more honest
-distribution than handing a third of the sport an instruction it cannot use, and still a lopsided
-one: a four-value vocabulary in which two values are effectively unused.
+Both were set for a stronger population than the one that ships. The 2026 roster's medians are **49
+power and 44 ground control**, and `groundControl > 68` is its 91st percentile, so *"pass, mount,
+take the back"* and *"posture up and hit them"* were instructions almost nobody was ever given —
+**5.1% and 3.5% of pairings** against `control`'s 77.8%. A four-value vocabulary in which two values
+are unused is three values and a decoration.
 
-Deliberately not fixed with D17. Re-keying them is a second behaviour change needing its own
-measurement, and D17's whole complaint is about a function that answered one question two ways —
-fixing that by smuggling in two more re-keyings would repeat the mistake at a larger scale.
+**`power + groundControl > 150` was not a claim about anything.** It is two ratings added together
+and compared to a number, so a 90-power fighter with no floor game and a 75/75 grappler both cleared
+it while a 60/60 fighter did not.
 
-The shape they need is the one `pickBottomIntent` and D17 now share: **read against the fighter's
-own game, with an absolute floor where the instruction is risky.** Note that it is a *distribution*
-finding rather than a correctness one — unlike D17, nobody is currently given an instruction that
-hurts them; some are simply never given one that would help.
+#### What replaced them
+
+Each of the three non-`control` intents **spends the position** — `topControlFocus` charges 0.87 for
+`advance`, 0.74 for `groundAndPound` and 0.70 for `submit` — so each asks the same question: *what
+does this fighter own that is worth spending it on?* And each answers it the shape D17 settled on:
+an absolute floor so the skill is really there, and a relative test where one is needed.
+
+```ts
+if (a.submissions > SUBMIT_FROM_TOP_FLOOR && a.submissions > a.groundControl + 2) return 'submit';
+if (derivedRating(a, 'groundAndPound') > GROUND_AND_POUND_FLOOR && a.power > a.groundControl + 6)
+  return 'groundAndPound';
+return a.groundControl > ADVANCE_FLOOR ? 'advance' : 'control';
+```
+
+- **`groundAndPound` is keyed on the derived rating the engine already uses for the damage**, so the
+  instruction is read off the thing it produces rather than off a sum nobody chose. `power >
+  groundControl` is what separates it from `advance`: given a position to spend, the man who hits
+  harder than he holds postures up and the technician passes.
+- **`advance` stays an absolute read**, because whether you can pass a guard is a question about
+  your own hands and not about the other three intents. Only the bar moves.
+
+**The floors are 56, 56 and 50, and the asymmetry is a claim rather than a tuning.** `submit` and
+`advance` sit above doc 02's *average for a major-promotion roster* because both are specialist acts
+that hand the position back when they fail. Ground and pound sits inside that band because **hitting
+a man you are already on top of is the least technical way there is to spend a position** — it
+requires neither passing a guard nor isolating a limb, and failing at it costs far less than failing
+at either. It asks a fighter to be ordinary at it where the other two ask him to be good.
+
+#### What it did
+
+Over all 35,627 same-division pairings:
+
+```
+             control   ground and pound   advance   submit
+  before        77.8%               5.1%      3.5%    13.6%
+  after         53.8%              17.9%     14.7%    13.6%
+```
+
+Four instructions all reachable, none dominant, `submit` untouched because D17 settled it, and
+riding the position still the plurality — which is right, because most fighters on top do.
+
+**And the sport moved toward the real one rather than away from it**, which was not the aim and is
+worth recording: taking fighters off `control` — the intent that suppresses submissions hardest at
+−0.6 — raised the submission rate about two points and took `KO:submission` from 3.09 to roughly
+2.6, against the real sport's ~1.8. `roster-profile.test.ts` holds every population bound and passes
+unchanged.
+
+**A note on how the floors were chosen, because the method nearly misled.** The sweep that compared
+candidate floors ran on every sixth pairing in division order, which is not a random sample of a
+world whose divisions differ in depth: it read the same change as 65/14/11/10 where the full 35,627
+give 53.8/17.9/14.7/13.6. The ranking of the candidates was unaffected and the choice would have
+been the same, but every figure in this entry is from the full set, and a subsample ordered by
+anything that correlates with the thing being measured should not be trusted for a level.
 
 ---
 

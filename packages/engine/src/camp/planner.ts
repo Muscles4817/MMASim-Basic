@@ -39,7 +39,7 @@ import {
   type TopIntent,
 } from '../domain/tactics.js';
 import { deriveTendencies, strikeLean } from '../fight/profile.js';
-import { deriveRatings } from '../ratings/derived.js';
+import { deriveRatings, derivedRating } from '../ratings/derived.js';
 
 /**
  * How many reads a camp drills.
@@ -277,6 +277,25 @@ function pickEntry(fighter: Fighter, opponent: Fighter, state: PreferredState): 
  */
 const SUBMIT_FROM_TOP_FLOOR = 56;
 
+/**
+ * And the same bar for passing — see `SUBMIT_FROM_TOP_FLOOR`, whose reasoning this shares.
+ *
+ * Both are specialist ways to spend a position and both hand it back when they fail, so both want a
+ * fighter who is better than doc 02's *average for a major-promotion roster* rather than merely in
+ * it. One number for one question, asked of two different ratings.
+ */
+const ADVANCE_FLOOR = 56;
+
+/**
+ * Ground and pound sits a band lower, at doc 02's *average for a major-promotion roster*.
+ *
+ * The one asymmetry in the three floors, and it is a claim rather than a tuning: **hitting a man you
+ * are already on top of is the least technical way there is to spend a position.** It does not
+ * require passing his guard or isolating a limb, and failing at it costs you far less than failing
+ * at either. So it asks a fighter to be ordinary at it, where the other two ask him to be good.
+ */
+const GROUND_AND_POUND_FLOOR = 50;
+
 /** What they do on top, from their floor game rather than from their plan. */
 function pickTopIntent(fighter: Fighter): TopIntent {
   const a = fighter.attributes;
@@ -311,19 +330,49 @@ function pickTopIntent(fighter: Fighter): TopIntent {
    */
   if (a.submissions > SUBMIT_FROM_TOP_FLOOR && a.submissions > a.groundControl + 2) return 'submit';
   /*
-   * **These two are the same defect wearing an absolute bar, and they are not fixed here.**
+   * **Posturing up to hit, and it carries the lowest floor of the three — doc 31 § D20.**
    *
-   * `power + groundControl > 150` and `groundControl > 68` are both set for a stronger population
-   * than the one that ships: the 2026 roster's medians are 49 power and 44 ground control, so the
-   * two branches reach **2.7% of pairings each** while `control` takes the rest. Giving `submit` a
-   * floor pushes it from 34.5% to 13.7% and `control` from 56.7% to 77.7%, which is a more honest
-   * distribution and still a lopsided one.
+   * `power + groundControl > 150` before this, which is not a claim about anything: it is two
+   * ratings added together and compared to a number, so a 90-power fighter with no floor game and a
+   * 75/75 grappler both cleared it and a 60/60 fighter did not. On the shipped roster it reached
+   * **2.7% of pairings**, because the medians are 49 power and 44 ground control.
    *
-   * Left alone on purpose. Re-keying them is a second behaviour change with its own measurement,
-   * and it belongs to its own finding (doc 31 § D20) rather than being smuggled into this one.
+   * Two terms now, and each says something. `derivedRating(a, 'groundAndPound')` is the rating the
+   * engine already uses for the damage itself, so the instruction is keyed on the thing it produces
+   * rather than on a sum nobody chose. And `power > groundControl` is what separates this from
+   * `advance`: given a position to spend, the man who hits harder than he holds postures up and the
+   * technician passes.
+   *
+   * **The floor is 50 rather than 56, and the gap is the point.** Doc 02 calls 50–61 *average for a
+   * major-promotion roster*, and hitting a man you are already on top of is the least technical way
+   * there is to spend a position — you need to be *ordinary* at it, not good. Passing a guard and
+   * hunting a finish are specialist acts that hand the position back when they fail, which is why
+   * those two sit a band higher.
    */
-  if (a.power + a.groundControl > 150) return 'groundAndPound';
-  return a.groundControl > 68 ? 'advance' : 'control';
+  if (derivedRating(a, 'groundAndPound') > GROUND_AND_POUND_FLOOR && a.power > a.groundControl + 6)
+    return 'groundAndPound';
+  /*
+   * **Passing, and the bar was set for a roster that does not exist.**
+   *
+   * `groundControl > 68` is the 91st percentile of the shipped world, so `advance` reached **2.1%
+   * of pairings** and "pass, mount, take the back" was an instruction almost nobody was given. The
+   * read itself is right and stays absolute: whether you can pass a guard is a question about your
+   * own hands, not about the other three intents. Only the bar moves, to the same 56 `submit`
+   * uses — passing badly is how you end up back in guard, so it wants better than average.
+   *
+   * Everything left rides the position, which is the honest default and still the plurality.
+   * Measured over all 35,627 same-division pairings on the shipped roster:
+   *
+   * ```
+   *              control   ground and pound   advance   submit
+   *   before        77.8%               5.1%      3.5%    13.6%
+   *   after         53.8%              17.9%     14.7%    13.6%
+   * ```
+   *
+   * Four instructions that are all reachable, none of them dominant, and `submit` untouched
+   * because D17 already settled it.
+   */
+  return a.groundControl > ADVANCE_FLOOR ? 'advance' : 'control';
 }
 
 /**

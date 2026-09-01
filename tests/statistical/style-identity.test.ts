@@ -61,7 +61,8 @@ import {
   type GamePlan,
   type TacticalPlan,
 } from '@mmasim/engine';
-import { repertoire } from '@mmasim/engine';
+import { TOP_INTENTS, repertoire } from '@mmasim/engine';
+import { DEFAULT_ERA, createNewGame } from '@mmasim/data';
 import { createCombatant } from '../../packages/engine/src/fight/profile.js';
 import {
   stanceOf,
@@ -418,6 +419,82 @@ describe('the corner reads the fighter it has', () => {
     const displaced = strikerWith(45, 30);
     expect(planFor(displaced, FOE).tactics.topIntent).toBe('control');
     expect(topControlFocus(createCombatant('red', displaced, planFor(displaced, FOE)))).toBe(1);
+  });
+
+  it('gives every top instruction to somebody, on the roster that actually ships', () => {
+    /*
+     * **D20.** The other two branches of `pickTopIntent` were the same defect as D17 wearing an
+     * absolute bar instead of no bar at all — `power + groundControl > 150` and `groundControl >
+     * 68`, both set for a stronger population than the one that ships. The 2026 roster's medians
+     * are 49 power and 44 ground control, so *"pass, mount, take the back"* and *"posture up and
+     * hit them"* were instructions almost nobody was ever given:
+     *
+     * ```
+     *              control   ground and pound   advance   submit
+     *   before        77.8%               5.1%      3.5%    13.6%
+     *   after         53.8%              17.9%     14.7%    13.6%
+     * ```
+     *
+     * Asserted as a floor per intent rather than as the measured split, because what is being
+     * defended is *every instruction reaches somebody* — a four-value vocabulary in which two
+     * values are unused is three values and a decoration. The bounds are wide on purpose; the
+     * population bounds live in `roster-profile.test.ts`, which is what would catch a change to
+     * this one moving the sport.
+     */
+    const db = createNewGame({ adapter: undefined, era: DEFAULT_ERA });
+    const active = (db.fighters.findAll() as Fighter[]).filter((f) => f.retiredDay === undefined);
+    const byDivision = new Map<string, Fighter[]>();
+    for (const f of active)
+      byDivision.set(f.divisionId, [...(byDivision.get(f.divisionId) ?? []), f]);
+
+    const share: Record<string, number> = {};
+    let pairings = 0;
+    for (const list of byDivision.values()) {
+      for (let i = 0; i < list.length; i++) {
+        for (let j = i + 1; j < list.length; j++) {
+          const intent = planFor(list[i]!, list[j]!).tactics.topIntent;
+          share[intent] = (share[intent] ?? 0) + 1;
+          pairings++;
+        }
+      }
+    }
+    const pct = (k: string) => ((share[k] ?? 0) * 100) / pairings;
+    const report = TOP_INTENTS.map((k) => `${k} ${pct(k).toFixed(1)}%`).join(', ');
+
+    // The guard on the fixture: if the world stops pairing, every bound below passes vacuously.
+    expect(pairings, report).toBeGreaterThan(30_000);
+
+    for (const intent of TOP_INTENTS) {
+      expect(pct(intent), `${intent} is unreachable — ${report}`).toBeGreaterThan(8);
+    }
+    // And riding the position stays the honest default without swallowing the vocabulary.
+    expect(pct('control'), report).toBeGreaterThan(40);
+    expect(pct('control'), report).toBeLessThan(70);
+  });
+
+  it('reads which way a fighter spends a position, not merely that he has one', () => {
+    /*
+     * The mechanism behind the distribution above, on controlled fighters rather than on a
+     * population: given the same position to spend, the man who hits harder than he holds postures
+     * up and the technician passes. `power > groundControl` is the whole of that separation, and
+     * `derivedRating(a, 'groundAndPound')` — the rating the engine uses for the damage itself — is
+     * the floor under it, so the instruction is keyed on what it produces rather than on a sum.
+     */
+    const onTop = (power: number, groundControl: number): Fighter =>
+      makeFighter({
+        id: `fighter_top_${power}_${groundControl}`,
+        // Low enough that the `submit` branch above never fires and this measures the two below it.
+        attributes: { power, groundControl, submissions: 30 },
+      });
+
+    // Hits harder than he holds, and hits hard enough for it to be worth the position.
+    expect(planFor(onTop(75, 55), FOE).tactics.topIntent).toBe('groundAndPound');
+    // The same edge, and nothing behind it — posturing up is not worth giving the position back.
+    expect(planFor(onTop(40, 30), FOE).tactics.topIntent).toBe('control');
+    // Holds better than he hits, and well enough to pass rather than sit.
+    expect(planFor(onTop(50, 70), FOE).tactics.topIntent).toBe('advance');
+    // Holds better than he hits and cannot pass anybody, so he rides it. The honest default.
+    expect(planFor(onTop(40, 48), FOE).tactics.topIntent).toBe('control');
   });
 
   it('never tells one of the style exemplars to hunt from the bottom', () => {
