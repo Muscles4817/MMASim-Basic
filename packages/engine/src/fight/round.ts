@@ -186,7 +186,7 @@ const CLINCH_SHARE_OF_CONTROL = 0.18;
 const BASE_TAKEDOWN_ATTEMPTS = 1.6;
 
 /**
- * Submission attempts per round: `SUBMISSION_FLOOR + SUBMISSION_PER_CONTROL × control share`.
+ * Submission attempts per round: `SUBMISSION_PER_CONTROL × control share`, and **nothing else**.
  *
  * **Nearly nothing to do with how good at submissions the fighter is**, which is the second
  * counter-intuitive thing in the table and the second one a first draft got backwards. Measured
@@ -201,8 +201,41 @@ const BASE_TAKEDOWN_ATTEMPTS = 1.6;
  * specialist twice and had the guard player beating a smotherer 28% of the time against a measured
  * 8.7%.
  */
-const SUBMISSION_FLOOR = 0.2;
-const SUBMISSION_PER_CONTROL = 3.8;
+/**
+ * **There is no intercept, and there used to be one** — `SUBMISSION_FLOOR = 0.2`, paid by every
+ * fighter in every round whatever his control time. Doc 31 § D18.
+ *
+ * It was never chosen. It is the intercept of a linear fit taken across six matchups, and **not one
+ * of the six had a fighter with near-zero floor time**, so the intercept was extrapolated into a
+ * region the fit never saw. Out there it was the whole prediction: at a control term of 0.003–0.008
+ * the shipped constants predicted 0.21–0.23 attempts a round where Full measures 0.00–0.05.
+ *
+ * D16 then moved the thing it was fitted against. The repertoire gate changed Full's submission
+ * attempts materially at the bottom of the scale — the Olympic boxer from 0.25 a fight to 0.01, the
+ * karateka 0.16 to 0.03 — and these two constants were never refitted; the gate was simply
+ * multiplied over the top of them, which is a different operation.
+ *
+ * Refitted against the Full model as it is now, over 110 matchups × 150 fights, on
+ * `attempts / B = intercept + slope × X` (see `tools/round-profile.ts` for the method):
+ *
+ * ```
+ *   free fit        intercept −0.116   slope 3.81    R² 0.9177
+ *   through zero    intercept  0       slope 3.633   R² 0.9135
+ *   as shipped      intercept  0.200   slope 3.800   R² 0.8589
+ * ```
+ *
+ * The free fit wants a **negative** intercept, which is not a thing a fighter can do; forcing it
+ * through zero costs four ten-thousandths of R² and is the only physically meaningful reading. So
+ * the floor is gone rather than reduced, and the comment above is simply true now: **attempts are
+ * bought with position, and a fighter who never got there does not make any.**
+ *
+ * `X` is built from **Full's** control shares rather than Reduced's, deliberately. Reduced
+ * over-books top control for weak grapplers (doc 31 § D21), and fitting against its own shares
+ * would bake that error into these constants — compensating one defect with another and leaving
+ * both invisible. This pair now describes the honest relationship between position and attempts;
+ * whether Reduced hands it the right position is a separate question with its own entry.
+ */
+const SUBMISSION_PER_CONTROL = 3.633;
 
 /**
  * **And how much of it is in his game at all** — doc 31 § D18, the Reduced half of D16.
@@ -893,10 +926,8 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
        */
       const submissionAttempts = around(
         roundRng,
-        (SUBMISSION_FLOOR +
-          SUBMISSION_PER_CONTROL *
-            (own * submissionAppetite(a, true) +
-              under * 0.15 * submissionAppetite(a, false))) *
+        SUBMISSION_PER_CONTROL *
+          (own * submissionAppetite(a, true) + under * 0.15 * submissionAppetite(a, false)) *
           (0.75 + a.tendencies.backTake * 0.5) *
           repertoire(a.attrs.submissions),
         0.4,
