@@ -30,21 +30,23 @@
  *    earns them. Structural rather than a fudge factor.
  */
 
-import type { AttributeKey } from '../ratings/attributes.js';
+import type { AptitudeKey, AttributeKey } from '../ratings/attributes.js';
 
 /**
  * The naturals an origin may lean.
  *
- * `frame` is derived from walking weight and `injuryProneness` is deliberately outside
- * anybody's control, so neither is biasable here — an origin that could buy a good injury
- * roll would make the one genuinely unfair number in the game a purchase.
+ * `injuryProneness` is deliberately outside anybody's control and is not biasable here — an origin
+ * that could buy a good injury roll would make the one genuinely unfair number in the game a
+ * purchase. `frame` used to be excluded for a different reason (it was derived from walking weight);
+ * it no longer exists at all, and what it was standing in for is now the body prior below.
+ *
+ * `forceVelocityBias` joined the list at doc 31 § 12 step 9, and it is the natural this layer most
+ * obviously needed. A sprinter and a shot putter are both explosive; what separates them is which
+ * end of the force-velocity curve that explosiveness comes out of, and before step 6 there was no
+ * number for that, which is precisely why the two of them had to share one `trackAndField` entry.
  */
 export type OriginNaturalKey =
-  | 'explosiveness'
-  | 'engine'
-  | 'constitution'
-  | 'recovery'
-  | 'motorLearning';
+  'explosiveness' | 'forceVelocityBias' | 'engine' | 'constitution' | 'recovery' | 'motorLearning';
 
 export type NaturalBias = Readonly<Partial<Record<OriginNaturalKey, number>>>;
 export type AttributeBias = Readonly<Partial<Record<AttributeKey, number>>>;
@@ -142,18 +144,60 @@ export const COMBAT_DISCIPLINES = [
 export type CombatDiscipline = (typeof COMBAT_DISCIPLINES)[number];
 
 /**
- * The non-combat branch.
+ * The non-combat branch. **Five since doc 31 § 12 step 9, and the reason it can be five now is
+ * that the engine gained two numbers it did not have when it was three.**
  *
- * Three, because these are three genuinely different *physical* profiles and the engine
- * reads all three — explosiveness, constitution/frame and engine are separate naturals
- * feeding separate ceilings. That is the same honesty test the six combat disciplines had
- * to pass; a fourth ("swimmer", "basketball") would land on one of these three.
+ * The old comment here justified the cap honestly and was right at the time: `trackAndField` and
+ * `enduranceSport` each had to be one entry because a sprinter and a thrower, or a rower and a
+ * marathoner, would have landed on *identical* numbers. Both of them read `explosiveness` or
+ * `engine` and nothing else, and a menu choice whose two outcomes are the same fighter is a lie
+ * told to the player — the same test doc/18 § 5 applies to a seventh martial art.
+ *
+ * Two things changed underneath it.
+ *
+ *  - **`forceVelocityBias` (step 6).** A sprinter and a shot putter are both explosive. What
+ *    separates them is which end of the force-velocity curve that explosiveness comes out of, and
+ *    until there was a number for that, "explosive" was all either of them could say.
+ *  - **The body (step 4), and its prior (this step).** A thrower and a distance runner differ by
+ *    more than twenty index points of muscle, twenty of body fat, and sixty pounds. Before the body
+ *    was a layer there was nowhere to put that, because `frame` was `walkingWeight / 300` and the
+ *    division had already decided it.
+ *
+ * So the split is not a widened menu. It is two pairs that were being averaged because the engine
+ * could not tell them apart, separated on the day it could. The test is unchanged and still
+ * binding: a sixth ("swimmer", "cycling") would land on `rowing` or `distanceRunning` and is
+ * therefore not offered.
  */
-export const ATHLETIC_ORIGINS = ['trackAndField', 'contactSport', 'enduranceSport'] as const;
+export const ATHLETIC_ORIGINS = [
+  'sprints',
+  'throws',
+  'contactSport',
+  'rowing',
+  'distanceRunning',
+] as const;
 export type AthleticOrigin = (typeof ATHLETIC_ORIGINS)[number];
 
 export type Discipline = CombatDiscipline | AthleticOrigin;
 export const DISCIPLINES: readonly Discipline[] = [...COMBAT_DISCIPLINES, ...ATHLETIC_ORIGINS];
+
+/**
+ * What a life in a sport did to the body, in index points on the primitives in `body.ts`.
+ *
+ * Doc 31 § 12 step 9. Every index is drawn N(50, 16-18), so eight points is about half a standard
+ * deviation and is a shove rather than a decision — the same principle the talent tiers use.
+ *
+ * **These are re-centred before they are applied, not added.** See `background.ts`: within any
+ * division the population-weighted mean of every prior is subtracted, so a background moves a
+ * fighter's body *relative to their division* and cannot move the division. A prior that was added
+ * raw would mean whichever backgrounds happen to be common quietly inflate everybody.
+ */
+export interface BodyPrior {
+  frameIndex?: number;
+  muscleIndex?: number;
+  bodyFatIndex?: number;
+  /** In inches, not index points. Rowers are tall; that is a fact about rowers, not about frames. */
+  heightInches?: number;
+}
 
 export interface DisciplineMeta {
   key: Discipline;
@@ -169,10 +213,47 @@ export interface DisciplineMeta {
    * *shape*, not quantity, so no discipline is the strong pick and the six are compared on
    * what kind of fighter they make. The athletic origins deliberately total far less — see
    * their entries.
+   *
+   * **Player-created fighters only.** The generated world gets its shape from `realises` and
+   * `aptitude` below instead, because those are claims about *where a fighter is on their own
+   * curve* rather than flat additions, and a flat addition applied to 40,000 newgens is
+   * indistinguishable from raising the world's ratings.
    */
   attributes: AttributeBias;
   /** Which of the hidden physical qualities this life selected for. */
   naturals: NaturalBias;
+  /** What the sport selected for physically. Doc 31 § 22.2. */
+  body: BodyPrior;
+  /**
+   * Extra share of their own ceiling this fighter has already reached at debut, per attribute, at
+   * the reference attainment (`regional`).
+   *
+   * This is the "realisation" half of step 9 and it is why `arrivalFactor` now takes a history. A
+   * national-team wrestler debuting at 24 is not a generic 24-year-old — he has spent a decade
+   * doing one of the fifteen things on the card and none of the other fourteen. The ceiling is
+   * untouched: realisation moves where a fighter *starts*, never how good they can become, so a
+   * background can never be bought as potential.
+   */
+  realises: Readonly<Partial<Record<AttributeKey, number>>>;
+  /**
+   * Which family of skill this life leaves a fighter learning fastest, in rating points on the
+   * aptitude roll. Doc 23 § 2.2.
+   *
+   * Realisation alone would be a debut artefact that washes out over a career — everybody
+   * converges on the same flat technical ceilings, so the wrestler stops being a wrestler by
+   * thirty. The aptitude lean is what makes a background durable without making it a ceiling.
+   */
+  aptitude: Readonly<Partial<Record<AptitudeKey, number>>>;
+  /**
+   * How far from the median professional this sport's people sit on mass, in standard deviations.
+   *
+   * Used only to condition which backgrounds turn up in which division: throwers are common at
+   * heavyweight and absent at flyweight, and distance runners the reverse. Without this the body
+   * prior would spend its life fighting the division the sampler was asked for.
+   */
+  massAffinity: number;
+  /** Share of the professional intake from this background, before division conditioning. */
+  intake: number;
 }
 
 export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
@@ -187,7 +268,12 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
       'Hands, footwork, and a head that moves. You have been hit properly by people who meant it, and you did not fall apart.',
     weakness: 'Everything below the waist is a mystery, and the first double leg will be a shock.',
     attributes: { strikingOffence: 17, strikingDefence: 12, speed: 6, power: 5 },
-    naturals: { explosiveness: 5 },
+    naturals: { explosiveness: 5, forceVelocityBias: 3 },
+    body: { muscleIndex: 2, bodyFatIndex: -3 },
+    realises: { strikingOffence: 0.11, strikingDefence: 0.07, speed: 0.03 },
+    aptitude: { striking: 6 },
+    massAffinity: 0,
+    intake: 0.15,
   },
   kickboxing: {
     key: 'kickboxing',
@@ -196,8 +282,19 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
     blurb:
       'Long weapons and shins that were conditioned the hard way. You are comfortable at a range most people find frightening.',
     weakness: 'You have spent your life being allowed to stand up. Nobody has ever taken you down.',
-    attributes: { kicking: 16, strikingOffence: 10, strikingDefence: 7, durability: 5, strength: 2 },
+    attributes: {
+      kicking: 16,
+      strikingOffence: 10,
+      strikingDefence: 7,
+      durability: 5,
+      strength: 2,
+    },
     naturals: { explosiveness: 4, constitution: 4 },
+    body: { heightInches: 0.8, frameIndex: -2, bodyFatIndex: -3 },
+    realises: { kicking: 0.11, strikingOffence: 0.06, durability: 0.04 },
+    aptitude: { striking: 6 },
+    massAffinity: 0,
+    intake: 0.18,
   },
   karate: {
     key: 'karate',
@@ -210,7 +307,12 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
     // strikingOffence and kicking, so a karateka who matched a boxer's hands would simply be
     // a better boxer. The identity is speed and selection, not volume.
     attributes: { kicking: 15, speed: 11, strikingDefence: 8, fightIq: 4, strikingOffence: 2 },
-    naturals: { explosiveness: 6 },
+    naturals: { explosiveness: 6, forceVelocityBias: 5 },
+    body: { heightInches: 0.5, muscleIndex: -4, bodyFatIndex: -5 },
+    realises: { kicking: 0.09, speed: 0.05, strikingDefence: 0.05 },
+    aptitude: { striking: 5, strategy: 2 },
+    massAffinity: -0.3,
+    intake: 0.06,
   },
   wrestling: {
     key: 'wrestling',
@@ -220,7 +322,12 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
       'Years on the mat. You already know how to make a grown man go where you want him to go, and how to stop him doing it to you.',
     weakness: 'You have never been punched in the face properly.',
     attributes: { wrestling: 15, takedownDefence: 12, strength: 7, groundControl: 4, cardio: 2 },
-    naturals: { explosiveness: 5, engine: 5 },
+    naturals: { explosiveness: 5, engine: 5, forceVelocityBias: -3 },
+    body: { frameIndex: 4, muscleIndex: 7, bodyFatIndex: -4 },
+    realises: { wrestling: 0.12, takedownDefence: 0.08, strength: 0.04 },
+    aptitude: { grappling: 6, conditioning: 3 },
+    massAffinity: 0.3,
+    intake: 0.24,
   },
   jiuJitsu: {
     key: 'jiuJitsu',
@@ -231,6 +338,11 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
     weakness: 'You have to get it there first, and standing up you are a target.',
     attributes: { submissions: 16, scrambling: 11, groundControl: 8, fightIq: 3, composure: 2 },
     naturals: { recovery: 5, motorLearning: 3 },
+    body: { muscleIndex: -2 },
+    realises: { submissions: 0.12, scrambling: 0.08, groundControl: 0.05 },
+    aptitude: { grappling: 6 },
+    massAffinity: -0.2,
+    intake: 0.17,
   },
   judo: {
     key: 'judo',
@@ -240,7 +352,12 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
       'Grips, throws and the strangle that follows. You take people off their feet from a position they thought was safe.',
     weakness: 'Everything you know starts from a grip nobody in a cage is obliged to give you.',
     attributes: { wrestling: 11, submissions: 10, groundControl: 7, strength: 6, scrambling: 6 },
-    naturals: { explosiveness: 4, recovery: 3 },
+    naturals: { explosiveness: 4, recovery: 3, forceVelocityBias: -2 },
+    body: { frameIndex: 4, muscleIndex: 5 },
+    realises: { wrestling: 0.07, submissions: 0.06, groundControl: 0.05, strength: 0.03 },
+    aptitude: { grappling: 6 },
+    massAffinity: 0.2,
+    intake: 0.08,
   },
 
   /*
@@ -254,15 +371,42 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
    * own axis. Here it is a different branch of a different layer, which is what lets it be
    * this lopsided without being either a trap or a dominant pick.
    */
-  trackAndField: {
-    key: 'trackAndField',
+  sprints: {
+    key: 'sprints',
     kind: 'athletic',
-    label: 'Track & Field',
+    label: 'Sprints & Jumps',
     blurb:
-      'Sprints, jumps, throws. You are explosive in a way that cannot be taught and you have never thrown a punch at a person.',
-    weakness: 'You are an athlete pretending to be a fighter. Everything technical is ahead of you.',
-    attributes: { speed: 9, power: 6, strength: 3 },
-    naturals: { explosiveness: 11, motorLearning: 5, engine: 3, recovery: 2 },
+      'Ten seconds of work at a time, for fifteen years. You are explosive in a way that cannot be taught and you have never thrown a punch at a person.',
+    weakness:
+      'You are an athlete pretending to be a fighter. Everything technical is ahead of you.',
+    attributes: { speed: 10, power: 6, strength: 2 },
+    naturals: { explosiveness: 12, forceVelocityBias: 8, motorLearning: 5, engine: 2, recovery: 2 },
+    // Lean and dense rather than large. A 100m finalist is not a big man; he is a man with almost
+    // no fat on him, which is a body-fat statement and not a mass one.
+    body: { muscleIndex: 8, bodyFatIndex: -10, frameIndex: -2 },
+    realises: { speed: 0.1, power: 0.05 },
+    aptitude: { conditioning: 4, striking: 2 },
+    massAffinity: 0,
+    intake: 0.022,
+  },
+  throws: {
+    key: 'throws',
+    kind: 'athletic',
+    label: 'Throws',
+    blurb:
+      'Shot, discus, hammer. You are one of the largest and strongest people most rooms have ever had in them, and none of it was for show.',
+    weakness:
+      'You are an athlete pretending to be a fighter. Everything technical is ahead of you.',
+    attributes: { strength: 10, power: 7, speed: 1 },
+    naturals: { explosiveness: 10, forceVelocityBias: -9, motorLearning: 4, constitution: 3 },
+    // The largest prior in the game, and the one that most needs the division conditioning below:
+    // a thrower belongs at heavyweight and the sampler should almost never be asked for one at
+    // flyweight.
+    body: { frameIndex: 12, muscleIndex: 12, bodyFatIndex: 6, heightInches: 1.5 },
+    realises: { strength: 0.1, power: 0.05 },
+    aptitude: { grappling: 3, conditioning: 2 },
+    massAffinity: 1.4,
+    intake: 0.012,
   },
   contactSport: {
     key: 'contactSport',
@@ -270,19 +414,63 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
     label: 'Rugby / American Football',
     blurb:
       'Big, strong, and entirely used to collisions. Somebody has been running into you at speed since you were twelve.',
-    weakness: 'You are an athlete pretending to be a fighter. Everything technical is ahead of you.',
+    weakness:
+      'You are an athlete pretending to be a fighter. Everything technical is ahead of you.',
     attributes: { strength: 8, durability: 6, power: 4 },
     naturals: { constitution: 9, explosiveness: 7, engine: 4, motorLearning: 4 },
+    body: { frameIndex: 8, muscleIndex: 7, bodyFatIndex: 4 },
+    realises: { durability: 0.06, strength: 0.05 },
+    aptitude: { grappling: 3, conditioning: 3 },
+    massAffinity: 0.9,
+    intake: 0.026,
   },
-  enduranceSport: {
-    key: 'enduranceSport',
+  rowing: {
+    key: 'rowing',
     kind: 'athletic',
-    label: 'Rowing / Distance Running',
+    label: 'Rowing',
     blurb:
-      'An engine nobody in this sport can match and a tolerance for suffering that was built over years.',
-    weakness: 'You are an athlete pretending to be a fighter. Everything technical is ahead of you.',
-    attributes: { cardio: 11, composure: 4, strength: 3 },
-    naturals: { engine: 11, recovery: 6, motorLearning: 4, explosiveness: 1 },
+      'Tall, long, and built by six years of the most miserable training in sport. You are strong in a way that lasts all afternoon.',
+    weakness:
+      'You are an athlete pretending to be a fighter. Everything technical is ahead of you.',
+    attributes: { cardio: 9, strength: 6, composure: 3 },
+    // 11 and 6 rather than 10 and 5. `origin.test.ts` asserts that every athletic origin
+    // out-ceilings every combat art — that is the whole identity of the branch, and it is the
+    // price paid for debuting unable to fight — and the first draft of this entry landed 0.03
+    // under it. Splitting `enduranceSport` should not have cost the half of it that stayed.
+    naturals: {
+      engine: 11,
+      recovery: 6,
+      forceVelocityBias: -4,
+      motorLearning: 4,
+      explosiveness: 2,
+    },
+    // The tallest prior in the game. Rowing selects on height harder than any sport here — leverage
+    // on an oar is length — and that is a claim the old shared `enduranceSport` entry could not
+    // make, because it had to be true of marathoners at the same time.
+    body: { heightInches: 2.5, frameIndex: 7, muscleIndex: 5, bodyFatIndex: -5 },
+    realises: { cardio: 0.09, strength: 0.04 },
+    aptitude: { conditioning: 6 },
+    massAffinity: 0.8,
+    intake: 0.012,
+  },
+  distanceRunning: {
+    key: 'distanceRunning',
+    kind: 'athletic',
+    label: 'Distance Running',
+    blurb:
+      'An engine nobody in this sport can match, on a frame that carries nothing it does not need. You have suffered for longer at a time than anybody you will meet in a cage.',
+    weakness:
+      'You are an athlete pretending to be a fighter. Everything technical is ahead of you.',
+    attributes: { cardio: 12, composure: 4, speed: 2 },
+    naturals: { engine: 13, recovery: 6, motorLearning: 4 },
+    // The mirror of `throws`, and the pair is the argument for the split: these two were one entry
+    // called `trackAndField` and `enduranceSport` respectively averaged with their opposites, and
+    // between them they now span 24 index points of muscle and 20 of fat.
+    body: { muscleIndex: -11, bodyFatIndex: -14, frameIndex: -7 },
+    realises: { cardio: 0.12, composure: 0.04 },
+    aptitude: { conditioning: 7 },
+    massAffinity: -1.3,
+    intake: 0.008,
   },
 };
 
@@ -348,6 +536,22 @@ export interface AttainmentMeta {
    * ageing (`applyAgeing`) then charges them for it for the rest of the career.
    */
   minDebutAge: number;
+  /**
+   * Multiplier on the discipline's `realises` shares. `regional` is the reference at 1.0.
+   *
+   * Deliberately wider than `skill`, and for a reason that is the opposite of the one that keeps
+   * `skill` narrow. `skill` is a claim about *ceilings*, where attainment must not be a second
+   * talent dial. This is a claim about how much of an existing ceiling somebody has already
+   * reached, and there the difference between a club player and a national squad member is
+   * genuinely large: it is the difference between six years of training and sixteen.
+   *
+   * It buys nothing at the top. A fighter who arrives at 0.95 of a mediocre ceiling is still
+   * mediocre, and has less left to gain than the club fighter next to him — which is the trade
+   * this layer is supposed to make and the reason it is not simply better to be a world medallist.
+   */
+  realisation: number;
+  /** Share of the professional intake at this attainment, before the debut-age filter. */
+  intake: number;
 }
 
 export const ATTAINMENT_META: Readonly<Record<Attainment, AttainmentMeta>> = {
@@ -363,39 +567,53 @@ export const ATTAINMENT_META: Readonly<Record<Attainment, AttainmentMeta>> = {
     reputation: 5,
     starPower: 1,
     minDebutAge: 18,
+    realisation: 0.45,
+    intake: 0.4,
   },
   regional: {
     key: 'regional',
     label: 'Regional',
     athleticLabel: 'Semi-professional',
-    blurb: 'State titles, regional circuit, a small write-up somewhere. Matchmakers in one region know you.',
-    athleticBlurb: 'Paid a little, trained properly, and were plainly better than the amateurs around you.',
+    blurb:
+      'State titles, regional circuit, a small write-up somewhere. Matchmakers in one region know you.',
+    athleticBlurb:
+      'Paid a little, trained properly, and were plainly better than the amateurs around you.',
     skill: 1,
     reputation: 14,
     starPower: 3,
     minDebutAge: 19,
+    realisation: 1,
+    intake: 0.38,
   },
   national: {
     key: 'national',
     label: 'National team',
     athleticLabel: 'Professional',
-    blurb: 'You made the national squad and you medalled at it. People in the sport argue about you.',
-    athleticBlurb: 'A full professional career in another sport, with a following that came with it.',
+    blurb:
+      'You made the national squad and you medalled at it. People in the sport argue about you.',
+    athleticBlurb:
+      'A full professional career in another sport, with a following that came with it.',
     skill: 1.15,
     reputation: 26,
     starPower: 7,
     minDebutAge: 22,
+    realisation: 1.55,
+    intake: 0.18,
   },
   world: {
     key: 'world',
     label: 'Olympic / World level',
     athleticLabel: 'International',
-    blurb: 'You stood on a podium with the flag behind you. Promoters have wanted this phone call for years.',
-    athleticBlurb: 'You represented your country at the top of your sport. Everybody already knows the name.',
+    blurb:
+      'You stood on a podium with the flag behind you. Promoters have wanted this phone call for years.',
+    athleticBlurb:
+      'You represented your country at the top of your sport. Everybody already knows the name.',
     skill: 1.3,
     reputation: 40,
     starPower: 14,
     minDebutAge: 25,
+    realisation: 2,
+    intake: 0.04,
   },
 };
 

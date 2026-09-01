@@ -54,7 +54,19 @@ describe('the size of a fresh save', () => {
      * is another 25 characters a fighter; and doc 20 phases 3 to 5 rebuild the roster from its seed,
      * which deletes 90% of this file's subject outright.
      */
-    expect(adapter.total()).toBeLessThan(3.2 * MB);
+    /*
+     * **The ceiling moved 3.2 -> 3.35 MB at doc 31 § 12 step 9, and this is the price of that.**
+     * Every fighter gained a `background` — the sport they came out of and how far they got at it —
+     * which is what made styles possible in the generated world and what two of doc 31 § 10.3's
+     * diagnostics had been waiting on since step 2.
+     *
+     * **It cost 99 KB**, 3.089 -> 3.186 MB, 3.2%. As with `physique` before it, almost all of that
+     * is JSON key names rather than data: the payload is two short strings and an optional third.
+     * Storing it packed would buy most of it back and would make the save unreadable, which doc 20
+     * phases 3 to 5 make moot anyway by rebuilding the roster from its seed and deleting 90% of
+     * this file's subject outright.
+     */
+    expect(adapter.total()).toBeLessThan(3.35 * MB);
   });
 
   it('fits the 2020 world inside its budget', () => {

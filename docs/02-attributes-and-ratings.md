@@ -286,7 +286,7 @@ have completely different futures.
 | Natural               | Governs                                                                                  |
 | --------------------- | ---------------------------------------------------------------------------------------- |
 | **Explosiveness**     | Neuromuscular quality. Lifts Power, Speed and Strength together. Declines earliest.      |
-| **ForceVelocityBias** | _Where_ on the force–velocity curve that quality sits. Low = Speed, high = Strength.     |
+| **ForceVelocityBias** | _Where_ on the force–velocity curve that quality sits. Low = Strength, high = Speed.     |
 | **Engine**            | Ceiling for Cardio. Declines slowly. Merab-tier is ~97.                                  |
 | **Constitution**      | Ceiling for Durability; also the _floor_ Durability decays toward as damage accumulates. |
 | **Recovery**          | Injury healing speed, inter-round recovery, camp load tolerance.                         |

@@ -79,8 +79,10 @@ describe('the origin picker asks three questions', () => {
     expect(names).toContain('Wrestling');
     expect(names).toContain('Brazilian Jiu-Jitsu');
     expect(names).toContain('Judo / Sambo');
-    // Six arts plus the three non-combat sports the default tier allows.
-    expect(trained).toHaveLength(9);
+    // Six arts plus the five non-combat sports the default tier allows. Three until doc 31 § 12
+    // step 9 split `trackAndField` into sprints and throws and `enduranceSport` into rowing and
+    // distance running — see § 22.1 for why that stopped being a widened menu.
+    expect(trained).toHaveLength(11);
   });
 });
 
@@ -90,9 +92,7 @@ describe('layer 1 filters layer 3', () => {
     await openCreator(user);
 
     await user.click(within(layer(/athlete you are/i)).getByRole('radio', { name: 'Freak' }));
-    expect(
-      within(layer(/How far you got/i)).getByRole('radio', { name: /Olympic/i }),
-    ).toBeTruthy();
+    expect(within(layer(/How far you got/i)).getByRole('radio', { name: /Olympic/i })).toBeTruthy();
 
     // Not offered-and-discounted: not offered. An Olympic medallist *is* an elite athlete,
     // so scaling it down under a lesser tier would count the same fact twice.
@@ -102,7 +102,9 @@ describe('layer 1 filters layer 3', () => {
         within(layer(/How far you got/i)).queryByRole('radio', { name: /Olympic/i }),
       ).toBeNull();
     });
-    expect(within(layer(/How far you got/i)).queryByRole('radio', { name: /National/i })).toBeNull();
+    expect(
+      within(layer(/How far you got/i)).queryByRole('radio', { name: /National/i }),
+    ).toBeNull();
     expect(screen.getByText(/rungs above this open up if you are a better athlete/i)).toBeTruthy();
   });
 
@@ -139,7 +141,7 @@ describe('layer 1 filters layer 3', () => {
       expect(within(layer(/What you trained/i)).getAllByRole('radio')).toHaveLength(6);
     });
     expect(
-      within(layer(/What you trained/i)).queryByRole('radio', { name: /Track & Field/i }),
+      within(layer(/What you trained/i)).queryByRole('radio', { name: /Sprints & Jumps/i }),
     ).toBeNull();
   });
 
@@ -192,9 +194,13 @@ describe('the second discipline', () => {
     const select = screen.getByLabelText(/second discipline/i) as HTMLSelectElement;
     expect([...select.options].map((o) => o.value)).not.toContain('boxing');
 
-    await user.click(within(layer(/What you trained/i)).getByRole('radio', { name: 'Track & Field' }));
+    await user.click(
+      within(layer(/What you trained/i)).getByRole('radio', { name: 'Sprints & Jumps' }),
+    );
     await waitFor(() => {
-      expect((screen.getByLabelText(/second discipline/i) as HTMLSelectElement).disabled).toBe(true);
+      expect((screen.getByLabelText(/second discipline/i) as HTMLSelectElement).disabled).toBe(
+        true,
+      );
     });
     expect(screen.getByText(/never trained a martial art/i)).toBeTruthy();
   });
@@ -211,7 +217,9 @@ describe('the non-combat branch is the most distinct thing on the screen', () =>
     await user.click(within(layer(/What you trained/i)).getByRole('radio', { name: 'Boxing' }));
     const boxer = await read(/^Striking:/i);
 
-    await user.click(within(layer(/What you trained/i)).getByRole('radio', { name: 'Track & Field' }));
+    await user.click(
+      within(layer(/What you trained/i)).getByRole('radio', { name: 'Sprints & Jumps' }),
+    );
     const sprinter = await read(/^Striking:/i);
 
     expect(sprinter).toBeLessThan(boxer - 8);
@@ -261,7 +269,9 @@ describe('the whole thing still gets you into a career', () => {
     await user.click(
       within(layer(/What you trained/i)).getByRole('radio', { name: 'Rugby / American Football' }),
     );
-    await user.click(within(layer(/How far you got/i)).getByRole('radio', { name: /International/i }));
+    await user.click(
+      within(layer(/How far you got/i)).getByRole('radio', { name: /International/i }),
+    );
     await user.click(screen.getByRole('button', { name: /Turn pro/i }));
 
     expect(await screen.findByText(/Origin/)).toBeTruthy();

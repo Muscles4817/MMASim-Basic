@@ -233,32 +233,36 @@ describe('layer 2 — discipline shapes the fighter', () => {
       const boxer = sample({ talent: 'freak', discipline: 'boxing', attainment: 'regional' });
       const athlete = sample({
         talent: 'freak',
-        discipline: 'trackAndField',
+        discipline: 'sprints',
         attainment: 'regional',
       });
       expect(athlete.startOverall).toBeLessThan(boxer.startOverall);
       expect(athlete.ceilingOverall).toBeGreaterThan(boxer.ceilingOverall);
     });
 
-    it('specialises in different physical qualities rather than being one option three times', () => {
-      const track = sample({
-        talent: 'natural',
-        discipline: 'trackAndField',
-        attainment: 'regional',
-      });
-      const contact = sample({
-        talent: 'natural',
-        discipline: 'contactSport',
-        attainment: 'regional',
-      });
-      const endurance = sample({
-        talent: 'natural',
-        discipline: 'enduranceSport',
-        attainment: 'regional',
-      });
-      expect(track.ceiling('speed')).toBeGreaterThan(endurance.ceiling('speed'));
-      expect(endurance.ceiling('cardio')).toBeGreaterThan(track.ceiling('cardio'));
-      expect(contact.ceiling('durability')).toBeGreaterThan(track.ceiling('durability'));
+    it('specialises in different physical qualities rather than being one option five times', () => {
+      const at = (discipline: Discipline) =>
+        sample({ talent: 'natural', discipline, attainment: 'regional' });
+      const sprint = at('sprints');
+      const throwing = at('throws');
+      const contact = at('contactSport');
+      const row = at('rowing');
+      const distance = at('distanceRunning');
+
+      expect(sprint.ceiling('speed')).toBeGreaterThan(distance.ceiling('speed'));
+      expect(distance.ceiling('cardio')).toBeGreaterThan(sprint.ceiling('cardio'));
+      expect(contact.ceiling('durability')).toBeGreaterThan(sprint.ceiling('durability'));
+
+      /*
+       * The two splits doc 31 § 12 step 9 made, asserted as the separations that justify them.
+       * Before `forceVelocityBias` and the body layer existed, each of these pairs was one menu
+       * entry because the engine had no number that could tell them apart — so if either pair ever
+       * collapses back together, the split has stopped being honest and should be undone rather
+       * than left as a wider menu that means nothing.
+       */
+      expect(throwing.ceiling('strength')).toBeGreaterThan(sprint.ceiling('strength') + 8);
+      expect(sprint.ceiling('speed')).toBeGreaterThan(throwing.ceiling('speed') + 8);
+      expect(row.ceiling('strength')).toBeGreaterThan(distance.ceiling('strength') + 5);
     });
 
     it('is not offered to the tier that has no athletic story to tell', () => {
@@ -344,7 +348,7 @@ describe('layer 2 — discipline shapes the fighter', () => {
 
     it('refuses a second art that is the same one, or that is not an art at all', () => {
       expect(secondaryOptionsFor('boxing')).not.toContain('boxing');
-      expect(secondaryOptionsFor('trackAndField')).toHaveLength(0);
+      expect(secondaryOptionsFor('sprints')).toHaveLength(0);
       for (const d of DISCIPLINES) {
         for (const s of secondaryOptionsFor(d)) {
           expect(isAthleticOrigin(s)).toBe(false);
@@ -361,7 +365,7 @@ describe('layer 2 — discipline shapes the fighter', () => {
       expect(
         validateOrigin({
           talent: 'freak',
-          discipline: 'trackAndField',
+          discipline: 'sprints',
           secondary: 'boxing',
           attainment: 'regional',
         }).length,
@@ -475,7 +479,7 @@ describe('keeping an origin legal as the layers above it change', () => {
   it('replaces a discipline the new tier does not offer', () => {
     const reconciled = reconcileOrigin({
       talent: 'grinder',
-      discipline: 'trackAndField',
+      discipline: 'sprints',
       attainment: 'amateur',
     });
     expect(isAthleticOrigin(reconciled.discipline)).toBe(false);
@@ -485,7 +489,7 @@ describe('keeping an origin legal as the layers above it change', () => {
     expect(
       reconcileOrigin({
         talent: 'freak',
-        discipline: 'trackAndField',
+        discipline: 'sprints',
         secondary: 'boxing',
         attainment: 'world',
       }).secondary,
@@ -716,7 +720,7 @@ describe('a created fighter is still a prospect, whatever the origin', () => {
     const corners: FighterOrigin[] = [
       { talent: 'freak', discipline: 'wrestling', secondary: 'boxing', attainment: 'world' },
       { talent: 'grinder', discipline: 'jiuJitsu', attainment: 'amateur' },
-      { talent: 'natural', discipline: 'enduranceSport', attainment: 'national' },
+      { talent: 'natural', discipline: 'distanceRunning', attainment: 'national' },
     ];
     for (const origin of corners) {
       for (let i = 0; i < 40; i++) {

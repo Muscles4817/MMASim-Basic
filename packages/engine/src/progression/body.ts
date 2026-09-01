@@ -629,9 +629,28 @@ export function sampleCutTolerance(rng: Rng): number {
  * world's newgen intake drifting into two different species — the failure doc 31 § 12 step 4 calls
  * out by name.
  */
-export function sampleBody(rng: Rng, sex: Sex): Body {
+/**
+ * A shift applied to the draw's *centre*, in index points and inches. Doc 31 § 12 step 9.
+ *
+ * Shifting the centre rather than the drawn value is what keeps this a prior rather than a
+ * post-hoc nudge: the spread is unchanged, the clamps still bind at the same places, and a
+ * background pushed against a wall (a thrower asked for at flyweight) produces a body that gets
+ * *rejected* by the division filter rather than a silently squashed one.
+ */
+export interface BodyShift {
+  frameIndex?: number;
+  muscleIndex?: number;
+  bodyFatIndex?: number;
+  heightInches?: number;
+}
+
+const NO_SHIFT: BodyShift = {};
+
+export function sampleBody(rng: Rng, sex: Sex, shift: BodyShift = NO_SHIFT): Body {
   const h = HEIGHT[sex];
-  const heightInches = Math.round(rng.normalClamped(h.mean, h.sd, h.min, h.max));
+  const heightInches = Math.round(
+    rng.normalClamped(h.mean + (shift.heightInches ?? 0), h.sd, h.min, h.max),
+  );
   const ape = Math.round(
     rng.normalClamped(APE_INDEX.mean, APE_INDEX.sd, APE_INDEX.min, APE_INDEX.max),
   );
@@ -640,9 +659,9 @@ export function sampleBody(rng: Rng, sex: Sex): Body {
     sex,
     heightInches,
     reachInches: heightInches + ape,
-    frameIndex: toRating(rng.normalClamped(50, 18, 3, 99)),
-    muscleIndex: toRating(rng.normalClamped(50, 16, 5, 99)),
-    bodyFatIndex: toRating(rng.normalClamped(50, 18, 3, 99)),
+    frameIndex: toRating(rng.normalClamped(50 + (shift.frameIndex ?? 0), 18, 3, 99)),
+    muscleIndex: toRating(rng.normalClamped(50 + (shift.muscleIndex ?? 0), 16, 5, 99)),
+    bodyFatIndex: toRating(rng.normalClamped(50 + (shift.bodyFatIndex ?? 0), 18, 3, 99)),
     waterCutIndex: toRating(rng.normalClamped(50, 18, 3, 99)),
   };
 }
@@ -669,8 +688,13 @@ const REJECTION_ATTEMPTS = 60;
  * the population is asserted in `body.test.ts`, because a fallback that fires often has silently
  * become the generator.
  */
-export function sampleBodyForDivision(rng: Rng, sex: Sex, divisionId: DivisionId): Body {
-  return sampleBodyForDivisionWithStats(rng, sex, divisionId).body;
+export function sampleBodyForDivision(
+  rng: Rng,
+  sex: Sex,
+  divisionId: DivisionId,
+  shift: BodyShift = NO_SHIFT,
+): Body {
+  return sampleBodyForDivisionWithStats(rng, sex, divisionId, shift).body;
 }
 
 /** A sampled body, with what it cost to get one. */
@@ -698,11 +722,12 @@ export function sampleBodyForDivisionWithStats(
   rng: Rng,
   sex: Sex,
   divisionId: DivisionId,
+  shift: BodyShift = NO_SHIFT,
 ): BodySample {
   const target = getDivision(divisionId);
 
   for (let attempt = 1; attempt <= REJECTION_ATTEMPTS; attempt++) {
-    const body = sampleBody(rng, sex);
+    const body = sampleBody(rng, sex, shift);
     const tolerance = sampleCutTolerance(rng);
     if (chosenDivision(body, sex, tolerance)?.id === target.id) {
       return { body, attempts: attempt, fellBack: false };
