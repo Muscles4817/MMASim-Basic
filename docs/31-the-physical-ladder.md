@@ -1076,7 +1076,9 @@ engine tuned against one has to be tuned again.
    landed as `ladder-falsifiers.test.ts` rather than in `roster-profile.test.ts`, so the roster is
    not simulated twice for one answer; and `BASE_KD_HAZARD` was **not** re-anchored, because the
    measurements say it does not need to be. S4 could not be measured at all.
-8. **Lock the scale.** `docs/02` rewritten to match.
+8. **Lock the scale.** `docs/02` rewritten to match. **Done — see §21.** The rewrite found five
+   places where the load-bearing document had gone stale and one place where a claim about the
+   ladder's own output was false; §21.2 records the false one, because it is the interesting one.
 9. **Backgrounds → priors and realisation.** `arrivalFactor(key, age)` becomes
    `arrivalFactor(key, age, history)`. Split `trackAndField` into sprint/jumps and throws;
    `enduranceSport` into rowing and distance running.
@@ -2214,3 +2216,86 @@ The two disagreements in § 20.3 are **engine consumption**, not ladder shape. N
 exponent, a pivot or a `D`. They are the next decision rather than part of this one, and they need
 what step 7 could not build: S4's position-transition counter, so that the Strength question has the
 second witness § 8.4 requires before anything moves.
+
+---
+
+## 21. Step 8: locking the scale
+
+`docs/02-attributes-and-ratings.md` is the load-bearing document of the project — it is what a
+reader consults to find out what a rating _means_. Seven steps of ladder work had made parts of it
+false. Locking the scale means making that document say what the code says, and this section
+records what had to change and, more usefully, the one thing the rewrite discovered.
+
+### 21.1 What had gone stale
+
+| Where          | Was                                                                                                                               | Now                                                                                                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Layer diagram  | Three layers: naturals → attributes → derived                                                                                     | Four. **BODY** sits between naturals and attributes, and walking weight and division fall _out_ of it rather than into it                                              |
+| Naturals table | Listed `Frame`, omitted `ForceVelocityBias`, claimed "eight values 1–100"                                                         | `Frame` was deleted at step 4; `ForceVelocityBias` arrived at step 6; seven rated naturals plus one categorical age shape                                              |
+| Derived block  | Four of the six formulas, `Clinch Offence` at its pre-doc-19 weights, "cage control" listed as derived when no such rating exists | All six, at their real weights, plus the record of why `cageIq` was deleted                                                                                            |
+| Effect curve   | Three of the five convexities                                                                                                     | All five, with the fifteen attributes assigned, and the reason `Durability` sits at 1.45                                                                               |
+| The scale      | Prose about absoluteness with no equation, `carriedPenalty` as the mass mechanism                                                 | The locked ladder: D/β/σ per attribute, both equations, lean-vs-total basis, the per-sex pivot, and the twelve-division median table generated from `physicalScale.ts` |
+| Moving up      | "requires no conversion whatsoever"                                                                                               | Corrected — see § 21.3                                                                                                                                                 |
+| Seed roster    | "A statistical test asserts the population matches the band table"                                                                | It does not; `seed.test.ts` guards three looser thresholds, and says in its own comment that they are looser on purpose                                                |
+
+The divisional median table in `docs/02` is copied verbatim from `ladder-tables.test.ts`, which
+generates it from the parameters. If a parameter moves and the doc is not updated, the two disagree
+in a diff rather than silently.
+
+### 21.2 A claim about the ladder's own output was false
+
+The draft carried a sentence asserting the overlap the ladder is supposed to guarantee:
+
+> A flyweight at p95 still reaches a heavyweight's median on every one of the five.
+
+That is the right thing to want — a scale on which no small fighter can reach a large fighter's
+median is a caste system on that attribute rather than a measurement. It is also **not true**, and
+the table it sat directly underneath is what falsifies it:
+
+|              | FLW p95 | FLW best in a 600-fighter division | HW median | overlap?                             |
+| ------------ | ------: | ---------------------------------: | --------: | ------------------------------------ |
+| Durability   |      73 |                                 77 |        59 | comfortably                          |
+| Cardio       |      81 |                                 85 |        53 | comfortably                          |
+| Speed        |      81 |                                 86 |        52 | comfortably                          |
+| **Power**    |      64 |                                 69 |    **67** | only at the very top of the division |
+| **Strength** |      61 |                                 65 |    **68** | **none**                             |
+
+**No flyweight in the model is as strong as a median heavyweight.** Not the 95th percentile, not
+the best one alive. That is β_strength = +0.67 doing exactly what it was written to do — it is the
+steepest exponent in the table — and it is the single most aggressive claim the ladder makes.
+
+Nothing was changed to fix this, and that is deliberate. β_strength and `D_strength` are held as
+hypotheses under § 8.4, which says they move only on S1, S2 and S4 taken together, and § 20.2
+established that **S4 cannot be measured** — `FightStats` has no bottom-position time and no
+reversal counter. Editing an exponent because a sentence written about it was too optimistic would
+be fitting the model to the prose. The sentence was corrected instead, the absence of overlap is
+now stated in `docs/02` as a claim the reader is invited to be uncomfortable with, and the
+instrument S4 needs remains the thing that unblocks it.
+
+This is the same failure mode § 13.9 caught at step 5, arriving from the other direction: there,
+the roster falsified the model; here, the model falsified a claim about the roster's shape. Both
+were only visible because the number and the sentence about the number were put on the same page.
+
+### 21.3 "No conversion whatsoever" is no longer true
+
+`docs/02` promised that a fighter moving divisions keeps every number, because ratings are
+absolute. Half of that survives and half of it does not, and the distinction is the point of the
+ladder:
+
+- **Still true:** there is no conversion table and no divisional normalisation. A rating means the
+  same thing in every division. A man who cuts to a lower class _without losing mass_ keeps his
+  ratings exactly and simply competes against smaller people.
+- **No longer true:** a fighter who genuinely puts on welterweight mass gains Power and Strength
+  and loses Speed and Cardio — not from a scaler applied at the door, but because the physicals are
+  computed from the mass he carries and he is now a different size.
+
+The old sentence was true of the old model, in which the physicals were authored numbers that
+happened to correlate with weight. It became false the moment mass became an input. The mechanics
+of how much mass actually transfers, over what timescale, at what cost, are step 11's.
+
+### 21.4 What step 8 does not do
+
+No code changed at step 8 — it is a documentation step, and a step that changed an equation while
+claiming to lock the scale would be neither. The two open engine-side disagreements from § 20.3
+stay open, the Strength question stays blocked on S4, and the lower tail of the calibration roster
+stays weakly calibrated as recorded in § 17.1.
