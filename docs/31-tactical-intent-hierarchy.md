@@ -94,14 +94,14 @@ calibrate twice.
 | **D9** | F8 — no badly-fatigued situation | cleanup (additive) | — | yes, situationally |
 | **D10** | Reduced's plan sensitivity is inverted on the ground *(**done**)* | architectural (Reduced) | — | Reduced only |
 | **D11** | Reduced books no clinch control at all *(**done**)* | architectural (Reduced) | — | Reduced only |
-| **D12** | Reduced under-produces knockdowns from standing time *(deferred)* | calibration (Reduced) | — | Reduced only |
+| **D12** | Reduced under-produces knockdowns from standing time *(**cause identified**: no `hurtSeconds`, so no self-excitation; still deferred, blocking D21)* | architectural (Reduced) | — | Reduced only |
 | **D13** | The controlling fighter in a clinch cannot let go *(**done**)* | architectural | shipped with D3 | yes |
 | **D14** | Reduced collapses the two grappling entries into one appetite | architectural (Reduced) | — | Reduced only |
 | **D15** | A tie-up costs both men the same *(**done**)* | calibration | shipped with D3 | yes, sport-wide |
 | **D16** | Repertoire is not representable — capability is a *ratio*, never an absolute *(**done**)* | architectural (engine-wide) | — | **yes, for fighters below 38** |
 | **D17** | `pickTopIntent` hands `submit` on a relative read with no floor *(**done**)* | cleanup (planner) | D16 *(done)* | yes: 34.5% of the roster loses a bad instruction, for 0.9pt of submission rate |
 | **D18** | Reduced pays an unconditional submission floor and cannot see the rating *(**done**)* | architectural (Reduced) | D16 *(done)* | Reduced only |
-| **D21** | Reduced compresses control time toward the middle *(new, raised by closing D18)* | architectural (Reduced) | — | Reduced only, and it moves scoring |
+| **D21** | Reduced compresses control time toward the middle *(mechanism proven; **blocked on D12**)* | architectural (Reduced) | **D12** | Reduced only, and it moves scoring |
 | **D19** | The player's own booking defaults to *no plan at all* *(**done**)* | cleanup (app) | — | yes, for one fighter |
 | **D20** | `advance` and `groundAndPound` are unreachable on the shipped roster *(**done**)* | cleanup (planner) | D17 *(done)* | yes: control 77.8% → 53.8%, and the sport moves toward the real one |
 
@@ -1180,7 +1180,7 @@ in fights that were spent against the cage.
 *Enforced by* `tests/statistical/reduced-clinch.test.ts` for the partition and the authority split,
 and three more claims in `tests/statistical/reduced-direction.test.ts` for the direction.
 
-### D12 — Reduced under-produces knockdowns from standing time *(pre-existing; **not** D10's cause)*
+### D12 — Reduced under-produces knockdowns from standing time *(pre-existing; **not** D10's cause; **cause now identified**; blocking D21)*
 
 The ~10.6-point standing-knockout deficit, investigated on its own terms. **It does not share a cause
 with D10**, and the measurement says so rather than the argument:
@@ -1210,6 +1210,68 @@ a different quantity, and it wants its own pass.
 **Deliberately not fixed here.** The fix is a change to how Reduced integrates a convex hazard, it
 will move knockout rates across the whole sport, and bundling it into a change whose entire claim is
 *"the level did not move"* would make both unprovable.
+
+
+#### The recorded diagnosis was wrong, and the arithmetic says so
+
+The entry above blames *"a nonlinearity evaluated at a mean rather than integrated over a
+distribution"* and points at `MID_ROUND_ACCUMULATION`. **That is not the cause.**
+`knockdownHazard`'s accumulation term is
+
+```ts
+const accumulation = 1 + defender.damage.head / 90;
+```
+
+— **linear** in accumulated damage. Damage accrues evenly through the round, so evaluating a linear
+function at the half-way point is not an approximation, it is exact. `MID_ROUND_ACCUMULATION = 0.5`
+is right and always was, and re-deriving it would have found nothing.
+
+**What is actually missing is `alreadyHurt`.** Full's `applyStrike` sets `hurtSeconds` on a
+knockdown, and for as long as that window is open `knockdownHazard` multiplies by **1.8** while the
+man who landed it swarms. **`hurtSeconds` appears nowhere in `round.ts`.** So Reduced has neither the
+multiplier nor the clustering: `poisson(landed × hazard)` is a constant-rate process, and a
+constant-rate process cannot produce the knockdown that follows the knockdown.
+
+Measured over 110 matchups, the shortfall has exactly the shape self-excitation predicts — absent
+when a first knockdown is too rare to have a second, largest once one is likely *and survivable*, and
+shrinking again when the first one simply ends the fight:
+
+```
+  λ (Reduced knockdowns/round)   full / reduced
+  < 0.05                              0.94
+  0.05–0.15                           1.31
+  0.15–0.35                           2.10
+  0.35–0.8                            1.71
+  ≥ 0.8                               1.40
+  overall                             1.55
+```
+
+#### Why the obvious correction does not land
+
+A first-order term — `λ × (1 + k(1 − e^−λ))`, one extra hurt window per round, vanishing as λ → 0 and
+saturating rather than compounding — closes the overall gap from 1.55× to 1.23× at k = 1.4 and
+tightens every bucket. **It breaks five parity bounds**, and all five are the bomber and the
+contender: `bomber-v-journeyman` knockouts go to 0.933 against Full's 0.804 and its mean end round
+to 1.13 against 1.57.
+
+That is the table above read properly. The deficit is **mid-range** and there is a *surplus* at the
+top — the original entry already recorded that Reduced **over**-converts by 45% for the bomber — so
+**no correction monotone in λ can fix both ends.** The honest form has to rise and then fall, which
+means at least two constants (the window's worth, and the rate at which a first knockdown ends the
+fight before a second can happen), fitted over more matchups than the buckets above hold. Fitting two
+constants to five bucket means from 110 matchups is curve-fitting, not calibration, and the
+0.15–0.35 bucket that drives the shape is 18 rows.
+
+**So: still deferred, and now for a stated reason rather than an assumed one.** What has changed is
+that the cause is known, the shape is measured, and the next attempt does not need to re-derive
+`MID_ROUND_ACCUMULATION` to find out it was never the problem.
+
+**It has since become the blocker on D21**, and the two are entangled rather than merely adjacent.
+The `smotherer-v-striker` row above — Full 27.4% knockouts against Reduced 10.2% — passes its parity
+bound today only because **D21's control compression is compensating for it**: squeezing the
+smotherer's control down hands the striker standing time he should not have, and the extra knockouts
+cover the missing ones. Fixing D21's control split alone takes the compensation away and the deficit
+breaks the bound at 0.272 against 0.110. So this one goes first, and D21 follows it.
 
 ### D13 — The controlling fighter in a clinch cannot let go *(found in the D3 re-audit; **done**)*
 
@@ -1622,43 +1684,99 @@ into these constants — compensating one defect with another and leaving both i
 
 ---
 
-### D21 — Reduced compresses control time toward the middle *(new, raised by closing D18)*
+### D21 — Reduced compresses control time toward the middle *(**mechanism found and proven; blocked on D12**)*
 
-**What D18 turned out not to be.** Decomposing the residual gap after the refit: Reduced's submission
-attempts **per second of floor control** are within about 20% of Full's, while its floor control
-itself runs 1.3–3.4× Full's for a fighter with no grappling game and 0.6–0.8× for one who has one:
+**What D18 turned out not to be.** After D18's refit, Reduced's submission attempts *per second of
+floor control* are within about 20% of Full's, while its control itself runs 1.3–3.4× Full's for a
+fighter with no grappling game and 0.6–0.8× for one who has one. The submission model is doing the
+right thing with the position it is handed; it is being handed the wrong position.
+
+Measured over 110 matchups, as control share of the fight clock:
 
 ```
-                   attempts f/r   ratio   total control f/r   ratio
-  olympic boxer     0.01 / 0.03    2.12          32 / 41       1.28
-  point karateka    0.04 / 0.14    3.31          18 / 48       2.59
-  southpaw sniper   0.24 / 0.38    1.58          22 / 26       1.20
-  striker           0.53 / 0.82    1.57          43 / 56       1.32
-  journeyman        0.29 / 1.04    3.62          26 / 90       3.42
-  grinder           7.52 / 6.64    0.88         514 / 414      0.80
-  smotherer         6.84 / 6.48    0.95         458 / 381      0.83
-  guard player      5.13 / 5.41    1.05         144 / 92       0.64
+  olympicBoxer   0.032 / 0.030   0.93     journeyman    0.047 / 0.082   1.76
+  pointKarateka  0.014 / 0.039   2.76     contender     0.189 / 0.249   1.32
+  southpawSniper 0.023 / 0.024   1.05     grinder       0.522 / 0.416   0.80
+  striker        0.032 / 0.040   1.26     smotherer     0.440 / 0.357   0.81
+  canFodder      0.021 / 0.031   1.49     guardPlayer   0.154 / 0.092   0.60
+
+  RMS log-ratio 0.441
 ```
 
-The submission model is doing the right thing with the position it is handed; **it is being handed
-the wrong position.** Read the last two columns and the sign flips at the middle of the roster:
-Reduced over-books control for fighters who cannot grapple and under-books it for those who can.
+Read the column: the sign flips at the middle of the roster. This moves **damage, scoring and who
+wins**, not only submissions — control time is what the judges read.
 
-Two things make this bigger than the entry it came out of. It moves **damage, scoring and who wins**,
-not only submissions — control time is what the judges read. And it is invisible to
-`reduced-fidelity.test.ts`, whose ±30% control tolerance passes on all six of its matchups, because
-those are **symmetric or near-symmetric pairs**: a model that regresses both fighters toward the
-same middle is most accurate exactly where the two fighters are already alike. The error only
-appears against a varied field, which is what the world is.
+#### The mechanism, and it is a sign error
 
-Worth noting the split is not the cause: Reduced and Full agree closely on time spent *underneath*
-(the boxer 0.219 against 0.222 of the fight clock, the striker 0.300 against 0.301). The divergence
-is in **own** control — the karateka gets 0.050 where Full gives 0.018.
+```ts
+const redImposes = roundRng.chance(redPull / pull);
+const swing = clamp(CONTROL_SWING * (1 + roundRng.normal() * 0.3), 0, 0.95);
+let cRed = grappled * (redImposes ? (1 + swing) / 2 : (1 - swing) / 2);
+```
 
-Untouched here on purpose. It is the core of `controlPull` and the `own / (own + other)` share form
-that D10 already worked on, it needs its own calibration pass, and D18 closes cleanly without it —
-which is the test above: the submission gap must not exceed the control gap by much, or the
-submission model has started contributing error of its own again.
+Write out that draw's mean. With `d = redPull / pull` and `CONTROL_SWING` 0.8 it is
+
+```
+  E[share] = 0.9·d + 0.1·(1 − d)  =  0.1 + 0.8·d
+```
+
+**A slope that never reaches 1, and an intercept.** The loser of each round's flip takes a tenth of
+`grappled` however badly he lost — and `grappled` is `redPull + bluePull`, driven almost entirely by
+his opponent. So **the better the wrestler a striker faces, the more top control Reduced books the
+striker.** That is the wrong sign, and it is the whole compression.
+
+It survives `reduced-fidelity.test.ts`'s ±30% control tolerance because all six of its matchups are
+symmetric or near-symmetric pairs, and a model that regresses both men toward the same middle is
+most accurate exactly where the two men are already alike. The error only appears against a varied
+field, which is what the world is.
+
+#### The fix, and why it is not shipped
+
+Replacing the mean with `dominance` itself — the same `mine / (mine + theirs)` share form D10 put on
+every other contest in this file — while reusing the old draw's own standard deviation,
+`CONTROL_SWING × √(d(1−d))`, so every round stays exactly as lopsided as it was and the one-sided
+rounds a 10-8 needs are untouched. One expression, and it moves the measurement the right way:
+
+```
+  RMS log-ratio   0.441 → 0.341        worst case   2.76× → 1.86×
+```
+
+**It breaks two parity bounds, and the reason is D12 rather than this.** `smotherer-v-striker` goes
+to a 17-point win-rate gap against the 12 allowed, and its knockout mix to 0.272 Full against 0.110
+Reduced.
+
+Those are D12's numbers. Its table already records that row at **Full 27.4% knockouts against
+Reduced 10.2%** — a pre-existing 17-point deficit in how Reduced converts standing time into
+knockdowns. It passes today because **the control compression was compensating for it**: squeezing
+the smotherer's control down handed the striker standing time he should not have had, and the extra
+knockouts covered the missing ones. Removing one without the other takes the compensation away and
+leaves the deficit bare.
+
+So D21 is blocked on D12 — and D12 has since been investigated in turn: its cause is not the one
+its entry originally recorded, it is that `hurtSeconds` does not exist in `round.ts` at all, so
+Reduced's knockdowns are a constant-rate process where Full's are self-exciting. The obvious
+first-order correction closes most of the gap and breaks five parity bounds at the top of the roster,
+because the deficit is mid-range and there is a surplus above it. See D12 for the measurement.
+
+D12's own entry gives the reason to keep them apart in advance: *"the fix is a change to
+how Reduced integrates a convex hazard, it will move knockout rates across the whole sport, and
+bundling it into a change whose entire claim is 'the level did not move' would make both
+unprovable."* The same holds in the other direction. **D12 first, then this.**
+
+#### Two dead ends, recorded so they are not re-run
+
+- **Restoring the floor as a term in the pull.** `controlPull + scramblePull` inflates `grappled`
+  itself, so it adds floor time to the sport rather than moving who has it. RMS went to 0.465, worse
+  than doing nothing.
+- **Restoring it as a floor on the share**, keyed on the fighter's own `scrambling` rather than his
+  opponent's wrestling — the right shape, and it buys nothing. Swept: 0.00 → RMS 0.341, 0.02 → 0.336,
+  0.04 → 0.344, 0.06 → 0.375. The optimum is flat against no floor at all and its tail is worse
+  (2.02× against 1.86×), so the intercept was not standing in for a missing scramble mechanic. It
+  was standing in for D12.
+
+**What was not done, deliberately.** Widening the parity bound to let the split fix through. The
+bound is protecting something true — Full is the reference, invariant 6 — and a bound moved to fit a
+change is a change that has stopped being measured.
 
 ---
 
