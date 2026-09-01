@@ -94,7 +94,7 @@ calibrate twice.
 | **D9** | F8 — no badly-fatigued situation | cleanup (additive) | — | yes, situationally |
 | **D10** | Reduced's plan sensitivity is inverted on the ground *(**done**)* | architectural (Reduced) | — | Reduced only |
 | **D11** | Reduced books no clinch control at all *(**done**)* | architectural (Reduced) | — | Reduced only |
-| **D12** | Reduced under-produces knockdowns from standing time *(deferred; **now blocking D21**)* | calibration (Reduced) | — | Reduced only |
+| **D12** | Reduced under-produces knockdowns from standing time *(**cause identified**: no `hurtSeconds`, so no self-excitation; still deferred, blocking D21)* | architectural (Reduced) | — | Reduced only |
 | **D13** | The controlling fighter in a clinch cannot let go *(**done**)* | architectural | shipped with D3 | yes |
 | **D14** | Reduced collapses the two grappling entries into one appetite | architectural (Reduced) | — | Reduced only |
 | **D15** | A tie-up costs both men the same *(**done**)* | calibration | shipped with D3 | yes, sport-wide |
@@ -1180,7 +1180,7 @@ in fights that were spent against the cage.
 *Enforced by* `tests/statistical/reduced-clinch.test.ts` for the partition and the authority split,
 and three more claims in `tests/statistical/reduced-direction.test.ts` for the direction.
 
-### D12 — Reduced under-produces knockdowns from standing time *(pre-existing; **not** D10's cause; now **blocking D21**)*
+### D12 — Reduced under-produces knockdowns from standing time *(pre-existing; **not** D10's cause; **cause now identified**; blocking D21)*
 
 The ~10.6-point standing-knockout deficit, investigated on its own terms. **It does not share a cause
 with D10**, and the measurement says so rather than the argument:
@@ -1210,6 +1210,61 @@ a different quantity, and it wants its own pass.
 **Deliberately not fixed here.** The fix is a change to how Reduced integrates a convex hazard, it
 will move knockout rates across the whole sport, and bundling it into a change whose entire claim is
 *"the level did not move"* would make both unprovable.
+
+
+#### The recorded diagnosis was wrong, and the arithmetic says so
+
+The entry above blames *"a nonlinearity evaluated at a mean rather than integrated over a
+distribution"* and points at `MID_ROUND_ACCUMULATION`. **That is not the cause.**
+`knockdownHazard`'s accumulation term is
+
+```ts
+const accumulation = 1 + defender.damage.head / 90;
+```
+
+— **linear** in accumulated damage. Damage accrues evenly through the round, so evaluating a linear
+function at the half-way point is not an approximation, it is exact. `MID_ROUND_ACCUMULATION = 0.5`
+is right and always was, and re-deriving it would have found nothing.
+
+**What is actually missing is `alreadyHurt`.** Full's `applyStrike` sets `hurtSeconds` on a
+knockdown, and for as long as that window is open `knockdownHazard` multiplies by **1.8** while the
+man who landed it swarms. **`hurtSeconds` appears nowhere in `round.ts`.** So Reduced has neither the
+multiplier nor the clustering: `poisson(landed × hazard)` is a constant-rate process, and a
+constant-rate process cannot produce the knockdown that follows the knockdown.
+
+Measured over 110 matchups, the shortfall has exactly the shape self-excitation predicts — absent
+when a first knockdown is too rare to have a second, largest once one is likely *and survivable*, and
+shrinking again when the first one simply ends the fight:
+
+```
+  λ (Reduced knockdowns/round)   full / reduced
+  < 0.05                              0.94
+  0.05–0.15                           1.31
+  0.15–0.35                           2.10
+  0.35–0.8                            1.71
+  ≥ 0.8                               1.40
+  overall                             1.55
+```
+
+#### Why the obvious correction does not land
+
+A first-order term — `λ × (1 + k(1 − e^−λ))`, one extra hurt window per round, vanishing as λ → 0 and
+saturating rather than compounding — closes the overall gap from 1.55× to 1.23× at k = 1.4 and
+tightens every bucket. **It breaks five parity bounds**, and all five are the bomber and the
+contender: `bomber-v-journeyman` knockouts go to 0.933 against Full's 0.804 and its mean end round
+to 1.13 against 1.57.
+
+That is the table above read properly. The deficit is **mid-range** and there is a *surplus* at the
+top — the original entry already recorded that Reduced **over**-converts by 45% for the bomber — so
+**no correction monotone in λ can fix both ends.** The honest form has to rise and then fall, which
+means at least two constants (the window's worth, and the rate at which a first knockdown ends the
+fight before a second can happen), fitted over more matchups than the buckets above hold. Fitting two
+constants to five bucket means from 110 matchups is curve-fitting, not calibration, and the
+0.15–0.35 bucket that drives the shape is 18 rows.
+
+**So: still deferred, and now for a stated reason rather than an assumed one.** What has changed is
+that the cause is known, the shape is measured, and the next attempt does not need to re-derive
+`MID_ROUND_ACCUMULATION` to find out it was never the problem.
 
 **It has since become the blocker on D21**, and the two are entangled rather than merely adjacent.
 The `smotherer-v-striker` row above — Full 27.4% knockouts against Reduced 10.2% — passes its parity
@@ -1697,7 +1752,13 @@ the smotherer's control down handed the striker standing time he should not have
 knockouts covered the missing ones. Removing one without the other takes the compensation away and
 leaves the deficit bare.
 
-So D21 is blocked on D12, and D12's own entry gives the reason in advance: *"the fix is a change to
+So D21 is blocked on D12 — and D12 has since been investigated in turn: its cause is not the one
+its entry originally recorded, it is that `hurtSeconds` does not exist in `round.ts` at all, so
+Reduced's knockdowns are a constant-rate process where Full's are self-exciting. The obvious
+first-order correction closes most of the gap and breaks five parity bounds at the top of the roster,
+because the deficit is mid-range and there is a surplus above it. See D12 for the measurement.
+
+D12's own entry gives the reason to keep them apart in advance: *"the fix is a change to
 how Reduced integrates a convex hazard, it will move knockout rates across the whole sport, and
 bundling it into a change whose entire claim is 'the level did not move' would make both
 unprovable."* The same holds in the other direction. **D12 first, then this.**
