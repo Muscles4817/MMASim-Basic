@@ -1868,6 +1868,96 @@ not, and the fixture set has to be designed for the fit rather than borrowed fro
 
 ---
 
+### D23 — The fixture set for the joint refit *(**done**; the precondition D22 named)*
+
+D22 ended on a requirement rather than a fix: *the fixture set has to be designed for the fit rather
+than borrowed from it*. This is that set — `packages/engine/src/testing/calibration.ts`, guarded by
+`tests/statistical/calibration-fixtures.test.ts`, measured by `tools/fixture-coverage.ts`. It changes
+no engine behaviour and no parity bound. The refit itself is still to come.
+
+#### The confound, measured
+
+The constants are not totals, they are rates: `volume` (strikes landed per round), `control` (share
+of the round), `hazard` (knockdowns per landed strike), `conversion` (strike finishes per knockdown).
+`hazard` and `conversion` multiply into the same observable — the KO rate — so a set that does not
+move them apart cannot tell an error in one from the opposite error in the other.
+
+At 600 fights a matchup, over three disjoint blocks of fights:
+
+```
+  set            worst |r|          the confounded pair
+  current six    0.83 0.83 0.85     volume-v-conversion, hazard-v-conversion
+  this set       0.53 0.54 0.63     none above 0.7
+```
+
+That is D22's compensating set, seen directly rather than inferred from a failing bound. The six
+could not have separated finish conversion from volume, so the fit did not.
+
+#### Three ways this went wrong first, all worth keeping
+
+**A metric derived from its own input.** The first version floored each rate at a fraction of the
+median of whatever rows it had been handed. The same set then scored 0.61 against one comparison and
+0.69 against another with nothing about the set changed, and the headline first result — 0.86 down to
+0.61 — was entirely that artefact. The floors are now fixed domain constants, stated in both the tool
+and the test.
+
+**Measuring too cheaply flatters a fixture set.** Noise dilutes a correlation, so the error is
+one-directional: the current six read |r| 0.67 at 250 fights a matchup and 0.83 at 600. A cheap
+measurement here does not produce a flaky test, it produces a *passing* one that has stopped
+measuring. Hence 600 in the suite.
+
+**The selection is not the authority on its own output.** The score surface over candidate sets is
+flat. Two selection runs at 200 and 400 fights a pair agreed on only 4 of 10 matchups, and the
+200-fight winner degraded to 0.74 when re-measured at 800. Every set here is re-measured on fights it
+was not selected against before being believed.
+
+#### The lever space, and what forced its shape
+
+Each fighter is a point in a lever space, not a character — `ARCHETYPES` are for tests that read like
+prose, and naming these after fighters would misdescribe what they are for. The space started at five
+levers and ended at seven, and **every split was forced by a measurement rather than chosen**:
+
+- `sprawl` split from `grappling` because one lever meant a fighter with no wrestling also had no
+  takedown defence, so the low-grappling end of the space produced *more* ground time, not less, and
+  neither end of the control span was reachable.
+- `topControl` split from `bottomGame` because the highest-control matchup the engine can produce is
+  a fighter who is dangerous off his back and cannot wrestle, held down by someone who can — and a
+  single grappling lever can only build fighters who are good at everything on the mat and therefore
+  get up. The collapsed space topped out at 0.65 of the round where the incumbent's
+  `guardPlayer`-v-`smotherer` reaches 0.735.
+
+The general lesson is in how that surfaced. Tying two independent attributes together did not produce
+a wrong number anywhere; it produced a *narrower span*, and the only thing that noticed was the
+coverage test refusing a set that saw less control than the one it was replacing. **A fixture set
+fails quietly.** Nothing about one breaks when the engine changes underneath it — add a mechanic that
+couples finishes to output and this set silently becomes as confounded as the six it replaced, and
+the next refit against it produces another compensating set with no symptom until somebody measures a
+matchup off the fixtures. Which is exactly how the current situation arose.
+
+The test therefore carries a falsifier as well as its two claims: the *current six* must still
+measure as confounded. Without it, a change that made every fixture set look independent would leave
+the span and independence assertions passing while they measured nothing.
+
+#### What was deliberately not done
+
+**`reduced-fidelity.test.ts` is untouched.** Its `MATCHUPS` are still the three archetype pairs and
+its bounds still describe the compensating set as it stands. Pointing those bounds at fixtures the
+constants were never fitted against would add failing assertions that describe a known-wrong model
+rather than a regression, and a suite that is red for a reason everybody knows is a suite nobody
+reads. The swap belongs with the refit.
+
+**Set size stays at 10.** The selection plateaus at |r| ≈ 0.6 whether it picks 8 matchups or 14.
+Independence comes from *which* matchups, not how many — adding fixtures to a confounded set buys
+precision on a quantity it still cannot separate.
+
+**One rate is not improved.** The six span control by 30× against this set's 24×; the incumbent gets
+there by pairing its one extreme matchup against a different matchup's near-zero corner. The other
+three are all wider here — volume 35× against 15×, hazard 159× against 47×, conversion 44× against
+20× — and the two that carry the confound are the two furthest behind. The test asserts the shortfall
+is bounded (85% of the incumbent's log span) rather than pretending it is not there.
+
+---
+
 ### D19 — The player's own booking defaults to *no plan at all* *(**done**; was never an engine defect)*
 
 `bookFight` in `packages/app/src/game/career.ts` created the booking with `defaultGamePlan()`, which
