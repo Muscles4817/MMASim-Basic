@@ -699,7 +699,7 @@ describe('over a card', () => {
     }
   });
 
-  it('leaves what remains as a control-time gap rather than a submission one — D21', () => {
+  it('no longer leaves a control-time gap for a striker — D21, closed by D24', () => {
     /*
      * **What D18 turned out not to be**, and the reason it is now somebody else's finding.
      *
@@ -726,7 +726,40 @@ describe('over a card', () => {
      * Asserted as the *relationship* rather than as either number: the submission gap must not
      * exceed the control gap by much, because a submission gap that outruns its control gap would
      * mean the submission model had started contributing error of its own again.
+     *
+     * ### D24 closed half of this, and the half it did not close is the interesting one
+     *
+     * This test used to assert `controlGap > 1.1` for both fighters — that the compression
+     * *exists*. After the joint refit it exists for one of them and not the other:
+     *
+     * ```
+     *                  control gap        submission gap
+     *   striker        1.41 → 0.96         1.41 → 1.19
+     *   journeyman     3.74 → 3.31         3.04 → 2.80
+     * ```
+     *
+     * So D21 was two defects wearing one number. The **split** was wrong — the loser of each
+     * round's flip took a tenth of the floor time however badly he lost — and fixing it closes the
+     * striker's gap completely. The journeyman's barely moves, because his is not a split error at
+     * all: Full gives him 26 seconds of control a fight and Reduced gives him 90, and no
+     * redistribution of the floor time can help when the quantity being distributed is three times
+     * too large to begin with. That is a **level** in `controlPull`, and it is a separate finding
+     * this file records rather than one D24 fixed.
+     *
+     * Each fighter is therefore declared at what he measures. The striker's bound is two-sided on
+     * purpose: a gap that had fallen *below* it would mean the refit overshot into under-booking a
+     * striker's control, which is the same defect with its sign flipped and is what happens if
+     * `CONTROL_DOMINANCE_BLEND` is taken all the way to 1 (doc 31 § D24).
+     *
+     * The submission relationship below is untouched and still the point of the test: whatever the
+     * control gap is, the submission model must not be adding error of its own on top of it.
      */
+    const DECLARED_CONTROL_GAP: Readonly<Record<string, [number, number]>> = {
+      // Closed. Measured 0.96, from 1.41 before D24.
+      striker: [0.8, 1.25],
+      // Not closed, and not a split error — see above. Measured 3.31, from 3.74 before D24.
+      journeyman: [2.5, 3.8],
+    };
     /*
      * **Measured on the striker and the journeyman rather than on the Olympic boxer**, and the
      * reason is the instrument rather than the claim. The boxer's Full rate is now about one
@@ -745,8 +778,11 @@ describe('over a card', () => {
       const controlGap = reduced.controlPerFight / Math.max(1e-6, full.controlPerFight);
       const report = `${name}: submission gap ${subGap.toFixed(2)}×, control gap ${controlGap.toFixed(2)}×`;
 
-      // Recorded, not endorsed: the control gap is real and is D21's.
-      expect(controlGap, report).toBeGreaterThan(1.1);
+      // Measured 0.96 for the striker after D24, against 1.41 before it. Two-sided: overshooting
+      // into under-booking his control is the same defect with the sign flipped.
+      const [lo, hi] = DECLARED_CONTROL_GAP[name]!;
+      expect(controlGap, report).toBeGreaterThan(lo);
+      expect(controlGap, report).toBeLessThan(hi);
       // What this holds is that the submission model is not adding error of its own on top of it.
       expect(subGap / controlGap, report).toBeLessThan(1.6);
     }
