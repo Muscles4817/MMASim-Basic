@@ -35,6 +35,7 @@ import {
   type Naturals,
 } from '../ratings/attributes.js';
 import { arrivalFactor, ceilingsFromNaturals, generateAptitudes } from './generation.js';
+import { bodyPriorFor, type FighterBackground } from './background.js';
 import {
   ATTAINMENT_META,
   DISCIPLINE_META,
@@ -488,7 +489,36 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
    * `build` still leans the naturals below and no longer touches the body at all — doc 31 § 12 step
    * 10 removes it outright in favour of height, reach and frame the player chooses directly.
    */
-  const body = sampleBodyForDivision(rng.fork('body'), spec.sex, spec.divisionId);
+  /*
+   * The origin's body prior, on the same terms every generated fighter gets it. Doc 31 § 22.
+   *
+   * The rule quoted above cuts both ways: since step 9 gives the world's intake a body that its
+   * sporting history selected for, withholding it here would re-open exactly the divergence step 2
+   * closed — a created thrower would be a generic body wearing a thrower's label while every
+   * thrower in the world around him was actually built like one.
+   *
+   * Re-centred against the division, like everybody else's. What the player picked is a shape, and
+   * a raw prior would make the athletic branch a body purchase on top of the naturals it already
+   * buys.
+   *
+   * **Realisation is deliberately not applied here.** The create screen already spends the
+   * discipline's forty attribute points on the player directly, which is the same claim said
+   * louder; layering `realises` on top would pay a created fighter twice for one choice.
+   */
+  const background: FighterBackground | undefined = spec.origin
+    ? {
+        discipline: spec.origin.discipline,
+        secondary: spec.origin.secondary,
+        attainment: spec.origin.attainment,
+      }
+    : undefined;
+
+  const body = sampleBodyForDivision(
+    rng.fork('body'),
+    spec.sex,
+    spec.divisionId,
+    background ? bodyPriorFor(background, spec.divisionId) : undefined,
+  );
   const walkingWeightLbs = Math.round(walkingWeightOf(body));
 
   // --- Naturals: background leaning, build, and a roll the player does not control --------
@@ -654,6 +684,7 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
     reachInches: body.reachInches,
     physique: physiqueOf(body),
     stance: spec.stance ?? 'orthodox',
+    background,
 
     divisionId: spec.divisionId,
     divisionHistory: [spec.divisionId],

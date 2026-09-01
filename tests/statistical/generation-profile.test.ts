@@ -394,11 +394,14 @@ describe('the body sampler', () => {
    * nothing about the resulting fighter says so. Doc 31 § 10.3 asks for the rate as a permanent
    * report; this is it.
    *
-   * **Background is not a dimension yet.** Nothing about a fighter's sporting history reaches the
-   * body until doc 31 § 12 step 9 gives backgrounds a body prior — a rugby forward carrying more
-   * mass for his height than a distance runner. When it does, this report gains a background column
-   * and the rates below will diverge by it, because the thin corners of the ladder are exactly where
-   * a background prior will start fighting the division it is being asked for.
+   * **Background is a dimension now.** Doc 31 § 12 step 9 gave every generated fighter a sporting
+   * history and gave that history a body prior, so the rates below are no longer the whole story:
+   * a distance runner asked for at heavyweight rejects far harder than the division's average
+   * because the prior is pushing against the division. That is the intended behaviour and not a
+   * defect — the prior shifts the draw's *centre*, so a body that no longer belongs is rejected
+   * rather than silently squashed — and it is bounded from the other side by the mass conditioning
+   * in `background.ts`, which makes that combination rare in the first place. `backgrounds.test.ts`
+   * measures the resulting population directly.
    */
   const RATES = (() => {
     const rng = createRng('rejection');

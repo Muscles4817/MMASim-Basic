@@ -57,6 +57,7 @@ export * from './health/freshness.js';
 export * from './progression/divisionMove.js';
 export * from './progression/intensity.js';
 export * from './progression/retirement.js';
+export * from './progression/background.js';
 export * from './progression/body.js';
 export * from './progression/generation.js';
 export * from './progression/names.js';

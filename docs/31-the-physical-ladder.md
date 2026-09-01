@@ -1081,7 +1081,10 @@ engine tuned against one has to be tuned again.
    ladder's own output was false; §21.2 records the false one, because it is the interesting one.
 9. **Backgrounds → priors and realisation.** `arrivalFactor(key, age)` becomes
    `arrivalFactor(key, age, history)`. Split `trackAndField` into sprint/jumps and throws;
-   `enduranceSport` into rowing and distance running.
+   `enduranceSport` into rowing and distance running. **Done — see §22.** The plan assumed a
+   fighter had a history to pass and no generated fighter had one at all, which was also why
+   nothing in the world had a style and why two of §10.3's diagnostics had never been runnable.
+   §22.4 records the one of those two that turned out to be measuring the wrong statistic.
 10. **Character creation.** Remove talent tiers, builds, physical allocation. Add height, reach,
     frame, live Weight Fit panel.
 11. **Weight-class movement.** `massChangeEffect` deleted; `settleWeight` moves mass and the physicals
@@ -2299,3 +2302,202 @@ No code changed at step 8 — it is a documentation step, and a step that change
 claiming to lock the scale would be neither. The two open engine-side disagreements from § 20.3
 stay open, the Strength question stays blocked on S4, and the lower tail of the calibration roster
 stays weakly calibrated as recorded in § 17.1.
+
+---
+
+## 22. Step 9: backgrounds become priors
+
+> 9. **Backgrounds → priors and realisation.** `arrivalFactor(key, age)` becomes
+>    `arrivalFactor(key, age, history)`. Split `trackAndField` into sprint/jumps and throws;
+>    `enduranceSport` into rowing and distance running.
+
+The plan's wording assumes a fighter has a history to pass. **They did not.** `origin.ts` was a
+character-creation screen rather than a model: the player picked a discipline, its biases were
+folded into their naturals and attributes at creation, and the choice was then discarded. Nothing
+was stored, and the tens of thousands of fighters the world generates had no sporting history at
+all.
+
+That single absence was hiding three separate problems, and the second one is the largest thing
+found at any step so far.
+
+**22.0.1 Nothing in the generated world had a style.** Technical ceilings are `motorLearning` plus
+six points of noise (`ceilingsFromNaturals`), and arrival is a function of age. So a generated
+fighter's Wrestling and their Kicking differed by a coin flip. There were no wrestlers in the
+world. There were fighters with slightly more wrestling, and which fighters those were changed
+nothing about how they fought, because the difference was noise rather than a fact about them.
+Six steps of work had gone into making the _bodies_ in this game distinguishable while every card
+above the physicals stayed flat.
+
+**22.0.2 Two of § 10.3's permanent diagnostics could not be run.** "National sprinters faster than
+club BJJ players by > 12 points" and "national distance runners: Cardio p05 > 55" were written as
+standing acceptance criteria against a dimension that did not exist. They had sat unrunnable since
+step 2.
+
+**22.0.3 The body prior had nowhere to attach.** `generation-profile.test.ts` says so in its own
+comment: a rugby forward should carry more mass for his height than a distance runner, and until a
+fighter had a history there was nothing to hang that on.
+
+### 22.1 Why the athletic branch can be five now, when three was right before
+
+`origin.ts` capped the non-combat branch at three and justified it with the same honesty test
+doc/18 § 5 applies to a seventh martial art: a fourth entry would land on numbers identical to one
+of the three, and a menu choice whose two outcomes are the same fighter is a lie told to the
+player. **That was correct when it was written.** `trackAndField` had to cover sprinters and shot
+putters because both of them read `explosiveness` and nothing else; `enduranceSport` had to cover
+rowers and marathoners because both read `engine` and nothing else.
+
+Two things changed underneath it, and neither was aimed at this menu:
+
+- **`forceVelocityBias`, from step 6 (§ 19.3).** A sprinter and a thrower are both explosive. What
+  separates them is which end of the force–velocity curve that explosiveness comes out of. Until
+  there was a number for that, "explosive" was the whole of what either could say.
+- **The body, from step 4, and its prior here.** A thrower and a distance runner differ by 23 index
+  points of muscle, 20 of body fat, and — measured on the world below — **58 lb of walking weight**.
+  Before the body was a layer there was nowhere to put that, because `frame` was `walkingWeight / 300`
+  and the division had already decided it.
+
+So the split is not a widened menu. It is two pairs that were being averaged because the engine
+could not tell them apart, separated on the day it could. The original test still binds and is now
+asserted rather than argued: `background.test.ts` requires each pair to separate on the axis that
+justifies it, and a sixth entry ("swimming", "cycling") would land on `rowing` or
+`distanceRunning` and is therefore still not offered.
+
+### 22.2 A background is a shape, not a bonus
+
+This is the load-bearing rule of `background.ts` and every function in it enforces it.
+
+The obvious implementation is to look up the discipline's biases and add them. **That inflates the
+world.** Wrestling is 24% of the intake and leans `explosiveness +5, engine +5`; adding that raw
+does not make wrestlers better than other fighters, it makes _the population_ better, and the part
+that looks like a wrestler is only the residual. The same is true of the body prior, of the
+realisation shares, and of the aptitude lean — four separate channels, each of which would have
+quietly raised the sport.
+
+So every prior is **re-centred against the population it is drawn from before it is applied**: the
+intake-weighted mean for the fighter's own division is subtracted, leaving a zero-sum
+redistribution. A wrestler is more explosive _than the fighters standing next to him_, not more
+explosive than he would have been with no history at all. And the subtraction is not a penalty
+bolted on to balance a bonus — it is the same number seen from the other side. A decade spent on
+one of the fifteen things on the card is a decade not spent on the other fourteen.
+
+Re-centring per **division** rather than globally is the deliberate half. Heavyweight draws far
+more throwers and rugby players than flyweight does, so centring globally would hand heavyweight a
+free lift on `constitution` and `explosiveness` — a caste claim about divisions arriving through
+the back door of a background table. Within a division backgrounds are exactly zero-sum; across
+divisions the _mix_ differs and nothing else does.
+
+Which backgrounds turn up where is one line rather than an eleven-by-twelve table of hand-typed
+shares: `intake × exp(massAffinity × divisionZ × 0.75)`. Measured, that makes a thrower about
+eleven times likelier at heavyweight than at flyweight and a distance runner about nine times
+likelier the other way, while the widest swing among the mid-sized backgrounds is karate at 2.1×.
+That contrast is the check on the coupling: it is meant to say "throwers are big", not to re-sort
+the sport by weight class.
+
+### 22.3 The world it produces
+
+40,000 male bodies, 5,000 per division, from `backgrounds.test.ts`.
+
+| background      | share |  walk |   ht | musc | frame |  fat | Pow | Spd | Car | Dur | Str | Wres | Str.O | Sub |
+| --------------- | ----: | ----: | ---: | ---: | ----: | ---: | --: | --: | --: | --: | --: | ---: | ----: | --: |
+| boxing          | 15.4% | 181.4 | 70.2 | 49.6 |  48.6 | 49.9 |  45 |  50 |  42 |  47 |  42 |   35 |    41 |  35 |
+| kickboxing      | 18.5% | 182.2 | 70.5 | 47.8 |  47.0 | 49.5 |  45 |  47 |  42 |  49 |  43 |   35 |    38 |  35 |
+| karate          |  6.8% | 176.5 | 70.1 | 44.2 |  47.3 | 48.1 |  45 |  52 |  43 |  47 |  40 |   35 |    36 |  35 |
+| wrestling       | 23.9% | 188.1 | 70.4 | 54.9 |  53.0 | 49.6 |  48 |  45 |  44 |  47 |  49 |   41 |    36 |  35 |
+| jiuJitsu        | 18.5% | 178.9 | 69.9 | 46.1 |  49.4 | 52.5 |  42 |  46 |  43 |  47 |  40 |   36 |    36 |  43 |
+| judo            |  8.1% | 185.5 | 70.1 | 52.6 |  52.6 | 52.5 |  46 |  46 |  42 |  46 |  46 |   38 |    36 |  39 |
+| sprints         |  2.3% | 181.8 | 70.2 | 55.2 |  46.6 | 45.0 |  51 |  57 |  44 |  47 |  46 |   38 |    39 |  38 |
+| throws          |  1.5% | 220.5 | 72.6 | 60.8 |  61.2 | 59.8 |  57 |  42 |  38 |  49 |  61 |   37 |    39 |  38 |
+| contactSport    |  2.5% | 203.2 | 71.2 | 55.2 |  58.6 | 59.8 |  50 |  47 |  43 |  54 |  49 |   38 |    39 |  38 |
+| rowing          |  1.1% | 200.8 | 72.0 | 53.4 |  54.8 | 49.3 |  48 |  43 |  49 |  48 |  49 |   37 |    37 |  38 |
+| distanceRunning |  1.4% | 162.4 | 69.4 | 37.9 |  42.6 | 40.1 |  39 |  48 |  55 |  46 |  36 |   37 |    36 |  37 |
+
+Read the two ends: a thrower walks around at 220 lb with Strength 61 and Speed 42; a distance
+runner at 162 lb with Cardio 55 and Strength 36. They are different species, and before this step
+both of them were the same fighter with a different label.
+
+**And the population is unchanged.** Measured on the identical seed and sample, before and after:
+
+|                    |  Pow |  Spd |  Car |  Dur |  Str | the ten technical |  walk | height |
+| ------------------ | ---: | ---: | ---: | ---: | ---: | ----------------: | ----: | -----: |
+| before backgrounds | 45.9 | 47.1 | 43.3 | 47.5 | 44.0 |         37.1–37.3 | 183.8 |  70.32 |
+| after              | 45.8 | 47.0 | 43.1 | 47.4 | 44.0 |         37.1–37.2 | 183.8 |  70.29 |
+
+Every attribute within 0.2 points, walking weight identical, height within 0.03″. Four channels of
+prior went in and the sport did not get better; it got _sorted_. That table is the whole argument
+for the re-centring rule, and `backgrounds.test.ts` asserts it against these recorded values so
+that a future change which starts inflating the world fails loudly rather than being re-baselined.
+
+### 22.4 One of § 10.3's own criteria was measuring the wrong statistic
+
+Both rows were run. One passed as written; the other did not, and the reason is worth recording
+because the criterion is not simply wrong — it is asking for something that contradicts a rule
+this project applies everywhere else.
+
+**"National sprinters faster than club BJJ players by > 12 points" — passes at 12.8.** It clears
+by 0.8, which is thin. It was left at the doc's own number rather than tuned for margin: raising
+the sprinter prior to buy room on a bound would be fitting the model to the test, and the point of
+writing the criterion in advance was to find out whether the design delivers it.
+
+**"National distance runners: Cardio p05 > 55" — withdrawn.** Measured at **45**. The decomposition
+says why, and it is not a weak prior:
+
+|                                            | value                                                |
+| ------------------------------------------ | ---------------------------------------------------- |
+| median national distance runner's Cardio   | 59, the world's **93rd percentile**                  |
+| their 5th percentile                       | 45, the world's 56th percentile                      |
+| their `engine` at p05                      | **47** — one in twenty rolled a below-average engine |
+| within-division Cardio lift over everybody | **+14.7 mean, +13.7 worst division**                 |
+
+The selection effect this row exists to guard is emphatically not cosmetic: the _median_ national
+distance runner sits in the top tenth of the sport, and the lift holds in every single division.
+What fails is the 5th percentile, and the 5th percentile of any group is dominated by the
+individual roll — which is the design working. `TALENT_META` states the principle in its own
+comment: a tier is a shove rather than a guarantee, which is why a freak can roll a bad chin and a
+grinder a great engine. **A p05 above 55 would require the background to override the roll**, and
+nothing else in this project is allowed to do that.
+
+So the row is replaced by two statistics that measure selection without demanding determinism, and
+both are stronger than the original in the way that matters — they hold **per division** rather
+than pooled:
+
+- the median national distance runner is above the world's 85th percentile for Cardio;
+- distance runners out-read their own division on Cardio by more than 8 points, in every division
+  with a measurable sample.
+
+This is the third time a criterion written in advance has been falsified by the measurement it
+asked for (§ 13.9 at step 5, § 21.2 at step 8). All three were only visible because the criterion
+and the number were made to meet.
+
+### 22.5 What deliberately did not change
+
+**The seed roster has no background, and that absence is a decision.** A seeded fighter's
+attributes are documented facts about a real person; applying a background prior on top of them
+would be inventing a second opinion about somebody we already know the answer for, and inferring
+their background _from_ their attributes and then using it to bias those attributes would be
+circular. `Fighter.background` is optional for exactly this reason. Whether to author real
+backgrounds for the seed roster — they are documented, like the anthropometry the calibration
+roster uses — is left open; it is authoring work, not modelling work.
+
+**A created fighter gets the body prior but not realisation.** The create screen already spends the
+discipline's forty attribute points on the player directly, which is the same claim said louder;
+layering `realises` on top would pay them twice for one choice. The body prior _is_ applied, and
+has to be: step 2's rule is that the creator and the world's intake must not diverge, and
+withholding it would have meant a created thrower was a generic body wearing a thrower's label
+while every thrower in the world around him was actually built like one.
+
+**It cost 99 KB of save**, 3.089 → 3.186 MB, 3.2%, and the `save-size.test.ts` ceiling moved 3.2 →
+3.35 MB with the number recorded — which is what that file's own comment asks the next person who
+adds a field to do. As with `physique` at step 4, almost all of it is JSON key names rather than
+data: the payload is two short strings and an optional third.
+
+**No fight-engine constant moved.** The style shape this step creates is the first real test of
+whether the engine can tell a wrestler from a striker on inputs it was not hand-fed, and reading
+that measurement is step 12's, not this one's.
+
+### 22.6 Also corrected
+
+`docs/02`'s naturals table, written at step 8, had `ForceVelocityBias` backwards — "low = Speed,
+high = Strength". It is the other way round: `generation.ts` adds the bias to Speed and subtracts
+it from Strength, and the seed builder infers it as `50 + (speed − strength) × 0.6`. Fixed. It is a
+one-word error in a table and it is recorded here rather than quietly amended because § 21 exists
+to say that the load-bearing document is the one that must not be wrong.

@@ -39,6 +39,15 @@ import {
 } from '../ratings/attributes.js';
 import { generateName } from './names.js';
 import {
+  aptitudeLeanFor,
+  bodyPriorFor,
+  leanAptitudes,
+  leanNaturals,
+  naturalsLeanFor,
+  realisationFor,
+  sampleBackground,
+} from './background.js';
+import {
   leanMassLbs,
   physiqueOf,
   sampleBodyForDivision,
@@ -525,20 +534,48 @@ const ARRIVAL: Readonly<Partial<Record<AttributeKey, readonly [number, number, n
 };
 
 /**
+ * What a fighter brings to their debut besides an age.
+ *
+ * Doc 31 § 12 step 9 replaced the bare `development` argument with this. The old signature could
+ * only answer "how far along is a 24-year-old", and the honest answer is that it depends entirely
+ * on what they were doing for the ten years before the debut: a national-team wrestler and a club
+ * kickboxer of the same age are not the same distance along the same curve, and averaging them was
+ * the reason every generated fighter had a flat card.
+ */
+export interface ArrivalHistory {
+  /** How much of a career they have already had. Absent for a created fighter, who has had none. */
+  development?: number;
+  /**
+   * Extra share of their own ceiling, per attribute, from the sport they came out of.
+   *
+   * Comes from `realisationFor`, and is zero-sum across a division's intake — so this raises some
+   * attributes and lowers others on every fighter, and cannot raise the population.
+   */
+  realisation?: Readonly<Partial<Record<AttributeKey, number>>>;
+}
+
+/**
  * Exported so `createPlayerFighter` uses the same curve rather than a second copy of it.
  *
- * `development` is optional here: a created fighter has no separate "how far along a career are
- * they" term, so the physical curve stands on its own. That is the point — a debutant is near
- * their physical ceiling and nowhere near their technical one, whichever door they came through.
+ * `development` is optional: a created fighter has no separate "how far along a career are they"
+ * term, so the physical curve stands on its own. That is the point — a debutant is near their
+ * physical ceiling and nowhere near their technical one, whichever door they came through.
+ *
+ * Realisation applies on top of both branches, and is the one part of this that is a claim about
+ * the fighter rather than about their age. It never reaches the ceiling: `generateFighter` clamps
+ * the product to `potential[key]`, so a background moves where somebody starts and never how good
+ * they can get.
  */
-export function arrivalFactor(key: AttributeKey, age: number, development?: number): number {
+export function arrivalFactor(key: AttributeKey, age: number, history?: ArrivalHistory): number {
+  const realised = history?.realisation?.[key] ?? 0;
+  const development = history?.development;
   const band = ARRIVAL[key];
-  if (!band) return development ?? 0;
+  if (!band) return (development ?? 0) + realised;
   const [young, prime, old] = band;
   const physical = age <= 26 ? remap(age, 20, 26, young, prime) : remap(age, 26, 34, prime, old);
-  if (development === undefined) return physical;
+  if (development === undefined) return physical + realised;
   // The same jitter the technical attributes get, so two fighters of the same age are not clones.
-  return physical + (development - remap(age, 20, 30, 0.55, 0.85));
+  return physical + (development - remap(age, 20, 30, 0.55, 0.85)) + realised;
 }
 
 /**
@@ -567,18 +604,41 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
    * Forked because it draws a variable number of times — rejection sampling — and an unforked
    * stream would make every later draw depend on how many bodies happened to be rejected.
    */
-  const body = sampleBodyForDivision(rng.fork('body'), options.sex, options.divisionId);
+  /*
+   * The background before the body, because the background is a claim about the body. Doc 31 § 22.
+   *
+   * Every fighter in the world now has a sporting history, where before this only the player's did
+   * — and the player's was consumed at creation and thrown away. It reaches the fighter at four
+   * points, and every one of them is re-centred against the division's own intake so that a
+   * background is a *shape* and never a bonus: the body it selected for, the naturals it selected
+   * for, how much of their ceiling they have already realised, and which family of skill they will
+   * keep learning fastest.
+   *
+   * Forked because it draws a variable number of times, exactly like the body below it.
+   */
+  const background = sampleBackground(rng.fork('background'), options.divisionId, age);
+
+  const body = sampleBodyForDivision(
+    rng.fork('body'),
+    options.sex,
+    options.divisionId,
+    bodyPriorFor(background, options.divisionId),
+  );
   const walkingWeightLbs = Math.round(walkingWeightOf(body));
 
-  const naturals = generateNaturals(rng, tier);
+  const naturals = leanNaturals(
+    generateNaturals(rng, tier),
+    naturalsLeanFor(background, options.divisionId, age),
+  );
   const potential = ceilingsFromNaturals(naturals, body, rng);
 
   // How developed they already are. Older debutants are further along but have less left.
   const development = clamp(remap(age, 20, 30, 0.55, 0.85) + rng.range(-0.06, 0.06), 0.4, 0.92);
+  const realisation = realisationFor(background, options.divisionId, age);
 
   const attributes = {} as Attributes;
   for (const key of ATTRIBUTE_KEYS) {
-    const factor = arrivalFactor(key, age, development);
+    const factor = arrivalFactor(key, age, { development, realisation });
     // Clamped to the ceiling: the jitter could otherwise push a starting attribute a point
     // or two above its own potential, an invariant the seed roster is tested for.
     attributes[key] = toRating(
@@ -621,7 +681,11 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     naturals,
     // Forked, so adding four rolls does not reshuffle every draw made after it and silently
     // move a decade of measured balance that has nothing to do with aptitudes.
-    aptitudes: generateAptitudes(rng.fork('aptitudes'), naturals.motorLearning),
+    background,
+    aptitudes: leanAptitudes(
+      generateAptitudes(rng.fork('aptitudes'), naturals.motorLearning),
+      aptitudeLeanFor(background, options.divisionId),
+    ),
     potential,
     personality: generatePersonality(rng),
     traits: generateTraits(rng, rng.int(1, 3), attributes),

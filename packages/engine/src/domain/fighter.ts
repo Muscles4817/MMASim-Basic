@@ -22,6 +22,7 @@ import type { Personality } from './personality.js';
 import type { TraitId } from './traits.js';
 import type { Injury } from '../health/injuries.js';
 import type { Physique } from '../progression/body.js';
+import type { FighterBackground } from '../progression/background.js';
 
 /** How a bout ended, from the winner's perspective. */
 export type FinishMethod =
@@ -176,6 +177,16 @@ export interface Fighter {
    */
   physique: Physique;
   stance: 'orthodox' | 'southpaw' | 'switch';
+
+  /**
+   * The sport this fighter came out of, and how far they got at it. Doc 31 § 12 step 9.
+   *
+   * Optional, and the absence is meaningful rather than a migration gap: the hand-authored seed
+   * roster deliberately does not carry one. A seeded fighter's attributes are documented facts
+   * about a real person, and applying a background prior on top of them would be inventing a
+   * second opinion about somebody we already know the answer for — see doc 31 § 22.5.
+   */
+  background?: FighterBackground;
 
   /** Division they currently compete in. Changing this changes no ratings. */
   divisionId: DivisionId;

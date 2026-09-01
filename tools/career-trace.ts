@@ -150,7 +150,7 @@ const SUBJECTS: readonly Subject[] = [
       sex: 'male',
       divisionId: 'mens-lightweight' as CreateFighterSpec['divisionId'],
       age: 22,
-      origin: { talent: 'freak', discipline: 'trackAndField', attainment: 'national' },
+      origin: { talent: 'freak', discipline: 'sprints', attainment: 'national' },
       build: 'balanced',
     },
     policy: rotate,
