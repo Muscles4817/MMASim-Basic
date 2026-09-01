@@ -586,6 +586,19 @@ const HEIGHT: Readonly<Record<Sex, { mean: number; sd: number; min: number; max:
 };
 
 /**
+ * The bounds of that distribution, exported for the creation screen.
+ *
+ * Doc 31 § 12 step 10 lets the player type a height, and the one thing it must not let them type is
+ * a height nobody in the world could have. Sharing the forward model's own limits rather than
+ * declaring a second pair is the same rule step 2 set for the body itself: one model, read two
+ * ways.
+ */
+export const HEIGHT_RANGE: Readonly<Record<Sex, { min: number; max: number }>> = {
+  male: { min: HEIGHT.male.min, max: HEIGHT.male.max },
+  female: { min: HEIGHT.female.min, max: HEIGHT.female.max },
+};
+
+/**
  * Ape index — reach minus height — in inches.
  *
  * Mean +2.4 with a standard deviation of 2, measured off the hand-authored roster, whose per
@@ -829,8 +842,11 @@ export function bodyFromChoices(
   rng: Rng,
   sex: Sex,
   choices: { heightInches?: number; reachInches?: number; frameIndex?: number },
+  shift: BodyShift = NO_SHIFT,
 ): Body {
-  const rolled = sampleBody(rng, sex);
+  // The shift moves the *draw*, so it reaches the primitives the player left alone and never the
+  // ones they stated. Doc 31 § 23: a typed height is the height they get.
+  const rolled = sampleBody(rng, sex, shift);
   const heightInches = choices.heightInches ?? rolled.heightInches;
   return {
     sex,

@@ -27,7 +27,7 @@
 import { describe, expect, it } from 'vitest';
 import { createNewGame } from '@mmasim/data';
 import { advanceWorld } from '../../packages/app/src/game/world';
-import { overallRating, type Fighter, type Gym } from '@mmasim/engine';
+import { DIVISIONS, overallRating, type Fighter, type Gym } from '@mmasim/engine';
 
 const YEAR = 365;
 const START = 2192;
@@ -89,9 +89,9 @@ describe('the sport replaces its own people', () => {
       ]),
     );
 
-    const debutants = after.filter(
-      (f) => (f.id as string).startsWith('gen_') && f.record.length === 0 && f.promotionId,
-    );
+    const isDebutant = (f: Fighter) =>
+      (f.id as string).startsWith('gen_') && f.record.length === 0 && !!f.promotionId;
+    const debutants = after.filter(isDebutant);
     if (debutants.length < 10) return; // Too few to say anything; the counts above cover it.
 
     /*
@@ -125,28 +125,55 @@ describe('the sport replaces its own people', () => {
      * Placement is weighted to roughly half the uniform rate, which is a claim worth asserting and
      * was invisible at either smaller pool. `arrival.ts` is where the weighting lives if the sport
      * ever wants debutants further from the top than they currently land.
+     *
+     * **A division only one promotion runs is not a placement decision, and is excluded.** Doc 31
+     * § 23.7. This assertion went red after doc 31 § 12 step 9 — 21 of 149 against a bound of
+     * 0.115 — and the weighting turned out to be working exactly as designed. Measured by
+     * division: **women's featherweight is run by a single promotion, the leader**, so every
+     * fighter who turns professional at 145 lb is on the leader's roster by arithmetic rather than
+     * by being signed early. Seven of the twelve top placements across four decades were that one
+     * division. Strip it out and the remainder read 5 of 69, in line with the 0.068 this bound was
+     * written against.
+     *
+     * Step 9 did not break placement; it changed the *intake mix*, and this ratio was quietly
+     * measuring division coverage alongside the thing it meant to measure. Excluding the divisions
+     * with no choice in them is what makes it measure placement — and if the sport ever wants
+     * women's featherweight to have somewhere else to debut, that is a promotion-roster question
+     * rather than an intake-weighting one.
      */
     const leaderPrestige = Math.max(...promotions.values());
+    const contested = new Set(
+      DIVISIONS.map((d) => d.id as string).filter(
+        (id) =>
+          (db.promotions.findAll() as unknown as { divisions: string[] }[]).filter((p) =>
+            p.divisions.includes(id),
+          ).length > 1,
+      ),
+    );
     const atTheTop = (fighters: readonly Fighter[]) =>
       fighters.filter((f) => (promotions.get(f.promotionId as string) ?? 0) >= leaderPrestige);
 
-    let top = atTheTop(debutants).length;
-    let total = debutants.length;
+    const contestedOnly = (fs: readonly Fighter[]) =>
+      fs.filter((f) => contested.has(f.divisionId as string));
+
+    let top = atTheTop(contestedOnly(debutants)).length;
+    let total = contestedOnly(debutants).length;
+    const prestigeSeen: number[] = contestedOnly(debutants).map(
+      (f) => promotions.get(f.promotionId as string) ?? 0,
+    );
     for (const start of [START + 1, START + 2, START + 3, START + 4, START + 5, START + 6, START + 7]) {
       // Eight decades is over a minute of solid synchronous work, and a worker that never yields
       // starves Vitest's own reporter heartbeat — which surfaces as an unhandled `onTaskUpdate`
       // timeout and a run that says it caught an error while every assertion passed.
       await new Promise((resolve) => setImmediate(resolve));
       const run = decade(start);
-      const more = run.after.filter(
-        (f) => (f.id as string).startsWith('gen_') && f.record.length === 0 && f.promotionId,
-      );
-      top += more.filter(
-        (f) =>
-          (run.db.promotions.findById(f.promotionId as string) as unknown as { prestige: number })
-            .prestige >= leaderPrestige,
-      ).length;
+      const more = contestedOnly(run.after.filter(isDebutant));
+      const prestigeOf = (f: Fighter) =>
+        (run.db.promotions.findById(f.promotionId as string) as unknown as { prestige: number })
+          .prestige;
+      top += more.filter((f) => prestigeOf(f) >= leaderPrestige).length;
       total += more.length;
+      prestigeSeen.push(...more.map(prestigeOf));
     }
 
     const uniform = 1 / promotions.size;
@@ -155,15 +182,23 @@ describe('the sport replaces its own people', () => {
       `${top} of ${total} winless fighters sit on the leader's roster, against ${uniform.toFixed(3)} for uniform placement`,
     ).toBeLessThan(uniform * 0.92);
 
-    // And as a population, debutants must sit below the sport's midpoint on prestige.
+    /*
+     * And as a population, debutants must sit below the sport's midpoint on prestige.
+     *
+     * **Pooled over the same eight decades as the ratio above, and over the same contested
+     * divisions.** It read a single decade until doc 31 § 23.7, which is a median over about
+     * twelve fighters — the sixth value of twelve decides it — and the long comment above already
+     * explains at length why one decade cannot support a claim about placement. It survived that
+     * long because nothing had reshuffled the first decade's draw; step 9 did.
+     */
     const prestiges = [...promotions.values()].sort((a, b) => a - b);
     const midpoint = prestiges[Math.floor(prestiges.length / 2)]!;
-    const median = debutants
-      .map((f) => promotions.get(f.promotionId as string) ?? 0)
-      .sort((a, b) => a - b)[Math.floor(debutants.length / 2)]!;
-    expect(median, `debutants sit at median prestige ${median}, sport midpoint ${midpoint}`).toBeLessThan(
-      midpoint + 1,
-    );
+    const sorted = [...prestigeSeen].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)]!;
+    expect(
+      median,
+      `debutants sit at median prestige ${median} over ${sorted.length} placements, sport midpoint ${midpoint}`,
+    ).toBeLessThan(midpoint + 1);
   });
 
   it('gives every generated fighter a gym to train in', () => {

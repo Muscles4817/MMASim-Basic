@@ -1086,7 +1086,10 @@ engine tuned against one has to be tuned again.
    nothing in the world had a style and why two of §10.3's diagnostics had never been runnable.
    §22.4 records the one of those two that turned out to be measuring the wrong statistic.
 10. **Character creation.** Remove talent tiers, builds, physical allocation. Add height, reach,
-    frame, live Weight Fit panel.
+    frame, live Weight Fit panel. **Done — see §23.** All three deletions were ways of buying a
+    physical and all three additions are ways of stating a body; attainment inherited what the
+    talent tier was carrying and pays for it in debut years. §23.4 records something the body
+    sliders turned out to do that nobody designed.
 11. **Weight-class movement.** `massChangeEffect` deleted; `settleWeight` moves mass and the physicals
     re-express from it continuously. Capability never moves.
 12. **Rebuild the world.**
@@ -2501,3 +2504,220 @@ high = Strength". It is the other way round: `generation.ts` adds the bias to Sp
 it from Strength, and the seed builder infers it as `50 + (speed − strength) × 0.6`. Fixed. It is a
 one-word error in a table and it is recorded here rather than quietly amended because § 21 exists
 to say that the load-bearing document is the one that must not be wrong.
+
+---
+
+## 23. Step 10: the player states a body, not a build
+
+> 10. **Character creation.** Remove talent tiers, builds, physical allocation. Add height, reach,
+>     frame, live Weight Fit panel.
+
+Three deletions and three additions, and they are the same change said twice: every one of the
+three things removed was a way of buying a physical, and every one of the three added is a way of
+stating a body. The creation screen was the last place in the project still working the way things
+worked before the ladder.
+
+### 23.1 What the three deletions were each doing
+
+**Talent tiers** — freak, natural, grinder — centred the rolled naturals at 76, 70 and 64, gated
+which attainments and disciplines appeared on the menu, and asked the player, in as many words, how
+gifted they would like to be. All three of those jobs had stopped being honest:
+
+- doc/06 and the screen's own footer promise the player is never shown their naturals, because
+  finding out what you got is what coaches, scouting and ten years of camps are for. A tier at the
+  top of the screen that _sets_ them is that promise broken before the first fight.
+- The attainment gate said "nobody medals at a world championship without the body to do it". True
+  — and a _consequence_ rather than a precondition. Selection runs the other way: the medal is
+  evidence about the athlete.
+- Centring the naturals was the pre-ladder way of saying "you are a good athlete". The body says it
+  directly now.
+
+**Builds** — rangy, balanced, powerful — were a three-way proxy for a body, from before there was a
+body, leaning naturals from a _label_. § 4.1 of doc 30 had already caught one of them telling a lie
+in the other direction, where "rangy" secretly cost four points of explosiveness and therefore
+meant _slower_.
+
+**Physical allocation.** A creation point spent on Power was a request for the model to disagree
+with itself: the ladder computes Power from lean mass on a scale where 43 points is twice the
+impulse, and the point then overwrote it. The ten technical and mental attributes keep their
+points, because "I boxed a bit on the side" is a true thing somebody can say and no equation
+contradicts it.
+
+### 23.2 Attainment inherited the job, and pays for it in years
+
+With `talent` gone, something has to carry the fact that a world medallist is a better athlete than
+a club amateur — refusing to say it at all is not neutrality, it is asserting that they roll
+identical bodies. So `ATTAINMENT_META` gained a naturals lean, spanning ±6 points against a roll
+with a standard deviation of 11 to 16. The same size of shove the tiers were, arriving through
+something the player actually did.
+
+`motorLearning` is the largest term and `constitution` the smallest, deliberately: getting to a
+world final is mostly evidence that you learn faster than the people who did not, and it is almost
+no evidence at all about your chin, because nothing in athletics tests one.
+
+**What stops "Olympic" being the free pick is `minDebutAge`**, which that table's own comment
+already called "the balance for the whole layer and self-balancing rather than arbitrary". You
+cannot medal at a world championship at nineteen and turn professional at nineteen; a player who
+wants the athlete pays in the years it took, and `applyAgeing` charges them for the rest of the
+career.
+
+Measured, 150 fighters per rung at each rung's own minimum debut age:
+
+| attainment    | mean ceiling | mean debut |
+| ------------- | -----------: | ---------: |
+| amateur (18)  |         64.0 |       49.7 |
+| regional (19) |         67.1 |       50.5 |
+| national (22) |         69.6 |       51.4 |
+| world (25)    |         71.9 |       51.9 |
+
+Every rung still debuts below the seed roster's floor of 51.1 plus a good roll, which is the bound
+`origin.test.ts` has always asserted about created fighters — an Olympic medallist is a better
+prospect, not a shortcut past the climb.
+
+### 23.3 The body, and the panel that makes it legible
+
+Three choices, all measurable: **how tall, how long, how big-boned.** Muscle, body fat and water
+tolerance are deliberately not offered — muscle is the one primitive that moves over a career, so
+selling a debutant a starting value would be selling them the thing the next ten years are for;
+body fat is a camp variable rather than an identity; and water-cut tolerance is a hidden fact you
+find out the first time you miss weight, which is worth far more as a discovery than as a slider.
+
+The **live Weight Fit panel** is the payoff and the reason the body choices are worth offering. It
+itemises the cut the player has signed up for — walking weight, camp weight, what fight week takes
+off, the lightest they could ever weigh in — names the band in the sport's own words, and lists
+every division the body could actually make. Measured, at lightweight:
+
+| the body stated    | walks | weigh-in floor | fit            | Pow | Spd | Str | Car | divisions open |
+| ------------------ | ----: | -------------: | -------------- | --: | --: | --: | --: | -------------: |
+| 5′4″, light-boned  |   122 |            105 | comfortable    |  50 |  64 |  57 |  63 |              8 |
+| 5′8″, slight       |   153 |            132 | comfortable    |  59 |  60 |  62 |  60 |              7 |
+| 5′10″, average     |   173 |            149 | typical        |  63 |  57 |  63 |  57 |              5 |
+| 6′1″, big-boned    |   207 |            178 | **impossible** |  69 |  54 |  65 |  54 |              3 |
+| 6′5″, heavy-framed |   257 |            222 | **impossible** |  76 |  49 |  68 |  50 |              1 |
+
+Twenty-six points of Power and fifteen of Speed across the range, against the eight points one
+attribute could ever be allocated — and moving in _both directions at once_, which allocation could
+never do.
+
+**The division stopped being free.** It was a dropdown the player picked and the body was then
+sampled to fit it, so a player who said "lightweight" was handed a lightweight-shaped person
+whatever else they said. Now the body is stated and the division is a consequence they have to live
+with: rows four and five above are bodies that cannot make 155 lb, and the panel says so in words
+rather than the screen accepting it and the engine disagreeing later.
+
+### 23.4 The frame slider is not a strength dial, and that is the model working
+
+Worth recording because it was not designed and it is the right answer. Across the body span above,
+Power moves 26 points and Strength only 11 — even though Strength has the steepest mass exponent in
+the ladder (β = +0.67) and the mass term alone is worth 33 points over that range.
+
+The difference is § 19's `density` term, `(muscleIndex − frameIndex) / 24`. A player who drags the
+frame slider to 92 while their muscle rolls around 50 has asked for a heavy skeleton carrying
+ordinary muscle, and maximal force scales with contractile cross-section rather than with bone —
+so the density term takes back about 21 of the 33 points the mass term handed over.
+
+That makes the frame slider a genuine trade rather than a min-max lever: bulk buys Power (which
+reads impulse, and mass is part of the product) far more readily than it buys Strength, and it
+costs Speed and Cardio the whole way. Nobody wrote that rule for this screen; it fell out of a
+coefficient added at step 6 for an unrelated reason.
+
+### 23.5 What deliberately did not change
+
+**A created fighter still debuts as a prospect.** Every bound `origin.test.ts` and
+`progression.test.ts` assert about the level — below the roster floor plus a good roll, a real hole
+in every fighter, room left above every attribute — is unchanged and still passing. What moved is
+the _shape_ of the choices, not the level they produce, which is the same thing doc 30 § 4.4 says
+about the last time this file was rewritten.
+
+**The deprecated flat `BACKGROUNDS` picker is deleted rather than migrated.** It was superseded two
+steps of design ago and kept alive so fixtures and long-sim baselines would keep compiling; nothing
+had sent one since. A second creation model with no callers is a disagreement waiting to happen,
+not compatibility.
+
+**Realisation still is not applied to a created fighter.** § 22.5's reasoning is unchanged: the
+screen already spends the discipline's forty attribute points on the player directly, and layering
+`realises` on top would pay them twice for one choice.
+
+### 23.6 The top of the created distribution fell, and it is now paid for
+
+`created-career.test.ts` plays forty created fighters through full careers and asserts that the
+best of them reaches champion level. It went red, and the reason is a real level change rather than
+a fixture detail.
+
+The old fixture was `background: 'athlete'` — "Elite Athlete, New To This" from the deprecated flat
+picker, which centred naturals at 73 and leaned `explosiveness +10, engine +9, motorLearning +8,
+recovery +6` on top of that. **Nothing in the layered system reproduces it**, and the reason is the
+rule § 22.2 established: a background is a shape, not a bonus. There is no longer any option that
+is generically gifted at everything. `sprints` buys explosiveness and does not buy an engine.
+
+Measured over forty careers:
+
+| fixture                                                    | best peak |
+| ---------------------------------------------------------- | --------: |
+| old `athlete` (flat picker, centre 73, generically leaned) |    ≥ 75.4 |
+| `sprints` / `national`, debuting at 22                     |  **72.6** |
+| `sprints` / `world`, debuting at 25                        |      70.2 |
+| `wrestling` / `regional`, debuting at 22                   |      71.1 |
+
+Two separate things are visible in that table.
+
+**The ceiling is still there.** The best of sixty rolls from a world-level athletic origin carries a
+potential-overall of **85.5**, against a champion bar of 78.4. Creation can still produce
+champion-calibre raw material; what fell is how much of it a career converts.
+
+**The top is no longer free.** The `freak` tier centred naturals at 76 and cost nothing but a line
+of flavour text. Reaching comparable naturals now means `world`, and `world` costs three years of
+debut age — and the table says three years of career is worth more than the naturals are. That is
+`minDebutAge` doing precisely the job step 10 handed it, and it is the difference between a top of
+the distribution that is bought and one that is given away.
+
+The bound moved from `CHAMPION_BAR − 3` to `CHAMPION_BAR − 6` with all of the above recorded in the
+test. **If that trade is wrong the fix is `ATTAINMENT_META.naturals` or `NATURALS_CENTRE`, not the
+bound** — this is flagged as a design question rather than settled.
+
+### 23.7 A step-9 regression this step uncovered, and why it was missed
+
+`npm test` runs `--project unit --project integration --project ui`. **It does not run
+`long-sim`**, which is `npm run test:long`. Step 9's verification was `npm test`, so it shipped a
+long-sim failure: `generations.test.ts`'s placement assertion, red at 21 of 149 against a bound of
+0.115. Confirmed by checking out the step-8 tree, where the file passes 8 of 8.
+
+The diagnosis is worth recording because the first two answers were both wrong.
+
+**It is not the placement weighting.** `pickStartingPromotion` weights by `(100 − prestige)² × room
+× divisionRoom` and does not read a fighter's attributes at all, so step 9 could not have touched
+it directly. A first fix — flooring the product of the two room terms rather than each separately,
+on the theory that their combined 125× swing could overwhelm the 256× prestige advantage — moved
+the number from 0.141 to 0.138 and broke a neighbouring bound. Reverted.
+
+**It is not noise, either.** Per decade the ratio ran 0.083, 0.158, 0.174, 0.182, 0.143, 0.111,
+0.214, 0.000: six of eight at or above the uniform rate, which is systematic.
+
+**It is division coverage.** Broken down by division, the answer is unmistakable:
+
+| division                  | debutants | at the leader | promotions running it |
+| ------------------------- | --------: | ------------: | --------------------: |
+| **women's featherweight** |         7 |         **7** |                 **1** |
+| men's flyweight           |         2 |             1 |                     8 |
+| men's middleweight        |        11 |             1 |                     8 |
+| everything else           |        49 |             3 |                   3–8 |
+
+**Women's featherweight is run by exactly one promotion, and it is the leader.** Every fighter who
+turns professional at 145 lb is on the leader's roster by arithmetic, not because the intake signed
+them early — and seven of the twelve top placements across four decades were that one division.
+Strip it out and the rest read 5 of 69, in line with the 0.068 this bound was written against.
+
+So step 9 did not break placement. It changed the **intake mix**, and this ratio had quietly been
+measuring division coverage alongside the thing it meant to measure. The fix is to the measure:
+debutants in a division only one promotion runs are excluded, because for them placement is not a
+decision. The bound itself is untouched.
+
+The same file's median-prestige assertion was measuring a single decade — a median over about
+twelve fighters, decided by the sixth value — while the long comment beside it explains at length
+why one decade cannot support a claim about placement. It is now pooled over the same eight decades
+and the same contested divisions as the ratio above it.
+
+**Two process notes.** The first is that a verification claim should name the command: "all tests
+pass" meant three of four projects. The second is that this was only found because step 10 changed
+the creation path and sent me to `long-sim` at all — a suite the default command does not run is a
+suite that goes stale between the times somebody remembers it.

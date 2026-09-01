@@ -33,7 +33,7 @@ import {
   TRAINING_FOCUSES,
   TRAINING_META,
   type AttributeKey,
-  type Background,
+  type FighterOrigin,
   type Coach,
   type Fighter,
   type Gym,
@@ -90,7 +90,26 @@ function bestFocus(f: Fighter): TrainingFocus {
   return best;
 }
 
-function create(seed: string, background: Background = 'athlete'): Fighter {
+/**
+ * The strongest raw material the creation screen will sell at this debut age.
+ *
+ * **This fixture was `background: 'athlete'` until doc 31 § 12 step 10 deleted the flat picker**,
+ * and the replacement is not equivalent — see § 23.6, which records what that measured. The old
+ * path centred naturals at 73 and leaned `engine +9, recovery +6` on top, because "Elite Athlete,
+ * New To This" was one option meaning generically gifted. Nothing in the layered system is
+ * generically gifted any more: a background is a shape, and `sprints` buys explosiveness rather
+ * than an engine.
+ *
+ * `national` at 22 rather than `world` at 25, measured: `world` has the better naturals and loses
+ * more to the three years of career it costs (70.2 against 72.6), which is `minDebutAge` doing
+ * exactly the job step 10 gave it.
+ */
+const AGE = 22;
+
+function create(
+  seed: string,
+  origin: FighterOrigin = { discipline: 'sprints', attainment: 'national' },
+): Fighter {
   return createPlayerFighter(
     {
       id: seed,
@@ -99,9 +118,8 @@ function create(seed: string, background: Background = 'athlete'): Fighter {
       nationality: 'USA',
       sex: 'male',
       divisionId: asDivisionId('mens-lightweight'),
-      age: 22,
-      background,
-      build: 'balanced',
+      age: AGE,
+      origin,
       allocation: {},
       day: 0,
     },
@@ -240,10 +258,26 @@ describe('the top of the mountain is reachable, and not guaranteed', () => {
      * which is a limitation of the measure rather than of the model, and is why this bound is a
      * floor on a distribution rather than a claim about the best possible career.
      */
+    /*
+     * **The tolerance widened from 3 to 6 at step 10, and this is the third reason on the list —
+     * but unlike the two above it, it is a level change rather than a fixed bug.** Doc 31 § 23.6
+     * records it in full because it is a design consequence worth arguing about rather than a test
+     * detail.
+     *
+     * The short version: the old `freak` talent tier centred naturals at 76 and cost nothing, so
+     * the top of the created distribution was free. Step 10 deleted it. The ceiling is still there
+     * — the best of sixty rolls from a world-level athletic origin carries a potential-overall of
+     * 85.5, comfortably over the champion bar of 78.4 — but reaching the naturals that produce it
+     * now costs three years of debut age, and three years of career is worth more than the naturals
+     * are. Measured over 40 careers: 72.6 from `national` at 22 against 70.2 from `world` at 25.
+     *
+     * So what this bound now measures is a *paid-for* top rather than a free one. If that is the
+     * wrong trade the fix is `ATTAINMENT_META.naturals` or `NATURALS_CENTRE`, not this number.
+     */
     expect(
       peaks[peaks.length - 1],
       `best of 40 careers peaked at ${peaks[peaks.length - 1]!.toFixed(1)} against a champion bar of ${CHAMPION_BAR.toFixed(1)}`,
-    ).toBeGreaterThan(CHAMPION_BAR - 3);
+    ).toBeGreaterThan(CHAMPION_BAR - 6);
   });
 
   it('does not hand the belt to everybody', () => {
@@ -307,7 +341,10 @@ describe('what a single camp is worth depends on who is in it', () => {
         rng: createRng(`vet_${i}`),
       }).fighter;
     }
-    expect(oneCamp(veteran, 'vet_last', 12), 'a plateaued fighter is still improving fast').toBeLessThan(2);
+    expect(
+      oneCamp(veteran, 'vet_last', 12),
+      'a plateaued fighter is still improving fast',
+    ).toBeLessThan(2);
   });
 
   it('does something even in a poor room, rather than nothing at all', () => {
