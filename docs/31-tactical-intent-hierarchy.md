@@ -94,14 +94,15 @@ calibrate twice.
 | **D9** | F8 — no badly-fatigued situation | cleanup (additive) | — | yes, situationally |
 | **D10** | Reduced's plan sensitivity is inverted on the ground *(**done**)* | architectural (Reduced) | — | Reduced only |
 | **D11** | Reduced books no clinch control at all *(**done**)* | architectural (Reduced) | — | Reduced only |
-| **D12** | Reduced under-produces knockdowns from standing time *(**cause identified**: no `hurtSeconds`, so no self-excitation; still deferred, blocking D21)* | architectural (Reduced) | — | Reduced only |
+| **D12** | Reduced under-produces knockdowns from standing time *(**cause identified and fix measured**: no `hurtSeconds`, so no rocked state; **superseded by D22**)* | architectural (Reduced) | **D22** | Reduced only |
 | **D13** | The controlling fighter in a clinch cannot let go *(**done**)* | architectural | shipped with D3 | yes |
 | **D14** | Reduced collapses the two grappling entries into one appetite | architectural (Reduced) | — | Reduced only |
 | **D15** | A tie-up costs both men the same *(**done**)* | calibration | shipped with D3 | yes, sport-wide |
 | **D16** | Repertoire is not representable — capability is a *ratio*, never an absolute *(**done**)* | architectural (engine-wide) | — | **yes, for fighters below 38** |
 | **D17** | `pickTopIntent` hands `submit` on a relative read with no floor *(**done**)* | cleanup (planner) | D16 *(done)* | yes: 34.5% of the roster loses a bad instruction, for 0.9pt of submission rate |
 | **D18** | Reduced pays an unconditional submission floor and cannot see the rating *(**done**)* | architectural (Reduced) | D16 *(done)* | Reduced only |
-| **D21** | Reduced compresses control time toward the middle *(mechanism proven; **blocked on D12**)* | architectural (Reduced) | **D12** | Reduced only, and it moves scoring |
+| **D21** | Reduced compresses control time toward the middle *(mechanism and fix proven; **superseded by D22**)* | architectural (Reduced) | **D22** | Reduced only, and it moves scoring |
+| **D22** | Reduced's constants are a mutually-compensating set *(new; supersedes D12 and D21)* | architectural (Reduced) | — | Reduced only |
 | **D19** | The player's own booking defaults to *no plan at all* *(**done**)* | cleanup (app) | — | yes, for one fighter |
 | **D20** | `advance` and `groundAndPound` are unreachable on the shipped roster *(**done**)* | cleanup (planner) | D17 *(done)* | yes: control 77.8% → 53.8%, and the sport moves toward the real one |
 
@@ -1180,7 +1181,7 @@ in fights that were spent against the cage.
 *Enforced by* `tests/statistical/reduced-clinch.test.ts` for the partition and the authority split,
 and three more claims in `tests/statistical/reduced-direction.test.ts` for the direction.
 
-### D12 — Reduced under-produces knockdowns from standing time *(pre-existing; **not** D10's cause; **cause now identified**; blocking D21)*
+### D12 — Reduced under-produces knockdowns from standing time *(cause identified and fix measured; **superseded by D22**)*
 
 The ~10.6-point standing-knockout deficit, investigated on its own terms. **It does not share a cause
 with D10**, and the measurement says so rather than the argument:
@@ -1245,6 +1246,15 @@ shrinking again when the first one simply ends the fight:
   ≥ 0.8                               1.40
   overall                             1.55
 ```
+
+**A later pass corrected this entry's own reading of the shape.** The rise-and-fall below is an
+artefact: it compares knockdowns per *round*, and Reduced's landed-strike count varies against Full's
+by matchup, so that ratio mixes a hazard error with a volume one. Measured as knockdowns per *landed
+strike* — with the strike counts agreeing to within about 10% — the shortfall simply **saturates**,
+0.80 / 1.15 / 1.54 / 1.64 / 1.64 across the same buckets, which is the shape a hurt window has. A
+saturating uplift fitted to that plateau brings the per-strike agreement to 0.64 / 0.87 / 1.12 /
+1.01 / 1.29. **See D22, which is where this finding now lives**, and which is also why it still does
+not ship.
 
 #### Why the obvious correction does not land
 
@@ -1684,7 +1694,7 @@ into these constants — compensating one defect with another and leaving both i
 
 ---
 
-### D21 — Reduced compresses control time toward the middle *(**mechanism found and proven; blocked on D12**)*
+### D21 — Reduced compresses control time toward the middle *(mechanism and fix proven; **superseded by D22**)*
 
 **What D18 turned out not to be.** After D18's refit, Reduced's submission attempts *per second of
 floor control* are within about 20% of Full's, while its control itself runs 1.3–3.4× Full's for a
@@ -1777,6 +1787,84 @@ unprovable."* The same holds in the other direction. **D12 first, then this.**
 **What was not done, deliberately.** Widening the parity bound to let the split fix through. The
 bound is protecting something true — Full is the reference, invariant 6 — and a bound moved to fit a
 change is a change that has stopped being measured.
+
+---
+
+### D22 — Reduced's constants are a mutually-compensating set *(raised by attempting D12 and D21 together)*
+
+**The finding that supersedes both of them, and the reason neither lands alone.**
+
+D12 and D21 were taken together on the theory that they were entangled — D21's control compression
+compensating for D12's knockdown deficit. They are, and the entanglement does not stop at two.
+
+#### What the attempt established
+
+**D21's mechanism and fix are correct**, and both are recorded in its entry. The split's mean was
+`0.1 + 0.8·d` — an intercept keyed on the opponent's strength — and replacing it with `dominance`
+while reusing the old draw's own standard deviation takes the control agreement from **RMS log-ratio
+0.441 to 0.341** with every round exactly as lopsided as before.
+
+**D12's cause was found, and it is not what its entry said.** `knockdownHazard`'s accumulation term
+is linear, so `MID_ROUND_ACCUMULATION = 0.5` is exact and was never the problem. What is missing is
+the rocked state: `applyStrike` carries a **second roll at `hazard × 1.5`** that opens the hurt
+window without a knockdown, and `alreadyHurt` then multiplies by **1.8** while it is open.
+`hurtSeconds` appears nowhere in `round.ts`.
+
+Isolating the hazard from the strike count — Full's knockdowns per landed strike against Reduced's,
+with the strike counts agreeing to within about 10% — the shortfall **saturates**, which is the shape
+a window has rather than the rise-and-fall an earlier pass inferred from a contaminated ratio:
+
+```
+  base rate λ    < 0.05   0.05–0.15   0.15–0.35   0.35–0.8   ≥ 0.8
+  full/reduced     0.80        1.15        1.54       1.64    1.64
+```
+
+A saturating uplift fitted to that plateau takes the per-strike hazard agreement to **0.64 / 0.87 /
+1.12 / 1.01 / 1.29** — close to parity across the range.
+
+#### Why the pair still does not land
+
+**Both fixes together break the parity suite, and so does either alone.** At uplift 1.00 — D21's
+split with no knockdown term at all — three bounds fail. Adding D12's term does not rescue them; it
+changes *which* three. Every failure is marginal, 1–3% past its bound, which is the signature of a
+set of constants sitting in a local optimum rather than of a wrong change.
+
+Then the cause, measured on **master with nothing changed at all**:
+
+```
+  strikes landed per round, Full / Reduced        ratio
+  guardPlayer-v-smotherer      6.0 / 11.3          1.90
+  contender-v-canFodder       14.0 / 18.4          1.32
+  bomber-v-journeyman         10.9 /  9.2          0.84
+```
+
+**Reduced lands nearly twice Full's strikes per round in a grappling-heavy mismatch, today, before
+any of this.** That is upstream of everything the two findings are about: more strikes is more head
+damage, which is more knockdowns, which is more stoppages. D21's change nudged
+`contender-v-canFodder` from 1.32 to 1.38 and that was enough to cross a 1.4 bound it had been
+sitting just under.
+
+So the picture is not two entangled defects but **a mutually-compensating set**: the control model's
+compression was partly offsetting a striking-volume overshoot, which was partly offsetting a
+knockdown-hazard shortfall, which was partly offsetting a finish conversion fitted on top of all
+three. Every one of those constants was fitted against six matchups **with the others' errors already
+in place**, so each is right only in the company of the rest.
+
+#### What the work actually is
+
+A **joint refit of `round.ts`'s constant set against a large matchup set** — volume, control split,
+knockdown hazard and finish conversion at once, with the parity fixtures extended beyond six
+near-symmetric pairs, since a compensating set is most accurate exactly where its fixtures live and
+the errors only appear against a varied field.
+
+Refitting the finish conversion alone was tried during this pass and is **ill-conditioned on the
+current data**: solving `P(KO) = 1 − (1 − p)^K` over 73 matchups regresses on damage per round at
+**R² 0.31**, against a shipped pair that scores 0.08 on the same data. Six carefully chosen matchups
+spanning the damage range gave the original fit its precision; seventy-three heterogeneous ones do
+not, and the fixture set has to be designed for the fit rather than borrowed from it.
+
+**Not attempted here.** Widening any of the bounds to let the pair through — they protect invariant
+6, and a bound moved to fit a change is a change that has stopped being measured.
 
 ---
 
