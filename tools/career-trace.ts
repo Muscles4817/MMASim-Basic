@@ -137,21 +137,20 @@ interface Subject {
 
 const SUBJECTS: readonly Subject[] = [
   {
-    key: 'freak',
+    key: 'athlete',
     name: 'Marcus Bell',
     blurb:
       'A national-level sprinter who has never been hit. The highest ceilings the model hands ' +
       'out, attached to almost no idea what he is doing.',
     spec: {
-      id: 'trace_freak',
+      id: 'trace_athlete',
       firstName: 'Marcus',
       lastName: 'Bell',
       nationality: 'USA',
       sex: 'male',
       divisionId: 'mens-lightweight' as CreateFighterSpec['divisionId'],
       age: 22,
-      origin: { talent: 'freak', discipline: 'sprints', attainment: 'national' },
-      build: 'balanced',
+      origin: { discipline: 'sprints', attainment: 'national' },
     },
     policy: rotate,
     policyLabel: 'Rotates to whatever has the most room. Broad; never specialises.',
@@ -175,8 +174,7 @@ const SUBJECTS: readonly Subject[] = [
       sex: 'male',
       divisionId: 'mens-lightweight' as CreateFighterSpec['divisionId'],
       age: 22,
-      origin: { talent: 'natural', discipline: 'wrestling', attainment: 'national' },
-      build: 'powerful',
+      origin: { discipline: 'wrestling', attainment: 'national' },
     },
     policy: commit('wrestling', 'boxing'),
     policyLabel: 'Wrestling and boxing, every camp, for the whole career.',
@@ -201,12 +199,10 @@ const SUBJECTS: readonly Subject[] = [
       divisionId: 'mens-lightweight' as CreateFighterSpec['divisionId'],
       age: 26,
       origin: {
-        talent: 'grinder',
         discipline: 'boxing',
         secondary: 'jiuJitsu',
         attainment: 'regional',
       },
-      build: 'balanced',
     },
     policy: commitThenMaintain('boxing', 'submissions', 32),
     policyLabel: 'Boxing and submissions until 32, then rotates to hold on to what he has.',
@@ -528,10 +524,10 @@ for (const c of careers) {
   say();
   say(`_${s.blurb}_`);
   say();
-  const o = s.spec.origin!;
+  const o = s.spec.origin;
   say(
-    `**Origin** — ${o.talent} · ${o.discipline}${o.secondary ? ` (+ ${o.secondary})` : ''} · ${o.attainment}, ` +
-      `build \`${s.spec.build}\`, turns pro at ${s.spec.age}.  `,
+    `**Origin** — ${o.discipline}${o.secondary ? ` (+ ${o.secondary})` : ''} · ${o.attainment}, ` +
+      `turns pro at ${s.spec.age}.  `,
   );
   say(
     `**Training** — ${s.policyLabel} Blocks of ${s.blockWeeks} weeks, fighting about every ${s.restDays} days.`,
@@ -687,7 +683,7 @@ say();
 
 say('### 3. Physical ceilings are close to decorative');
 say();
-say('Marcus Bell is a `freak`, the top talent tier, and this is what he did with his ceilings:');
+say('Marcus Bell is a national-level sprinter, the most raw athleticism the creation screen can produce, and this is what he did with his ceilings:');
 say();
 say('| Physical | Debut | Ceiling | Career best | Of the gap, used |');
 say('| --- | ---: | ---: | ---: | ---: |');
@@ -701,8 +697,9 @@ say();
 say(
   'Eighteen years of professional training bought him one point of speed against a ten-point gap. ' +
     '`ARRIVAL` is doing what doc 23 designed — a 22-year-old is near their physical best — but the ' +
-    'consequence is that the difference between a freak\u2019s ceilings and anybody else\u2019s is mostly ' +
-    'unreachable, so the talent tier shows up in scouting reports and barely in careers.',
+    'consequence is that the difference between an exceptional athlete\u2019s ceilings and anybody ' +
+    'else\u2019s is mostly unreachable, so raw athleticism shows up in scouting reports and barely in ' +
+    'careers.',
 );
 say();
 

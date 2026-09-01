@@ -18,9 +18,9 @@ import {
   CREATION_POINTS,
   createPlayerFighter,
   validateCreation,
-  type Background,
   type CreateFighterSpec,
 } from './createFighter.js';
+import type { FighterOrigin } from './origin.js';
 
 const gym: Gym = {
   id: 'g' as Gym['id'],
@@ -557,7 +557,10 @@ describe('idle decay', () => {
   });
 
   it('punishes an undisciplined fighter far more', () => {
-    const base = { age: 26, attributes: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 60])) as never };
+    const base = {
+      age: 26,
+      attributes: Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 60])) as never,
+    };
     const pro = applyIdleDecay(
       makeFighter({ ...base, personality: { discipline: 95 } }),
       300,
@@ -581,8 +584,10 @@ describe('creating a fighter', () => {
     sex: 'male',
     age: 22,
     divisionId: asDivisionId('mens-lightweight'),
-    background: 'wrestler',
-    build: 'balanced',
+    // `amateur` rather than `regional`, because this fixture is the *baseline* created fighter and
+    // the bounds below were measured on one. Doc 31 § 23: `amateur` carries the same 5 reputation
+    // and 1 star power a created fighter had before the origin layers existed.
+    origin: { discipline: 'wrestling', attainment: 'amateur' },
     day: 0,
     ...overrides,
   });
@@ -626,23 +631,31 @@ describe('creating a fighter', () => {
     }
   });
 
-  it('makes the background actually shape the fighter', () => {
-    const wrestler = createPlayerFighter(spec({ background: 'wrestler' }), createRng('same'));
-    const boxer = createPlayerFighter(spec({ background: 'boxer' }), createRng('same'));
+  it('makes the discipline actually shape the fighter', () => {
+    const wrestler = createPlayerFighter(
+      spec({ origin: { discipline: 'wrestling', attainment: 'regional' } }),
+      createRng('same'),
+    );
+    const boxer = createPlayerFighter(
+      spec({ origin: { discipline: 'boxing', attainment: 'regional' } }),
+      createRng('same'),
+    );
     expect(wrestler.attributes.wrestling).toBeGreaterThan(boxer.attributes.wrestling + 8);
-    expect(boxer.attributes.strikingOffence).toBeGreaterThan(wrestler.attributes.strikingOffence + 8);
+    expect(boxer.attributes.strikingOffence).toBeGreaterThan(
+      wrestler.attributes.strikingOffence + 8,
+    );
   });
 
   it('gives the raw athlete the highest ceilings and the lowest skills', () => {
-    const totals = (bg: Background) => {
-      const f = createPlayerFighter(spec({ background: bg }), createRng('ceil'));
+    const totals = (origin: FighterOrigin) => {
+      const f = createPlayerFighter(spec({ origin }), createRng('ceil'));
       return {
         skill: f.attributes.strikingOffence + f.attributes.wrestling + f.attributes.submissions,
         ceiling: ATTRIBUTE_KEYS.reduce((a, k) => a + f.potential[k], 0),
       };
     };
-    const athlete = totals('athlete');
-    const grappler = totals('grappler');
+    const athlete = totals({ discipline: 'sprints', attainment: 'regional' });
+    const grappler = totals({ discipline: 'jiuJitsu', attainment: 'regional' });
     expect(athlete.ceiling).toBeGreaterThan(grappler.ceiling);
     expect(athlete.skill).toBeLessThan(grappler.skill);
   });
@@ -650,40 +663,48 @@ describe('creating a fighter', () => {
   it('applies the discretionary allocation', () => {
     const plain = createPlayerFighter(spec(), createRng('alloc'));
     const boosted = createPlayerFighter(
-      spec({ allocation: { power: 8, cardio: 8 } }),
+      spec({ allocation: { wrestling: 8, submissions: 8 } }),
       createRng('alloc'),
     );
-    expect(boosted.attributes.power).toBeGreaterThan(plain.attributes.power);
-    expect(boosted.attributes.cardio).toBeGreaterThan(plain.attributes.cardio);
+    expect(boosted.attributes.wrestling).toBeGreaterThan(plain.attributes.wrestling);
+    expect(boosted.attributes.submissions).toBeGreaterThan(plain.attributes.submissions);
   });
 
-  it('no longer lets build decide the body, which the body model now owns', () => {
+  it('refuses to sell a physical, because a physical is read off the body', () => {
     /*
-     * This asserted the opposite until doc 31 § 12 step 2, and the old claim was the problem.
-     *
-     * `build` used to set walking weight, height and reach directly — `limit × (1.07 ± 0.035)` and a
-     * pair of remaps — which is a second body model that agreed with nothing, and it lived in the one
-     * place a player could reach it. Bodies now come from `sampleBodyForDivision`, the same forward
-     * model the world's intake draws from, so the creator and the generator cannot produce different
-     * species.
-     *
-     * `build` still leans the naturals, which is the part of it that was ever a claim about the
-     * person rather than about the tape. Doc 31 § 12 step 10 removes it outright in favour of height,
-     * reach and frame the player chooses directly — at which point this test is deleted rather than
-     * inverted again.
+     * Doc 31 § 12 step 10. The five physicals left `ALLOCATABLE` because a creation point spent on
+     * Power was a request for the model to disagree with itself: the ladder computes the number
+     * from lean mass, and the point overwrote it. The player buys the body instead.
      */
-    const powerful = createPlayerFighter(spec({ build: 'powerful' }), createRng('b'));
-    const rangy = createPlayerFighter(spec({ build: 'rangy' }), createRng('b'));
-
-    expect(powerful.walkingWeightLbs).toBe(rangy.walkingWeightLbs);
-    expect(powerful.heightInches).toBe(rangy.heightInches);
-    expect(powerful.reachInches).toBe(rangy.reachInches);
-
-    // What build still does, and the reason it survives to step 10: it says something about the
-    // engine and the chin rather than about the tape measure.
-    expect(powerful.naturals.constitution).toBeGreaterThan(rangy.naturals.constitution);
-    expect(rangy.naturals.engine).toBeGreaterThan(powerful.naturals.engine);
+    expect(validateCreation(spec({ allocation: { power: 4 } })).length).toBeGreaterThan(0);
+    expect(validateCreation(spec({ allocation: { wrestling: 4 } }))).toHaveLength(0);
   });
+
+  it('lets the player state the body, and the physicals follow from it', () => {
+    const tall = createPlayerFighter(
+      spec({ physique: { heightInches: 76, frameIndex: 80 } }),
+      createRng('body'),
+    );
+    const small = createPlayerFighter(
+      spec({ physique: { heightInches: 66, frameIndex: 25 } }),
+      createRng('body'),
+    );
+
+    expect(tall.heightInches).toBe(76);
+    expect(tall.walkingWeightLbs).toBeGreaterThan(small.walkingWeightLbs + 30);
+    // The whole point of the ladder: mass moves the physicals, in both directions.
+    expect(tall.attributes.strength).toBeGreaterThan(small.attributes.strength);
+    expect(small.attributes.speed).toBeGreaterThan(tall.attributes.speed);
+  });
+
+  /*
+   * `build` is gone, and with it the test that used to sit here.
+   *
+   * It asserted that `build` no longer decided the body — an inversion of its own earlier claim,
+   * left in place with a note saying doc 31 § 12 step 10 would delete it rather than invert it a
+   * second time. This is that deletion. What `build` was standing in for, the player now states
+   * directly, and the test above measures it.
+   */
 
   describe('validation', () => {
     it('accepts a well-formed spec', () => {
@@ -701,9 +722,11 @@ describe('creating a fighter', () => {
 
     it('enforces the points budget and the per-attribute cap', () => {
       expect(
-        validateCreation(spec({ allocation: { power: 8, cardio: 8, speed: 8, wrestling: 8 } })).length,
+        validateCreation(
+          spec({ allocation: { wrestling: 8, submissions: 8, kicking: 8, fightIq: 8 } }),
+        ).length,
       ).toBeGreaterThan(0);
-      expect(validateCreation(spec({ allocation: { power: 20 } })).length).toBeGreaterThan(0);
+      expect(validateCreation(spec({ allocation: { wrestling: 20 } })).length).toBeGreaterThan(0);
     });
 
     it('rejects contradictory traits', () => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { App } from '../../packages/app/src/App';
@@ -9,15 +9,17 @@ import { ThemeProvider } from '../../packages/app/src/state/theme';
 import { ErrorBoundary } from '../../packages/app/src/shell/ErrorBoundary';
 
 /**
- * The three-layer origin picker.
+ * The creation screen: two origin questions, a body, and a live Weight Fit panel.
  *
- * Nested pickers are where creation screens go wrong: the layers cascade, so a choice made
- * on layer 1 can silently invalidate one already made on layer 3, and the player finds out
- * on submit. Every test here is about that seam — that the filter is visible rather than
- * enforced only at validation time, that a selection which stops being legal is *moved*
- * rather than left to fail, and that the whole thing still reaches "Turn pro".
+ * **It asked three questions until doc 31 § 12 step 10** — the first being what kind of athlete you
+ * were born as — and most of this file used to be about the seam that created. Nested pickers are
+ * where creation screens go wrong: layer 1 could silently invalidate a choice already made on layer
+ * 3, and the player found out on submit. Deleting the layer deleted the seam, and the tests that
+ * guarded it went with it.
  *
- * The other thing it guards is the one hard rule of the mode: no ceiling is ever rendered.
+ * What is left is what the screen is now for: that the two questions and the body reach "Turn pro",
+ * that the panel tells the player what the cut costs before they commit to it, and the one hard
+ * rule of the mode — no ceiling is ever rendered.
  */
 
 function renderApp() {
@@ -54,17 +56,27 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe('the origin picker asks three questions', () => {
-  it('shows all three layers, in order, each explained', async () => {
+describe('the origin picker asks two questions', () => {
+  it('shows both layers, in order, each explained', async () => {
     const user = userEvent.setup();
     await openCreator(user);
 
-    expect(screen.getByRole('radiogroup', { name: /What kind of athlete you are/i })).toBeTruthy();
     expect(screen.getByRole('radiogroup', { name: /What you trained/i })).toBeTruthy();
     expect(screen.getByRole('radiogroup', { name: /How far you got/i })).toBeTruthy();
-    // Numbered, because three nested layers with no ordering read as three unrelated menus.
-    expect(screen.getByText(/1\. What kind of athlete you are/i)).toBeTruthy();
-    expect(screen.getByText(/3\. How far you got/i)).toBeTruthy();
+    expect(screen.getByText(/1\. What you trained/i)).toBeTruthy();
+    expect(screen.getByText(/2\. How far you got/i)).toBeTruthy();
+  });
+
+  it('no longer asks the player how gifted they would like to be', async () => {
+    const user = userEvent.setup();
+    await openCreator(user);
+
+    expect(screen.queryByRole('radiogroup', { name: /athlete you are/i })).toBeNull();
+    for (const tier of ['Freak', 'Natural', 'Grinder']) {
+      expect(screen.queryByRole('radio', { name: tier }), tier).toBeNull();
+    }
+    // And it says why, rather than the question simply vanishing between versions.
+    expect(screen.getByText(/not something anybody gets to choose/i)).toBeTruthy();
   });
 
   it('offers exactly the six combat disciplines the fight engine can tell apart', async () => {
@@ -79,84 +91,80 @@ describe('the origin picker asks three questions', () => {
     expect(names).toContain('Wrestling');
     expect(names).toContain('Brazilian Jiu-Jitsu');
     expect(names).toContain('Judo / Sambo');
-    // Six arts plus the five non-combat sports the default tier allows. Three until doc 31 § 12
-    // step 9 split `trackAndField` into sprints and throws and `enduranceSport` into rowing and
-    // distance running — see § 22.1 for why that stopped being a widened menu.
+    // Six arts plus five non-combat sports, all eleven open to everybody since step 10 deleted the
+    // talent tier that used to gate the athletic branch. Three athletic entries until step 9 split
+    // `trackAndField` and `enduranceSport` — see § 22.1 for why that stopped being a widened menu.
     expect(trained).toHaveLength(11);
   });
 });
 
-describe('layer 1 filters layer 3', () => {
-  it('drops the elite rungs off the menu entirely under a lesser talent', async () => {
-    const user = userEvent.setup();
-    await openCreator(user);
-
-    await user.click(within(layer(/athlete you are/i)).getByRole('radio', { name: 'Freak' }));
-    expect(within(layer(/How far you got/i)).getByRole('radio', { name: /Olympic/i })).toBeTruthy();
-
-    // Not offered-and-discounted: not offered. An Olympic medallist *is* an elite athlete,
-    // so scaling it down under a lesser tier would count the same fact twice.
-    await user.click(within(layer(/athlete you are/i)).getByRole('radio', { name: 'Grinder' }));
-    await waitFor(() => {
-      expect(
-        within(layer(/How far you got/i)).queryByRole('radio', { name: /Olympic/i }),
-      ).toBeNull();
-    });
-    expect(
-      within(layer(/How far you got/i)).queryByRole('radio', { name: /National/i }),
-    ).toBeNull();
-    expect(screen.getByText(/rungs above this open up if you are a better athlete/i)).toBeTruthy();
-  });
-
-  it('moves a selection that stopped being legal rather than letting it fail on submit', async () => {
-    const user = userEvent.setup();
-    await openCreator(user);
-
-    await user.click(within(layer(/athlete you are/i)).getByRole('radio', { name: 'Freak' }));
-    const olympic = within(layer(/How far you got/i)).getByRole('radio', { name: /Olympic/i });
-    await user.click(olympic);
-    expect(olympic.getAttribute('aria-checked')).toBe('true');
-
-    await user.click(within(layer(/athlete you are/i)).getByRole('radio', { name: 'Grinder' }));
-
-    // Fell to the highest rung a grinder can reach, and the form is still submittable.
-    await waitFor(() => {
-      const chosen = within(layer(/How far you got/i))
-        .getAllByRole('radio')
-        .filter((r) => r.getAttribute('aria-checked') === 'true');
-      expect(chosen).toHaveLength(1);
-      expect(chosen[0]!.getAttribute('aria-label')).toMatch(/Regional/i);
-    });
-    expect(screen.getByRole('button', { name: /Turn pro/i }).getAttribute('aria-disabled')).toBe(
-      'false',
-    );
-  });
-
-  it('hides the non-combat sports from the tier with no athletic story to tell', async () => {
-    const user = userEvent.setup();
-    await openCreator(user);
-
-    await user.click(within(layer(/athlete you are/i)).getByRole('radio', { name: 'Grinder' }));
-    await waitFor(() => {
-      expect(within(layer(/What you trained/i)).getAllByRole('radio')).toHaveLength(6);
-    });
-    expect(
-      within(layer(/What you trained/i)).queryByRole('radio', { name: /Sprints & Jumps/i }),
-    ).toBeNull();
-  });
-
+/*
+ * **The `layer 1 filters layer 3` describe is deleted with layer 1.**
+ *
+ * Its four tests were all about the cascade: that a lesser tier dropped the elite rungs off the
+ * menu, that a selection which stopped being legal was moved rather than left to fail on submit,
+ * that the athletic branch was hidden from the tier with no athletic story, and that picking
+ * Olympic raised the debut age. The first three tested a filter that no longer exists — every rung
+ * and every discipline is open to everybody now.
+ *
+ * The fourth tested the thing that turned out to be the *whole* balance once the tier was gone, so
+ * it survives here on its own.
+ */
+describe('what an attainment costs', () => {
   it('raises the debut age to match what you say you achieved', async () => {
     const user = userEvent.setup();
     await openCreator(user);
 
-    await user.click(within(layer(/athlete you are/i)).getByRole('radio', { name: 'Freak' }));
     await user.click(within(layer(/How far you got/i)).getByRole('radio', { name: /Olympic/i }));
 
-    // You cannot medal at a world championship and also turn pro at nineteen. The slider
-    // moves rather than the form quietly becoming invalid.
+    // You cannot medal at a world championship and also turn pro at nineteen. This is now the only
+    // thing stopping the top rung being the automatic pick, which is why it gets its own test.
     const slider = screen.getByLabelText(/Debut age/i) as HTMLInputElement;
     await waitFor(() => expect(Number(slider.value)).toBeGreaterThanOrEqual(25));
     expect(Number(slider.min)).toBeGreaterThanOrEqual(25);
+  });
+});
+
+describe('the body, and what making the weight would cost it', () => {
+  it('lets the player state a body and shows what it weighs', async () => {
+    const user = userEvent.setup();
+    await openCreator(user);
+
+    const height = screen.getByLabelText(/Height:/i) as HTMLInputElement;
+    expect(screen.getByLabelText(/Reach:/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Frame:/i)).toBeTruthy();
+
+    const walkingWeight = () =>
+      Number(
+        screen.getByText(/You walk around at/i).parentElement!.textContent!.match(/(\d+) lb/)![1],
+      );
+
+    const before = walkingWeight();
+    fireEvent.change(height, { target: { value: '76' } });
+    await waitFor(() => expect(walkingWeight()).toBeGreaterThan(before + 15));
+  });
+
+  it('tells the player the cut is impossible rather than letting them find out later', async () => {
+    const user = userEvent.setup();
+    await openCreator(user);
+
+    // A very large man, still asking for the division the screen opens on.
+    fireEvent.change(screen.getByLabelText(/Height:/i), { target: { value: '80' } });
+    fireEvent.change(screen.getByLabelText(/Frame:/i), { target: { value: '95' } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/You cannot make this weight/i)).toBeTruthy();
+    });
+    // And it says which divisions would work, so the panel is a way forward rather than a wall.
+    expect(screen.getByText(/Divisions open to this body/i)).toBeTruthy();
+  });
+
+  it('no longer offers the three-way build picker it replaced', async () => {
+    const user = userEvent.setup();
+    await openCreator(user);
+    for (const label of ['Rangy', 'Powerful']) {
+      expect(screen.queryByRole('radio', { name: label }), label).toBeNull();
+    }
   });
 });
 
@@ -233,8 +241,8 @@ describe('what the screen refuses to tell you', () => {
     const user = userEvent.setup();
     await openCreator(user);
 
-    for (const name of ['Freak', 'Grinder']) {
-      await user.click(within(layer(/athlete you are/i)).getByRole('radio', { name }));
+    for (const name of ['Wrestling', 'Sprints & Jumps']) {
+      await user.click(within(layer(/What you trained/i)).getByRole('radio', { name }));
       const meters = await screen.findAllByRole('meter');
       expect(meters.length).toBeGreaterThan(10);
       for (const meter of meters) {
@@ -250,22 +258,22 @@ describe('what the screen refuses to tell you', () => {
     const user = userEvent.setup();
     await openCreator(user);
 
-    await user.click(within(layer(/athlete you are/i)).getByRole('radio', { name: 'Freak' }));
     await user.click(within(layer(/What you trained/i)).getByRole('radio', { name: 'Wrestling' }));
     await user.selectOptions(screen.getByLabelText(/second discipline/i), 'boxing');
 
-    const summary = await screen.findByText(/A freak out of Wrestling/i);
+    const summary = await screen.findByText(/Out of Wrestling/i);
     expect(summary.textContent).toMatch(/Boxing/);
     expect(summary.textContent).not.toMatch(/\d/);
   });
 });
 
 describe('the whole thing still gets you into a career', () => {
-  it('turns pro from a fully specified three-layer origin', async () => {
+  it('turns pro from a fully specified origin and body', async () => {
     const user = userEvent.setup();
     await openCreator(user);
 
-    await user.click(within(layer(/athlete you are/i)).getByRole('radio', { name: 'Freak' }));
+    fireEvent.change(screen.getByLabelText(/Height:/i), { target: { value: '73' } });
+    fireEvent.change(screen.getByLabelText(/Frame:/i), { target: { value: '62' } });
     await user.click(
       within(layer(/What you trained/i)).getByRole('radio', { name: 'Rugby / American Football' }),
     );

@@ -39,140 +39,64 @@ import { bodyPriorFor, type FighterBackground } from './background.js';
 import {
   ATTAINMENT_META,
   DISCIPLINE_META,
-  attainmentsForTalent,
-  disciplinesForTalent,
   isAthleticOrigin,
   resolveOrigin,
   secondaryOptionsFor,
   type FighterOrigin,
-  type ResolvedOrigin,
 } from './origin.js';
 import { isPhysical } from './development.js';
-import { physiqueOf, sampleBodyForDivision, walkingWeightLbs as walkingWeightOf } from './body.js';
+import {
+  HEIGHT_RANGE,
+  bodyFromChoices,
+  campWeightLbs,
+  cutChain,
+  makeableDivisions,
+  physiqueOf,
+  walkingWeightLbs as walkingWeightOf,
+  weighInFloorLbs,
+  weightFit,
+  type Body,
+  type WeightFit,
+} from './body.js';
+import { getDivision } from '../domain/divisions.js';
+
+/*
+ * **The flat `BACKGROUNDS` picker and the three `BUILDS` were both deleted at doc 31 § 12 step 10.**
+ *
+ * `BACKGROUNDS` — wrestler, boxer, kickboxer, grappler, streetFighter, athlete — was the original
+ * one-question creation screen. It was superseded by the layered origin two steps of design ago and
+ * kept alive only so that fixtures and long-sim baselines built on it would keep compiling. Nothing
+ * has sent one since; a deprecated path with no callers is a second creation model waiting to
+ * disagree with the first.
+ *
+ * `BUILDS` — rangy, balanced, powerful — was a three-way proxy for a body, from before there was a
+ * body. It leaned naturals from a *label*: rangy bought engine and gave up constitution, powerful
+ * the reverse. That was the best available answer when `frame` was `walkingWeight / 300`, and doc 30
+ * § 4.1 had already caught it telling a lie in the other direction, where rangy secretly meant slow.
+ *
+ * The player now states the three things a build was standing in for — how tall, how long, how
+ * big-boned — and the physicals follow from them through the ladder rather than from a word. Three
+ * continuous choices replace three discrete ones, and none of them is a number the model has to
+ * translate.
+ */
 
 /**
- * Where a fighter came from, flat.
+ * Attributes the player may distribute their discretionary points across.
  *
- * @deprecated Superseded by `CreateFighterSpec.origin` (talent / discipline / attainment).
- * Kept working, and kept producing bit-identical fighters for the same seed, because tests,
- * fixtures and the long-sim baselines were all built on it — see `resolveSpecOrigin`.
+ * **The five physicals left this list at doc 31 § 12 step 10**, and their removal is the point of
+ * the step rather than a tightening of it. A physical is not a thing anybody has; it is a reading
+ * taken off a body, on a scale where 43 points of Power is twice the impulse. So a creation point
+ * spent on Power was a request for the model to disagree with itself: the ladder computes the
+ * number from lean mass, and the point then overwrote it.
+ *
+ * The player buys the body instead — height, reach and frame, three measurable facts — and the
+ * physicals follow. That is a strictly larger space of fighters than the eight points of Power ever
+ * bought, and every one of them is a body the world could also have produced.
+ *
+ * The ten technical and mental attributes keep their points, because "I boxed a bit on the side"
+ * is a true thing somebody can say about themselves and there is no equation that contradicts it.
  */
-export const BACKGROUNDS = [
-  'wrestler',
-  'boxer',
-  'kickboxer',
-  'grappler',
-  'streetFighter',
-  'athlete',
-] as const;
-export type Background = (typeof BACKGROUNDS)[number];
-
-export interface BackgroundMeta {
-  key: Background;
-  label: string;
-  blurb: string;
-  /** Rating points added on top of the baseline, per attribute. */
-  attributes: Readonly<Partial<Record<AttributeKey, number>>>;
-  /** Naturals leaning, in rating points. */
-  naturals: Readonly<Partial<Record<keyof Omit<Naturals, 'ageCurve'>, number>>>;
-  /** The hole this background starts with, named plainly. */
-  weakness: string;
-}
-
-export const BACKGROUND_META: Readonly<Record<Background, BackgroundMeta>> = {
-  wrestler: {
-    key: 'wrestler',
-    label: 'Collegiate Wrestler',
-    blurb: 'Years on the mat. You already know how to make people go where you want.',
-    attributes: { wrestling: 16, takedownDefence: 13, strength: 8, groundControl: 7, cardio: 5 },
-    naturals: { explosiveness: 6, engine: 5 },
-    weakness: 'You have never been punched in the face properly.',
-  },
-  boxer: {
-    key: 'boxer',
-    label: 'Amateur Boxer',
-    blurb: 'Real hands, real footwork, and a head that moves.',
-    attributes: { strikingOffence: 16, strikingDefence: 11, speed: 7, power: 6 },
-    naturals: { explosiveness: 5 },
-    weakness: 'Everything below the waist is a mystery to you.',
-  },
-  kickboxer: {
-    key: 'kickboxer',
-    label: 'Muay Thai / Kickboxer',
-    blurb: 'Long weapons, a clinch, and shins that have been conditioned the hard way.',
-    attributes: { kicking: 16, strikingOffence: 9, strikingDefence: 8, durability: 5 },
-    naturals: { explosiveness: 4, constitution: 4 },
-    weakness: 'The first competent double leg will be a shock.',
-  },
-  grappler: {
-    key: 'grappler',
-    label: 'Jiu-Jitsu Black Belt',
-    blurb: 'You are dangerous everywhere on the ground, including off your back.',
-    attributes: { submissions: 17, scrambling: 12, groundControl: 8, fightIq: 4 },
-    naturals: { recovery: 5, motorLearning: 4 },
-    weakness: 'You have to get it there first, and standing up you are a target.',
-  },
-  streetFighter: {
-    key: 'streetFighter',
-    label: 'Came Up Fighting',
-    blurb: 'No pedigree, no technique, and absolutely no fear.',
-    attributes: { power: 12, durability: 11, composure: 8, strikingOffence: 4 },
-    naturals: { constitution: 8, explosiveness: 5 },
-    weakness: 'Nothing you do is technically correct, and good opponents will show you that.',
-  },
-  athlete: {
-    key: 'athlete',
-    label: 'Elite Athlete, New To This',
-    blurb: 'Extraordinary raw material. Almost no idea what you are doing yet.',
-    attributes: { speed: 10, cardio: 9, strength: 8, power: 6 },
-    // The highest ceilings in the game, attached to the lowest starting skill. The long game.
-    naturals: { explosiveness: 10, engine: 9, motorLearning: 8, recovery: 6 },
-    weakness: 'You are an athlete pretending to be a fighter. For now.',
-  },
-};
-
-/** Physical build. Shifts naturals and walking weight within a division. */
-export const BUILDS = ['rangy', 'balanced', 'powerful'] as const;
-export type Build = (typeof BUILDS)[number];
-
-type NaturalLean = Readonly<Partial<Record<'explosiveness' | 'engine' | 'constitution', number>>>;
-
-/**
- * What a build leans, in rating points on the naturals it actually implies.
- *
- * This used to be one signed `buildShift` applied to two naturals at once: **rangy cost four
- * points of explosiveness**, and explosiveness is the driver of speed. So the game's own word for
- * "long and light" quietly meant *slower*, which is not what the label says, not what the sport
- * looks like, and the single most misleading thing on the creation screen — a player building a
- * rangy, quick striker was choosing the slowest version of him available.
- *
- * Length is not a speed penalty, so there is no longer one. What a build genuinely trades is
- * carried mass: a thicker fighter hits harder and takes a shot better, and pays for it with the
- * engine, which is exactly what `frame` and `engine` already model. Powerful keeps a small
- * explosiveness lean because mass really does move force; rangy does not need a matching penalty
- * to be balanced, because it is already paying in `frame` — which enters power, strength and
- * durability — and being repaid in reach.
- */
-const BUILD_NATURALS: Readonly<Record<Build, NaturalLean>> = {
-  rangy: { engine: 5, constitution: -2 },
-  balanced: {},
-  powerful: { explosiveness: 3, engine: -5, constitution: 3 },
-};
-
-export const BUILD_META: Readonly<Record<Build, { label: string; blurb: string }>> = {
-  rangy: {
-    label: 'Rangy',
-    blurb: 'Long and light for the weight. More reach, a better engine, less to hit you with.',
-  },
-  balanced: { label: 'Balanced', blurb: 'No particular physical advantage or disadvantage.' },
-  powerful: {
-    label: 'Powerful',
-    blurb: 'Thick and heavy for the weight. Hits harder, takes one better, tires sooner.',
-  },
-};
-
-/** Attributes the player may distribute their discretionary points across. */
-export const ALLOCATABLE: readonly AttributeKey[] = ATTRIBUTE_KEYS;
+export const ALLOCATABLE: readonly AttributeKey[] = ATTRIBUTE_KEYS.filter((k) => !isPhysical(k));
 
 /**
  * Discretionary points.
@@ -193,21 +117,20 @@ export interface CreateFighterSpec {
   sex: Sex;
   age: number;
   divisionId: DivisionId;
+  /** What you trained and how far you got at it. Two layers since step 10 deleted `talent`. */
+  origin: FighterOrigin;
   /**
-   * The three-layer origin. Preferred, and what the creation screen sends.
+   * The body, as far as the player gets to choose it: how tall, how long, how big-boned.
    *
-   * Optional only so that the deprecated `background` route keeps compiling; a spec with
-   * neither is rejected by `validateCreation` rather than silently defaulted, because a
-   * fighter with no origin is not a sensible thing to build.
+   * Every field is optional and an omitted one is rolled, so a half-filled creation screen is a
+   * valid spec and the preview can be live from the first keystroke. What is deliberately *not*
+   * here is muscle, body fat and water tolerance — see `bodyFromChoices`. Muscle is the one
+   * primitive that moves over a career, so letting a debutant buy it would be selling them the
+   * thing the next ten years are for; body fat is a camp variable rather than an identity; and
+   * water-cut tolerance is a hidden fact you find out the first time you miss weight, which is
+   * worth far more as a discovery than as a slider.
    */
-  origin?: FighterOrigin;
-  /** @deprecated Use `origin`. Ignored when `origin` is present. */
-  background?: Background;
-  /**
-   * Physique, which is orthogonal to origin: a rangy boxer and a powerful boxer are both
-   * real people. Defaults to `balanced`.
-   */
-  build?: Build;
+  physique?: { heightInches?: number; reachInches?: number; frameIndex?: number };
   stance?: 'orthodox' | 'southpaw' | 'switch';
   /** Discretionary points per attribute. Must total at most `CREATION_POINTS`. */
   allocation?: Partial<Record<AttributeKey, number>>;
@@ -235,20 +158,19 @@ export function validateOrigin(origin: FighterOrigin, age?: number): CreationIss
   const issues: CreationIssue[] = [];
   const disciplineLabel = DISCIPLINE_META[origin.discipline]?.label ?? origin.discipline;
 
-  if (!disciplinesForTalent(origin.talent).includes(origin.discipline)) {
-    issues.push({
-      field: 'origin.discipline',
-      message: `${disciplineLabel} is only open to fighters who were exceptional athletes first.`,
-    });
-  }
-
-  if (!attainmentsForTalent(origin.talent).includes(origin.attainment)) {
-    issues.push({
-      field: 'origin.attainment',
-      message: `Nobody reaches ${ATTAINMENT_META[origin.attainment].label.toLowerCase()} without the athleticism to match.`,
-    });
-  }
-
+  /*
+   * The two talent gates that used to live here are gone with the layer that fed them.
+   *
+   * `disciplinesForTalent` kept the athletic branch off the menu below Natural, and
+   * `attainmentsForTalent` kept Olympic off it below Freak. Both were the same idea — an elite
+   * attainment is a claim about an elite athlete — expressed as a filter, and with `talent` deleted
+   * there is nothing left to filter against. The claim itself survives as
+   * `ATTAINMENT_META.naturals`, which is the honest direction for it to run.
+   *
+   * The `minDebutAge` check below is what now stops "Olympic" being the free pick, and it always
+   * was the real balance: a fighter who arrives with a name arrives having spent the years it took
+   * to build it.
+   */
   if (origin.secondary && !secondaryOptionsFor(origin.discipline).includes(origin.secondary)) {
     issues.push({
       field: 'origin.secondary',
@@ -280,11 +202,8 @@ export function validateCreation(spec: CreateFighterSpec): CreationIssue[] {
     issues.push({ field: 'age', message: 'Debut age must be between 18 and 35.' });
   }
 
-  if (spec.origin) {
-    issues.push(...validateOrigin(spec.origin, spec.age));
-  } else if (!spec.background) {
-    issues.push({ field: 'origin', message: 'Choose where you came from.' });
-  }
+  issues.push(...validateOrigin(spec.origin, spec.age));
+  issues.push(...validatePhysique(spec));
 
   const allocation = spec.allocation ?? {};
   const spent = Object.values(allocation).reduce((a, v) => a + (v ?? 0), 0);
@@ -292,6 +211,12 @@ export function validateCreation(spec: CreateFighterSpec): CreationIssue[] {
     issues.push({ field: 'allocation', message: `Only ${CREATION_POINTS} points are available.` });
   }
   for (const [key, value] of Object.entries(allocation)) {
+    if (isPhysical(key as AttributeKey)) {
+      issues.push({
+        field: key,
+        message: `${key} is read off your body, not bought. Change your height, reach or frame instead.`,
+      });
+    }
     if ((value ?? 0) < 0) {
       issues.push({ field: key, message: 'Points cannot be negative.' });
     }
@@ -392,23 +317,13 @@ const RAW_ROOM: Readonly<Partial<Record<AttributeKey, number>>> = {
 const ORIGIN_TO_BODY = 0.5;
 
 /**
- * How far a point of Speed-over-Strength emphasis moves the force–velocity bias.
+ * How far a point of the discipline's Speed-over-Strength emphasis moves the force-velocity bias.
  *
- * Five allocated points into Speed with none into Strength is a clear statement, and it should land
- * a fighter most of a standard deviation toward the velocity end — enough to be the fighter the
- * player asked for, not so much that the roll stops mattering.
+ * Taekwondo's eleven points of Speed against no Strength is a clear statement, and it should land a
+ * fighter most of a standard deviation toward the velocity end — enough to be the fighter the
+ * discipline implies, not so much that the roll stops mattering.
  */
 const BIAS_PER_LEAN_POINT = 2.4;
-
-/**
- * The same, for the points the player spends themselves.
- *
- * Slightly higher than the origin's share because it is a more direct statement of intent: a
- * player putting points into speed is saying "this fighter is fast", not "this fighter trained".
- * It is still not 1, or the allocation would be a ceiling purchase and the twenty-four points
- * would decide a career on their own.
- */
-const ALLOCATION_TO_BODY = 0.6;
 
 /** Room every physical keeps at debut, so no part of the body is finished before the first fight. */
 const MIN_PHYSICAL_HEADROOM = 3;
@@ -420,51 +335,131 @@ const MIN_PHYSICAL_HEADROOM = 3;
  * level almost everywhere — because the game being offered is the climb, and a fighter who
  * starts at 70 has nowhere to go.
  */
-/**
- * Where a created fighter's hidden athleticism is centred.
- *
- * This number decides the *ceiling* of the whole mode, because ceilings are derived from
- * naturals and nothing in play ever raises a ceiling. At its original 52 a created fighter's
- * potential-overall topped out at 71.2 across 2000 rolls, while the seeded champions rate
- * 78.4 to 84.6 — so becoming champion was not difficult, it was arithmetically impossible,
- * and the entire premise of the mode was unreachable by construction.
- *
- * At 66 a typical created fighter has the ceiling of a ranked contender and a good roll has
- * the ceiling of a champion. That is the correct shape: the belt should be a hard, uncertain
- * target rather than either a formality or a lie. It leaves them at roughly the equivalent
- * of a tier-76 generated prospect — a real talent, not the best athlete alive.
- *
- * Note this raises what they can *become*, not what they start as. Starting attributes come
- * from `BASELINE` plus background and allocation, and a created fighter still turns pro well
- * below anybody on a major roster.
- */
-const NATURALS_BASELINE = 73;
-
 /** Rating points of room every attribute has at debut, however the ceilings rolled. */
 const MINIMUM_DEBUT_HEADROOM = 4;
 
 /**
- * Turn whichever origin the spec carries into the one shape the builder below reads.
+ * The body a created fighter gets.
  *
- * The deprecated `background` route maps onto exactly the numbers it always used — the same
- * attribute table, the same naturals leaning, the same 73 centre, the same 5 reputation and
- * 1 star power — so an old spec and a seed produce the fighter they produced before. That
- * matters more than it looks: the long-sim career suite asserts a *distribution* over forty
- * seeded careers built through this path, and every one of those bounds was measured.
+ * Doc 31 § 12 step 10, and the single largest change on this path since the ladder started.
+ *
+ * It was `sampleBodyForDivision`, which rejection-samples the forward model until it finds a body
+ * that belongs in the division the player picked. That was right for step 2's purpose — it stopped
+ * the creator and the world's intake being two species — but it means **the division chooses the
+ * body**, which is the exact inversion the whole ladder exists to undo. The player said
+ * "lightweight" and the game handed back a lightweight-shaped person.
+ *
+ * Now the player states the body and the division is a consequence they have to live with. Three
+ * choices, all measurable: how tall, how long, how big-boned. Everything else is rolled, and the
+ * division they asked for is checked against what that body can actually make (`validatePhysique`)
+ * rather than quietly guaranteed.
+ *
+ * The discipline's body prior still applies, re-centred exactly as it is for the world's intake, so
+ * a created thrower is built like the throwers around him. It shifts the *rolled* parts and the
+ * unchosen ones; a height the player typed is the height they get.
  */
-function resolveSpecOrigin(spec: CreateFighterSpec): ResolvedOrigin {
-  if (spec.origin) return resolveOrigin(spec.origin);
+function bodyForCreation(rng: Rng, spec: CreateFighterSpec, background: FighterBackground): Body {
+  /*
+   * The prior shifts what is *rolled* and never what is typed.
+   *
+   * A player who types 74" gets 74". Folding the discipline's height prior into a stated height
+   * would mean the slider and the fighter disagreed, which is the same class of bug as a division
+   * choosing a body — the screen says one thing and the model does another.
+   */
+  return bodyFromChoices(
+    rng,
+    spec.sex,
+    spec.physique ?? {},
+    bodyPriorFor(background, spec.divisionId),
+  );
+}
 
-  // Only reachable through a spec `validateCreation` has already rejected, which
-  // `createPlayerFighter` throws on — but `resolveSpecOrigin` must still be total.
-  const background = BACKGROUND_META[spec.background ?? 'wrestler'];
-  return {
-    naturalsCentre: NATURALS_BASELINE,
-    naturals: background.naturals,
-    attributes: background.attributes,
-    reputation: 5,
-    starPower: 1,
+/** What making the chosen division would cost the chosen body, for the creation screen's panel. */
+export interface WeightFitPreview {
+  walkingWeightLbs: number;
+  campWeightLbs: number;
+  fightWeekLossLbs: number;
+  weighInFloorLbs: number;
+  /** Fraction of camp weight that has to come off. Negative when the fighter is already under. */
+  cutFraction: number;
+  fit: WeightFit;
+  /** Every division this body could physiologically make, lightest first. */
+  makeable: readonly { id: DivisionId; shortName: string; limitLbs: number }[];
+}
+
+/**
+ * The live Weight Fit panel, computed.
+ *
+ * The payoff of the ladder on this screen and the reason the body choices are worth offering at
+ * all: a player moving the height slider watches their walking weight move, watches divisions drop
+ * off the makeable list, and watches the cut they signed up for go from `typical` to `extreme`.
+ * That is the model made legible, and it replaces a division dropdown that used to be free.
+ *
+ * Deterministic for a fully specified physique and stable enough to render on every keystroke for a
+ * partial one, because the seed is the spec rather than a fresh roll.
+ */
+export function previewWeightFit(spec: CreateFighterSpec, rng: Rng): WeightFitPreview {
+  const background: FighterBackground = {
+    discipline: spec.origin.discipline,
+    secondary: spec.origin.secondary,
+    attainment: spec.origin.attainment,
   };
+  const body = bodyForCreation(rng.fork('body'), spec, background);
+  const chain = cutChain(body);
+  const limit = getDivision(spec.divisionId).limitLbs;
+
+  return {
+    walkingWeightLbs: Math.round(walkingWeightOf(body)),
+    campWeightLbs: Math.round(campWeightLbs(body)),
+    fightWeekLossLbs: Math.round(chain.transient.totalLbs),
+    weighInFloorLbs: Math.round(weighInFloorLbs(body)),
+    cutFraction: (campWeightLbs(body) - limit) / campWeightLbs(body),
+    fit: weightFit(body, spec.divisionId),
+    makeable: makeableDivisions(body, spec.sex).map((d) => ({
+      id: d.id,
+      shortName: d.shortName,
+      limitLbs: d.limitLbs,
+    })),
+  };
+}
+
+/**
+ * Everything the three body choices can be wrong about.
+ *
+ * The height bound is the forward model's own, so a created fighter cannot be a size the world
+ * could never produce. The division check is the one that matters and it is new: a body whose
+ * weigh-in floor is above the limit **cannot make that weight at all**, not with a hard camp and
+ * not with a bad one, and the old screen had no way to say so because the division was choosing
+ * the body. It is stated as a fixable problem rather than a rejection — the panel next to it lists
+ * the divisions that do work.
+ */
+export function validatePhysique(spec: CreateFighterSpec): CreationIssue[] {
+  const issues: CreationIssue[] = [];
+  const chosen = spec.physique ?? {};
+  const range = HEIGHT_RANGE[spec.sex];
+
+  if (chosen.heightInches !== undefined) {
+    if (chosen.heightInches < range.min || chosen.heightInches > range.max) {
+      issues.push({
+        field: 'physique.heightInches',
+        message: `Height has to be between ${range.min}" and ${range.max}".`,
+      });
+    }
+  }
+  if (chosen.reachInches !== undefined && chosen.heightInches !== undefined) {
+    const ape = chosen.reachInches - chosen.heightInches;
+    if (ape < -4 || ape > 10) {
+      issues.push({
+        field: 'physique.reachInches',
+        message: 'Reach has to be within four inches under and ten over your height.',
+      });
+    }
+  }
+  if (chosen.frameIndex !== undefined && (chosen.frameIndex < 1 || chosen.frameIndex > 100)) {
+    issues.push({ field: 'physique.frameIndex', message: 'Frame has to be between 1 and 100.' });
+  }
+
+  return issues;
 }
 
 export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter {
@@ -473,52 +468,16 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
     throw new Error(`Cannot create fighter: ${issues.map((i) => i.message).join(' ')}`);
   }
 
-  const origin = resolveSpecOrigin(spec);
+  const origin = resolveOrigin(spec.origin);
   const allocation = spec.allocation ?? {};
 
-  const build = BUILD_NATURALS[spec.build ?? 'balanced'];
+  const background: FighterBackground = {
+    discipline: spec.origin.discipline,
+    secondary: spec.origin.secondary,
+    attainment: spec.origin.attainment,
+  };
 
-  /*
-   * The player's fighter gets a body from the same forward model every other fighter does.
-   *
-   * Doc 31 § 12 step 2, and specifically its rule that the creator and the world's intake must not
-   * be able to diverge: one model, sampled two ways. Height, reach and walking weight all used to be
-   * computed here from `division.limitLbs` and `buildShift`, which is a second body model that
-   * happened to agree with nothing.
-   *
-   * `build` still leans the naturals below and no longer touches the body at all — doc 31 § 12 step
-   * 10 removes it outright in favour of height, reach and frame the player chooses directly.
-   */
-  /*
-   * The origin's body prior, on the same terms every generated fighter gets it. Doc 31 § 22.
-   *
-   * The rule quoted above cuts both ways: since step 9 gives the world's intake a body that its
-   * sporting history selected for, withholding it here would re-open exactly the divergence step 2
-   * closed — a created thrower would be a generic body wearing a thrower's label while every
-   * thrower in the world around him was actually built like one.
-   *
-   * Re-centred against the division, like everybody else's. What the player picked is a shape, and
-   * a raw prior would make the athletic branch a body purchase on top of the naturals it already
-   * buys.
-   *
-   * **Realisation is deliberately not applied here.** The create screen already spends the
-   * discipline's forty attribute points on the player directly, which is the same claim said
-   * louder; layering `realises` on top would pay a created fighter twice for one choice.
-   */
-  const background: FighterBackground | undefined = spec.origin
-    ? {
-        discipline: spec.origin.discipline,
-        secondary: spec.origin.secondary,
-        attainment: spec.origin.attainment,
-      }
-    : undefined;
-
-  const body = sampleBodyForDivision(
-    rng.fork('body'),
-    spec.sex,
-    spec.divisionId,
-    background ? bodyPriorFor(background, spec.divisionId) : undefined,
-  );
+  const body = bodyForCreation(rng.fork('body'), spec, background);
   const walkingWeightLbs = Math.round(walkingWeightOf(body));
 
   // --- Naturals: background leaning, build, and a roll the player does not control --------
@@ -538,52 +497,30 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
   const centre = origin.naturalsCentre;
   const naturals: Naturals = {
     explosiveness: toRating(
-      rng.normalClamped(
-        centre + (origin.naturals.explosiveness ?? 0) + (build.explosiveness ?? 0),
-        11,
-        30,
-        96,
-      ),
+      rng.normalClamped(centre + (origin.naturals.explosiveness ?? 0), 11, 30, 96),
     ),
     /*
-     * Flat and independent, exactly as `generateNaturals` draws it: this is which way a
-     * neuromuscular system expresses itself, not how good it is, so neither the origin's centre nor
-     * the player's build should push it. A build that raised it would be a build that made you
-     * faster *and* weaker, which is not a choice anybody would take.
-     */
-    /*
-     * Where on the force–velocity curve the player has asked to sit.
+     * Where on the force–velocity curve the sport this fighter came out of has put them.
      *
-     * Drawn flat like every generated fighter's, and then moved by what the player actually chose.
-     * Doc 31 § 19.3 makes this the axis that separates Speed from Strength, so leaving it to the
-     * dice would mean a player who spent every point on speed rolling force-biased half the time
-     * and getting a slow fighter anyway — which is what the origin tests caught the moment step 6
-     * landed: a karate natural built for speed debuted at 64 against an expected 77.
+     * Drawn flat like every generated fighter's, then moved by the discipline. Doc 31 § 19.3 makes
+     * this the axis that separates Speed from Strength, so leaving it to the dice would mean a
+     * created taekwondo player rolling force-biased half the time and getting a slow fighter
+     * anyway — which is exactly what the origin tests caught the moment step 6 landed.
      *
-     * The lean is the difference between what was spent on Speed and what was spent on Strength,
-     * from the discipline and the allocation together, because that difference is exactly the
-     * question the curve answers. It is a genuine trade rather than a free upgrade: buying velocity
-     * bias costs maximal force, and buying either extreme costs a little Power, which is the shape
-     * of the curve and the reason the choice is interesting.
+     * **The allocation term left this expression at step 10** along with physical allocation
+     * itself. It read the difference between points spent on Speed and points spent on Strength,
+     * which was the closest thing the old screen had to "which kind of athlete am I" — and it was a
+     * player buying a body through the attribute list. The discipline still says it, and now the
+     * body says the rest of it directly.
      */
     forceVelocityBias: toRating(
       rng.normalClamped(50, 17.5, 5, 95) +
-        BIAS_PER_LEAN_POINT *
-          ((allocation.speed ?? 0) +
-            (origin.attributes.speed ?? 0) -
-            (allocation.strength ?? 0) -
-            (origin.attributes.strength ?? 0)),
+        BIAS_PER_LEAN_POINT * ((origin.attributes.speed ?? 0) - (origin.attributes.strength ?? 0)) +
+        (origin.naturals.forceVelocityBias ?? 0),
     ),
-    engine: toRating(
-      rng.normalClamped(centre + (origin.naturals.engine ?? 0) + (build.engine ?? 0), 11, 30, 96),
-    ),
+    engine: toRating(rng.normalClamped(centre + (origin.naturals.engine ?? 0), 11, 30, 96)),
     constitution: toRating(
-      rng.normalClamped(
-        centre + (origin.naturals.constitution ?? 0) + (build.constitution ?? 0),
-        11,
-        30,
-        96,
-      ),
+      rng.normalClamped(centre + (origin.naturals.constitution ?? 0), 11, 30, 96),
     ),
     recovery: toRating(rng.normalClamped(centre + (origin.naturals.recovery ?? 0), 11, 30, 96)),
     // The single most important hidden number, and the one the player has least say over.
@@ -618,20 +555,38 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
        * explosiveness 85 debuted with power ~48 while a generated fighter with the identical
        * ceiling debuted at 77.5. Doc 23 § 4.6.
        *
-       * What is new is *where the player's choices land*. Both the discipline's bias and the
-       * allocated points now buy body — they raise the ceiling, and the fighter then arrives at
-       * that raised ceiling on the same age curve everybody else uses. Adding them to the current
-       * rating instead, as this did, produced the exact reading the whole change exists to remove:
-       * a fighter built for speed who starts at 66 against a stated ceiling of 70, with the
-       * player's own investment having bought four points and closed the door behind them.
+       * The discipline's bias still buys body — it raises the ceiling, and the fighter then arrives
+       * at that raised ceiling on the same age curve everybody else uses. Adding it to the current
+       * rating instead, as this once did, produced the exact reading the change exists to remove: a
+       * fighter built for speed who starts at 66 against a stated ceiling of 70, with his own
+       * investment having bought four points and closed the door behind them.
+       *
+       * **The allocation term is gone at step 10.** `ALLOCATABLE` no longer contains a physical, so
+       * `fromAllocation` was structurally zero here; what took its place is that the player chooses
+       * the body the ceiling is computed from in the first place, which is a larger lever and an
+       * honest one.
        */
-      const ceiling =
-        potential[key] + fromOrigin * ORIGIN_TO_BODY + fromAllocation * ALLOCATION_TO_BODY;
-      const arrived = ceiling * arrivalFactor(key, spec.age) * (RAW_ROOM[key] ?? 1);
-      attributes[key] = toRating(arrived + rng.range(-2, 2));
+      const ceiling = potential[key] + fromOrigin * ORIGIN_TO_BODY;
+      const arrived = ceiling * arrivalFactor(key, spec.age) * (RAW_ROOM[key] ?? 1) + rng.range(-2, 2);
+
       // A ceiling can only ever be raised to fit what the player chose, never lowered onto it —
       // and it always keeps a little room, so no physical is finished before the first fight.
-      potential[key] = toRating(Math.max(ceiling, attributes[key] + MIN_PHYSICAL_HEADROOM));
+      potential[key] = toRating(Math.max(ceiling, arrived + MIN_PHYSICAL_HEADROOM));
+
+      /*
+       * **The scale ends at 100, and the headroom guarantee above did not know that.**
+       *
+       * `toRating` clamps, so a fighter whose ceiling saturates got `potential = 100` while the
+       * attribute kept whatever it computed — and at the very top of the created range that is 100
+       * as well. `origin.test.ts` asserts every created fighter has somewhere to grow in every
+       * attribute, and this is the one place that could quietly be false: it needed an origin good
+       * enough to push a physical into the clamp, and until step 10 gave the best athletic origins
+       * their full lean, nothing did.
+       *
+       * When the ceiling saturates, the room has to come out of the attribute instead. A fighter
+       * who debuts at their own limit is not a very good fighter, they are a finished one.
+       */
+      attributes[key] = toRating(Math.min(arrived, potential[key] - MIN_PHYSICAL_HEADROOM));
       continue;
     }
 

@@ -51,74 +51,31 @@ export type OriginNaturalKey =
 export type NaturalBias = Readonly<Partial<Record<OriginNaturalKey, number>>>;
 export type AttributeBias = Readonly<Partial<Record<AttributeKey, number>>>;
 
-// --- Layer 1: talent ------------------------------------------------------------------
-
-export const TALENT_TIERS = ['freak', 'natural', 'grinder'] as const;
-export type TalentTier = (typeof TALENT_TIERS)[number];
-
-export interface TalentMeta {
-  key: TalentTier;
-  label: string;
-  /** What this means for the player, in fiction. Never states a ceiling. */
-  blurb: string;
-  /** The trade, said plainly, so the tier is a choice rather than a difficulty slider. */
-  cost: string;
-  /**
-   * Where this tier centres the five rolled naturals, in rating points.
-   *
-   * `natural` sits at 73 because that is the value `createPlayerFighter` was tuned to and
-   * measured at: at 66 a created fighter's ceiling was a ranked contender's and a good roll
-   * was a champion's, and 73 moved that up one notch after the long-sim suite showed the
-   * climb finishing short. Keeping the middle tier exactly there means the whole existing
-   * balance envelope is the *middle* of the new range rather than one end of it.
-   */
-  naturalsCentre: number;
-  /** Whether a non-combat sporting background is offered under this tier. */
-  allowsAthleticOrigin: boolean;
-}
-
-export const TALENT_META: Readonly<Record<TalentTier, TalentMeta>> = {
-  freak: {
-    key: 'freak',
-    label: 'Freak',
-    blurb:
-      'Every coach who has ever watched you warm up has said the same thing to somebody. You are put together differently and everybody in the room knows it.',
-    cost: 'Nothing has ever been hard, so nobody has found out yet whether you can be told anything.',
-    // +5 on the tuned middle. Deliberately small: the roll around it has a standard
-    // deviation of 11 to 16, so a tier is a shove rather than a guarantee — the same
-    // principle `generateNaturals` uses for `tier`, and the reason a freak can still roll a
-    // bad chin and a grinder can still roll a great engine.
-    // Down 2 from 78. Physicals are visible on debut now rather than hidden behind a flat 46,
-    // so the same centre would have pushed a created fighter's overall past the roster it is
-    // supposed to be joining at the bottom of. Doc 23 § 4.6.
-    naturalsCentre: 76,
-    allowsAthleticOrigin: true,
-  },
-  natural: {
-    key: 'natural',
-    label: 'Natural',
-    blurb:
-      'You picked things up faster than the people next to you and you were always in the better half of the room. Good, and not obviously special.',
-    cost: 'You will have to be better than the people who are simply bigger and faster than you.',
-    naturalsCentre: 70,
-    allowsAthleticOrigin: true,
-  },
-  grinder: {
-    key: 'grinder',
-    label: 'Grinder',
-    blurb:
-      'Nobody ever picked you first. Everything you can do, you can do because you did it ten thousand times when the gym was empty.',
-    cost: 'The people at the top of this sport were born with things you were not.',
-    // −5 rather than the −7 first tried. Measured over 300 rolls per tier, −7 put the
-    // grinder's mean potential-overall at 67.5 against a roster floor of 51.1 and a median
-    // of 67.5 — and since a played-out career reaches roughly 85% of its own ceiling, that
-    // is a fighter who cannot become a professional at all. −5 lands the mean at 70 and the
-    // best roll at 87, which is the intended shape: an ordinary career is the likely
-    // outcome and a title is a genuine long shot rather than an arithmetic impossibility.
-    naturalsCentre: 64,
-    allowsAthleticOrigin: false,
-  },
-};
+/*
+ * **Layer 1 was `talent`, and it was deleted at doc 31 § 12 step 10.**
+ *
+ * It was three tiers — freak, natural, grinder — that centred the rolled naturals at 76, 70 and 64,
+ * gated which attainments and which disciplines were on the menu, and asked the player, in as many
+ * words, how gifted they would like to be.
+ *
+ * Every one of those three jobs stopped being honest once the ladder landed.
+ *
+ *  - **Choosing your own genetics.** doc/06 and this screen's own footer say the player is never
+ *    shown their naturals, because finding out what you got is what coaches, scouting and ten years
+ *    of camps are for. A tier at the top of the screen that sets them is that promise broken before
+ *    the first fight.
+ *  - **Gating attainment.** "Nobody medals at a world championship without the body to do it" is
+ *    true, and it is a *consequence* rather than a precondition. Selection ran the other way round:
+ *    the medal is evidence about the athlete, so the athlete should follow from the medal.
+ *  - **Centring the naturals.** That was the pre-ladder way of saying "you are a good athlete". The
+ *    body says it directly now, and the player picks the body.
+ *
+ * What replaced it is `ATTAINMENT_META.naturals` below. Attainment was always the layer carrying
+ * this information — it is a record of what somebody actually did — and it is self-balancing in a
+ * way a tier could never be, through `minDebutAge`: you cannot medal at a world championship at
+ * nineteen and also turn professional at nineteen. A player who wants the athlete pays for it in
+ * the years it took, and `applyAgeing` charges them for the rest of the career.
+ */
 
 // --- Layer 2: discipline --------------------------------------------------------------
 
@@ -494,6 +451,19 @@ export const isAthleticOrigin = (d: Discipline): d is AthleticOrigin =>
 export const SECONDARY_WEIGHT = 0.25;
 export const PRIMARY_WEIGHT_WITH_SECONDARY = 1 - SECONDARY_WEIGHT;
 
+// --- Layer 2 (was 3): attainment -------------------------------------------------------
+
+/**
+ * Where a created fighter's rolled naturals centre, for everybody.
+ *
+ * One number since step 10 deleted the talent tiers, and it is the middle one they had: `natural`
+ * sat at 70, which is the value `createPlayerFighter` was tuned and measured at. Keeping the old
+ * middle as the new universal centre means the balance envelope the long-sim suite already asserts
+ * is unchanged for the median created fighter, and the spread around it now comes from attainment
+ * and from the roll rather than from a dial.
+ */
+export const NATURALS_CENTRE = 70;
+
 // --- Layer 3: attainment ---------------------------------------------------------------
 
 export const ATTAINMENTS = ['amateur', 'regional', 'national', 'world'] as const;
@@ -537,6 +507,19 @@ export interface AttainmentMeta {
    */
   minDebutAge: number;
   /**
+   * What this rung is evidence of about the athlete, in rating points on the naturals.
+   *
+   * The replacement for the deleted talent tier — see the note where layer 1 used to be. The spread
+   * is +/-6 against a roll with a standard deviation of 11 to 16, so it is the same size of shove
+   * the tiers were, arriving through something the player actually did rather than through a
+   * question about their genetics.
+   *
+   * `motorLearning` is deliberately the largest term and `constitution` the smallest. Getting to a
+   * world final is mostly evidence that you learn faster than the people who did not, and it is
+   * almost no evidence at all about your chin — nothing in athletics tests one.
+   */
+  naturals: NaturalBias;
+  /**
    * Multiplier on the discipline's `realises` shares. `regional` is the reference at 1.0.
    *
    * Deliberately wider than `skill`, and for a reason that is the opposite of the one that keeps
@@ -568,6 +551,7 @@ export const ATTAINMENT_META: Readonly<Record<Attainment, AttainmentMeta>> = {
     starPower: 1,
     minDebutAge: 18,
     realisation: 0.45,
+    naturals: { explosiveness: -3, engine: -3, motorLearning: -5, recovery: -2 },
     intake: 0.4,
   },
   regional: {
@@ -583,6 +567,7 @@ export const ATTAINMENT_META: Readonly<Record<Attainment, AttainmentMeta>> = {
     starPower: 3,
     minDebutAge: 19,
     realisation: 1,
+    naturals: {},
     intake: 0.38,
   },
   national: {
@@ -598,6 +583,7 @@ export const ATTAINMENT_META: Readonly<Record<Attainment, AttainmentMeta>> = {
     starPower: 7,
     minDebutAge: 22,
     realisation: 1.55,
+    naturals: { explosiveness: 3, engine: 3, motorLearning: 5, recovery: 2, constitution: 1 },
     intake: 0.18,
   },
   world: {
@@ -613,32 +599,10 @@ export const ATTAINMENT_META: Readonly<Record<Attainment, AttainmentMeta>> = {
     starPower: 14,
     minDebutAge: 25,
     realisation: 2,
+    naturals: { explosiveness: 5, engine: 5, motorLearning: 8, recovery: 3, constitution: 2 },
     intake: 0.04,
   },
 };
-
-/**
- * Which attainments layer 1 allows.
- *
- * The filter is a ceiling, not a window: a freak who never left the local amateurs is a
- * real and interesting person (the undiscovered one), whereas a world medallist who is not
- * an elite athlete is a contradiction. So talent removes rungs from the top, never from the
- * bottom.
- */
-export function attainmentsForTalent(talent: TalentTier): readonly Attainment[] {
-  const highest: Record<TalentTier, Attainment> = {
-    freak: 'world',
-    natural: 'national',
-    grinder: 'regional',
-  };
-  const cut = ATTAINMENTS.indexOf(highest[talent]);
-  return ATTAINMENTS.slice(0, cut + 1);
-}
-
-/** Which disciplines layer 1 allows. Only the non-combat branch is ever gated. */
-export function disciplinesForTalent(talent: TalentTier): readonly Discipline[] {
-  return TALENT_META[talent].allowsAthleticOrigin ? DISCIPLINES : COMBAT_DISCIPLINES;
-}
 
 /**
  * Which disciplines may be taken as a second art.
@@ -656,7 +620,6 @@ export function secondaryOptionsFor(primary: Discipline): readonly CombatDiscipl
 // --- The origin itself -------------------------------------------------------------------
 
 export interface FighterOrigin {
-  talent: TalentTier;
   discipline: Discipline;
   /** Optional second art, worth a third of the primary and paid for out of it. */
   secondary?: CombatDiscipline;
@@ -665,39 +628,26 @@ export interface FighterOrigin {
 
 /** A sensible, always-legal starting point for the creation screen. */
 export const DEFAULT_ORIGIN: FighterOrigin = {
-  talent: 'natural',
   discipline: 'wrestling',
   attainment: 'regional',
 };
 
 /**
- * Force an origin back into legality after a layer above it changed.
+ * Force an origin back into legality after the discipline changed.
  *
- * The creation screen needs this because the layers cascade: dropping from Freak to Grinder
- * has to do something with the Olympic attainment and the rugby background that are no
- * longer on offer. Silently keeping them would let the UI submit a spec that validation
- * rejects; clearing everything would throw away choices the player did not change. So each
- * illegal field falls to the nearest legal one and everything else survives.
+ * Two layers rather than three since step 10, and only one of them can now be made illegal by
+ * the other: a secondary art has to be a *different* combat art, and switching the primary to an
+ * athletic origin removes the secondary entirely. Attainment is no longer gated by anything —
+ * every rung is open to everybody, and what stops "Olympic" being the automatic pick is
+ * `minDebutAge` rather than a filter.
  */
 export function reconcileOrigin(origin: FighterOrigin): FighterOrigin {
-  const disciplines = disciplinesForTalent(origin.talent);
-  const discipline = disciplines.includes(origin.discipline)
-    ? origin.discipline
-    : // Only ever reached by an athletic origin losing its tier, and a raw athlete's nearest
-      // combat neighbour is not meaningful — so land on the default rather than pretend.
-      DEFAULT_ORIGIN.discipline;
-
-  const allowed = attainmentsForTalent(origin.talent);
-  const attainment = allowed.includes(origin.attainment)
-    ? origin.attainment
-    : allowed[allowed.length - 1]!;
-
   const secondary =
-    origin.secondary && secondaryOptionsFor(discipline).includes(origin.secondary)
+    origin.secondary && secondaryOptionsFor(origin.discipline).includes(origin.secondary)
       ? origin.secondary
       : undefined;
 
-  return { talent: origin.talent, discipline, secondary, attainment };
+  return { discipline: origin.discipline, secondary, attainment: origin.attainment };
 }
 
 /** The label an attainment wears under this discipline. */
@@ -722,15 +672,14 @@ export function attainmentBlurb(attainment: Attainment, discipline: Discipline):
 export function describeOrigin(origin: FighterOrigin): string {
   const discipline = DISCIPLINE_META[origin.discipline];
   const attainment = attainmentLabel(origin.attainment, origin.discipline);
-  const talent = TALENT_META[origin.talent].label.toLowerCase();
 
   const art = origin.secondary
     ? `${discipline.label} with a serious grounding in ${DISCIPLINE_META[origin.secondary].label}`
     : discipline.label;
 
   return isAthleticOrigin(origin.discipline)
-    ? `A ${talent} out of ${art} — ${attainment} — with no fighting behind you at all.`
-    : `A ${talent} out of ${art} — ${attainment}.`;
+    ? `Out of ${art} — ${attainment} — with no fighting behind you at all.`
+    : `Out of ${art} — ${attainment}.`;
 }
 
 /**
@@ -750,7 +699,6 @@ export interface ResolvedOrigin {
 }
 
 export function resolveOrigin(origin: FighterOrigin): ResolvedOrigin {
-  const talent = TALENT_META[origin.talent];
   const attainment = ATTAINMENT_META[origin.attainment];
   const primary = DISCIPLINE_META[origin.discipline];
   const secondary = origin.secondary ? DISCIPLINE_META[origin.secondary] : undefined;
@@ -767,14 +715,24 @@ export function resolveOrigin(origin: FighterOrigin): ResolvedOrigin {
   if (secondary) add(secondary.attributes, SECONDARY_WEIGHT);
 
   /*
-   * Naturals are *not* scaled by attainment.
+   * **Attainment now leans the naturals, and until step 10 it deliberately did not.**
    *
-   * How far you got is a fact about your career; what your body is made of is a fact about
-   * your body, and the whole reason layer 1 exists is that the old flat picker let those two
-   * be the same lever. Attainment already moves skill and reputation; letting it also move
-   * ceilings would put the double-count straight back in.
+   * The old comment here said: how far you got is a fact about your career, what your body is made
+   * of is a fact about your body, and letting attainment move ceilings would double-count against
+   * layer 1. That reasoning was sound *while layer 1 existed*. With `talent` deleted, refusing to
+   * let attainment say anything about the athlete does not avoid a double count — it means nothing
+   * in the game says it at all, and a world medallist and a club amateur roll identical bodies.
+   *
+   * Selection is real and it runs one way: standing on a world podium is *evidence* about the
+   * athlete, which is exactly what the old `attainmentsForTalent` gate was trying to express by
+   * refusing to offer the rung. Stating it as a consequence is the honest form of the same claim,
+   * and it is a shove rather than a guarantee — `NATURALS_ROLL_SD` is wide enough that a world
+   * medallist can still roll a bad chin.
    */
   const naturals: Partial<Record<OriginNaturalKey, number>> = {};
+  for (const [key, value] of Object.entries(attainment.naturals) as [OriginNaturalKey, number][]) {
+    naturals[key] = value;
+  }
   const lean = (bias: NaturalBias, weight: number) => {
     for (const [key, value] of Object.entries(bias) as [OriginNaturalKey, number][]) {
       naturals[key] = (naturals[key] ?? 0) + value * weight;
@@ -784,7 +742,7 @@ export function resolveOrigin(origin: FighterOrigin): ResolvedOrigin {
   if (secondary) lean(secondary.naturals, SECONDARY_WEIGHT);
 
   return {
-    naturalsCentre: talent.naturalsCentre,
+    naturalsCentre: NATURALS_CENTRE,
     naturals,
     attributes,
     reputation: attainment.reputation,
