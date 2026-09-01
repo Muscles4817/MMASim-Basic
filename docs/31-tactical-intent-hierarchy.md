@@ -1958,6 +1958,157 @@ is bounded (85% of the incumbent's log span) rather than pretending it is not th
 
 ---
 
+### D24 — The joint refit *(**done**; D22 resolves here, D12 and D21 partly)*
+
+The refit D22 blocked on and D23 built the fixtures for. Five constants and one mechanism move
+together in `round.ts`; the parity suite tightens in four places and declares one new allowance.
+
+#### What moved
+
+| constant | before | after | what it prices |
+| --- | --- | --- | --- |
+| `position` floor | 0.3 | **0.06** | how little a smothered fighter may throw |
+| `UNDERNEATH_SCALE` | 1.0 | **1.76** | how hard being held suppresses output |
+| `CONTROL_DOMINANCE_BLEND` | 0 | **0.47** | D21's split correction, part-taken |
+| `HAZARD_SCALE` | 1.0 | **1.25** | knockdowns per landed strike |
+| `SUBMISSION_FINISH_RATE` | 0.47 | **0.40** | attempts that become taps |
+| `FINISH_FLOOR` | 0.042 | **0.08** | knockdowns that become stoppages |
+
+`BASE_ATTEMPTS`, `MID_ROUND_ACCUMULATION`, `SUBMISSION_PER_CONTROL` and `FINISH_PER_DAMAGE` are
+**unchanged**, each because the measurement said so rather than because it was not looked at.
+
+Model error against Full, noise-corrected, on the fight block the fit used and two it did not:
+
+```
+                 seed a        seed b        seed c
+  volume      0.498→0.411   0.484→0.398   0.499→0.419
+  control     0.440→0.416   0.400→0.375   0.461→0.416
+  hazard      0.421→0.316   0.310→0.224   0.291→0.183
+```
+
+#### The check that matters most
+
+Reduced's job is to be Full, so the honest headline is the method mix over a nine-archetype field,
+36 matchups, 4320 fights:
+
+```
+                 KO/TKO     submission    KO:sub
+  Full            44.5%        25.7%       1.73
+  Reduced before  37.6%        26.5%       1.42
+  Reduced after   41.1%        23.5%       1.75
+```
+
+The ratio the whole sport is judged on goes from 1.42 to 1.75 against Full's 1.73. Submissions
+overshoot slightly — 0.8 points out before, 2.2 after — and that is the price of the
+`SUBMISSION_FINISH_RATE` correction, which is right pooled across the calibration set and a little
+strong on this field.
+
+#### The compensating set was bigger than four
+
+D22 named four constants. It is at least six, and the two it missed are the two that mattered most.
+
+**The `position` floor is the largest single error in the file.** `attemptsFor` clamped its position
+term at 0.3, so no fighter could ever throw less than 30% of baseline however comprehensively he was
+being held. Full has `grapplerNoGas` attempting **1.3** significant strikes a round while
+`eliteGrappler` smothers him; Reduced booked **6.1**. None of the six matchups contains a fighter
+that helpless, so the floor was never reached there and cost nothing — the definition of a defect a
+fixture set cannot see.
+
+**`SUBMISSION_FINISH_RATE` was over-converting by 15%**, pooled across the set: Full taps out 14.58%
+of attempts, Reduced 17.17%. Attempts themselves agree to 5%, so D18's `SUBMISSION_PER_CONTROL`
+survives untouched and only the conversion moves.
+
+#### Three predictions that were wrong, and the measurements that say so
+
+**D12's mechanism is not what was missing.** D12 identified that `hurtSeconds` appears nowhere in
+`round.ts`, so Reduced has neither `alreadyHurt` nor the clustering it produces, and predicted a
+*self-exciting* correction. Fitted jointly with a free coefficient, self-excitation takes **zero**,
+and what the data wants is a flat 1.25 — evenly, across matchups spanning 200× in hazard. The
+clustering is real in Full; it is not what the round totals were missing.
+
+**"Volume is a property of the situation, not of the striker" survives.** `attemptsFor` states it
+and the calibration set looks like a flat contradiction — 24.3 strikes a round for `outputNoPower`
+against 0.70 for `grapplerNoGas`. So a term for the fighter's own striking was fitted alongside
+everything else. It took 0.169 on the block it was fitted on and **nothing** on two disjoint blocks
+(0.457 vs 0.460, 0.439 vs 0.421 — noise in both directions) while pushing `contender-v-canFodder`
+past its volume bound. The 35× gap is position, and once `position` could express being smothered it
+needed no help. The claim was right; the fixture set that could have falsified it now exists.
+
+**The finish conversion's predictor does not generalise, and this refit does not fix it.** Two
+independent estimators put the *slope* at 0.00472 against the shipped 0.00477 — 1% — so the shape is
+right. But regressed across the calibration set, damage per round explains **R² 0.085** of
+conversion, against near-perfect agreement on the six. `outputNoPower-v-smother` gives 0.310 one way
+and 0.063 the other at identical damage, because a grappler who drops somebody takes the back and
+submits him rather than swarming. Conversion depends on what the attacker does next and the model
+has no term for it. Only the intercept moved, and only to where two held-out blocks both put the
+optimum (0.08; both degrade again by 0.12) rather than to the 0.19–0.27 the pooled estimators
+suggest. **Recorded, not fixed** — inventing a term against R² 0.085 is how compensating sets get
+built.
+
+#### Method, and three ways it went wrong first
+
+**Fit the noise floor before fitting anything else.** Measured Full against Full on a disjoint block,
+`conversion` carries an RMS of 0.44 against a Reduced-versus-Full error of 0.58 — three quarters of
+it is the sample. It was 35% of the objective and the optimiser spent its budget on it, walking
+`FINISH_FLOOR` to 0.22 and `FINISH_PER_DAMAGE` to a seventeenth of its value purely to flatten a
+term the correction then clips to zero. Every residual in this entry is noise-corrected.
+
+**One parameter at a time is how the set was built; it is not how it comes apart.** The first attempt
+used coordinate descent, which raised `baseAttempts` on its opening sweep and spent every later sweep
+paying for that with the other eight — finishing *worse* than a run that never touched the volume
+terms. Replaced with a scatter over the whole box and a compass search from nine starts.
+
+**Two parameters can be jointly unidentifiable in a way a compass search cannot see.** The hazard
+correction was first parameterised as (plateau, half-rate). With the plateau at 1 the half-rate has
+exactly zero gradient, so no single step could ever discover that a small half-rate *and* a plateau
+above 1 beat both. Reparameterised as a flat scale plus a separate λ-dependence, the scale was found
+immediately.
+
+#### D21 was two defects wearing one number
+
+The control compression closes for a striker and does not for a journeyman, and the split between
+those two cases is the finding:
+
+```
+                 control gap        submission gap
+  striker        1.41 → 0.96         1.41 → 1.19
+  journeyman     3.74 → 3.31         3.04 → 2.80
+```
+
+The **split** was wrong exactly as D21 said, and correcting it closes the striker's gap outright.
+The journeyman's barely moves, because his was never a split error: Full gives him 26 seconds of
+control a fight and Reduced gives him 90, and no redistribution of floor time helps when the
+quantity being distributed is three times too large. That is a **level in `controlPull`**, it is
+untouched here, and it is the largest single thing this refit leaves on the table.
+`style-identity.test.ts` declares both fighters at what they measure rather than asserting the
+compression either exists or does not.
+
+#### The parity suite
+
+Four declared allowances tighten and one is added. The trade is stated rather than absorbed:
+
+```
+  smotherer-v-striker  ko           0.160 → 0.127     allowance 0.16  → 0.135
+  striker-v-grinder    ko           0.129 → 0.118     allowance 0.145 → 0.125
+  smotherer-v-striker  submission   0.129 → 0.092     allowance 0.15  → 0.10
+  guardPlayer-v-smotherer  volume   1.462 → 1.283     allowance 1.52  → 1.32
+  smotherer-v-striker  win rate     passing → 0.122   allowance NEW, 0.13
+```
+
+The new one is the cell D21 wrote down in advance at 17 points. It is 12.2 because the control
+compression it names had been *paying for* the finish deficit underneath it, and removing the
+compression leaves the deficit bare — which is exactly what D21 predicted and what D22 said a joint
+refit would have to face. What is left of it is the conversion predictor above.
+
+**`reduced-fidelity.test.ts` still runs the six archetype matchups.** Swapping them for the
+calibration set was considered and not done here: the six are the only continuous record this file
+has, every entry from D1 onward is measured against them, and replacing them in the same change that
+moves six constants would make both unreadable. The calibration set is asserted separately by
+`calibration-fixtures.test.ts` and measured by `tools/reduced-refit.ts`, which is the reproduction
+of everything above.
+
+---
+
 ### D19 — The player's own booking defaults to *no plan at all* *(**done**; was never an engine defect)*
 
 `bookFight` in `packages/app/src/game/career.ts` created the booking with `defaultGamePlan()`, which

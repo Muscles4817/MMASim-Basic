@@ -71,12 +71,7 @@ import {
 import { buildScorecards, emptyTally, readDecision, type RoundTally } from './scoring.js';
 import { accrueFatigue, recoverBetweenRounds, workRate } from './stamina.js';
 import type { FightConfig } from './simulate.js';
-import {
-  OTHER_CORNER,
-  type Corner,
-  type DamageReport,
-  type ReducedFightResult,
-} from './types.js';
+import { OTHER_CORNER, type Corner, type DamageReport, type ReducedFightResult } from './types.js';
 
 const ROUND_SECONDS = 300;
 
@@ -86,7 +81,14 @@ const RANGES_FOR_MIX = ['outside', 'boxing', 'pocket'] as const;
 /** The roster's typical `kickLean`, so the weapon-hazard blend below is level-free. */
 const REFERENCE_KICK_LEAN = 0.38;
 
-
+/**
+ * How hard being held down suppresses output, over `underneath`'s per-fighter shape.
+ *
+ * Fitted with the control split and the knockdown hazard rather than on its own (doc 31 § D24).
+ * Master's 1.0 was measured against six matchups in which nobody is ever comprehensively
+ * smothered, and it does not survive contact with a fixture set where somebody is.
+ */
+const UNDERNEATH_SCALE = 1.76;
 
 /* --------------------------------------------------------------------------------------------
  * Calibration constants. Every one is a column of `tools/round-profile.ts`.
@@ -136,6 +138,14 @@ const MAX_TOTAL_CONTROL = 0.77;
 const CONTROL_SWING = 0.8;
 
 /**
+ * How far the control split's mean moves from `CONTROL_SWING`'s draw toward `dominance` itself.
+ *
+ * 0 is the behaviour that shipped before doc 31 § D24; 1 is D21's correction taken whole. See the
+ * block that uses it for why the fit lands between them.
+ */
+const CONTROL_DOMINANCE_BLEND = 0.47;
+
+/**
  * What a knockdown does to the *rest* of the round.
  *
  * A dropped fighter spends `hurtDuration` seconds — ten to twenty of the round's three hundred —
@@ -156,6 +166,23 @@ const KNOCKDOWN_DOMINANCE = 0.6;
  * excess it was meant to fix is not here, and this is not the place to correct it from.
  */
 const MID_ROUND_ACCUMULATION = 0.5;
+
+/**
+ * A flat multiplier on the per-strike knockdown hazard.
+ *
+ * D12 recorded that `hurtSeconds` appears nowhere in this file, so Reduced has neither
+ * `alreadyHurt` nor the clustering it produces, and predicted the fix would be a *self-exciting*
+ * term — more hazard where a knockdown has already landed. Fitted jointly against
+ * `testing/calibration.ts`, the self-exciting term takes a coefficient of **zero** and what the
+ * data wants instead is this: a flat 1.25.
+ *
+ * Which is worth stating plainly, because it contradicts the prediction. Once volume and control
+ * are corrected, what is left of the knockdown deficit has no shape in the knockdown rate at all —
+ * Reduced simply produces about a fifth too few knockdowns per landed strike, evenly, across
+ * matchups spanning 200x in hazard. The clustering D12 identified is real in Full; it is not what
+ * the round totals were missing.
+ */
+const HAZARD_SCALE = 1.25;
 
 /**
  * Landed strikes in the sequence that ends a fight.
@@ -313,8 +340,26 @@ const HIGH_KICK_SHARE = 0.3;
  * give him the shortest hurt window of anybody in the table, so it predicted the striker converts
  * 2% of his knockdowns against a measured 24%. A defender's chin is already priced in — it is what
  * decides how many knockdowns there are at all — and pricing it a second time here double-counts it.
+ *
+ * ### What the D24 refit changed, and what it could not
+ *
+ * **The floor is 0.08, not 0.042.** The slope is untouched and that is the interesting half: two
+ * independent estimators over `testing/calibration.ts` put it at 0.00472 against the shipped
+ * 0.00477, agreeing to 1%. The intercept is the part the six matchups could not see, and the
+ * direction is not subtle — `smotherer-v-striker` has Full producing 165 stoppages by strikes and
+ * Reduced 86. 0.08 is where two disjoint blocks of held-out fights both put the optimum; both
+ * degrade again by 0.12, which is why it is not the 0.19-0.27 the pooled estimators suggest.
+ *
+ * **The predictor does not generalise, and that is recorded rather than fixed.** Regressed over
+ * the calibration set, damage per round explains almost nothing: R² 0.085, against near-perfect
+ * agreement on the six. `outputNoPower-v-smother` gives a per-knockdown conversion of 0.310 one
+ * way and 0.063 the other at *identical* damage, because a grappler who drops somebody takes the
+ * back and submits them rather than swarming. Conversion depends on what the attacker does next,
+ * and this model has no term for that. Refitting two constants against R² 0.085 would replace a
+ * derivation with a coin flip, so only the intercept moved, and only as far as held-out fights
+ * support. See doc 31 § D24.
  */
-const FINISH_FLOOR = 0.042;
+const FINISH_FLOOR = 0.08;
 const FINISH_PER_DAMAGE = 0.00477;
 
 /**
@@ -327,14 +372,23 @@ const FINISH_PER_DAMAGE = 0.00477;
 const HURT_WINDOW_EXPONENT = 0.3;
 
 /**
- * The submission model is `simulate.ts`'s, unchanged: an attempt goes *deep* with probability
- * `edge`, and a deep one finishes at `SUBMISSION_FINISH_RATE × edge³ × familiarity`. Both
- * constants are that file's, and the shape is worth copying rather than approximating — the cube
- * is what keeps a genuine specialist dangerous while making an average grappler's attempt a
- * scoring event, and a first cut here that used a fitted power law instead had the guard player
- * submitting a smotherer three times as often as he does.
+ * The submission model is `simulate.ts`'s, unchanged in shape: an attempt goes *deep* with
+ * probability `edge`, and a deep one finishes at `SUBMISSION_FINISH_RATE × edge³ × familiarity`.
+ * The shape is worth copying rather than approximating — the cube is what keeps a genuine
+ * specialist dangerous while making an average grappler's attempt a scoring event, and a first cut
+ * here that used a fitted power law instead had the guard player submitting a smotherer three
+ * times as often as he does.
+ *
+ * **The rate is 0.40 rather than `simulate.ts`'s 0.47**, and that is a measurement rather than a
+ * divergence for its own sake. Pooled over `testing/calibration.ts` at 800 fights a matchup, Full
+ * taps out 14.58% of submission attempts and Reduced, on the same shape with the same constant,
+ * taps out 17.17%. Attempts themselves agree — 1.035 a round against 0.985 — so D18's
+ * `SUBMISSION_PER_CONTROL` is untouched and only the conversion moves, by the ratio measured:
+ * 0.47 × 0.849. Reduced resolves one submission sequence per round where Full resolves several
+ * with the position re-contested between them, and that difference has to be priced somewhere.
+ * See doc 31 § D24.
  */
-const SUBMISSION_FINISH_RATE = 0.47;
+const SUBMISSION_FINISH_RATE = 0.4;
 const SUBMISSION_REPEAT_DECAY = 0.4;
 
 /* --------------------------------------------------------------------------------------------
@@ -404,7 +458,10 @@ function controlPull(a: Combatant, d: Combatant): number {
       // A man told to get up is a man you hold for less of the round.
       controlResistance(d));
 
-  return Math.max(0, BASE_CONTROL * (wants / 0.42) * asContest(push) ** 0.9 * asContest(hold) ** 0.8);
+  return Math.max(
+    0,
+    BASE_CONTROL * (wants / 0.42) * asContest(push) ** 0.9 * asContest(hold) ** 0.8,
+  );
 }
 
 /**
@@ -512,6 +569,16 @@ function initiativeShare(a: Combatant, d: Combatant): number {
  * So what is left is the four things that actually move it — how much gas is in the tank right now,
  * who is dictating, where the round is being fought, and whether the man opposite is still all
  * there. Cardio enters through `workRate` and nowhere else, which is the right number of times.
+ *
+ * **The claim survived the D24 refit, and it was tested rather than assumed.** Across
+ * `testing/calibration.ts` Full has `outputNoPower` landing 24.3 significant strikes a round and
+ * `grapplerNoGas` landing 0.70, which looks like a flat contradiction of the paragraph above — so
+ * a term for the fighter's own striking rating was fitted alongside everything else here. It took
+ * an exponent of 0.169 against the block it was fitted on and **nothing at all** against two
+ * disjoint blocks of fights (0.457 versus 0.460, and 0.439 versus 0.421 — noise in both
+ * directions), while pushing `contender-v-canFodder` past its volume bound. The 35x gap between
+ * those two fighters is *position*, and once `position` below could express being smothered it
+ * needed no help. See doc 31 § D24.
  */
 function attemptsFor(
   a: Combatant,
@@ -561,11 +628,20 @@ function attemptsFor(
    * identically here.
    */
   const fence = clinchShareOfControl(a, d);
-  const workAppetite =
-    fence * clinchStrikeAppetite(a) + (1 - fence) * groundStrikeAppetite(a);
+  const workAppetite = fence * clinchStrikeAppetite(a) + (1 - fence) * groundStrikeAppetite(a);
+  /*
+   * The floor is 0.06 rather than master's 0.3, and that is the single largest correction in the
+   * refit that produced these numbers.
+   *
+   * A floor of 0.3 says a fighter can never throw less than 30% of baseline however comprehensively
+   * he is being held, which is not a thing the sport does: Full has `grapplerNoGas` attempting 1.3
+   * strikes a round while `eliteGrappler` smothers him, against a baseline near 10. The old floor
+   * was never *reached* on the six matchups the constants were measured against — none of them
+   * contains a fighter who is that helpless — so it cost nothing there and was invisible.
+   */
   const position = clamp(
-    1 + ownControl * 0.26 * workAppetite - beingControlled * underneath,
-    0.3,
+    1 + ownControl * 0.26 * workAppetite - beingControlled * underneath * UNDERNEATH_SCALE,
+    0.06,
     1.6,
   );
 
@@ -629,7 +705,6 @@ function accuracyFor(
  */
 const FAILED_ENTRY_HAZARD = 0.6;
 
-
 /** What a pairing with no particular range disagreement fails at. Measured, not chosen. */
 const REFERENCE_ENTRY_FAILURE = 0.16;
 
@@ -650,8 +725,7 @@ function rangeHazardFor(a: Combatant, d: Combatant): number {
    * the same range, which is most of the roster and the whole reason it can be sized on the worst
    * case without moving everything else.
    */
-  const punished =
-    1 + (expectedRangeFailure(d, a) - REFERENCE_ENTRY_FAILURE) * FAILED_ENTRY_HAZARD;
+  const punished = 1 + (expectedRangeFailure(d, a) - REFERENCE_ENTRY_FAILURE) * FAILED_ENTRY_HAZARD;
   /*
    * Divided through by the same blend at the roster's typical lean, so this says *who* is more
    * dangerous and not *how dangerous the sport is* — the third time in this change that a table
@@ -824,7 +898,24 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
      */
     const grappled = Math.min(pull, MAX_TOTAL_CONTROL);
     const swing = clamp(CONTROL_SWING * (1 + roundRng.normal() * 0.3), 0, 0.95);
-    let cRed = grappled * (redImposes ? (1 + swing) / 2 : (1 - swing) / 2);
+    /*
+     * The mean of that draw is `0.1 + 0.8·d` — a slope that never reaches 1, and an intercept. The
+     * loser of each round's flip takes a tenth of `grappled` however badly he lost, and `grappled`
+     * is driven mostly by his opponent, so **the better the wrestler a striker faces, the more top
+     * control this booked the striker** (doc 31 § D21). `CONTROL_DOMINANCE_BLEND` moves the mean
+     * toward `dominance` itself, which is the share form D10 put on every other contest in this
+     * file, while leaving the draw's spread alone so a one-sided round stays as lopsided as it was
+     * and the 10-8s a draw rate needs are untouched.
+     *
+     * It is 0.47 rather than 1 because the fit says so and the reason is instructive: at 1 the
+     * split is right in isolation and the *volume* terms above then over-correct, because the two
+     * were compensating for each other. Fitted together, each takes about half of what it would
+     * have taken alone.
+     */
+    const dominance = pull <= 0 ? 0.5 : redPull / pull;
+    const oldMean = redImposes ? (1 + swing) / 2 : (1 - swing) / 2;
+    const dominantMean = dominance + (redImposes ? 1 - dominance : -dominance) * swing;
+    let cRed = grappled * (oldMean + CONTROL_DOMINANCE_BLEND * (dominantMean - oldMean));
     let cBlue = grappled - cRed;
     // And no single fighter holds more of it than anyone has been measured holding. What the cap
     // takes off him is time nobody controlled, so it goes back to distance rather than to the
@@ -971,7 +1062,9 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
       const half = w.byRegion.head * MID_ROUND_ACCUMULATION;
       d.damage.head = clamp(d.damage.head + half, 0, 100);
       const hazard =
-        knockdownHazard(a, d, 'head', expectedFlush(a, d, 'punch'), 'punch') * rangeHazardFor(a, d);
+        knockdownHazard(a, d, 'head', expectedFlush(a, d, 'punch'), 'punch') *
+        rangeHazardFor(a, d) *
+        HAZARD_SCALE;
       d.damage.head -= Math.min(half, d.damage.head);
       w.knockdowns = poisson(roundRng, w.headLanded * hazard);
 
