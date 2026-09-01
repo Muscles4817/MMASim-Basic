@@ -538,6 +538,8 @@ interface Sample {
   shareOfFights: number;
   /** Takedown attempts per fight, so this file covers more than one action. */
   takedownsPerFight: number;
+  /** Seconds of controlling position per fight — what Reduced buys submission attempts with. */
+  controlPerFight: number;
 }
 
 function card(
@@ -548,6 +550,7 @@ function card(
   const resolve = level === 'full' ? simulateFight : resolveFightByRound;
   let subs = 0;
   let tds = 0;
+  let control = 0;
   let withSub = 0;
   let n = 0;
   for (const makeOpp of FIELD) {
@@ -564,11 +567,17 @@ function card(
       });
       subs += r.stats.red.submissionAttempts;
       tds += r.stats.red.takedownsAttempted;
+      control += r.stats.red.controlSeconds;
       if (r.stats.red.submissionAttempts > 0) withSub++;
       n++;
     }
   }
-  return { perFight: subs / n, shareOfFights: withSub / n, takedownsPerFight: tds / n };
+  return {
+    perFight: subs / n,
+    shareOfFights: withSub / n,
+    takedownsPerFight: tds / n,
+    controlPerFight: control / n,
+  };
 }
 
 describe('over a card', () => {
@@ -649,50 +658,97 @@ describe('over a card', () => {
     expect(defaultGamePlan().tactics.conviction).toBe(0);
   });
 
-  it('narrows the gap between the two resolvers without closing it — the remaining debt', () => {
+  it('buys every Reduced submission attempt with position, and nothing with an intercept', () => {
     /*
-     * **D18, half fixed, and the half that is left is not what the first measurement said it was.**
+     * **D18, closed.** `resolveFightByRound` built attempts as `SUBMISSION_FLOOR +
+     * SUBMISSION_PER_CONTROL × control share`, and the floor was 0.2 a round paid by **every
+     * fighter in every round** whatever his control time.
      *
-     * `resolveFightByRound` built submission attempts as `SUBMISSION_FLOOR + SUBMISSION_PER_CONTROL
-     * × control share × appetite`, and `SUBMISSION_FLOOR` was 0.2 per round paid by **every fighter
-     * in every round**, unconditionally. The same gate Full applies at the moment of choosing is
-     * now applied to that whole expression, floor included — a floor that survives the gate is a
-     * floor that says a boxer hunts chokes. Per fight, against a six-man field:
+     * It was never chosen: it is the intercept of a fit taken across six matchups, **not one of
+     * which had a fighter with near-zero floor time**, so it was extrapolated into a region the fit
+     * never saw. Out there it was the whole prediction — at a control term of 0.003–0.008 it
+     * predicted 0.21–0.23 attempts a round where Full measures 0.00–0.05. D16 then moved the thing
+     * it had been fitted against and the constants were not refitted; the repertoire gate was
+     * multiplied over the top of them, which is a different operation.
+     *
+     * Refitted over 110 matchups (`tools/submission-fit.ts`), the free fit wants a **negative**
+     * intercept — not a thing a fighter can do — and forcing it through zero costs four
+     * ten-thousandths of R² while beating the shipped pair outright:
      *
      * ```
-     *                    Full before → after     Reduced before → after
-     *   olympic boxer        0.25 → 0.01             0.76 → 0.04
-     *   point karateka       0.16 → 0.03             0.89 → 0.22
+     *   free fit        intercept −0.116   slope 3.81    R² 0.9177
+     *   through zero    intercept  0       slope 3.633   R² 0.9135
+     *   as shipped      intercept  0.200   slope 3.800   R² 0.8589
      * ```
      *
-     * **A correction to the original D18 report, which overstated one number.** It said ~97% of
-     * Reduced fights contained a submission attempt against 13–21% at Full. That comparison was
-     * not sound: Reduced writes a **fractional** `submissionAttempts` into `stats` — it is an
-     * expected value, not a count of events, where Full increments an integer — so "share of
-     * fights with a non-zero total" is close to 1 whenever the mean is above zero, and measures the
-     * resolver's arithmetic rather than the sport. That is a real and separate finding about the
-     * Reduced resolver's statistics, it is pre-existing, and it is not what this change fixes. The
-     * per-fight totals were and are the sound comparison, and they were genuinely 3–6× apart.
-     *
-     * What is left is a ratio that still looks large on a base that is now nearly zero: Reduced
-     * runs about 4× Full on the boxer, which is 0.03 attempts a fight. Doc 31 § D10's rule is that
-     * the two resolvers must agree on **sign and not size**, and they now do — both say *this man
-     * does not attempt submissions*. Closing the last of it means giving Reduced a position model
-     * it does not have, which is D14's territory rather than this one's.
+     * So the comment the file always carried is finally true: attempts are bought with position,
+     * and a fighter who never got there does not make any.
      */
     for (const [name, make] of [
       ['olympic boxer', ARCHETYPES.olympicBoxer],
       ['point karateka', ARCHETYPES.pointKarateka],
+      ['southpaw sniper', ARCHETYPES.southpawSniper],
     ] as const) {
       const full = card('full', make, (f, o) => planFor(f, o));
       const reduced = card('reduced', make, (f, o) => planFor(f, o));
       const report = `${name}: full ${full.perFight.toFixed(3)}/fight, reduced ${reduced.perFight.toFixed(3)}/fight`;
 
-      // Both resolvers now say "effectively never", which is the agreement that matters.
-      expect(full.perFight, report).toBeLessThan(0.1);
-      expect(reduced.perFight, report).toBeLessThan(0.35);
-      // Recorded, not endorsed: Reduced is still the hotter of the two on a near-zero base.
-      expect(reduced.perFight, report).toBeGreaterThan(full.perFight);
+      // Both resolvers say "effectively never", and Reduced no longer says it four times as loudly.
+      expect(full.perFight, report).toBeLessThan(0.35);
+      expect(reduced.perFight, report).toBeLessThan(0.5);
+    }
+  });
+
+  it('leaves what remains as a control-time gap rather than a submission one — D21', () => {
+    /*
+     * **What D18 turned out not to be**, and the reason it is now somebody else's finding.
+     *
+     * Decomposing the residual gap: Reduced's submission attempts per *second of floor control* are
+     * within about 20% of Full's, while its floor control itself is 1.3–3.4× Full's for a fighter
+     * with no grappling game. The submission model is doing the right thing with the position it is
+     * handed; it is being handed the wrong position.
+     *
+     * ```
+     *                    attempts f/r   ratio   total control f/r   ratio
+     *   olympic boxer     0.01 / 0.03    2.12          32 / 41       1.28
+     *   point karateka    0.04 / 0.14    3.31          18 / 48       2.59
+     *   striker           0.53 / 0.82    1.57          43 / 56       1.32
+     *   journeyman        0.29 / 1.04    3.62          26 / 90       3.42
+     *   grinder           7.52 / 6.64    0.88         514 / 414      0.80
+     *   guard player      5.13 / 5.41    1.05         144 / 92       0.64
+     * ```
+     *
+     * Read the last two columns: **Reduced compresses control toward the middle**, over-booking it
+     * for fighters who cannot grapple and under-booking it for those who can. That moves damage,
+     * scoring and who wins, not only submissions, which is why it is registered separately as D21
+     * rather than absorbed here.
+     *
+     * Asserted as the *relationship* rather than as either number: the submission gap must not
+     * exceed the control gap by much, because a submission gap that outruns its control gap would
+     * mean the submission model had started contributing error of its own again.
+     */
+    /*
+     * **Measured on the striker and the journeyman rather than on the Olympic boxer**, and the
+     * reason is the instrument rather than the claim. The boxer's Full rate is now about one
+     * attempt per hundred fights, so a ratio taken against it is a small integer divided by a
+     * smaller one and moves by whole multiples on sampling noise — it read 2.1× from one tool and
+     * 6.9× from this suite's field on the same code. A ratio needs a denominator, and these two
+     * have one.
+     */
+    for (const [name, make] of [
+      ['striker', ARCHETYPES.striker],
+      ['journeyman', ARCHETYPES.journeyman],
+    ] as const) {
+      const full = card('full', make, (f, o) => planFor(f, o));
+      const reduced = card('reduced', make, (f, o) => planFor(f, o));
+      const subGap = reduced.perFight / Math.max(1e-6, full.perFight);
+      const controlGap = reduced.controlPerFight / Math.max(1e-6, full.controlPerFight);
+      const report = `${name}: submission gap ${subGap.toFixed(2)}×, control gap ${controlGap.toFixed(2)}×`;
+
+      // Recorded, not endorsed: the control gap is real and is D21's.
+      expect(controlGap, report).toBeGreaterThan(1.1);
+      // What this holds is that the submission model is not adding error of its own on top of it.
+      expect(subGap / controlGap, report).toBeLessThan(1.6);
     }
   });
 

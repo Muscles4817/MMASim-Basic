@@ -9,7 +9,7 @@ architecture before they are implemented — some may have changed shape.**
 | F1 | **done** for the two positions that needed it — bottom and the held clinch. Distance already had the architecture; holding-clinch and top do not need it. See the audit below. |
 | D1 | **done.** `stall` is split into `maintainPosition`, which is capability-backed, and residual inactivity, which is no longer a candidate. |
 | the rest | re-ranked by architectural dependency as **D2–D9** in § 3, which is the live register. F3 is largely resolved by F1 as a side effect; two new findings were raised by the F1 audit. |
-| D16–D19 | **D16 is done and was upstream of D7.** A submission report against a created fighter found that no term in the engine could say a technique is *not in a fighter's game* — capability was a ratio of two attributes rather than an absolute. `repertoire` is the fourth term on `Candidate` that says it, anchored on doc 02's own scale bands. **D17, D19 and D20 are now done too.** D17 raised D20 — the other two branches of `pickTopIntent` carried absolute bars set for a stronger population than the one that ships — and all four top instructions are now reachable. D18 is half done and is the only one left. |
+| D16–D19 | **D16 is done and was upstream of D7.** A submission report against a created fighter found that no term in the engine could say a technique is *not in a fighter's game* — capability was a ratio of two attributes rather than an absolute. `repertoire` is the fourth term on `Candidate` that says it, anchored on doc 02's own scale bands. **D17, D19 and D20 are now done too.** D17 raised D20 — the other two branches of `pickTopIntent` carried absolute bars set for a stronger population than the one that ships — and all four top instructions are now reachable. **D18 is done too** — its floor was the intercept of a fit taken across six matchups, none of which had a fighter with near-zero floor time, and D16 had moved the model it was fitted against without a refit. Closing it raised **D21**: Reduced compresses control time toward the middle, over-booking it for fighters who cannot grapple and under-booking it for those who can, which moves scoring and not only submissions. |
 
 The range split (doc 05, doc 01 § invariants) fixed the standing half of a problem that is larger
 than standing. This document is the audit of what is left, and it deliberately stops before the
@@ -100,7 +100,8 @@ calibrate twice.
 | **D15** | A tie-up costs both men the same *(**done**)* | calibration | shipped with D3 | yes, sport-wide |
 | **D16** | Repertoire is not representable — capability is a *ratio*, never an absolute *(**done**)* | architectural (engine-wide) | — | **yes, for fighters below 38** |
 | **D17** | `pickTopIntent` hands `submit` on a relative read with no floor *(**done**)* | cleanup (planner) | D16 *(done)* | yes: 34.5% of the roster loses a bad instruction, for 0.9pt of submission rate |
-| **D18** | Reduced pays an unconditional submission floor and cannot see the rating *(**half done**: the floor is gated, the position model is not)* | architectural (Reduced) | D16 *(done)* | Reduced only |
+| **D18** | Reduced pays an unconditional submission floor and cannot see the rating *(**done**)* | architectural (Reduced) | D16 *(done)* | Reduced only |
+| **D21** | Reduced compresses control time toward the middle *(new, raised by closing D18)* | architectural (Reduced) | — | Reduced only, and it moves scoring |
 | **D19** | The player's own booking defaults to *no plan at all* *(**done**)* | cleanup (app) | — | yes, for one fighter |
 | **D20** | `advance` and `groundAndPound` are unreachable on the shipped roster *(**done**)* | cleanup (planner) | D17 *(done)* | yes: control 77.8% → 53.8%, and the sport moves toward the real one |
 
@@ -1321,7 +1322,7 @@ against Full's fatigue curves rather than bundling into a vocabulary change. It 
 for `clinchIntent: 'control'` being a real strategy rather than a stalling one**, and it is related to
 D9.
 
-### D16 — Repertoire is not representable *(**done**; D17, D19 and D20 done too, D18 half done)*
+### D16 — Repertoire is not representable *(**done**; D17, D18, D19 and D20 done too, D21 raised)*
 
 **The report.** A created fighter — a former Olympic boxer, `submissions: 12`, a game plan built
 entirely around staying on his feet and getting back up — kept hunting submissions.
@@ -1554,52 +1555,110 @@ anything that correlates with the thing being measured should not be trusted for
 
 ---
 
-### D18 — Reduced pays an unconditional submission floor and cannot see the rating *(**half done**)*
+### D18 — Reduced pays an unconditional submission floor and cannot see the rating *(**done**)*
 
-`resolveFightByRound` builds submission attempts as
+`resolveFightByRound` built submission attempts as
 
 ```
   SUBMISSION_FLOOR + SUBMISSION_PER_CONTROL × control share × appetite   (× a backTake term)
 ```
 
-and **`SUBMISSION_FLOOR` is 0.2 per round, unconditional** — paid by every fighter in every round
-regardless of control time, position, plan, or whether he has attempted a submission in his life.
-Over three rounds that is 0.6 before anything about the fighter is consulted, and the jitter rounds up
-often enough that essentially every fighter in a Reduced world attempts one in essentially every
-fight:
+and **`SUBMISSION_FLOOR` was 0.2 per round, unconditional** — paid by every fighter in every round
+regardless of control time, position, plan, or whether he had attempted a submission in his life.
+The only rating-sensitive term was `tendencies.backTake`, spanning about 1.5:1 end to end.
+
+This is invariant 6 (Full is the reference) failing where it matters most, because **the world's
+entire pre-history is simulated at Reduced detail** (`newWorld.ts`), so every record the player is
+matched against was built in a different sport from the one they are shown.
+
+#### First half, with D16: the gate
+
+`repertoire` is applied to the whole expression, *floor included* — a floor that survives the gate is
+a floor that says a boxer hunts chokes. The Olympic boxer went 0.76 → 0.04 a fight, the karateka
+0.89 → 0.22, and both resolvers began agreeing on the sign, which is D10's rule.
+
+#### Second half: the floor was never chosen, and the constants were stale
+
+**`SUBMISSION_FLOOR` is the intercept of a linear fit, and not one of the six matchups it was fitted
+across had a fighter with near-zero floor time.** So it was extrapolated into a region the fit never
+saw, and out there it was the whole prediction: at a control term of 0.003–0.008 the shipped
+constants predicted **0.21–0.23 attempts a round where Full measures 0.00–0.05.**
+
+D16 then moved the thing it had been fitted against — the repertoire gate changed Full's submission
+behaviour materially at the bottom of the scale — and the constants were **not refitted**. The gate
+was multiplied over the top of them, which is a different operation, and the stale intercept was the
+whole of what D18 had left.
+
+Refitted against the Full model as it is now, over 110 matchups × 150 fights
+(`tools/submission-fit.ts`, in the manner of `round-profile.ts`):
 
 ```
-                   Full: per fight / % of fights     Reduced: per fight / % of fights
-  olympic boxer         0.25   18.4%                     0.76   96.8%
-  point karateka        0.16   12.8%                     0.89   97.7%
-  journeyman            0.32   20.8%                     1.28   99.9%
+  free fit        intercept −0.116   slope 3.81    R² 0.9177
+  through zero    intercept  0       slope 3.633   R² 0.9135
+  as shipped      intercept  0.200   slope 3.800   R² 0.8589
 ```
 
-The only rating-sensitive term in the expression is `tendencies.backTake`, which spans about 1.5:1
-between a 12-submissions boxer and a 92-submissions specialist. The comment above the constants argues
-that attempts are bought with position and the rating buys conversion — right about *position*, silent
-about *identity*. It explains why a guard player attempts fewer than a smotherer; it does not explain
-why a boxer attempts any.
+**The free fit wants a negative intercept**, which is not a thing a fighter can do. Forcing it
+through zero costs four ten-thousandths of R² and is the only physically meaningful reading, so the
+floor is **gone rather than reduced** and the comment the file always carried is finally true:
+attempts are bought with position, and a fighter who never got there does not make any.
 
-This is invariant 6 (Full is the reference) failing in the direction that matters most, because **the
-world's entire pre-history is simulated at Reduced detail** (`newWorld.ts`), so every record the player
-is matched against was built in a different sport from the one they are shown.
+`X` is built from **Full's** control shares rather than Reduced's, deliberately: Reduced over-books
+top control for weak grapplers (D21 below), and fitting against its own shares would bake that error
+into these constants — compensating one defect with another and leaving both invisible.
 
-**Half fixed with D16.** `repertoire` is applied to the whole expression, *floor included* — a floor
-that survives the gate is a floor that says a boxer hunts chokes — so the boxer goes 0.76 → 0.04 a
-fight and the karateka 0.89 → 0.22. Both resolvers now agree on the sign, which is D10's rule.
+#### What it did
 
-**A correction to the measurement above, which overstated one number.** *~97% of Reduced fights
-contained a submission attempt* was not a sound comparison: **Reduced writes a fractional
-`submissionAttempts` into `stats`** — an expected value rather than a count of events, where Full
-increments an integer — so "share of fights with a non-zero total" is close to 1 whenever the mean is
-above zero, and it measures the resolver's arithmetic rather than the sport. That is a real,
-separate, pre-existing finding about every counter Reduced writes, and it is worth its own entry; the
-per-fight totals were and are the sound comparison, and they were genuinely 3–6× apart.
+```
+                  attempts f/r   before → after
+  olympic boxer    0.01 / 0.03     2.87× → 2.12×
+  point karateka   0.04 / 0.14     5.27× → 3.31×
+  southpaw sniper  0.24 / 0.38     2.39× → 1.58×
+  striker          0.53 / 0.82     2.16× → 1.57×
+  journeyman       0.29 / 1.04     4.90× → 3.62×
+  grinder          7.52 / 6.64     0.99× → 0.88×
+  guard player     5.13 / 5.41     1.16× → 1.05×
+```
 
-**What is left** is that Reduced still runs about 4× Full on a near-zero base, because its attempts
-are bought from a control share rather than from a position it does not model. That is D14's
-territory rather than this one's.
+---
+
+### D21 — Reduced compresses control time toward the middle *(new, raised by closing D18)*
+
+**What D18 turned out not to be.** Decomposing the residual gap after the refit: Reduced's submission
+attempts **per second of floor control** are within about 20% of Full's, while its floor control
+itself runs 1.3–3.4× Full's for a fighter with no grappling game and 0.6–0.8× for one who has one:
+
+```
+                   attempts f/r   ratio   total control f/r   ratio
+  olympic boxer     0.01 / 0.03    2.12          32 / 41       1.28
+  point karateka    0.04 / 0.14    3.31          18 / 48       2.59
+  southpaw sniper   0.24 / 0.38    1.58          22 / 26       1.20
+  striker           0.53 / 0.82    1.57          43 / 56       1.32
+  journeyman        0.29 / 1.04    3.62          26 / 90       3.42
+  grinder           7.52 / 6.64    0.88         514 / 414      0.80
+  smotherer         6.84 / 6.48    0.95         458 / 381      0.83
+  guard player      5.13 / 5.41    1.05         144 / 92       0.64
+```
+
+The submission model is doing the right thing with the position it is handed; **it is being handed
+the wrong position.** Read the last two columns and the sign flips at the middle of the roster:
+Reduced over-books control for fighters who cannot grapple and under-books it for those who can.
+
+Two things make this bigger than the entry it came out of. It moves **damage, scoring and who wins**,
+not only submissions — control time is what the judges read. And it is invisible to
+`reduced-fidelity.test.ts`, whose ±30% control tolerance passes on all six of its matchups, because
+those are **symmetric or near-symmetric pairs**: a model that regresses both fighters toward the
+same middle is most accurate exactly where the two fighters are already alike. The error only
+appears against a varied field, which is what the world is.
+
+Worth noting the split is not the cause: Reduced and Full agree closely on time spent *underneath*
+(the boxer 0.219 against 0.222 of the fight clock, the striker 0.300 against 0.301). The divergence
+is in **own** control — the karateka gets 0.050 where Full gives 0.018.
+
+Untouched here on purpose. It is the core of `controlPull` and the `own / (own + other)` share form
+that D10 already worked on, it needs its own calibration pass, and D18 closes cleanly without it —
+which is the test above: the submission gap must not exceed the control gap by much, or the
+submission model has started contributing error of its own again.
 
 ---
 
