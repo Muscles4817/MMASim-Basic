@@ -123,6 +123,24 @@ export interface Params {
   positionFloor: number;
   /** Scale on the `underneath` penalty, i.e. how hard being controlled suppresses output. */
   underneathScale: number;
+  /**
+   * An additive floor on how much of a round ends up in contact, before the pulls are counted.
+   *
+   * **Not** `BASE_CONTROL`, which was the first thing tried and is not wrong: at the even matchup
+   * where that constant is defined, Full gives each fighter 0.313 of the fight and Reduced 0.300
+   * and 0.284. Left free, the fit drove it to its bound of 0.75 — which does not model anything,
+   * it just saturates `MAX_TOTAL_CONTROL` for every matchup at once.
+   *
+   * What is actually wrong is the shape at the bottom. `controlPull` is a product, so two fighters
+   * who both want nothing to do with the floor multiply toward zero: Full puts 9.8% of
+   * `olympicBoxer-v-pointKarateka` in contact and Reduced puts 3.1%. Some grappling happens in any
+   * fight whatever either man intends — a slip, a scramble, a fence tie-up on the way out of an
+   * exchange — and a product has no way to say so. This is that irreducible share.
+   */
+  incidentalContact: number;
+  /** Exponents on the two contests in `controlPull`, which set the spread away from even. */
+  pushExponent: number;
+  holdExponent: number;
   /** `FINISH_FLOOR`. */
   finishFloor: number;
   /** `FINISH_PER_DAMAGE`. */
@@ -142,9 +160,12 @@ export const MASTER: Params = {
   positionFloor: 0.06,
   underneathScale: 1.76,
   controlDominance: 0.47,
+  incidentalContact: 0.06,
+  pushExponent: 0.9,
+  holdExponent: 0.8,
   hazardScale: 1.25,
   hurtGain: 0,
-  finishFloor: 0.042,
+  finishFloor: 0.08,
   finishPerDamage: 0.00477,
 };
 
@@ -189,6 +210,15 @@ const _P = (): Record<string, number> =>
   );
 
   sub('BASE_ATTEMPTS * output * position', '_P().baseAttempts * output * position');
+  sub(
+    'BASE_CONTROL * (wants / 0.42) * asContest(push) ** 0.9 * asContest(hold) ** 0.8',
+    'BASE_CONTROL * (wants / 0.42) * asContest(push) ** _P().pushExponent * ' +
+      'asContest(hold) ** _P().holdExponent',
+  );
+  sub(
+    'const grappled = Math.min(pull + INCIDENTAL_CONTACT, MAX_TOTAL_CONTROL);',
+    'const grappled = Math.min(pull + _P().incidentalContact, MAX_TOTAL_CONTROL);',
+  );
   sub('w.attempts / lasted / BASE_ATTEMPTS', 'w.attempts / lasted / _P().baseAttempts');
   sub(
     '((FINISH_FLOOR + FINISH_PER_DAMAGE * damageThisRound) * window ** HURT_WINDOW_EXPONENT) /',
@@ -279,6 +309,7 @@ type Resolver = (c: Parameters<typeof simulateFight>[0]) => {
   round: number;
   method: string;
   winnerId?: string;
+  timeSeconds: number;
   stats: Record<
     'red' | 'blue',
     {
@@ -336,7 +367,18 @@ function measure(run: Resolver, tag: string, seedOverride?: string): Row[] {
         acc[c].damage += f.stats[c].damageDealt;
         acc[c].subAtt += f.stats[c].submissionAttempts;
       }
-      rounds += f.round;
+      /*
+       * Elapsed time, not whole rounds.
+       *
+       * A round ending in a stoppage has its stats prorated to the moment of the stoppage, so
+       * dividing by `f.round` charges a fighter five minutes for thirty seconds of work and
+       * understates every rate in exactly the matchups that finish early. D24 used whole rounds
+       * and its `control` target carried the artefact: measured that way the residual floor-time
+       * error has no structure at all (best predictor |r| 0.32), and against elapsed time the same
+       * fights give a level of 0.71x and a slope of +0.64 against Full's own floor time. See
+       * doc 31 § D25.
+       */
+      rounds += ((f.round - 1) * ROUND_SECONDS + f.timeSeconds) / ROUND_SECONDS;
       const w = f.winnerId === undefined ? undefined : f.winnerId === red.id ? 'red' : 'blue';
       if (
         w !== undefined &&
@@ -438,6 +480,9 @@ const KEYS = [
   'controlDominance',
   'hazardScale',
   'hurtGain',
+  'incidentalContact',
+  'pushExponent',
+  'holdExponent',
   'finishFloor',
   'finishPerDamage',
 ] as const;
@@ -456,6 +501,9 @@ const BOUNDS: Record<keyof Params, [number, number]> = {
   controlDominance: [0, 1],
   hazardScale: [0.6, 2.2],
   hurtGain: [0, 2],
+  incidentalContact: [0, 0.2],
+  pushExponent: [0.5, 1.3],
+  holdExponent: [0.5, 1.3],
   finishFloor: [0, 0.25],
   finishPerDamage: [0, 0.015],
 };
