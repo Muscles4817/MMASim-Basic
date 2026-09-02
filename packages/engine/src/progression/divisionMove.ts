@@ -16,19 +16,27 @@
  * happen first.
  */
 
-import { clamp, clamp01 } from '../core/math.js';
+import { clamp01 } from '../core/math.js';
 import type { GameDay } from '../core/clock.js';
 import type { DivisionId } from '../core/ids.js';
+import { divisionsFor, getDivision, type Division } from '../domain/divisions.js';
 import {
-  cutSeverity,
-  divisionsFor,
-  getDivision,
-  type Division,
-} from '../domain/divisions.js';
+  bodyOf,
+  cutChain,
+  makeableDivisions,
+  massExpressionShift,
+  physiqueOf,
+  settledBody,
+  stepTowardBody,
+  walkingWeightLbs as walkingWeightOfBody,
+  weighInFloorLbs,
+  type Body,
+} from './body.js';
+import { PHYSICAL_SCALE_KEYS } from '../ratings/physicalScale.js';
 import type { Fighter } from '../domain/fighter.js';
 import { weightMissRiskMultiplier } from '../domain/personality.js';
 import { traitMul } from '../domain/traits.js';
-import type { Attributes } from '../ratings/attributes.js';
+import { toRating, type AttributeKey, type Attributes } from '../ratings/attributes.js';
 
 /** Cut severity above which a division is simply not makeable. */
 export const MAX_MAKEABLE_SEVERITY = 0.95;
@@ -57,45 +65,40 @@ export interface DivisionMoveAppraisal {
    * a player will not work out for themselves.
    */
   fieldGap: number;
-  /** What months of gaining or losing real mass will do, once settled. */
+  /** What months of gaining or losing real mass will do, once settled. Physicals only. */
   settledAttributeChange: Partial<Attributes>;
+  /** Where their walking weight ends up once the body has finished moving. */
+  settledWalkingWeightLbs: number;
   /** Plain-language verdict, ordered most important first. */
   notes: readonly string[];
 }
 
-/** Walking weight a fighter would settle at in a division, given time to get there. */
-export function settledWalkingWeight(division: Division): number {
-  // ~7% above the limit is a routine, professional cut. Nobody walks around at the limit
-  // and nobody sensible walks around 20% above it for long.
-  return Math.round(division.limitLbs * 1.07);
-}
-
 /**
- * What months of real mass change does to a fighter.
+ * **`settledWalkingWeight` and `massChangeEffect` were both deleted at doc 31 § 12 step 11.**
  *
- * Deliberately small and deliberately double-edged. Adding fifteen pounds of usable weight
- * is worth a couple of points of Strength and costs a couple of points of Speed and Cardio —
- * it is a trade, not an upgrade, and a fighter who moves up twice has made that trade twice.
+ * `settledWalkingWeight(division)` returned `division.limitLbs * 1.07`, and it was the last
+ * surviving copy of the thing the entire ladder exists to remove: the division deciding the body.
+ * Two fighters eight inches apart moving to welterweight both settled at exactly 182 lb. It lived
+ * this long because it lived in the one module where mass actually moves, which is also the reason
+ * it had to be the last thing fixed rather than the first. Its replacement is `settledBody` in
+ * `body.ts`, which moves the two primitives a career can move and leaves height and frame alone.
  *
- * Note this operates on *attributes*, never on naturals: the hidden athleticism underneath
- * is who they are and does not move because they ate differently.
+ * `massChangeEffect(deltaLbs)` paid a flat table — `+2.4 strength, +1.6 power, −1.5 speed,
+ * −1.8 cardio, +1.1 takedownDefence, +0.7 wrestling` per fifteen pounds — added once to the current
+ * rating. Three things were wrong with it and only the first was visible:
+ *
+ *  - **It double-counted.** § 11's own table said so: once mass feeds expression through the
+ *    ladder, a separate table applying mass effects is the same effect charged twice.
+ *  - **It was a one-off delta rather than a re-reading.** Applying it twice for two half-steps gave
+ *    a different answer from once for the whole, and reversing the move did not reverse the
+ *    ratings. A fighter who went up and came back was not the fighter who never left.
+ *  - **It moved two skills.** `takedownDefence` and `wrestling` are capability. Being heavier makes
+ *    somebody harder to take down, and that is Strength doing its job in the engine — not a
+ *    fighter who got better at sprawling because he ate differently.
+ *
+ * Its replacement is `massExpressionShift`, which is the difference between the median rating for
+ * the new body and for the old one, applied to the five physicals only.
  */
-export function massChangeEffect(deltaLbs: number): Partial<Attributes> {
-  if (Math.abs(deltaLbs) < 4) return {};
-
-  // Per 15lb, which is roughly one division at the middle of the scale.
-  const steps = deltaLbs / 15;
-
-  return {
-    strength: round1(steps * 2.4),
-    power: round1(steps * 1.6),
-    speed: round1(-steps * 1.5),
-    cardio: round1(-steps * 1.8),
-    // Carrying more usable weight makes a fighter harder to move, in both directions.
-    takedownDefence: round1(steps * 1.1),
-    wrestling: round1(steps * 0.7),
-  };
-}
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
 
@@ -123,9 +126,19 @@ export function appraiseDivisionMove(
   const direction: MoveDirection =
     targetIndex === currentIndex ? 'same' : target.limitLbs > current.limitLbs ? 'up' : 'down';
 
-  const severity = cutSeverity(fighter.walkingWeightLbs, targetId);
-  const currentSeverity = cutSeverity(fighter.walkingWeightLbs, fighter.divisionId);
-  const makeable = severity <= MAX_MAKEABLE_SEVERITY;
+  /*
+   * Severity and makeability now come from the body, not from a remap on a scalar weight.
+   *
+   * `cutSeverity` was `(walking − limit) / limit / 0.18` — a percentage against a hand-drawn danger
+   * line, which cannot tell a lean fighter from a fat one of the same weight and therefore cannot
+   * say *why* a cut is hard. `weighInFloorLbs` is the calibrated answer (§ 15) and it is the one
+   * the creation screen and the generator already use, so this module joining them is the last
+   * consumer to stop having its own opinion about weight.
+   */
+  const body = bodyOf(fighter);
+  const severity = cutSeverityOf(body, targetId);
+  const currentSeverity = cutSeverityOf(body, fighter.divisionId);
+  const makeable = weighInFloorLbs(body) <= target.limitLbs;
 
   const weightMissRisk = clamp01(
     Math.pow(severity, 2.2) *
@@ -140,9 +153,22 @@ export function appraiseDivisionMove(
       : fighterOverall;
   const fieldGap = round1(fighterOverall - fieldAverage);
 
-  const settledAttributeChange = massChangeEffect(
-    settledWalkingWeight(target) - fighter.walkingWeightLbs,
-  );
+  /*
+   * What the fighter looks like once the body has finished moving, rather than what one camp does.
+   *
+   * The appraisal is a forecast, so it reads the *whole* journey — `settledBody` for the target
+   * division against the body today — while `settleWeight` below walks a share of it per camp. Both
+   * go through the same two functions, which is what stops the screen promising something the
+   * simulation then does not deliver.
+   */
+  const settled = settledBody(body, target.limitLbs);
+  const shift = massExpressionShift(body, settled);
+  const settledAttributeChange: Partial<Attributes> = {};
+  for (const key of PHYSICAL_SCALE_KEYS) {
+    const change = round1(shift[key]);
+    if (Math.abs(change) >= 0.1) settledAttributeChange[key] = change;
+  }
+  const settledWalkingWeightLbs = Math.round(walkingWeightOfBody(settled));
 
   const notes: string[] = [];
 
@@ -150,7 +176,7 @@ export function appraiseDivisionMove(
     notes.push('This is the division you already fight in.');
   } else if (!makeable) {
     notes.push(
-      `You cannot make ${target.limitLbs}lb. At ${fighter.walkingWeightLbs}lb walking around, that cut would put you in hospital rather than on the scales.`,
+      `You cannot make ${target.limitLbs}lb. At ${Math.round(walkingWeightOfBody(body))}lb walking around, the lightest you could ever weigh in is ${Math.round(weighInFloorLbs(body))}lb — that is a floor, not a hard camp.`,
     );
   } else {
     if (severity >= DANGEROUS_SEVERITY) {
@@ -174,7 +200,9 @@ export function appraiseDivisionMove(
     }
 
     if (fieldGap > 4) {
-      notes.push(`On paper you are above this division — roughly ${fieldGap} points clear of the field.`);
+      notes.push(
+        `On paper you are above this division — roughly ${fieldGap} points clear of the field.`,
+      );
     } else if (fieldGap < -4) {
       notes.push(
         `This is a step up. The field here is about ${Math.abs(fieldGap)} points better than you, and absolute ratings mean that gap is real rather than relative.`,
@@ -200,6 +228,7 @@ export function appraiseDivisionMove(
     weightMissRisk,
     fieldGap,
     settledAttributeChange,
+    settledWalkingWeightLbs,
     notes,
   };
 }
@@ -226,35 +255,109 @@ export function moveDivision(fighter: Fighter, targetId: DivisionId, day: GameDa
 }
 
 /**
- * Move the body a share of the way toward where it should be for the current division.
+ * How much of the remaining journey one camp covers, coming down.
  *
- * `share` is how much of the remaining journey one camp covers. Losing weight is faster than
- * gaining usable weight, which is why the two are not symmetric: dropping fifteen pounds is a
- * diet and adding fifteen usable pounds is a year.
+ * Fat comes off on a timescale a camp actually works on. Eight weeks of a real professional diet is
+ * most of the way to where somebody is going, which is why the number is this large.
  */
-export function settleWeight(fighter: Fighter, share = 0.35): Fighter {
-  const target = settledWalkingWeight(getDivision(fighter.divisionId));
-  const gap = target - fighter.walkingWeightLbs;
+const SETTLE_SHARE_DOWN = 0.35;
+
+/**
+ * The same, going up — and deliberately slower.
+ *
+ * Dropping fifteen pounds is a diet; adding fifteen pounds of usable mass is most of a year. The
+ * asymmetry was in the old implementation too, as `share * 0.6`, and it is one of the few things
+ * about that function worth keeping.
+ */
+const SETTLE_SHARE_UP = 0.21;
+
+/**
+ * Move the body a share of the way toward where it settles for the current division, and re-read
+ * the physicals from it.
+ *
+ * **This used to move a number and then add a table to the ratings.** It set
+ * `walkingWeightLbs` directly — a field derived from `physique` everywhere else in the game, so the
+ * two quietly diverged the moment anybody changed weight class — and then applied
+ * `massChangeEffect` as a one-off increment. Doc 31 § 12 step 11.
+ *
+ * Now it moves `muscleIndex` and `bodyFatIndex`, which are the primitives a career can move, and
+ * the five physicals are **re-read** from the new body through `massExpressionShift`. Walking
+ * weight is not set at all, because it is no longer stored: it falls out of the body, as it does
+ * for every other fighter in the game.
+ *
+ * The ceiling takes the same shift as the rating. That is the point of the whole step: a fighter
+ * who moves up is not closer to their limit, they are the same distance from a limit that has moved
+ * with them — because `potential` is a reading at a mass exactly as `attributes` is.
+ */
+export function settleWeight(fighter: Fighter, share?: number): Fighter {
+  const body = bodyOf(fighter);
+  const division = getDivision(fighter.divisionId);
+  const settled = settledBody(body, division.limitLbs);
+
+  const gap = walkingWeightOfBody(settled) - walkingWeightOfBody(body);
   if (Math.abs(gap) < 1) return fighter;
 
-  const rate = gap > 0 ? share * 0.6 : share;
-  const delta = gap * rate;
-  const nextWeight = Math.round(fighter.walkingWeightLbs + delta);
+  const rate = share ?? (gap > 0 ? SETTLE_SHARE_UP : SETTLE_SHARE_DOWN);
+  const next = stepTowardBody(body, settled, clamp01(rate));
+  const shift = massExpressionShift(body, next);
 
-  const effect = massChangeEffect(delta);
   const attributes = { ...fighter.attributes };
-  for (const [key, change] of Object.entries(effect) as [keyof Attributes, number][]) {
-    // Never past the fighter's own ceiling, and never below a floor that would erase them.
-    const ceiling = fighter.potential[key];
-    attributes[key] = clamp(Math.min(ceiling, attributes[key] + change), 1, 100);
+  const potential = { ...fighter.potential };
+  const carry: Partial<Record<AttributeKey, number>> = { ...fighter.trainingCarry };
+
+  for (const key of PHYSICAL_SCALE_KEYS) {
+    /*
+     * **Banked, or the whole effect rounds to nothing.**
+     *
+     * A move is worth about two rating points and settles over six or eight camps, so the shift is
+     * a third of a point at a time and `toRating` rounds every one of them away. Measured before
+     * this line existed: a lightweight settled into welterweight over forty camps and gained *one*
+     * point of Strength against a forecast of 2.3. That is the same defect `trainingCarry` was
+     * introduced to fix for camps and `applyAgeing` for decline, arriving a third time — see the
+     * field's own comment.
+     */
+    const banked = (carry[key] ?? 0) + shift[key];
+    const whole = Math.trunc(banked);
+    carry[key] = banked - whole;
+    if (whole === 0) continue;
+
+    /*
+     * The ceiling moves first and the rating follows it, never past it.
+     *
+     * A fighter already at their ceiling for Strength who puts on fifteen pounds should gain
+     * Strength — the old code clamped the gain to a ceiling that had not moved, so mass bought
+     * nothing for exactly the fighters it should have bought the most for.
+     */
+    potential[key] = toRating(potential[key] + whole);
+    attributes[key] = toRating(Math.min(potential[key], attributes[key] + whole));
   }
 
-  return { ...fighter, walkingWeightLbs: nextWeight, attributes };
+  return { ...fighter, physique: physiqueOf(next), attributes, potential, trainingCarry: carry };
 }
 
-/** Every division this fighter could realistically compete in today. */
+/**
+ * Every division this fighter could physiologically make today.
+ *
+ * `makeableDivisions` rather than a severity threshold: the question "could this body ever weigh
+ * that" has an exact answer in the cut model, and a scalar severity line was a proxy for it from
+ * before there was one.
+ */
 export function viableDivisions(fighter: Fighter): Division[] {
-  return divisionsFor(fighter.sex).filter(
-    (d) => cutSeverity(fighter.walkingWeightLbs, d.id) <= MAX_MAKEABLE_SEVERITY,
-  );
+  return makeableDivisions(bodyOf(fighter), fighter.sex);
+}
+
+/**
+ * Cut severity, on the calibrated model rather than on a percentage.
+ *
+ * Kept as a 0–1 scalar because the appraisal, the personality weight-miss roll and several screens
+ * read it that way — but the number underneath is now how far through the *removable* mass a cut
+ * reaches, which is a question about this body rather than about its weight. 1.0 means the weigh-in
+ * floor: the point where there is nothing left to take.
+ */
+export function cutSeverityOf(body: Body, divisionId: DivisionId): number {
+  const limit = getDivision(divisionId).limitLbs;
+  const chain = cutChain(body);
+  const removable = chain.walkingWeightLbs - chain.weighInFloorLbs;
+  if (removable <= 0) return chain.walkingWeightLbs > limit ? 1 : 0;
+  return clamp01((chain.walkingWeightLbs - limit) / removable);
 }

@@ -157,7 +157,6 @@ export function buildFighter(spec: FighterSpec, onDay: number = SEED_DAY): Fight
     sex: spec.sex ?? 'male',
     // Real birthdays are not modelled; a fixed 15 June keeps ages stable and reproducible.
     birthDay: birthDayForAge(spec.age, onDay, 6, 15),
-    walkingWeightLbs: spec.walk,
     /*
      * Solved from the height and walking weight the spec transcribes, rather than authored.
      *
@@ -167,6 +166,10 @@ export function buildFighter(spec: FighterSpec, onDay: number = SEED_DAY): Fight
      * composition produces them, which is what `physiqueForMeasurements` does. Frame and muscle split
      * the difference evenly, because a tale of the tape says nothing about which of the two a given
      * fighter's mass is made of.
+     *
+     * `walkingWeightLbs` stopped being stored at doc 31 § 12 step 11, so `spec.walk` is now purely
+     * an *input* to this solve — which is what it always was in spirit. Read it back with
+     * `walkingWeightOf(fighter)`.
      */
     physique: physiqueForMeasurements(spec.sex ?? 'male', spec.htIn, spec.walk, 50, 50),
     heightInches: spec.htIn,

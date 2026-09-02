@@ -18,6 +18,8 @@ import {
   type Fighter,
   type PersonalityAxis,
   type TraitId,
+  physiqueForMeasurements,
+  walkingWeightOf,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
@@ -53,9 +55,9 @@ export function EditorScreen() {
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
       <Card>
         <p className="muted prose" style={{ marginBottom: 'var(--space-3)' }}>
-          Edit anything in the world — fighters, promotions, gyms, coaches, referees, judges
-          and the commentary booth. Changes take effect in the live world when you save them.
-          The editor warns about combinations that do not add up; it never blocks them.
+          Edit anything in the world — fighters, promotions, gyms, coaches, referees, judges and the
+          commentary booth. Changes take effect in the live world when you save them. The editor
+          warns about combinations that do not add up; it never blocks them.
         </p>
         <label>
           <span className="visually-hidden">Search fighters to edit</span>
@@ -141,9 +143,7 @@ export function EditorFighterScreen({ id }: { id: string }) {
     );
 
   const setAxis = (axis: PersonalityAxis, value: number) =>
-    setDraft((d) =>
-      d ? { ...d, personality: { ...d.personality, [axis]: toRating(value) } } : d,
-    );
+    setDraft((d) => (d ? { ...d, personality: { ...d.personality, [axis]: toRating(value) } } : d));
 
   const toggleTrait = (trait: TraitId) =>
     setDraft((d) =>
@@ -203,14 +203,33 @@ export function EditorFighterScreen({ id }: { id: string }) {
               inputMode="numeric"
               min={95}
               max={400}
-              value={draft.walkingWeightLbs}
+              value={walkingWeightOf(draft)}
               onChange={(e) => {
                 const next = Number(e.target.value);
                 if (!Number.isFinite(next)) return;
-                // Bounded: an unvalidated field trivially produces a 0lb fighter, and the
-                // cut-severity maths has no defence against that.
+                /*
+                 * Typing a weight solves a *physique*, because walking weight stopped being stored
+                 * at doc 31 § 12 step 11 and is now read off the body. The affordance is worth
+                 * keeping — "make this fighter 250 lb" is how an editor should read — so the field
+                 * stays and the solve happens underneath it, at the height already on the draft.
+                 *
+                 * Still bounded: an unvalidated field trivially produces a 0 lb fighter, and no
+                 * amount of body model defends against that.
+                 */
+                const lbs = Math.min(400, Math.max(95, next));
                 setDraft((d) =>
-                  d ? { ...d, walkingWeightLbs: Math.min(400, Math.max(95, next)) } : d,
+                  d
+                    ? {
+                        ...d,
+                        physique: physiqueForMeasurements(
+                          d.sex,
+                          d.heightInches,
+                          lbs,
+                          d.physique.bodyFatIndex,
+                          d.physique.waterCutIndex,
+                        ),
+                      }
+                    : d,
                 );
               }}
               className="field"
@@ -218,8 +237,8 @@ export function EditorFighterScreen({ id }: { id: string }) {
           </label>
         </div>
         <p className="faint" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>
-          Ratings are absolute. Changing division changes no numbers — it changes who they
-          fight and how hard the cut is.
+          Ratings are absolute. Changing division changes no numbers — it changes who they fight and
+          how hard the cut is.
         </p>
       </Card>
 

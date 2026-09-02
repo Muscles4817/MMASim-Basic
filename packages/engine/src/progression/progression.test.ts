@@ -21,6 +21,7 @@ import {
   type CreateFighterSpec,
 } from './createFighter.js';
 import type { FighterOrigin } from './origin.js';
+import { walkingWeightOf } from './body.js';
 
 const gym: Gym = {
   id: 'g' as Gym['id'],
@@ -691,7 +692,7 @@ describe('creating a fighter', () => {
     );
 
     expect(tall.heightInches).toBe(76);
-    expect(tall.walkingWeightLbs).toBeGreaterThan(small.walkingWeightLbs + 30);
+    expect(walkingWeightOf(tall)).toBeGreaterThan(walkingWeightOf(small) + 30);
     // The whole point of the ladder: mass moves the physicals, in both directions.
     expect(tall.attributes.strength).toBeGreaterThan(small.attributes.strength);
     expect(small.attributes.speed).toBeGreaterThan(tall.attributes.speed);

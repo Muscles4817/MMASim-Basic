@@ -52,7 +52,6 @@ import {
   physiqueOf,
   sampleBodyForDivision,
   walkingWeightLbs,
-  walkingWeightLbs as walkingWeightOf,
   type Body,
 } from './body.js';
 import { medianRatingAtMass, ratingSd, type PhysicalScaleKey } from '../ratings/physicalScale.js';
@@ -624,7 +623,6 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     options.divisionId,
     bodyPriorFor(background, options.divisionId),
   );
-  const walkingWeightLbs = Math.round(walkingWeightOf(body));
 
   const naturals = leanNaturals(
     generateNaturals(rng, tier),
@@ -666,7 +664,6 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     nationality: named.nationality,
     sex: options.sex,
     birthDay: birthDayForAge(age, options.day, rng.int(1, 12), rng.int(1, 28)),
-    walkingWeightLbs,
     heightInches: body.heightInches,
     reachInches: body.reachInches,
     physique: physiqueOf(body),

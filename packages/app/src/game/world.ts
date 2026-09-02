@@ -26,6 +26,7 @@ import {
   applyAftermath,
   applyAgeing,
   applyTraining,
+  settleWeight,
   AMBIENT_BLOCKS_PER_WEEK,
   campInjuryChance,
   canFightOn,
@@ -1943,7 +1944,20 @@ function develop(
   // fighter would lose several extra years of physical prime purely for having fought often.
   const since = lastSeen.get(fighter.id as string) ?? day;
   lastSeen.set(fighter.id as string, day);
-  return applyAgeing(withInjury, since, day, rng).fighter;
+  const aged = applyAgeing(withInjury, since, day, rng).fighter;
+
+  /*
+   * And the body catches up with the division, which is the third thing this loop was not doing.
+   *
+   * The comment above this function calls it "the same loop the player is in", and doc 31 § 12 step
+   * 11 put `settleWeight` into `runTraining` — so without this line the player would be the only
+   * person in the sport whose mass responded to the division they fight in. That is the exact
+   * asymmetry the camp-injury note above documents, arriving again in a new system.
+   *
+   * A no-op for anybody already inside their division's weight band, which is almost everybody
+   * almost always: `settleWeight` returns the fighter unchanged on its second line.
+   */
+  return settleWeight(aged);
 }
 
 function finalise(

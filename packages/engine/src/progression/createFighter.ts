@@ -478,7 +478,6 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
   };
 
   const body = bodyForCreation(rng.fork('body'), spec, background);
-  const walkingWeightLbs = Math.round(walkingWeightOf(body));
 
   // --- Naturals: background leaning, build, and a roll the player does not control --------
   /*
@@ -567,7 +566,8 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
        * honest one.
        */
       const ceiling = potential[key] + fromOrigin * ORIGIN_TO_BODY;
-      const arrived = ceiling * arrivalFactor(key, spec.age) * (RAW_ROOM[key] ?? 1) + rng.range(-2, 2);
+      const arrived =
+        ceiling * arrivalFactor(key, spec.age) * (RAW_ROOM[key] ?? 1) + rng.range(-2, 2);
 
       // A ceiling can only ever be raised to fit what the player chose, never lowered onto it —
       // and it always keeps a little room, so no physical is finished before the first fight.
@@ -634,7 +634,6 @@ export function createPlayerFighter(spec: CreateFighterSpec, rng: Rng): Fighter 
     nationality: spec.nationality,
     sex: spec.sex,
     birthDay: birthDayForAge(spec.age, spec.day, rng.int(1, 12), rng.int(1, 28)),
-    walkingWeightLbs,
     heightInches: body.heightInches,
     reachInches: body.reachInches,
     physique: physiqueOf(body),

@@ -34,6 +34,7 @@ import {
   weighInFloorLbs,
   weightFit,
   type Body,
+  walkingWeightOf,
 } from './body.js';
 
 const body = (o: Partial<Body> & { heightInches: number }): Body => ({
@@ -419,11 +420,17 @@ describe('the indices the rating ceilings read', () => {
     );
   });
 
-  it('keeps the stored walking weight equal to the one the body implies', () => {
+  it('has no stored walking weight left to drift', () => {
     /*
-     * `Fighter.walkingWeightLbs` is derivable from `physique` and `heightInches` and is stored anyway
-     * until doc 31 § 12 step 11, which is when mass starts genuinely moving over a career and a cached
-     * copy could go stale. This is the guard that stops it drifting in the meantime.
+     * This asserted that `Fighter.walkingWeightLbs` agreed with the body it was derived from, and
+     * it was written as a holding guard: doc 31 § 12 step 11 was going to delete the field, because
+     * step 11 is when mass starts genuinely moving over a career and a cached copy of a derived
+     * quantity is only safe while nothing changes its inputs. `settleWeight` now changes them every
+     * camp.
+     *
+     * The field is gone, so the drift it guarded against cannot happen. What is worth keeping is
+     * that the accessor which replaced it agrees with the long form, since forty call sites now go
+     * through it.
      */
     const rng = createRng('drift');
     for (const division of divisionsFor('male')) {
@@ -434,11 +441,9 @@ describe('the indices the rating ceilings read', () => {
           sex: 'male',
           day: 0,
         });
-        const implied = walkingWeightLbs(bodyOf(f));
-        expect(
-          Math.abs(f.walkingWeightLbs - implied),
-          `${division.shortName}: stored ${f.walkingWeightLbs}, body implies ${implied.toFixed(1)}`,
-        ).toBeLessThan(1);
+        expect(walkingWeightOf(f), division.shortName).toBe(
+          Math.round(walkingWeightLbs(bodyOf(f))),
+        );
       }
     }
   });
