@@ -740,11 +740,17 @@ describe('over a card', () => {
      *
      * So D21 was two defects wearing one number. The **split** was wrong — the loser of each
      * round's flip took a tenth of the floor time however badly he lost — and fixing it closes the
-     * striker's gap completely. The journeyman's barely moves, because his is not a split error at
-     * all: Full gives him 26 seconds of control a fight and Reduced gives him 90, and no
-     * redistribution of the floor time can help when the quantity being distributed is three times
-     * too large to begin with. That is a **level** in `controlPull`, and it is a separate finding
-     * this file records rather than one D24 fixed.
+     * striker's gap completely. The journeyman's does not move, because his is not a split error at
+     * all: Full gives him 22 seconds of control a fight against this field and Reduced gives him
+     * 80, and no redistribution helps when the quantity being distributed is three times too large.
+     *
+     * **D25 looked for the level D24 called this, and there is no level.** `BASE_CONTROL` is right
+     * where it is defined — at the even matchup Full gives each fighter 0.313 of the fight and
+     * Reduced 0.300 — and across a 55-matchup field the total floor-time error has almost no level
+     * once it is measured against elapsed time rather than whole rounds. What D25 fixed is the
+     * *bottom* of the range, and this cell is not at the bottom: the journeyman's control against a
+     * field of grapplers went 3.31x → 3.63x, slightly worse, because an additive floor also lands
+     * on a matchup that was already over-booked. Declared at what it measures; the cause is open.
      *
      * Each fighter is therefore declared at what he measures. The striker's bound is two-sided on
      * purpose: a gap that had fallen *below* it would mean the refit overshot into under-booking a
@@ -755,10 +761,12 @@ describe('over a card', () => {
      * control gap is, the submission model must not be adding error of its own on top of it.
      */
     const DECLARED_CONTROL_GAP: Readonly<Record<string, [number, number]>> = {
-      // Closed. Measured 0.96, from 1.41 before D24.
+      // Closed. Measured 1.02 after D25, 0.96 after D24, 1.41 before either. Two-sided:
+      // overshooting into under-booking his control is the same defect with the sign flipped.
       striker: [0.8, 1.25],
-      // Not closed, and not a split error — see above. Measured 3.31, from 3.74 before D24.
-      journeyman: [2.5, 3.8],
+      // Not closed, not a split error, and not a level either — see above.
+      // Measured 3.63: 3.74 before D24, 3.31 after it, 3.63 after D25's floor.
+      journeyman: [2.9, 4.1],
     };
     /*
      * **Measured on the striker and the journeyman rather than on the Olympic boxer**, and the

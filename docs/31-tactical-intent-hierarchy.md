@@ -2109,6 +2109,85 @@ of everything above.
 
 ---
 
+### D25 — The floor-time shape, and the level that was not there *(**done**)*
+
+D24 recorded the journeyman's control gap as *"a level in `controlPull`"* and called it the largest
+thing the refit left on the table. **There is no level.** One constant changes here —
+`INCIDENTAL_CONTACT = 0.06` — and it fixes something else.
+
+#### The measurement that was wrong
+
+Every control figure in D21 and D24 was taken per *whole round*, and a round that ends in a
+stoppage has its stats prorated to the moment of the stoppage. Dividing by `f.round` therefore
+charges a fighter five minutes for thirty seconds of work, and understates every rate in exactly
+the matchups that finish early. Measured against elapsed time instead, over 55 archetype matchups:
+
+```
+                              per whole round     per elapsed second
+  RMS log error                    0.522                0.499
+  mean ratio                       0.84x                0.71x
+  corr with Full's floor time     -0.04                +0.64
+  worst cases                 0.10x … 3.31x        0.31x … 1.52x
+```
+
+The left column is why D24 could find no structure in this and called what it saw a level. The
+right column has structure: a **+0.64 slope against how much floor time Full itself has**, and a
++0.68 correlation with the better grappler's rating. `tools/reduced-refit.ts` used whole rounds
+too, so its `control` target carried the same artefact; it now uses elapsed time.
+
+#### There is no level, and the fit will lie about it if you let it
+
+`BASE_CONTROL` is the control share of an even matchup, and at an even matchup it is right: Full
+gives each fighter **0.313** of the fight, Reduced 0.300 and 0.284. Left free in the joint fit it
+went to **0.75**, its bound — which models nothing at all, it simply parks every matchup against
+`MAX_TOTAL_CONTROL` at once. Three parameters ran to their bounds together and `CONTROL_DOMINANCE_BLEND`
+collapsed 0.47 → 0.08, undoing D24's split fix to pay for it. That is the compensating set forming
+again in front of you, and it is what a bound at an implausible value is *for*.
+
+#### What is actually wrong: a product cannot have a floor
+
+`controlPull` is a product, so two fighters who both want nothing to do with the floor multiply
+toward zero. Full puts **9.8%** of `olympicBoxer-v-pointKarateka` in contact — two men with 25 and
+22 wrestling between them, each trying to stay on the end of a jab — and Reduced put **3.1%**. Some
+grappling happens in any fight whatever either man intends: a slip, a scramble, a fence tie-up on
+the way out of an exchange.
+
+`INCIDENTAL_CONTACT` is that irreducible share, added to `grappled` before the cap. 0.06 is where
+two disjoint blocks of held-out fights both put the joint optimum. Control agreement alone keeps
+improving past it (RMS 0.371 at 0.14 against 0.379 at 0.06) but the other three rates start paying,
+so the objective turns back up.
+
+```
+  control RMS, held out      seed b        seed c
+    before                    0.416         0.438
+    after                     0.366         0.387
+
+  archetype field, Reduced/Full total floor time, by tercile of Full's own
+    before    0.54x   0.78x   0.86x
+    after     0.82x   0.87x   0.87x
+```
+
+The slope is what went; a near-uniform 0.85x remains.
+
+#### Two things that were tried and are not shipped
+
+**Raising the contest exponents.** The joint fit wanted `pushExponent` and `holdExponent` up from
+0.9 and 0.8 to about 1.25, which would sharpen the discrimination that lets a mediocre grappler buy
+floor time against a good sprawl. Measured on held-out fights it makes control *worse*,
+monotonically — 0.366 → 0.369 → 0.381 on one block and 0.387 → 0.391 → 0.406 on another. It was
+fitting its own sample.
+
+**The journeyman's cell got slightly worse, and it is declared rather than chased.** His control
+against `style-identity`'s grappler-heavy field goes 3.31x → 3.63x, because an additive floor also
+lands on a matchup that was already over-booked. That over-booking — a mediocre grappler against a
+striker, where Full has him fail and Reduced has him succeed — is a *third* distinct defect in this
+area, and neither the split fix nor the floor addresses it. `style-identity.test.ts` declares it at
+what it measures.
+
+No parity bound moved for this change.
+
+---
+
 ### D19 — The player's own booking defaults to *no plan at all* *(**done**; was never an engine defect)*
 
 `bookFight` in `packages/app/src/game/career.ts` created the booking with `defaultGamePlan()`, which

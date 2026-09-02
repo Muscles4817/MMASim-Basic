@@ -121,6 +121,29 @@ const BASE_ATTEMPTS = 15.0;
  */
 const MAX_CONTROL_PER_FIGHTER = 0.74;
 const MAX_TOTAL_CONTROL = 0.77;
+
+/**
+ * How much of a round ends up in contact no matter what either man wants.
+ *
+ * `controlPull` is a product, so two fighters who both want nothing to do with the floor multiply
+ * toward zero — and that is not what happens. Full puts **9.8%** of `olympicBoxer-v-pointKarateka`
+ * in contact, two fighters with 25 and 22 wrestling between them who are each trying to stay on
+ * the end of a jab, and Reduced put 3.1%. Some grappling happens in any fight whatever either man
+ * intends: a slip, a scramble, a fence tie-up on the way out of an exchange. A product cannot say
+ * so; this can.
+ *
+ * **This is not `BASE_CONTROL` being wrong**, which is the first thing tried and the reason this
+ * constant is separate. At the even matchup where `BASE_CONTROL` is defined, Full gives each
+ * fighter 0.313 of the fight and Reduced 0.300 and 0.284 — it is right where it is measured. Left
+ * free to fix the bottom of the range instead, the fit drove it to 0.75, which models nothing: it
+ * just parks every matchup against `MAX_TOTAL_CONTROL` at once. The error is a shape at the
+ * bottom, not a level, and the two are fixed in different places.
+ *
+ * 0.06 is where two disjoint blocks of held-out fights both put the optimum. Control agreement
+ * keeps improving past it — RMS log-ratio 0.371 at 0.14 against 0.379 at 0.06 — but the other
+ * three rates start paying for it, so the joint objective turns back up. See doc 31 § D25.
+ */
+const INCIDENTAL_CONTACT = 0.06;
 /*
  * Both are ceilings on the **realised share of a round**, and that is the only thing either of them
  * may ever be applied to. `MAX_CONTROL_PER_FIGHTER` spent a long time capping `controlPull` as well,
@@ -896,7 +919,7 @@ export function resolveFightByRound(config: ReducedFightConfig): ReducedFightRes
      * pulling twice as hard as the sport allows still only have five minutes between them. Below the
      * ceiling this is the identity, so nothing about an ordinary round changed.
      */
-    const grappled = Math.min(pull, MAX_TOTAL_CONTROL);
+    const grappled = Math.min(pull + INCIDENTAL_CONTACT, MAX_TOTAL_CONTROL);
     const swing = clamp(CONTROL_SWING * (1 + roundRng.normal() * 0.3), 0, 0.95);
     /*
      * The mean of that draw is `0.1 + 0.8·d` — a slope that never reaches 1, and an intercept. The
