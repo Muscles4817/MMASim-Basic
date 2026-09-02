@@ -90,7 +90,6 @@ export function makeFighter(o: FighterOverrides = {}): Fighter {
     nationality: 'USA',
     sex: o.sex ?? 'male',
     birthDay: birthDayForAge(age, TEST_DAY, 6, 15),
-    walkingWeightLbs: o.walkingWeightLbs ?? 170,
     heightInches: o.heightInches ?? 70,
     reachInches: o.reachInches ?? 72,
     /*
@@ -100,6 +99,10 @@ export function makeFighter(o: FighterOverrides = {}): Fighter {
      * Solving it matters more than it looks: half the suite builds a heavyweight by passing
      * `walkingWeightLbs: 250`, and a fixed physique would have attached a lightweight's lean mass to
      * it — which `leanMassIndex` feeds straight into the Power, Strength and Durability ceilings.
+     *
+     * `walkingWeightLbs` stayed an *option* when doc 31 § 12 step 11 deleted the stored field,
+     * because "build me a 250 lb heavyweight" is exactly how a fixture should read. It is now
+     * strictly an input to the physique solve, and `walkingWeightOf` reads it back.
      */
     physique:
       o.physique ??

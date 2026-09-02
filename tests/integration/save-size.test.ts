@@ -55,6 +55,12 @@ describe('the size of a fresh save', () => {
      * which deletes 90% of this file's subject outright.
      */
     /*
+     * **Step 11 gave 37 KB of it back**, 3.186 -> 3.149 MB, by deleting `Fighter.walkingWeightLbs`
+     * — a stored copy of a quantity derivable from `physique` and `heightInches`, which step 11 had
+     * to remove because that is the step where its inputs start changing every camp. The ceiling
+     * stays at 3.35 rather than tightening to match: it is a ceiling, and doc 20 phases 3 to 5 are
+     * about to delete most of this file's subject anyway.
+     *
      * **The ceiling moved 3.2 -> 3.35 MB at doc 31 § 12 step 9, and this is the price of that.**
      * Every fighter gained a `background` — the sport they came out of and how far they got at it —
      * which is what made styles possible in the generated world and what two of doc 31 § 10.3's

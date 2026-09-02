@@ -28,6 +28,7 @@ import {
   type DivisionId,
   type Gym,
   type TrainingFocus,
+  walkingWeightOf,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
@@ -360,9 +361,9 @@ export function TrainingScreen() {
         <div className="stack" style={{ gap: 'var(--space-2)' }}>
           <InjuryStatus fighter={fighter} day={world.day} />
           <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
-            Training through it costs you roughly {Math.round((1 - impairment) * 100)}% of the
-            camp, and about {fitInWeeks} week{fitInWeeks === 1 ? '' : 's'} of patience would cost
-            you none of it.
+            Training through it costs you roughly {Math.round((1 - impairment) * 100)}% of the camp,
+            and about {fitInWeeks} week{fitInWeeks === 1 ? '' : 's'} of patience would cost you none
+            of it.
           </p>
         </div>
       )}
@@ -786,7 +787,7 @@ function DivisionPicker() {
         style={{ fontSize: 'var(--text-sm)', marginBottom: 'var(--space-3)' }}
       >
         You currently fight at {getDivision(fighter.divisionId).name}, walking around at{' '}
-        {fighter.walkingWeightLbs}lb. Your ratings do not change when you move — the people across
+        {walkingWeightOf(fighter)}lb. Your ratings do not change when you move — the people across
         from you do.
       </p>
 

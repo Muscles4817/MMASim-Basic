@@ -22,7 +22,8 @@ import { gamePlanAdherence } from '../domain/personality.js';
 import { hasTrait, traitAdd, traitMul } from '../domain/traits.js';
 import type { Attributes } from '../ratings/attributes.js';
 import { deriveRatings, type DerivedRatings } from '../ratings/derived.js';
-import { cutSeverity } from '../domain/divisions.js';
+import { cutSeverityOf } from '../progression/divisionMove.js';
+import { bodyOf } from '../progression/body.js';
 import { FRESH, freshnessOf } from '../health/freshness.js';
 import type { Corner, DamageRegion, FightStats, StrikeTarget } from './types.js';
 import { emptyStats, type GroundPosition, type Position } from './types.js';
@@ -166,22 +167,14 @@ export function effectiveDurability(c: Combatant): number {
   const tonightErosion = (c.damage.head / 100) * 30 * traitMul(traits, 'durabilityDecay');
   const fatigueErosion = c.fatigue * 12;
 
-  const floor = clamp(
-    base * 0.35 + traitAdd(traits, 'durabilityFloorShift'),
-    1,
-    Math.max(1, base),
-  );
+  const floor = clamp(base * 0.35 + traitAdd(traits, 'durabilityFloorShift'), 1, Math.max(1, base));
 
   return clamp(base - careerErosion - tonightErosion - fatigueErosion, floor, 100);
 }
 
 /** Effective Composure, lifted by traits that keep a fighter switched on while hurt. */
 export function effectiveComposure(c: Combatant): number {
-  return clamp(
-    c.attrs.composure + traitAdd(c.fighter.traits, 'compositionUnderFire'),
-    1,
-    100,
-  );
+  return clamp(c.attrs.composure + traitAdd(c.fighter.traits, 'compositionUnderFire'), 1, 100);
 }
 
 /**
@@ -217,13 +210,9 @@ export function startingFatigue(fighter: Fighter): number {
   return clamp01((1 - freshnessOf(fighter) / FRESH) * MAX_STARTING_FATIGUE);
 }
 
-export function createCombatant(
-  corner: Corner,
-  fighter: Fighter,
-  plan: GamePlan,
-): Combatant {
+export function createCombatant(corner: Corner, fighter: Fighter, plan: GamePlan): Combatant {
   const traits = fighter.traits;
-  const severity = cutSeverity(fighter.walkingWeightLbs, fighter.divisionId);
+  const severity = cutSeverityOf(bodyOf(fighter), fighter.divisionId);
 
   return {
     corner,

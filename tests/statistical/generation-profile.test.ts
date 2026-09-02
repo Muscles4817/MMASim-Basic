@@ -39,6 +39,7 @@ import {
   type AttributeKey,
   type Fighter,
   type Sex,
+  walkingWeightOf,
 } from '@mmasim/engine';
 
 const PHYSICAL = ATTRIBUTES_BY_GROUP.physical;
@@ -125,9 +126,9 @@ describe('the body generation produces', () => {
       for (const c of COHORTS.filter((x) => x.sex === sex)) {
         const ht = c.fighters.map((f) => f.heightInches);
         const reach = c.fighters.map((f) => f.reachInches);
-        const walk = c.fighters.map((f) => f.walkingWeightLbs);
+        const walk = c.fighters.map((f) => walkingWeightOf(f));
         const cut = c.fighters.map(
-          (f) => (100 * (f.walkingWeightLbs - c.limitLbs)) / f.walkingWeightLbs,
+          (f) => (100 * (walkingWeightOf(f) - c.limitLbs)) / walkingWeightOf(f),
         );
         console.log(
           c.division.padEnd(7) +
@@ -151,7 +152,7 @@ describe('the body generation produces', () => {
      * Strength and Durability ceilings.
      */
     for (const c of COHORTS) {
-      const walk = c.fighters.map((f) => f.walkingWeightLbs);
+      const walk = c.fighters.map((f) => walkingWeightOf(f));
       const spread = pct(walk, 0.95) - pct(walk, 0.05);
       expect(
         spread,
@@ -209,7 +210,7 @@ describe('the body generation produces', () => {
     const all = everyone();
     const heightVsWeight = correlation(
       all.map((f) => f.heightInches),
-      all.map((f) => f.walkingWeightLbs),
+      all.map((f) => walkingWeightOf(f)),
     );
     expect(
       heightVsWeight,
@@ -219,7 +220,7 @@ describe('the body generation produces', () => {
     for (const c of COHORTS) {
       const within = correlation(
         c.fighters.map((f) => f.heightInches),
-        c.fighters.map((f) => f.walkingWeightLbs),
+        c.fighters.map((f) => walkingWeightOf(f)),
       );
       expect(
         within,
