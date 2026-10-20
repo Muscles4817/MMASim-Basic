@@ -54,7 +54,13 @@ import {
   walkingWeightLbs,
   type Body,
 } from './body.js';
-import { medianRatingAtMass, ratingSd, type PhysicalScaleKey } from '../ratings/physicalScale.js';
+import {
+  PHYSICAL_SCALE_KEYS,
+  expectedPhysical,
+  medianRatingAtMass,
+  ratingSd,
+  type PhysicalScaleKey,
+} from '../ratings/physicalScale.js';
 
 export interface GenerationOptions {
   id: string;
@@ -443,18 +449,57 @@ export function generatePersonality(rng: Rng): Personality {
 const TRAIT_FIT_FLOOR = 0.12;
 const TRAIT_FIT_CEILING = 3;
 
-export function traitFit(trait: TraitDef, attributes: Attributes): number {
+export function traitFit(
+  trait: TraitDef,
+  attributes: Attributes,
+  /**
+   * What "ordinary" is for this fighter, per attribute. Defaults to 50 for anything absent.
+   *
+   * **The pivot was a hard-coded 50 until doc 31 § 12 step 12**, and § 7.2 predicted what that
+   * would do once the ladder gave each division its own physical medians: traits migrate by
+   * division rather than by fighter. Measured over 32,000 generated men, it does, and harder than
+   * § 7.2 guessed — `volumeMachine` runs 6.8% at flyweight against 2.3% at heavyweight (×0.34) and
+   * `headhunter` 5.3% against 15.5% (×2.91), an 8.6× spread between the two extremes.
+   *
+   * The reference is a *per-attribute* map rather than a division, because the fix only applies to
+   * the five physicals: a rating of 70 in Wrestling means the same thing in every division, so the
+   * pivot there stays exactly 50. Passing the map keeps this function pure and lets a test state
+   * the reference it is measuring against.
+   */
+  reference?: Readonly<Partial<Record<AttributeKey, number>>>,
+): number {
   if (!trait.affinity) return 1;
   let fit = 1;
   for (const [key, weight] of Object.entries(trait.affinity) as [AffinityAttribute, number][]) {
-    // Neutral at 50, doubled at 70, near zero at 30 for a weight of 1 — and it keeps going past
-    // those, which is what puts an Iron Chin on the 95-durability fighter rather than merely on an
-    // above-average one. The slope is steeper than it looks because generated debutants are
-    // compressed: their attributes measure a mean of 42 with a standard deviation of 11, so a
-    // rating of 70 is already exceptional rather than merely good.
-    fit *= 1 + (weight * (attributes[key] - 50)) / 20;
+    // Neutral at the pivot, doubled twenty points above it, near zero twenty below for a weight of
+    // 1 — and it keeps going past those, which is what puts an Iron Chin on the 95-durability
+    // fighter rather than merely on an above-average one. The slope is steeper than it looks
+    // because generated debutants are compressed: their attributes measure a mean of 42 with a
+    // standard deviation of 11, so twenty points clear of ordinary is exceptional.
+    const pivot = reference?.[key] ?? 50;
+    fit *= 1 + (weight * (attributes[key] - pivot)) / 20;
   }
   return clamp(fit, TRAIT_FIT_FLOOR, TRAIT_FIT_CEILING);
+}
+
+/**
+ * What ordinary looks like for a fighter of this division, for `traitFit`'s pivot.
+ *
+ * The five physicals read their division's own median; the ten technical and mental attributes are
+ * absent from the map and therefore keep the flat 50, which is correct rather than an oversight —
+ * there is no sex or division term on Wrestling or Fight IQ and inventing one would be asserting
+ * something the sport does not support (§ 2.3).
+ */
+export function traitReferenceFor(
+  divisionId: DivisionId,
+  sex: Sex,
+): Readonly<Partial<Record<AttributeKey, number>>> {
+  const out: Partial<Record<AttributeKey, number>> = {};
+  for (const key of PHYSICAL_SCALE_KEYS) {
+    const expected = expectedPhysical(key, divisionId as string, sex);
+    if (expected !== undefined) out[key] = expected;
+  }
+  return out;
 }
 
 /**
@@ -466,14 +511,19 @@ export function traitFit(trait: TraitDef, attributes: Attributes): number {
  * cannot wrestle at exactly the rate chance produces them — and a trait is the most *legible*
  * thing about a fighter, being what the scouting report and the profile screen lead with.
  */
-export function generateTraits(rng: Rng, count = 2, attributes?: Attributes): TraitId[] {
+export function generateTraits(
+  rng: Rng,
+  count = 2,
+  attributes?: Attributes,
+  reference?: Readonly<Partial<Record<AttributeKey, number>>>,
+): TraitId[] {
   const traits: TraitId[] = [];
   // Acquired traits are earned in play, not handed out at generation.
   const pool = ALL_TRAITS.filter((t) => !t.acquirable);
 
   for (let attempt = 0; attempt < 30 && traits.length < count; attempt++) {
     const candidate = attributes
-      ? rng.pickWeighted(pool, (t) => traitFit(t, attributes)).id
+      ? rng.pickWeighted(pool, (t) => traitFit(t, attributes, reference)).id
       : rng.pick(pool).id;
     if (traits.includes(candidate)) continue;
     if (findTraitConflicts([...traits, candidate]).length > 0) continue;
@@ -685,7 +735,12 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     ),
     potential,
     personality: generatePersonality(rng),
-    traits: generateTraits(rng, rng.int(1, 3), attributes),
+    traits: generateTraits(
+      rng,
+      rng.int(1, 3),
+      attributes,
+      traitReferenceFor(options.divisionId, options.sex),
+    ),
 
     condition: freshCondition(),
     record: [],

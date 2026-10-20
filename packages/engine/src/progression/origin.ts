@@ -124,6 +124,22 @@ export type CombatDiscipline = (typeof COMBAT_DISCIPLINES)[number];
  * could not tell them apart, separated on the day it could. The test is unchanged and still
  * binding: a sixth ("swimmer", "cycling") would land on `rowing` or `distanceRunning` and is
  * therefore not offered.
+ *
+ * **None of the five leans `motorLearning`, and four of them did until doc 31 § 12 step 12.**
+ *
+ * They carried +4 or +5, on the reasoning that an athlete learns fast. Measured over 36,000
+ * generated men, that made the athletic branch **better at skills than the six combat disciplines**
+ * — technical means of 38.2 to 39.8 against 36.6 to 38.2, with every athletic origin above every
+ * combat one on overall and on ceiling — which is the exact opposite of the branch's entire
+ * identity. `motorLearning` sets the technical *ceilings* in `ceilingsFromNaturals` and reaches the
+ * current ratings through `arrivalFactor`, so a lean on it is a lean on the one thing these origins
+ * are supposed to be bad at, and because they are rare the re-centring made that lean large.
+ *
+ * Zeroed rather than made negative. "A sprinter picks up a martial art faster" is a claim the
+ * evidence does not support; "a sprinter picks one up more slowly" is equally unsupported and would
+ * be inventing a penalty to balance a bonus. No evidence either way is the honest statement, and
+ * what is left — the largest naturals leans in the game, on the physicals — is the trade the branch
+ * was always meant to be. § 25.4 has the measurement.
  */
 export const ATHLETIC_ORIGINS = [
   'sprints',
@@ -337,7 +353,7 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
     weakness:
       'You are an athlete pretending to be a fighter. Everything technical is ahead of you.',
     attributes: { speed: 10, power: 6, strength: 2 },
-    naturals: { explosiveness: 12, forceVelocityBias: 8, motorLearning: 5, engine: 2, recovery: 2 },
+    naturals: { explosiveness: 12, forceVelocityBias: 8, engine: 2, recovery: 2 },
     // Lean and dense rather than large. A 100m finalist is not a big man; he is a man with almost
     // no fat on him, which is a body-fat statement and not a mass one.
     body: { muscleIndex: 8, bodyFatIndex: -10, frameIndex: -2 },
@@ -355,7 +371,7 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
     weakness:
       'You are an athlete pretending to be a fighter. Everything technical is ahead of you.',
     attributes: { strength: 10, power: 7, speed: 1 },
-    naturals: { explosiveness: 10, forceVelocityBias: -9, motorLearning: 4, constitution: 3 },
+    naturals: { explosiveness: 10, forceVelocityBias: -9, constitution: 3 },
     // The largest prior in the game, and the one that most needs the division conditioning below:
     // a thrower belongs at heavyweight and the sampler should almost never be asked for one at
     // flyweight.
@@ -374,7 +390,7 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
     weakness:
       'You are an athlete pretending to be a fighter. Everything technical is ahead of you.',
     attributes: { strength: 8, durability: 6, power: 4 },
-    naturals: { constitution: 9, explosiveness: 7, engine: 4, motorLearning: 4 },
+    naturals: { constitution: 9, explosiveness: 7, engine: 4 },
     body: { frameIndex: 8, muscleIndex: 7, bodyFatIndex: 4 },
     realises: { durability: 0.06, strength: 0.05 },
     aptitude: { grappling: 3, conditioning: 3 },
@@ -394,13 +410,7 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
     // out-ceilings every combat art — that is the whole identity of the branch, and it is the
     // price paid for debuting unable to fight — and the first draft of this entry landed 0.03
     // under it. Splitting `enduranceSport` should not have cost the half of it that stayed.
-    naturals: {
-      engine: 11,
-      recovery: 6,
-      forceVelocityBias: -4,
-      motorLearning: 4,
-      explosiveness: 2,
-    },
+    naturals: { engine: 11, recovery: 6, forceVelocityBias: -4, explosiveness: 2 },
     // The tallest prior in the game. Rowing selects on height harder than any sport here — leverage
     // on an oar is length — and that is a claim the old shared `enduranceSport` entry could not
     // make, because it had to be true of marathoners at the same time.
@@ -419,7 +429,7 @@ export const DISCIPLINE_META: Readonly<Record<Discipline, DisciplineMeta>> = {
     weakness:
       'You are an athlete pretending to be a fighter. Everything technical is ahead of you.',
     attributes: { cardio: 12, composure: 4, speed: 2 },
-    naturals: { engine: 13, recovery: 6, motorLearning: 4 },
+    naturals: { engine: 13, recovery: 6 },
     // The mirror of `throws`, and the pair is the argument for the split: these two were one entry
     // called `trackAndField` and `enduranceSport` respectively averaged with their opposites, and
     // between them they now span 24 index points of muscle and 20 of fat.

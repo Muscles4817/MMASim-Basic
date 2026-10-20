@@ -1094,7 +1094,10 @@ engine tuned against one has to be tuned again.
     re-express from it continuously. Capability never moves. **Done — see §24.** Four defects rather
     than the one the plan names, including a `settleWeight` that was called exactly once ever
     despite a comment saying otherwise, and three rounding bugs that were all the same bug.
-12. **Rebuild the world.**
+12. **Rebuild the world.** **Done — see §25.** § 7 had already written the specification: three
+    places where an absolute rating was being used as a comparison with no reference population.
+    Two of its three predictions were wrong about the magnitude and one about which traits, and the
+    largest finding of the step was not in § 7 at all — §25.4.
 
 Steps 2, 3 and 6 carry most of the value and none of them require the creator work.
 
@@ -2871,3 +2874,196 @@ every camp and pulls a body toward its own division's band, so a fighter whose c
 unsustainable now drifts down toward it rather than holding an impossible weight forever — but
 nothing yet makes the AI _choose_ to change division on the strength of that. Matchmaking and career
 decisions are step 12's.
+
+---
+
+## 25. Step 12: the world's consumers stop mistaking a reading for a verdict
+
+> 12. **Rebuild the world.** **Done — see §25.** § 7 had already written the specification: three
+>     places where an absolute rating was being used as a comparison with no reference population.
+>     Two of its three predictions were wrong about the magnitude and one about which traits, and the
+>     largest finding of the step was not in § 7 at all — §25.4.
+
+Two words, and the least specified step in the plan — but § 7 had already written the specification
+and called it _What the absolute scale breaks_. Three defects, and they are the same defect three
+times: **an absolute rating being used as a comparison with no reference population.** § 7's own
+summary is the fix, and step 12 is its implementation:
+
+> The number is absolute. The adjective is comparative.
+
+Everything below was measured before it was touched, which is how two of § 7's three predictions
+turned out to be wrong about the magnitude and one about which traits.
+
+### 25.1 § 7.3 — the bands, and the one a player sees
+
+`RATING_BANDS` calls 38–49 "Below level — a hole opponents will find". That was true of every
+attribute under the old flat ladder. Measured over 36,000 generated men, it is now false in the most
+visible way the game has:
+
+|             | Power: in "Liability", "Absent" or "Below level" |
+| ----------- | -----------------------------------------------: |
+| flyweight   |                                          **74%** |
+| heavyweight |                                              36% |
+
+Three quarters of all flyweights were being labelled a hole or worse at Power, and the only thing
+separating them from a heavyweight reading "Average" is which weight class they were born into.
+
+`displayBand` fixes it by re-centring the five physicals on the fighter's own division, so a fighter
+at his division's rostered median reads 55 — the middle of "Average" — in every division. Measured
+after: the spread in "bad band" share across the men's ladder is **under 12 points on all five
+physicals**, against 38 before.
+
+Three things it deliberately does not do. It does not touch the _number_: Power 46 is Power 46, and
+`quantityMultiple` will still tell you it is 0.87× the median professional's impulse. It does not
+re-band the ten technical and mental attributes, because there is no division term on Wrestling or
+Fight IQ (§ 2.3) and inventing one would assert something the sport does not support. And with no
+division context it falls back to the absolute band rather than guessing — a label that cannot name
+its reference population should not pretend to have one.
+
+### 25.2 § 7.2 — traits migrating by division
+
+§ 7.2 predicted that `traitFit`'s hard-coded pivot of 50 would send `powerPuncher` and `ironChin` to
+heavyweights and `cardioMachine` to flyweights. **It named three traits and got one right.**
+
+| trait           | flyweight | heavyweight |                        ratio |
+| --------------- | --------: | ----------: | ---------------------------: |
+| `headhunter`    |      5.3% |       15.5% |                    **×2.91** |
+| `volumeMachine` |      6.8% |        2.3% |                    **×0.34** |
+| `cardioMachine` |      9.1% |        3.9% |            ×0.42 — predicted |
+| `ironChin`      |      8.1% |        9.0% | ×1.11 — predicted, and clean |
+| `powerPuncher`  |         — |           — |               does not exist |
+
+The two worst offenders were both unnamed, an 8.6× spread between them; `ironChin` barely moves,
+because β_durability is +0.10 and § 21.2 had already established that Durability hardly varies by
+division at all. The prediction was right about the mechanism and wrong about the symptoms, which is
+the argument for measuring rather than fixing from a list.
+
+`traitFit` now takes a reference map and pivots each physical on its division's median, with the ten
+others left on a flat 50. Measured after: **the widest spread across the men's ladder is ×1.47**
+(`finisher`, 4.7% to 6.9%). Not 1.0, and it should not be — a heavyweight genuinely is likelier to
+be a headhunter, because the attributes a trait reads are not only the physicals. What must not
+happen is the _division_ deciding it.
+
+### 25.3 § 7.1 — measured at half its prediction, and deliberately not fixed
+
+§ 7.1 predicted `overallRating` would be worth "roughly +2.0 overall points to a heavyweight over a
+flyweight, before either has learned anything", and recommended adding a `competitiveRating`
+comparator and migrating about twenty consumers.
+
+**Measured, the bias is 1.06 points** across the whole men's ladder — FLW 39.51 to HW 40.57. The
+physical means spread 4.6 points, and the physical group carries only 4.9 of 14.9 weight while the
+ten technical means are flat to within 0.7.
+
+So the comparator was not built. One rating point on a hundred-point scale is below the resolution
+of every consumer § 7.1 names, and building a parallel rating plus migrating twenty call sites to
+correct it would be a large, speculative change in service of a number that does not justify it.
+What was done instead: the bias is now asserted at under two points, and asserted to be **monotone
+in weight** — because "small" is only a defence if the effect is also structured, and a bias that
+climbs with the division is a real effect rather than noise. If it ever doubles, § 7.1's
+recommendation stands and the test says so.
+
+`overallRating` itself is unchanged, which is what § 7.1 recommended anyway: it is domain-honest, a
+sum of absolute qualities.
+
+### 25.4 What measuring the world found that § 7 did not predict
+
+Step 12's brief is the world, so the world was measured rather than only its consumers — and the
+largest finding of the step is not in § 7 at all.
+
+**Every athletic origin was better than every combat discipline, on both axes.** Measured over
+36,000 generated men:
+
+|                            |   overall | physical mean | **technical mean** |   ceiling |
+| -------------------------- | --------: | ------------: | -----------------: | --------: |
+| the five athletic origins  | 41.7–42.2 |     45.7–49.6 |      **38.2–39.8** | 56.9–58.2 |
+| the six combat disciplines | 39.4–40.3 |     43.4–46.5 |      **36.6–38.2** | 53.8–54.5 |
+
+The technical column is the problem. The athletic branch's entire identity is "You are an athlete
+pretending to be a fighter. Everything technical is ahead of you" — and it was **better at skills
+than the martial arts.**
+
+The cause was four lines of `motorLearning`. Four of the five athletic origins leaned it +4 or +5,
+on the reasonable-sounding basis that an athlete learns fast. But `motorLearning` sets the technical
+_ceilings_ in `ceilingsFromNaturals` and reaches the current ratings through `arrivalFactor`, so a
+lean on it is a lean on precisely the thing these origins are supposed to be worst at — and because
+they are rare, § 22.2's re-centring made that lean large. Removing it closes the technical gap
+(athletic 36.7–38.1 against combat 36.7–38.3, now overlapping, with jiu-jitsu the best technical
+population, which is right) and leaves the branch leading on physicals and ceiling, which is the
+trade it was always meant to be.
+
+Zeroed rather than made negative: "a sprinter picks up a martial art faster" is unsupported, and so
+is the reverse, and inventing a penalty to balance a bonus would be the same mistake twice.
+
+**The best created career moved to a martial art, which is the fix landing.** `motorLearning` is the
+number a career is quietly decided by, so `created-career.test.ts` — which asks whether the best of
+forty played-out careers reaches champion level — changed its answer. Measured over 40 careers:
+**jiu-jitsu 72.6, wrestling 72.4, sprints 72.3.** The fixture moved from `sprints` to `jiuJitsu`
+accordingly, and that is not fixture-shopping: a file asserting that the top of the distribution is
+reachable should rest on the origin that genuinely produces it, and after step 12 that is a
+discipline whose fighters have spent a decade learning to fight.
+
+It also means step 12 took another 0.3 off the top of the created distribution, on top of the 2.8
+§ 23.6 recorded at step 10. The cumulative drop from the old `freak` tier is now about three points
+and **the bound has moved twice**, which is the point at which it stops being a test detail: § 23.6
+named `ATTAINMENT_META.naturals` and `NATURALS_CENTRE` as the levers if the top should be higher,
+and that decision is still open and now worth more than it was.
+
+**Two measurements that corrected themselves on the way.** A first probe showed distance runners
+winning 70% of fights, which would have been a serious finding; at n=69 in an unbalanced matchup it
+was noise, and a clean within-division round robin puts them at 48.9%. And the athletic branch's
+"highest ceilings in the game" test, which this change broke, turned out to be measuring the wrong
+thing twice over — step 9 had already narrowed each origin from a broad lean to two or three sharp
+ones, so a fifteen-attribute average was never going to show it. On the quality each sport actually
+selects for, four of five clear every combat art outright. The fifth does not: **karate out-ceilings
+sprints on Speed, 83.1 to 81.4**, because karate is also a speed sport and half of its eleven
+attribute points buy body through `ORIGIN_TO_BODY` — a mechanism that exists because doc 30 § 4.2
+established the quick ones were selected for it by the sport they came from. A taekwondo specialist
+really is one of the fastest athletes in the sport, so the test asserts the median combat art and
+the tie is recorded rather than tuned away.
+
+### 25.5 § 22.5's deferred question, answered
+
+Step 9 left one: _can the fight engine tell a wrestler from a striker on inputs it was not
+hand-fed?_ **Yes.** Generated fighters, no archetype fixtures, within division:
+
+| background | submission attempts / fight | takedowns / fight | ground seconds |
+| ---------- | --------------------------: | ----------------: | -------------: |
+| jiuJitsu   |                    **2.77** |              2.37 |            176 |
+| wrestling  |                        2.16 |          **2.86** |            194 |
+| boxing     |                        1.88 |              2.30 |            162 |
+| kickboxing |                        1.88 |              2.20 |            156 |
+
+A jiu-jitsu player attempts 1.47× the submissions of a kickboxer and a wrestler lands 1.30× the
+takedowns of one, on a card the engine was never told the style of. That is the step 9 claim
+closing: the styles are in the population, and the engine reads them.
+
+### 25.6 One source for where a division sits
+
+`DIVISION_WALKING_WEIGHT_LBS` and `expectedPhysical` moved into `physicalScale.ts`. The walking
+weights were a private table inside `ladder-tables.test.ts`, which was correct while only a table
+needed them; step 12 gave the engine two more reasons to know where a division sits, and a third
+copy is how the three quietly disagree. `ladder-tables.test.ts` now reads the shared constant,
+keeps its own arithmetic, and asserts the two agree to nine decimal places — sharing the constant
+while each side computes independently is what makes that assertion worth anything.
+
+**It is `limitLbs × ~1.09`, and that is not the thing step 11 deleted.** `settledWalkingWeight` was
+wrong because it decided an _individual's_ body from their division. A division's population mean
+genuinely is a function of its limit — that is what a weight class is — and the difference between
+those two statements is the difference between a cause and a consequence.
+
+### 25.7 Still open
+
+- **§ 7.1's comparator**, at 1.06 points of bias. The number, not the principle, is why it was not
+  built; the principle is sound and the assertion will reopen it.
+- **The athletic branch's cost is player-only.** § 22 made the discipline's forty attribute points a
+  creation-screen term, so a generated athletic-origin fighter gets the naturals lean without the
+  skill bill. After removing `motorLearning` the residual edge is about half an overall point and
+  1.4 of ceiling, which is the branch's intended advantage — but `realises` is the only thing
+  charging NPCs for it and it may be too small. Measured and left.
+- **Women's featherweight has one promotion running it** (§ 23.7). Still true, still a roster
+  question rather than an intake-weighting one.
+- **Cardio sits 6–8 points below its ladder prediction** where the other four physicals sit 2–4,
+  uniformly across every division. Uniform means it is not a division bias and so not step 12's; it
+  is a coefficient asymmetry — `cardio` reads `engine` at full weight where Power, Speed and
+  Strength read `explosiveness` damped by `QUALITY_ON_ENDS = 0.78`. A step 6 question, recorded here
+  because this is where it was seen.

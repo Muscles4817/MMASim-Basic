@@ -17,8 +17,14 @@
  */
 
 import type { ReactNode } from 'react';
-import { ratingBand, type Rating } from '@mmasim/engine';
-import { bandColour } from './index';
+import {
+  displayBand,
+  ratingBand,
+  type AttributeKey,
+  type BandContext,
+  type Rating,
+} from '@mmasim/engine';
+import { bandKeyColour } from './index';
 import { Icon, type IconName } from './signals';
 import './console.css';
 
@@ -268,13 +274,20 @@ export function MiniRating({
   label,
   value,
   hint,
+  attribute,
+  bands,
 }: {
   label: string;
   value: Rating;
   hint?: string;
+  attribute?: AttributeKey;
+  /** The division a physical's label is compared against. Doc 31 § 12 step 12 / § 7.3. */
+  bands?: BandContext;
 }) {
-  const band = ratingBand(value);
-  const colour = bandColour(value);
+  // The dense row has to say the same thing the full one does, or the toggle between them changes
+  // the verdict. See `RatingRow` for why a physical's label is comparative and the number is not.
+  const band = attribute ? displayBand(attribute, value, bands) : ratingBand(value);
+  const colour = bandKeyColour(band.key);
 
   /*
    * The silhouette, kept from `RatingRow`.
