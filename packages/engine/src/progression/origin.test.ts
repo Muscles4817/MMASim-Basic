@@ -44,6 +44,7 @@ import {
   type CreateFighterSpec,
 } from './createFighter.js';
 import { getDivision } from '../domain/divisions.js';
+import { walkingWeightOf } from './body.js';
 
 const build = (origin: FighterOrigin, seed: string, age = 25): Fighter =>
   createPlayerFighter(
@@ -739,7 +740,7 @@ describe('the body the player states, and what it costs to make the weight', () 
       createRng('a'),
     );
     expect(f.heightInches).toBe(74);
-    expect(f.walkingWeightLbs).toBeGreaterThan(
+    expect(walkingWeightOf(f)).toBeGreaterThan(
       getDivision(asDivisionId('mens-lightweight')).limitLbs,
     );
   });

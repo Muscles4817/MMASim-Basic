@@ -35,6 +35,11 @@ import type { Rng } from '../core/rng.js';
 import type { DivisionId } from '../core/ids.js';
 import { divisionsFor, getDivision, type Division, type Sex } from '../domain/divisions.js';
 import { toRating, type Rating } from '../ratings/attributes.js';
+import {
+  PHYSICAL_SCALE_KEYS,
+  medianRatingAtMass,
+  type PhysicalScaleKey,
+} from '../ratings/physicalScale.js';
 
 /**
  * A generated human body.
@@ -859,6 +864,176 @@ export function bodyFromChoices(
   };
 }
 
+/**
+ * What moving a body does to the five physicals.
+ *
+ * Doc 31 § 12 step 11, and the replacement for `massChangeEffect` — a flat table that paid out
+ * `+2.4 strength, −1.8 cardio` per fifteen pounds, added once to the current rating and never
+ * consulted again. § 11's own table lists it as double-counting the moment mass feeds expression,
+ * which it now does.
+ *
+ * The rule here is the mass law and nothing else: the shift is **the difference between the
+ * division-median rating for the new body and for the old one**. Because it is a difference of
+ * medians, it cannot double-count by construction — apply it twice for two half-steps and you get
+ * the same answer as once for the whole, and reverse the body change and it reverses exactly.
+ *
+ * **Capability never moves, and this is what that sentence means.** A fighter's rating is a median
+ * for their mass plus their own `individual · σ`; holding the individual term fixed and re-reading
+ * the median is precisely "the same athlete, at a different size". Both the current rating and the
+ * ceiling take the same shift, because both are readings taken at a mass. Nothing here touches
+ * naturals, aptitudes, or any of the ten technical and mental attributes: gaining fifteen pounds
+ * does not make anybody better or worse at wrestling, and the old table's `+1.1 takedownDefence,
+ * +0.7 wrestling` was a size effect wearing a skill's name.
+ */
+export function massExpressionShift(from: Body, to: Body): Record<PhysicalScaleKey, number> {
+  const at = (body: Body, key: PhysicalScaleKey) =>
+    medianRatingAtMass(key, body.sex, walkingWeightLbs(body), leanMassLbs(body));
+
+  const out = {} as Record<PhysicalScaleKey, number>;
+  for (const key of PHYSICAL_SCALE_KEYS) out[key] = at(to, key) - at(from, key);
+  return out;
+}
+
+/**
+ * The band of walking weights a fighter can sit at in a division without anything forcing them.
+ *
+ * **A band rather than a point, and that distinction is the whole of what separates this from the
+ * `settledWalkingWeight` it replaces.** The first draft of this function targeted
+ * `limit / (1 - 0.08)` — a single weight, the roster's mean cut — and measured against three
+ * different skeletons it settled a 5'4" fighter, a 5'10" fighter and a 6'4" fighter at 186, 185 and
+ * 204 lb for the same division. That is `limitLbs * 1.07` with more arithmetic: the division
+ * deciding the body again, which is the exact failure the ladder exists to remove.
+ *
+ * The band's edges are the sport's own. The bottom is 4% over the limit, because essentially
+ * nobody walks around *at* it — the hand-authored roster's mean cut is 8.2% (§ 15.1) — so a fighter
+ * being pulled up lands on a small real cut rather than on zero. The top is a 12% cut, between that
+ * mean and the roster's 90th percentile of 13.8%, which is where a routine hard camp stops being
+ * routine.
+ *
+ * Inside the band nothing moves. A small welterweight stays a small welterweight for as long as he
+ * wants to be one; that is a person the sport is full of and the old model could not represent.
+ */
+const SETTLED_BAND = { bottom: 1.04, top: 1 / (1 - 0.12) } as const;
+
+/**
+ * The body this person settles into for this division, given time and no other pressure.
+ *
+ * **This replaces `settledWalkingWeight`, which was `division.limitLbs * 1.07`.** Doc 31 § 12 step
+ * 11. That expression was the last surviving copy of the thing the whole ladder exists to delete —
+ * the division deciding the body — and it survived this long precisely because it lived in the one
+ * module where mass actually moves.
+ *
+ * What settles is `muscleIndex` and `bodyFatIndex`, and nothing else: height and frame are facts
+ * about a person and do not respond to a training camp. `Fighter.physique` says the same thing in
+ * its own comment — muscle is the only primitive that moves over a career.
+ *
+ * **The two directions are not symmetric, and the asymmetry is physiological rather than a balance
+ * knob.**
+ *
+ *  - *Coming down*, fat goes first and muscle only once fat has hit its floor. That is the order a
+ *    body sheds mass in, and it is why § 6 predicts stripping muscle to make weight costs four
+ *    points of Power where cutting the same pounds off fat costs two.
+ *  - *Going up*, **muscle only, and never fat.** A fighter moving up is trying to arrive as a
+ *    bigger fighter rather than a heavier one, and muscle stops at `MAX_FAT_FREE_MASS_INDEX` — so a
+ *    small-framed fighter chasing heavyweight adds what his frame will carry and then stops, and
+ *    stays a small heavyweight. That is the honest answer and the old model could not give it: it
+ *    would have fed him to 283 lb whatever he was built like.
+ */
+export function settledBody(body: Body, limitLbs: number): Body {
+  const walking = walkingWeightLbs(body);
+  const floor = limitLbs * SETTLED_BAND.bottom;
+  const ceiling = limitLbs * SETTLED_BAND.top;
+  if (walking >= floor && walking <= ceiling) return body;
+
+  const target = walking > ceiling ? ceiling : floor;
+  const heightM = body.heightInches * M_PER_INCH;
+  const maxLeanKg = MAX_FAT_FREE_MASS_INDEX[body.sex] * heightM * heightM;
+
+  /** Walking weight at a given (muscle, fat) pair, for the searches below. */
+  const weightAt = (muscleIndex: number, bodyFatIndex: number): number =>
+    walkingWeightLbs({
+      ...body,
+      muscleIndex: toRating(muscleIndex),
+      bodyFatIndex: toRating(bodyFatIndex),
+    });
+
+  /**
+   * Bisect one index onto the target weight, or return the bound it saturates at.
+   *
+   * Both primitives are monotone in weight, so this always converges — and returning the bound
+   * rather than failing is what lets the caller fall through to the other primitive when this one
+   * runs out, which is the whole asymmetry above.
+   */
+  const solve = (lo: number, hi: number, weigh: (v: number) => number): number => {
+    if (weigh(lo) > target) return lo;
+    if (weigh(hi) < target) return hi;
+    let a = lo;
+    let b = hi;
+    for (let i = 0; i < 40; i++) {
+      const mid = (a + b) / 2;
+      if (weigh(mid) < target) a = mid;
+      else b = mid;
+    }
+    return (a + b) / 2;
+  };
+
+  if (walking > ceiling) {
+    // Coming down: fat first, all the way to its floor, and only then muscle.
+    const fat = solve(1, body.bodyFatIndex, (v) => weightAt(body.muscleIndex, v));
+    if (weightAt(body.muscleIndex, fat) <= target + 0.5) {
+      return { ...body, bodyFatIndex: toRating(fat) };
+    }
+    const muscle = solve(1, body.muscleIndex, (v) => weightAt(v, fat));
+    return { ...body, muscleIndex: toRating(muscle), bodyFatIndex: toRating(fat) };
+  }
+
+  /** The muscle index at which lean mass would reach the human fat-free ceiling for this height. */
+  const muscleCap = (() => {
+    let a = 1;
+    let b = 99;
+    for (let i = 0; i < 40; i++) {
+      const mid = (a + b) / 2;
+      if (leanMassLbs({ ...body, muscleIndex: toRating(mid) }) * KG_PER_LB < maxLeanKg) a = mid;
+      else b = mid;
+    }
+    return a;
+  })();
+
+  // Going up: muscle, as far as the frame will carry it, and no further. No fat is added — a
+  // fighter who cannot reach the bottom of the band on muscle alone is simply a small one here.
+  const muscle = solve(body.muscleIndex, Math.min(99, muscleCap), (v) =>
+    weightAt(v, body.bodyFatIndex),
+  );
+  return { ...body, muscleIndex: toRating(muscle) };
+}
+
+/**
+ * One step of the journey from `body` toward `target`, moving only what a camp can move.
+ *
+ * **The minimum step is one index point, and without it the journey never finishes.** The indices
+ * are integers, so a lerp of 0.21 across a remaining gap of one rounds straight back to where it
+ * started and the body sticks a point short of settled forever. Measured before this: a fighter
+ * bulking into welterweight stopped at muscle 71 against a target of 72 and stayed there for
+ * however many camps he was given, which then stranded the last point of the Strength gain the
+ * appraisal had promised him.
+ *
+ * A one-point floor is also the honest step size — an index cannot move by less than one — so this
+ * is the rounding being made to agree with the type rather than a fudge to force arrival.
+ */
+export function stepTowardBody(body: Body, target: Body, share: number): Body {
+  const step = (from: number, to: number): Rating => {
+    if (from === to) return toRating(from);
+    const moved = Math.round(from + (to - from) * share);
+    if (moved !== from) return toRating(moved);
+    return toRating(from + Math.sign(to - from));
+  };
+  return {
+    ...body,
+    muscleIndex: step(body.muscleIndex, target.muscleIndex),
+    bodyFatIndex: step(body.bodyFatIndex, target.bodyFatIndex),
+  };
+}
+
 // --- What the rating ceilings read ---------------------------------------------------------
 
 /**
@@ -938,6 +1113,22 @@ export function bodyOf(fighter: {
     reachInches: fighter.reachInches,
     ...fighter.physique,
   };
+}
+
+/**
+ * Walking weight, for the fighters who no longer store it.
+ *
+ * Doc 31 § 12 step 11 deleted `Fighter.walkingWeightLbs`. This is the one-liner every reader wants
+ * in its place, and having it named rather than spelled `walkingWeightLbs(bodyOf(f))` at forty call
+ * sites is the difference between a derived quantity and a chore.
+ */
+export function walkingWeightOf(fighter: {
+  sex: Sex;
+  heightInches: number;
+  reachInches: number;
+  physique: Physique;
+}): number {
+  return Math.round(walkingWeightLbs(bodyOf(fighter)));
 }
 
 /** The storable part of a rolled body. */

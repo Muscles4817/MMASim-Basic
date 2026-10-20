@@ -155,15 +155,16 @@ export interface Fighter {
   nationality: string;
   sex: 'male' | 'female';
   birthDay: GameDay;
-  /**
-   * Natural walking weight in pounds, out of camp. Drives cut severity.
+  /*
+   * **`walkingWeightLbs` was deleted here at doc 31 § 12 step 11.**
    *
-   * Derivable from `physique` and `heightInches` via `walkingWeightLbs(bodyOf(fighter))`, and stored
-   * anyway until doc 31 § 12 step 11 — which is when mass starts genuinely *moving* over a career
-   * and a cached copy could go stale. `body.test.ts` asserts the two agree, so it cannot drift in
-   * the meantime.
+   * It was a cache of `walkingWeightLbs(bodyOf(fighter))`, kept deliberately and with a note saying
+   * step 11 would remove it — because step 11 is when mass starts genuinely moving over a career,
+   * and a cached copy of a derived quantity is only safe while nothing changes its inputs.
+   * `settleWeight` now changes them every camp.
+   *
+   * Read it with `walkingWeightOf(fighter)` below, or take the whole body with `bodyOf(fighter)`.
    */
-  walkingWeightLbs: number;
   heightInches: number;
   reachInches: number;
   /**
@@ -197,13 +198,20 @@ export interface Fighter {
 
   attributes: Attributes;
   /**
-   * Fractional training progress not yet worth a whole rating point.
+   * Fractional rating movement not yet worth a whole point.
    *
-   * Ratings are integers, and camps produce fractions. Rounding the fraction away at the end
-   * of every camp meant that at a poor gym — including the one the game starts you in —
-   * four camps out of five moved nothing at all and the work was silently discarded. Banking
-   * the remainder means a slow room is *slow*, rather than a room where training does not
-   * happen. Never rendered; the rating is what the player sees.
+   * Ratings are integers, and the things that move them produce fractions. Rounding the fraction
+   * away at the end of every camp meant that at a poor gym — including the one the game starts you
+   * in — four camps out of five moved nothing at all and the work was silently discarded. Banking
+   * the remainder means a slow room is *slow*, rather than a room where training does not happen.
+   * Never rendered; the rating is what the player sees.
+   *
+   * **Three systems bank here, not one**, which is why the name is the only thing about it that
+   * still says "training": camps (`applyTraining`), ageing (`applyAgeing`) and, since doc 31 § 12
+   * step 11, mass re-expression (`settleWeight`). All three have the same shape — a small signed
+   * fraction per camp — and all three had, or would have had, the same bug. Sharing one bank is
+   * also what stops them fighting: a fighter gaining 0.3 of a point from mass and losing 0.2 to age
+   * nets 0.1, rather than both rounding to zero and the year meaning nothing.
    */
   trainingCarry?: Partial<Record<AttributeKey, number>>;
   /** Hidden. Never rendered as numbers. */

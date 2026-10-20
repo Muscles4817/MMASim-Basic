@@ -1091,7 +1091,9 @@ engine tuned against one has to be tuned again.
     talent tier was carrying and pays for it in debut years. §23.4 records something the body
     sliders turned out to do that nobody designed.
 11. **Weight-class movement.** `massChangeEffect` deleted; `settleWeight` moves mass and the physicals
-    re-express from it continuously. Capability never moves.
+    re-express from it continuously. Capability never moves. **Done — see §24.** Four defects rather
+    than the one the plan names, including a `settleWeight` that was called exactly once ever
+    despite a comment saying otherwise, and three rounding bugs that were all the same bug.
 12. **Rebuild the world.**
 
 Steps 2, 3 and 6 carry most of the value and none of them require the creator work.
@@ -2721,3 +2723,151 @@ and the same contested divisions as the ratio above it.
 pass" meant three of four projects. The second is that this was only found because step 10 changed
 the creation path and sent me to `long-sim` at all — a suite the default command does not run is a
 suite that goes stale between the times somebody remembers it.
+
+---
+
+## 24. Step 11: mass moves, and the ratings are re-read from it
+
+> 11. **Weight-class movement.** `massChangeEffect` deleted; `settleWeight` moves mass and the
+>     physicals re-express from it continuously. Capability never moves.
+
+`divisionMove.ts` was the last pre-ladder module in the project, and it was last for a reason: it is
+the only place where mass actually _moves_, so every other step could leave it alone and none of
+them could fix it. Four things were wrong with it, and only the first was written down.
+
+### 24.1 The four defects
+
+**`settledWalkingWeight(division)` was `division.limitLbs × 1.07`.** The last surviving copy of the
+thing the entire ladder exists to delete: the division deciding the body. Two fighters eight inches
+apart moving to welterweight both settled at exactly 182 lb.
+
+**`massChangeEffect(deltaLbs)` paid a flat table** — `+2.4 strength, +1.6 power, −1.5 speed,
+−1.8 cardio, +1.1 takedownDefence, +0.7 wrestling` per fifteen pounds — added once to the current
+rating. § 11's own table had it down as double-counting the moment mass feeds expression. Two
+further faults were not recorded: it was a **one-off delta rather than a re-reading**, so two
+half-steps did not equal one whole step and reversing a move did not reverse the ratings; and it
+**moved two skills**, when being heavier making you harder to take down is Strength doing its job in
+the engine rather than a fighter who got better at sprawling because he ate differently.
+
+**`settleWeight` was called exactly once, ever.** `changeDivision`'s own comment says "`runTraining`
+applies another each camp — a fighter who moves up is a different size six months later, not the
+same afternoon". Nothing called it per camp. The body took a single 35% step at the moment of the
+move and then stopped forever, so a fighter who moved to heavyweight stayed a light-heavyweight in a
+heavyweight's division for the rest of his career.
+
+**`Fighter.walkingWeightLbs` was a stored copy of a derived quantity**, and `settleWeight` wrote to
+it directly — so the stored weight and the weight the body implied diverged the moment anybody
+changed division. It was kept deliberately, with a note saying step 11 would remove it, because
+step 11 is when its inputs start moving.
+
+### 24.2 What replaced them
+
+**`settledBody(body, limitLbs)`** — where a person settles, not where a division puts them. Height
+and frame never move; `muscleIndex` and `bodyFatIndex` do, which is what `Fighter.physique` already
+said in its own comment.
+
+It is a **band, not a point**, and that distinction is the whole of the fix. The first draft
+targeted `limit / (1 − 0.08)`, the roster's mean cut — and measured against three skeletons it
+settled a 5'4", a 5'10" and a 6'4" fighter at 186, 185 and 204 lb for the same division. That is
+`limitLbs × 1.07` with more arithmetic. The band runs from 4% over the limit to a 12% cut (the
+hand-authored roster's mean is 8.2% and its p90 is 13.8%, § 15.1), and **inside it nothing moves**:
+a small welterweight stays a small welterweight, which is a person the sport is full of and the old
+model could not represent.
+
+The two directions are asymmetric for physiological reasons rather than balance ones. Coming down,
+fat goes first and muscle only once fat hits its floor — which is why § 6 predicted that stripping
+muscle to make weight costs four points of Power where cutting the same pounds off fat costs two.
+Going up, **muscle only, never fat**, capped at `MAX_FAT_FREE_MASS_INDEX`: a small-framed fighter
+chasing heavyweight adds what his frame will carry and then stops, and stays a small heavyweight.
+That is the honest answer, and the old model would have fed him to 283 lb whatever he was built like.
+
+**`massExpressionShift(from, to)`** — the difference between the division-median rating for the new
+body and for the old one, on the five physicals and nothing else. Because it is a difference of
+medians it **cannot double-count by construction**: two half-steps equal one whole step exactly, and
+reversing the body reverses the ratings exactly. `divisionMove.test.ts` asserts both to ten decimal
+places, which is a property the table it replaced could not have had.
+
+**Capability never moves, and this is what the plan's phrase means.** A rating is a median for a
+mass plus the fighter's own `individual · σ`; holding the individual term fixed and re-reading the
+median is precisely "the same athlete, at a different size". The ceiling takes the same shift as the
+rating, because both are readings at a mass — so a fighter who moves up is not closer to their
+limit, they are the same distance from a limit that moved with them. The old code clamped the gain
+to a ceiling that had not moved, which meant mass bought nothing for exactly the fighters it should
+have bought the most for.
+
+### 24.3 What it produces
+
+Six generated lightweights moved to welterweight and settled over forty camps:
+
+| fighter | LW cut | walks (LW → WW) |    muscle |   Power | Strength |   Speed |  Cardio |   Wrestling |
+| ------- | -----: | --------------: | --------: | ------: | -------: | ------: | ------: | ----------: |
+| 0       |    10% |       170 → 177 |   71 → 83 | 39 → 40 |  48 → 49 | 44 → 44 | 44 → 44 | 29 → **29** |
+| 1       |    12% |       173 → 176 |   53 → 58 |       — |        — |       — |       — | 22 → **22** |
+| 2       |    15% |       178 → 178 | no change |       — |        — |       — |       — | 49 → **49** |
+| 5       |     9% |       169 → 177 |   58 → 71 | 42 → 43 |  35 → 36 | 59 → 59 | 63 → 63 | 58 → **58** |
+
+Two things to read off it. Fighters 2 and 3 **do not move at all**, because they were already
+walking at welterweight size — they were big lightweights, and moving up relieves the cut rather
+than requiring a bulk. And Wrestling is unchanged in every row, in both directions, which is the
+capability claim asserted rather than argued.
+
+### 24.4 Three rounding bugs, all the same bug
+
+Measuring the above found the effect arriving at roughly half its forecast, and the cause was the
+same defect at three levels.
+
+**The rating shift rounded to zero.** A move is worth about two points and settles over six or eight
+camps, so the shift is a third of a point at a time and `toRating` rounded every one away —
+a lightweight settled into welterweight over forty camps and gained _one_ point of Strength against
+a forecast of 2.3. This is precisely the defect `trainingCarry` was introduced to fix for camps and
+`applyAgeing` for decline, arriving a third time. Mass now banks in the same place, and the field's
+comment says so: three systems bank there, not one, and sharing a bank is also what stops them
+cancelling each other into nothing.
+
+**The body step rounded to zero.** `stepTowardBody` lerped integer indices, so a remaining gap of one
+point at a 21% share rounded straight back to where it started and the body stuck a point short of
+settled forever — which then stranded the last point of the gain. The minimum step is now one index
+point, which is not a fudge to force arrival but the rounding being made to agree with the type: an
+index cannot move by less than one.
+
+**The forecast still reads fractionally** and the realised integer lags it by the stranded carry.
+That is consistent with how every other rating movement in the project behaves and is left alone.
+
+### 24.5 `cutSeverity` moved to the body, and it cost 34 fingerprint digits
+
+`divisionMove`, `profile.ts` and `career.ts` all read `cutSeverity(walkingWeightLbs, division)` —
+`(walking − limit) / limit / 0.18`, a percentage against a hand-drawn danger line, which cannot tell
+a lean fighter from a fat one of the same weight. They now read `cutSeverityOf(body, division)`: how
+far through this body's _removable_ mass the cut reaches, where 1.0 is the weigh-in floor.
+
+**This was checked before it was shipped rather than after.** Measured across the 139-fighter 2020
+roster, the two scales agree almost exactly in aggregate — mean 0.473 against 0.471, p50 0.483
+against 0.472, p90 0.766 against 0.760, and **the same eighteen fighters over the dangerous line**.
+So it is not a balance change. The differences are per fighter, and they are the information the old
+scalar could not carry: Andrade goes 0.97 → 0.84 and Romero 0.90 → 0.86, because a 5'1" fighter and
+a heavily muscled one have removable mass that a flat percentage of the limit cannot see.
+
+`intent-authority.test.ts` re-recorded 34 fingerprint values as a result, the largest being punches
+by 0.13% and knockouts by 0.2 points. That file's convention is that a re-recording carries its own
+explanation; this is its second.
+
+### 24.6 What this leaves for step 12
+
+`Fighter.walkingWeightLbs` is gone, which is the save-size win § 13.6 predicted and, more
+importantly, removes a cache of a quantity that now changes every camp. `walkingWeightOf(fighter)`
+replaced roughly fifty read sites; the seed builder, the fixtures and the editor keep walking weight
+as an **input** that solves a physique, which is what it always was in spirit.
+
+**The world settles too, and it very nearly did not.** `settleWeight` went into `runTraining`, which
+is the player's camp loop — and `ageEveryone`, the loop the world's fighters run, trains and injures
+and ages them without it. That would have made the player the only person in the sport whose mass
+responded to the division they fight in. It is exactly the asymmetry that function's own comment
+already documents about camp injuries ("the world's fighters trained for entire careers and could not
+so much as tweak a knee doing it"), arriving again in a new system, and it was found by going looking
+for it rather than by a test failing.
+
+The one thing step 11 deliberately does not do is decide _when_ a fighter moves. `settleWeight` runs
+every camp and pulls a body toward its own division's band, so a fighter whose cut has become
+unsustainable now drifts down toward it rather than holding an impossible weight forever — but
+nothing yet makes the AI _choose_ to change division on the strength of that. Matchmaking and career
+decisions are step 12's.

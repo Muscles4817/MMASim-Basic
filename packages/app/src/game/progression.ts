@@ -209,7 +209,25 @@ export function runTraining(
     ? { ...aged.fighter, injuries: [...existing, injury] }
     : aged.fighter;
 
-  db.fighters.upsert(withInjury);
+  /*
+   * The body catches up with the division, one camp at a time.
+   *
+   * **`changeDivision`'s comment has claimed this happened since it was written, and nothing did
+   * it.** It says "`runTraining` applies another each camp — a fighter who moves up is a different
+   * size six months later, not the same afternoon", and `settleWeight` had exactly one call site:
+   * the moment of the move. So the body took a single step of the journey and then stopped
+   * forever, and a fighter who moved to heavyweight stayed a light-heavyweight in a heavyweight's
+   * division permanently.
+   *
+   * Doc 31 § 12 step 11 is where mass genuinely starts moving over a career, so this is where the
+   * missing call goes. It is a no-op for the overwhelming majority of camps — a fighter already
+   * settled in their division returns unchanged on the first line of `settleWeight` — and the cost
+   * of getting it wrong is a whole career, which is why it runs unconditionally rather than behind
+   * a flag on the move.
+   */
+  const settled = settleWeight(withInjury);
+
+  db.fighters.upsert(settled);
   setWorld(db, { day: toDay });
   advanceRoster(db, world.day, toDay, fighter.id);
   db.save();
@@ -224,7 +242,7 @@ export function runTraining(
   const headroom: Partial<Record<AttributeKey, number>> = {};
   for (const key of Object.keys(trained.gains) as AttributeKey[]) {
     before[key] = fighter.attributes[key];
-    after[key] = withInjury.attributes[key];
+    after[key] = settled.attributes[key];
     /*
      * Physicals only. A skill has no ceiling to be near — `potential[key]` is a projection the
      * gain arithmetic never reads — and reporting it as one told a fighter with fight IQ 92 and a
@@ -232,7 +250,14 @@ export function runTraining(
      * improving fastest at. Left undefined for skills, which the report renders as nothing.
      */
     if (isPhysical(key)) {
-      headroom[key] = Math.max(0, fighter.potential[key] - withInjury.attributes[key]);
+      /*
+       * Both ends read the *same* fighter. This took `fighter.potential` — the fighter as they were
+       * before the camp — against the attribute after it, which was already a shade wrong because
+       * ageing moves ceilings, and became properly wrong at doc 31 § 12 step 11 when `settleWeight`
+       * started moving them too. A fighter who gained fifteen pounds would have been told they had
+       * lost headroom on Strength when in fact the ceiling had moved up with them.
+       */
+      headroom[key] = Math.max(0, settled.potential[key] - settled.attributes[key]);
     }
   }
 

@@ -20,6 +20,7 @@ import {
   type Discipline,
   type Fighter,
   type Sex,
+  walkingWeightOf,
 } from '@mmasim/engine';
 
 const PER_DIVISION = 6000;
@@ -172,7 +173,7 @@ describe('a background is a shape, not a bonus — measured on the population', 
 
   it('leaves the mean body where it was', () => {
     const males = WORLD.filter((f) => f.sex === 'male');
-    expect(mean(males.map((f) => f.walkingWeightLbs))).toBeCloseTo(183.8, 0);
+    expect(mean(males.map((f) => walkingWeightOf(f)))).toBeCloseTo(183.8, 0);
     expect(mean(males.map((f) => f.heightInches))).toBeCloseTo(70.3, 0);
     expect(mean(males.map((f) => f.physique.muscleIndex))).toBeCloseTo(50, 0);
     expect(mean(males.map((f) => f.physique.frameIndex))).toBeCloseTo(50, 0);
@@ -258,7 +259,7 @@ describe('the body a sport selected for', () => {
     const runners = who('distanceRunning');
 
     expect(
-      mean(throwers.map((f) => f.walkingWeightLbs)) - mean(runners.map((f) => f.walkingWeightLbs)),
+      mean(throwers.map((f) => walkingWeightOf(f))) - mean(runners.map((f) => walkingWeightOf(f))),
       'throwers should walk around a great deal heavier than distance runners',
     ).toBeGreaterThan(35);
     expect(

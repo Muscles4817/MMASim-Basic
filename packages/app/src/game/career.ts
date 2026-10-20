@@ -39,7 +39,8 @@ import {
   daysSinceLastBout,
   setChampion,
   campPurchaseEffects,
-  cutSeverity,
+  cutSeverityOf,
+  bodyOf,
   simulateFight,
   traitMul,
   weightMissForfeit,
@@ -812,7 +813,7 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
   const weighInRng = createRng(`${world.seed}:weigh:${booking.bout.id}`);
   const cutRisk = Math.min(
     1,
-    Math.pow(cutSeverity(red.walkingWeightLbs, red.divisionId), 2.2) *
+    Math.pow(cutSeverityOf(bodyOf(red), red.divisionId), 2.2) *
       0.55 *
       weightMissRiskMultiplier(red.personality) *
       traitMul(red.traits, 'weightMissRisk') *

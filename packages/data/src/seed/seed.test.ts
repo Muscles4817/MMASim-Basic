@@ -3,7 +3,8 @@ import {
   ATTRIBUTE_KEYS,
   DIVISIONS,
   careerSummary,
-  cutSeverity,
+  cutSeverityOf,
+  bodyOf,
   findTraitConflicts,
   overallRating,
   ratingBand,
@@ -203,8 +204,12 @@ describe('honest ratings (docs/02 § Rating the seed roster honestly)', () => {
   it('does not launder reputation — star power and ability are decoupled', () => {
     // The roster must contain both draws who are mediocre fighters and excellent fighters
     // nobody pays to watch, or Star Power is just a second ability rating.
-    const bigDrawMediocre = fighters.filter((f) => f.starPower >= 60 && overallRating(f.attributes) < 68);
-    const eliteNoDraw = fighters.filter((f) => f.starPower <= 45 && overallRating(f.attributes) >= 75);
+    const bigDrawMediocre = fighters.filter(
+      (f) => f.starPower >= 60 && overallRating(f.attributes) < 68,
+    );
+    const eliteNoDraw = fighters.filter(
+      (f) => f.starPower <= 45 && overallRating(f.attributes) >= 75,
+    );
     expect(bigDrawMediocre.length, 'no draws who are mediocre fighters').toBeGreaterThan(0);
     expect(eliteNoDraw.length, 'no elite fighters the market ignores').toBeGreaterThan(2);
   });
@@ -264,14 +269,14 @@ describe('absolute ratings across divisions (design pillar 2)', () => {
 
   it('gives every fighter a realistic weight cut for their division', () => {
     for (const f of fighters) {
-      const severity = cutSeverity(f.walkingWeightLbs, f.divisionId);
+      const severity = cutSeverityOf(bodyOf(f), f.divisionId);
       expect(severity, `${f.lastName}'s cut is impossible`).toBeLessThanOrEqual(1);
     }
   });
 
   it('flags the known weight-cut gamblers with genuinely severe cuts', () => {
     for (const f of fighters.filter((x) => x.traits.includes('weightCutGambler'))) {
-      expect(cutSeverity(f.walkingWeightLbs, f.divisionId), `${f.lastName}`).toBeGreaterThan(0.2);
+      expect(cutSeverityOf(bodyOf(f), f.divisionId), `${f.lastName}`).toBeGreaterThan(0.2);
     }
   });
 });
@@ -303,7 +308,8 @@ describe('seed organisations', () => {
 
   it('makes coaches specialists rather than uniformly good', () => {
     for (const c of SEED_COACHES) {
-      const spread = Math.max(c.scouting, c.gamePlanning, c.development, c.cornering) -
+      const spread =
+        Math.max(c.scouting, c.gamePlanning, c.development, c.cornering) -
         Math.min(c.scouting, c.gamePlanning, c.development, c.cornering);
       expect(spread, `${c.lastName} is uniformly rated`).toBeGreaterThan(8);
       expect(c.specialisms.length).toBeGreaterThan(0);
