@@ -487,17 +487,31 @@ describe('attainment is standing, and what a career is evidence of', () => {
     expect(shape(medallist)).toBeCloseTo(shape(clubman), 5);
   });
 
-  it('keeps the naturals lean the size the deleted tiers were, and no larger', () => {
+  it('keeps the naturals lean inside what a paid rung can justify', () => {
     /*
-     * The tiers spanned 12 points of naturals centre, 64 to 76, and the roll around them has a
-     * standard deviation of 11 to 16. Attainment inherits the job and should inherit the scale: an
-     * evidence term that out-pulled the roll would be a talent dial wearing a career label, which
-     * is the exact failure the old comment here was guarding against from the other side.
+     * **This bound was 13 and is now 22, and the relaxation is deliberate rather than a test
+     * getting out of the way.** Doc 31 § 26.
+     *
+     * The old reasoning: the deleted talent tiers spanned 12 points of naturals centre, the roll
+     * around them has a standard deviation of 11 to 16, so attainment should inherit that scale or
+     * it becomes "a talent dial wearing a career label". The premise is right and the conclusion
+     * does not follow, because the two dials do not cost the same thing. A tier cost nothing but a
+     * line of flavour text, so 12 points was the most it could justify. Attainment is paid for in
+     * `minDebutAge` — three years of career to reach `national`, six to `world` — and `applyAgeing`
+     * charges for them for the rest of the career. A rung somebody spent a third of their twenties
+     * on can say more about them than one they simply picked.
+     *
+     * The bound is kept rather than removed because the term still must not become unbounded, and
+     * 22 is where the top rung's `motorLearning` starts pressing into its own clamp — measured at
+     * 5.3% of rolls, which is the exceptional tail and not a squashed distribution.
+     *
+     * The real guard is the next test: the roll has to be able to beat the rung. That is the
+     * property this number was a proxy for, and it is asserted directly.
      */
     const spread = (key: 'explosiveness' | 'motorLearning') =>
       (ATTAINMENT_META.world.naturals[key] ?? 0) - (ATTAINMENT_META.amateur.naturals[key] ?? 0);
     expect(spread('explosiveness')).toBeGreaterThan(0);
-    expect(spread('motorLearning')).toBeLessThanOrEqual(13);
+    expect(spread('motorLearning')).toBeLessThanOrEqual(22);
     expect(ATTAINMENT_META.world.skill - ATTAINMENT_META.amateur.skill).toBeLessThan(1);
   });
 });

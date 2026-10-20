@@ -3053,6 +3053,8 @@ those two statements is the difference between a cause and a consequence.
 
 ### 25.7 Still open
 
+- **The created fighter's ceiling was raised at § 26**, and it did not move the career. The open
+  question is now the yardstick rather than the naturals — § 26.5.
 - **§ 7.1's comparator**, at 1.06 points of bias. The number, not the principle, is why it was not
   built; the principle is sound and the assertion will reopen it.
 - **The athletic branch's cost is player-only.** § 22 made the discipline's forty attribute points a
@@ -3067,3 +3069,115 @@ those two statements is the difference between a cause and a consequence.
   is a coefficient asymmetry — `cardio` reads `engine` at full weight where Power, Speed and
   Strength read `explosiveness` damped by `QUALITY_ON_ENDS = 0.78`. A step 6 question, recorded here
   because this is where it was seen.
+
+---
+
+## 26. Raising the created-fighter ceiling, and what it bought
+
+§ 23.6 and § 25.4 both ended at the same open decision. Step 10 deleted the free `freak` talent tier
+and the top of the created distribution fell **2.8 points**; step 12 removed the athletic branch's
+`motorLearning` lean and it fell **another 0.3**. Both notes named the same lever —
+`ATTAINMENT_META.naturals` — and this is that lever being pulled.
+
+### 26.1 Why this lever and not `NATURALS_CENTRE`
+
+`ATTAINMENT_META.naturals` is read in exactly one place: `resolveOrigin`, on the player path.
+`background.ts` reads the attainment's `minDebutAge`, `intake`, `realisation` and `skill` and
+**never its naturals**, so raising it cannot touch the generated world. `NATURALS_CENTRE` would have
+been the blunter instrument — it is the centre every created fighter rolls around, so moving it
+raises the floor as much as the ceiling.
+
+### 26.2 A free dial has to be small. A paid one does not.
+
+The leans arrived at step 10 at ±6 at the widest, with the stated reasoning that attainment should
+inherit the scale of the tiers it replaced: 12 points of naturals centre against a roll standard
+deviation of 11 to 16, or it becomes "a talent dial wearing a career label".
+
+**The premise is right and the conclusion does not follow**, because the two dials do not cost the
+same thing. A tier cost nothing but a line of flavour text, so 12 points was the most it could
+justify. Attainment is paid for in `minDebutAge` — three years of career between `regional` and
+`national`, six to `world` — and `applyAgeing` charges for them for the rest of the career. A rung
+somebody spent a third of their twenties on can say more about them than one they simply selected.
+
+The top two rungs roughly tripled:
+
+| rung       | before                                 | after                                                         |
+| ---------- | -------------------------------------- | ------------------------------------------------------------- |
+| `national` | expl 3, engine 3, ML 5, rec 2, const 1 | expl **9**, engine **9**, ML **11**, rec **6**, const **3**   |
+| `world`    | expl 5, engine 5, ML 8, rec 3, const 2 | expl **13**, engine **13**, ML **16**, rec **9**, const **5** |
+
+`amateur` and `regional` are untouched. The brief was the ceiling, not the spread, and the debut
+guards in `progression.test.ts` are calibrated on `amateur`.
+
+### 26.3 What it bought: the ceiling, as asked
+
+Ceiling-overall, 400 created fighters per cell:
+
+| rung     | debut age | ceiling before | ceiling after |  p95 | best of 400 |
+| -------- | --------: | -------------: | ------------: | ---: | ----------: |
+| amateur  |        22 |          63.75 |         63.75 | 73.6 |        80.8 |
+| regional |        22 |          66.62 |         66.62 | 76.9 |        82.8 |
+| national |        22 |          68.92 |     **72.62** | 80.7 |        85.2 |
+| world    |        25 |          71.17 |     **75.23** | 82.8 |        86.5 |
+
+**+3.7 and +4.1 at the top two rungs**, which is slightly more than the 3.1 the two earlier steps
+took off between them. The rungs now read 63.8 / 66.6 / 72.6 / 75.2 against a champion bar of 78.4,
+so the ladder has a real gradient where before `regional` to `national` was worth 2.3 points for
+three years of debut age.
+
+**Debut moved less than a point** — `national` 49.40 → 50.09, `world` 51.37 → 52.26 — so a created
+fighter is a better _prospect_ without being a better professional on day one. That is the shape
+this layer is supposed to have, and it is why the raise does not disturb any of the "starts below
+major-promotion level" bounds.
+
+### 26.4 What it did not buy: the career
+
+**This is the part worth reading.** The best of forty played-out careers went from 72.6 to **72.7**.
+
+The lever has almost no authority over the achieved peak, and measuring it first is the only reason
+that is known rather than discovered later. Swept across four settings at 400 careers each:
+
+| `national` lean     | ceiling mean | peak mean | peak p95 | best of 400 | conversion |
+| ------------------- | -----------: | --------: | -------: | ----------: | ---------: |
+| 3/3/5/2/1 (before)  |        69.42 |     66.42 |     71.0 |        74.3 |  **96.2%** |
+| 6/6/8/4/2           |        70.92 |     66.99 |     71.6 |        73.8 |      94.9% |
+| 9/9/11/6/3 (chosen) |        72.43 |     67.52 |     71.7 |        74.8 |      93.6% |
+| 12/12/14/8/4        |        74.20 |     68.15 |     72.5 |        75.5 |      92.2% |
+
+**Conversion was already 96.2%.** A career converts nearly all of the ceiling it is given, so adding
+ceiling adds almost nothing to the peak — a 4.8-point lift in ceiling bought 1.7 points of peak, and
+the rest went straight into unconverted headroom. No setting in the sweep put a single career of 400
+over the champion bar.
+
+So the ceiling was never the binding constraint on the career, and neither is the learning rate.
+What binds is the yardstick and the harness: `overallRating` averages fifteen attributes, and the
+simulated player trains one focus at a time. § 23.6 said this in passing — "a committed
+two-discipline player scores _lower_ here despite being a better fighter, which is a limitation of
+the measure rather than of the model" — and this sweep is what turns that aside into the main
+finding. **A created fighter cannot reach champion level on this measure no matter what the naturals
+say**, because reaching it would require being good at all fifteen things at once and the game
+charges maintenance for breadth (doc 23 § 2.5).
+
+`created-career.test.ts`'s bound therefore stays at `CHAMPION_BAR − 6`. Tightening it on a 0.1-point
+improvement would be fitting the bound to the noise.
+
+### 26.5 What is actually open now
+
+The question has changed shape, which is the useful outcome. It is no longer "are the created
+fighter's ceilings high enough" — they are, and the best roll from a world-level origin now carries
+a potential-overall of 86.5 against a champion bar of 78.4. It is **"can any single career be good
+enough at fifteen things to read as a champion"**, and the honest answer is no, for reasons that sit
+in the measure and in the breadth-maintenance rule rather than in the physical ladder.
+
+Three ways out, none of them this step's:
+
+- **Change the yardstick.** A champion is not an average of fifteen; `competitiveRating` (§ 7.1,
+  still unbuilt) or a weighted "what wins fights" reading would both say something truer about a
+  specialist.
+- **Change the harness.** One focus at a time is a worst case; a player who commits to two and
+  accepts the maintenance bill is the fighter the design wants and scores lower here.
+- **Change the breadth charge.** Doc 23 § 2.5's maintenance cost is what makes being good at
+  everything expensive. It is probably right and it is the reason this bound exists.
+
+The naturals are no longer the answer to any of those, and that is the thing § 23.6's open decision
+was really asking.
