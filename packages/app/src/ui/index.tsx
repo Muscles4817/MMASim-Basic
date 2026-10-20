@@ -2,7 +2,14 @@
 
 import { useRef } from 'react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
-import { ratingBand, type Rating, type RatingBandKey } from '@mmasim/engine';
+import {
+  displayBand,
+  ratingBand,
+  type AttributeKey,
+  type BandContext,
+  type Rating,
+  type RatingBandKey,
+} from '@mmasim/engine';
 import './ui.css';
 
 // --- Card ---------------------------------------------------------------------------
@@ -40,7 +47,10 @@ export function Card({
   return (
     <section className={classes} role={role} data-testid={testId}>
       {(title || action) && (
-        <header className="card__header" style={flush ? { padding: 'var(--space-4)', marginBottom: 0 } : undefined}>
+        <header
+          className="card__header"
+          style={flush ? { padding: 'var(--space-4)', marginBottom: 0 } : undefined}
+        >
           {title && <h2 className="card__title">{title}</h2>}
           {action}
         </header>
@@ -115,6 +125,11 @@ export function bandColour(rating: Rating): string {
   return BAND_COLOUR[ratingBand(rating).key];
 }
 
+/** The same, for a band already decided — so a comparative label and its colour cannot disagree. */
+export function bandKeyColour(key: RatingBandKey): string {
+  return BAND_COLOUR[key];
+}
+
 /**
  * One attribute row: label, value, and a colour-coded bar.
  *
@@ -127,13 +142,36 @@ export function RatingRow({
   value,
   ceiling,
   hint,
+  attribute,
+  bands,
 }: {
   label: string;
   value: Rating;
   ceiling?: Rating;
   hint?: string;
+  /**
+   * Which attribute this row is, so the band can know whether it is comparing or stating.
+   *
+   * Optional, and absent means "band it absolutely" — the honest fallback for a row that is not one
+   * of the fifteen, such as a derived rating or a coach's stat.
+   */
+  attribute?: AttributeKey;
+  /** The division to compare a physical against. Doc 31 § 12 step 12 / § 7.3. */
+  bands?: BandContext;
 }) {
-  const band = ratingBand(value);
+  /*
+   * The number is absolute; the adjective is comparative.
+   *
+   * `ratingBand(value)` labelled 44% of generated flyweights a "Liability" at Power while a
+   * heavyweight in the same place in his own division read "Average" — the band table was written
+   * when a rating meant the same thing about quality whoever held it, and the ladder ended that for
+   * the five physicals. `displayBand` re-centres those five on the fighter's own division and
+   * leaves the other ten exactly as they were.
+   *
+   * The *value* shown is untouched. Power 46 is Power 46; what changed is only what the game is
+   * willing to call it.
+   */
+  const band = attribute ? displayBand(attribute, value, bands) : ratingBand(value);
   const showCeiling = ceiling !== undefined && ceiling > value;
 
   // Elite and poor ratings get a visibly different bar, not just a different hue. A row of
@@ -149,7 +187,7 @@ export function RatingRow({
       <span className="rating__label" aria-hidden="true">
         {label}
       </span>
-      <span className="rating__value" style={{ color: bandColour(value) }} aria-hidden="true">
+      <span className="rating__value" style={{ color: bandKeyColour(band.key) }} aria-hidden="true">
         {value}
       </span>
       <div
@@ -161,20 +199,18 @@ export function RatingRow({
         aria-label={`${label}: ${value} out of 100, ${band.label}${
           showCeiling ? `, scouted ceiling ${ceiling}` : ''
         }${hint ? `. ${hint}` : ''}`}
-        style={showCeiling ? ({ '--ceiling-pos': `${ceiling}%` } as React.CSSProperties) : undefined}
+        style={
+          showCeiling ? ({ '--ceiling-pos': `${ceiling}%` } as React.CSSProperties) : undefined
+        }
       >
         <div
           className="rating__fill"
-          style={{ width: `${value}%`, background: bandColour(value) }}
+          style={{ width: `${value}%`, background: bandKeyColour(band.key) }}
         />
       </div>
       {/* The band name, not just the number. "Elite" is actionable; "84" needs a scale in
           your head before it means anything. */}
-      <span
-        className="rating__band"
-        style={{ color: bandColour(value) }}
-        aria-hidden="true"
-      >
+      <span className="rating__band" style={{ color: bandKeyColour(band.key) }} aria-hidden="true">
         {band.short}
       </span>
       {hint && (

@@ -275,3 +275,75 @@ export function calibrationSensitiveParameters(): { key: PhysicalScaleKey; why: 
     why: PHYSICAL_SCALE[k].calibrationSensitive!,
   }));
 }
+
+// --- Where a division sits on the ladder ---------------------------------------------------
+
+/**
+ * Walking weight the median professional of each division carries.
+ *
+ * **Measured off the forward body model in `body.ts`**, not assumed — `generation-profile.test.ts`
+ * prints what generation actually produces and `ladder-tables.test.ts` asserts these against it.
+ * Rounded, because this describes a population rather than a person.
+ *
+ * It used to live as a private table inside `ladder-tables.test.ts`, which was fine while only a
+ * table needed it. Doc 31 § 12 step 12 gave the *engine* two reasons to know where a division sits —
+ * banding a physical for display and pivoting `traitFit` — and a third copy of these numbers is how
+ * the three quietly disagree. One source, read three ways, which is the rule step 2 set for the body
+ * and § 7 sets again here.
+ *
+ * **This is `limitLbs × ~1.09` and that is not the defect step 11 deleted.** `settledWalkingWeight`
+ * was wrong because it decided an *individual's* body from their division. A division's population
+ * mean genuinely is a function of its limit — that is what a weight class is — and the distinction
+ * is the whole difference between a cause and a consequence.
+ */
+export const DIVISION_WALKING_WEIGHT_LBS: Readonly<Record<string, number>> = {
+  'mens-flyweight': 133,
+  'mens-bantamweight': 147,
+  'mens-featherweight': 158,
+  'mens-lightweight': 169,
+  'mens-welterweight': 183,
+  'mens-middleweight': 199,
+  'mens-light-heavyweight': 217,
+  'mens-heavyweight': 242,
+  'womens-strawweight': 121,
+  'womens-flyweight': 136,
+  'womens-bantamweight': 147,
+  'womens-featherweight': 163,
+};
+
+/**
+ * Lean fraction of a division's median fighter.
+ *
+ * Anchored on `PIVOT_LEAN_FRACTION`, which is where the scale measures from, and nudged down at the
+ * top of the men's ladder because heavyweight is the one division with no ceiling and its fighters
+ * carry some of their extra mass as fat.
+ */
+function divisionLeanFraction(walkingLbs: number, sex: Sex): number {
+  return sex === 'male' && walkingLbs > 210
+    ? PIVOT_LEAN_FRACTION.male - 0.03
+    : PIVOT_LEAN_FRACTION[sex];
+}
+
+/**
+ * What the median professional of a division rates on this attribute.
+ *
+ * The reference population a comparison needs. § 7 of doc 31 names three places where an absolute
+ * rating was being used as a comparison with no reference at all — `overallRating`, `traitFit`'s
+ * hard-coded pivot of 50, and the rating bands — and this is the number all three were missing.
+ *
+ * Whole-population rather than major-promotion: `ELITE_LIFT` is a separate, named term and a caller
+ * that wants the rostered median should add it, so that nobody has to guess which population a
+ * number describes.
+ *
+ * Returns `undefined` for a division the table does not know, which is a real case — the editor can
+ * add one — and callers must treat it as "no reference available" rather than as zero.
+ */
+export function expectedPhysical(
+  key: PhysicalScaleKey,
+  divisionId: string,
+  sex: Sex,
+): number | undefined {
+  const walking = DIVISION_WALKING_WEIGHT_LBS[divisionId];
+  if (walking === undefined) return undefined;
+  return medianRatingAtMass(key, sex, walking, walking * divisionLeanFraction(walking, sex));
+}

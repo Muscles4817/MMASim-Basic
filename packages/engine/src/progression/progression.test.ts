@@ -652,12 +652,22 @@ describe('creating a fighter', () => {
       const f = createPlayerFighter(spec({ origin }), createRng('ceil'));
       return {
         skill: f.attributes.strikingOffence + f.attributes.wrestling + f.attributes.submissions,
-        ceiling: ATTRIBUTE_KEYS.reduce((a, k) => a + f.potential[k], 0),
+        speedCeiling: f.potential.speed,
       };
     };
+    /*
+     * **The ceiling half of this compares Speed, not the fifteen-attribute sum.** Doc 31 § 12 step
+     * 12, § 25.4: step 12 removed the `motorLearning` lean the athletic origins carried, which was
+     * the only thing giving them an edge on the ten *technical* ceilings that make up two thirds of
+     * that sum — and it had to go, because it made the branch better at skills than the combat arts
+     * and that is the exact opposite of what the branch is. On the summed yardstick a sprinter and
+     * a jiu-jitsu player now tie exactly, which says nothing about either.
+     *
+     * The skill half is untouched and is the half that was never ambiguous.
+     */
     const athlete = totals({ discipline: 'sprints', attainment: 'regional' });
     const grappler = totals({ discipline: 'jiuJitsu', attainment: 'regional' });
-    expect(athlete.ceiling).toBeGreaterThan(grappler.ceiling);
+    expect(athlete.speedCeiling).toBeGreaterThan(grappler.speedCeiling);
     expect(athlete.skill).toBeLessThan(grappler.skill);
   });
 

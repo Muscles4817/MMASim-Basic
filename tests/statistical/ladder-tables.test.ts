@@ -21,8 +21,10 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  DIVISION_WALKING_WEIGHT_LBS,
   ELITE_LIFT,
   PIVOT_LEAN_FRACTION,
+  expectedPhysical,
   PHYSICAL_SCALE_KEYS,
   calibrationSensitiveParameters,
   divisionsFor,
@@ -36,24 +38,19 @@ import {
 /**
  * Walking weight the median professional of each division carries.
  *
- * Measured off the forward body model in `body.ts` rather than assumed — see
- * `generation-profile.test.ts`, which prints what generation actually produces. Rounded here because
- * a table is being drawn, not a simulation run.
+ * **These moved into `physicalScale.ts` at doc 31 § 12 step 12.** They used to be a private table
+ * here, keyed by short name, which was fine while only a table needed them — and then step 12 gave
+ * the engine two more reasons to know where a division sits (banding a physical for display, and
+ * pivoting `traitFit`), at which point a third copy was how the three quietly disagree.
+ *
+ * Read by short name here because that is how this file's tables are drawn; the shared table is
+ * keyed by division id, which is the stable key.
  */
-const WALKING: Readonly<Record<string, number>> = {
-  FLW: 133,
-  BW: 147,
-  FW: 158,
-  LW: 169,
-  WW: 183,
-  MW: 199,
-  LHW: 217,
-  HW: 242,
-  WSW: 121,
-  WFLW: 136,
-  WBW: 147,
-  WFW: 163,
-};
+const WALKING: Readonly<Record<string, number>> = Object.fromEntries(
+  [...divisionsFor('male'), ...divisionsFor('female')]
+    .map((d) => [d.shortName, DIVISION_WALKING_WEIGHT_LBS[d.id as string]] as const)
+    .filter((pair): pair is readonly [string, number] => pair[1] !== undefined),
+);
 
 /**
  * Lean fraction of a division's median fighter.
@@ -61,6 +58,10 @@ const WALKING: Readonly<Record<string, number>> = {
  * Anchored on `PIVOT_LEAN_FRACTION`, which is where the scale measures from, and nudged down at the
  * top of the men's ladder because heavyweight is the one division with no ceiling and its fighters
  * carry some of their extra mass as fat.
+ *
+ * Still local, and deliberately: `expectedPhysical` applies the same rule inside the engine, and
+ * the test below asserts the two agree. Sharing the *constant* while each side keeps its own
+ * arithmetic is what makes that assertion worth anything.
  */
 const leanFraction = (walkingLbs: number, sex: Sex): number =>
   sex === 'male' && walkingLbs > 210 ? PIVOT_LEAN_FRACTION.male - 0.03 : PIVOT_LEAN_FRACTION[sex];
@@ -266,5 +267,29 @@ describe('the physical ladder', () => {
     const spread = hw - flw;
     expect(spread, `strength spread ${spread.toFixed(1)} points`).toBeGreaterThan(25);
     expect(spread, `strength spread ${spread.toFixed(1)} points`).toBeLessThan(31);
+  });
+});
+
+describe('the engine and this file read the ladder the same way', () => {
+  it('agrees with `expectedPhysical` on every division', () => {
+    /*
+     * Doc 31 § 12 step 12 moved the walking-weight table into `physicalScale.ts` so that the
+     * engine could band a physical for display and pivot `traitFit` without a third copy of these
+     * numbers. This is the guard on that: the shared constant is shared, and each side still does
+     * its own arithmetic, so a divergence in *either* shows up here rather than as a screen quietly
+     * disagreeing with a table in a document.
+     */
+    for (const sex of ['male', 'female'] as const) {
+      for (const division of divisionsFor(sex)) {
+        const walking = WALKING[division.shortName];
+        if (walking === undefined) continue;
+        for (const key of PHYSICAL_SCALE_KEYS) {
+          expect(
+            expectedPhysical(key, division.id as string, sex),
+            `${division.shortName} ${key}`,
+          ).toBeCloseTo(ratings(key, sex, walking, false).mu, 9);
+        }
+      }
+    }
   });
 });

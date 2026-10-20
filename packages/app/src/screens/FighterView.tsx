@@ -57,19 +57,13 @@ import {
   TRAUMA_CONCERN,
   TRAUMA_MEDICAL,
   WEAR_CONCERN,
+  ELITE_LIFT,
+  type BandContext,
 } from '@mmasim/engine';
 import type { GameDb } from '@mmasim/data';
 import { Button, Card, Chip, Flag, RatingRow } from '../ui';
 import { Alert, AttributeBadge, Fact, ICON, Icon, KeyStat } from '../ui/signals';
-import {
-  AbilityBand,
-  Console,
-  Ledger,
-  LedgerRow,
-  MiniRating,
-  TabPanel,
-  Tabs,
-} from '../ui/console';
+import { AbilityBand, Console, Ledger, LedgerRow, MiniRating, TabPanel, Tabs } from '../ui/console';
 import { FightRecordList, RecordSummaryBar } from '../ui/FightRecord';
 import { readMileage } from '../ui/mileage';
 import { money } from '../ui/format';
@@ -182,6 +176,21 @@ export function FighterView({
   const [tab, setTab] = useState<TabId>('overview');
   const [showDerived, setShowDerived] = useState(false);
   const [showDefinitions, setShowDefinitions] = useState(false);
+
+  /*
+   * Which population the physical labels compare against. Doc 31 § 12 step 12, and § 7.3's fix.
+   *
+   * This fighter's own division, because the question a player is asking on this screen is "is he
+   * good at this" and the only reference that answers it is the people he is about to be locked in
+   * with. The *numbers* stay absolute, so a flyweight's Power 46 and a heavyweight's Power 46 still
+   * read 46 — what the band table used to do was call the first a liability and the second average,
+   * for no reason except where they were born.
+   */
+  const bands: BandContext = {
+    divisionId: fighter.divisionId as string,
+    sex: fighter.sex,
+    eliteLift: ELITE_LIFT,
+  };
 
   const words = VOCAB[viewer];
   const division = getDivision(fighter.divisionId);
@@ -470,6 +479,8 @@ export function FighterView({
                         : undefined
                     }
                     hint={ATTRIBUTE_META[key].blurb}
+                    attribute={key}
+                    bands={bands}
                   />
                 ))
               ) : (
@@ -480,6 +491,8 @@ export function FighterView({
                       label={ATTRIBUTE_META[key].label}
                       value={fighter.attributes[key]}
                       hint={ATTRIBUTE_META[key].blurb}
+                      attribute={key}
+                      bands={bands}
                     />
                   ))}
                 </div>
@@ -496,8 +509,8 @@ export function FighterView({
             }
           >
             <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginTop: 0 }}>
-              Computed from the ratings above, never stored — which is why they can never
-              contradict them.
+              Computed from the ratings above, never stored — which is why they can never contradict
+              them.
             </p>
             {showDerived && (
               <div className="mini-ratings" style={{ marginTop: 'var(--space-3)' }}>
@@ -602,7 +615,9 @@ function SituationCard({
               ? '—'
               : `${fighter.summary.streak > 0 ? 'W' : 'L'}${Math.abs(fighter.summary.streak)}`
           }
-          tone={fighter.summary.streak > 0 ? 'good' : fighter.summary.streak < 0 ? 'bad' : undefined}
+          tone={
+            fighter.summary.streak > 0 ? 'good' : fighter.summary.streak < 0 ? 'bad' : undefined
+          }
         />
         {guarantee !== undefined && (
           <LedgerRow
@@ -625,7 +640,10 @@ function SituationCard({
         />
       </Ledger>
 
-      <p className="prose muted" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
+      <p
+        className="prose muted"
+        style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}
+      >
         {ladder.titleShot.reason}
       </p>
     </Card>
@@ -774,7 +792,9 @@ function CareerTab({
                           {describeHeat(rivalry, day)}
                         </span>
                       </span>
-                      <Chip tone={rivalry.isRivalry ? 'negative' : heat > 45 ? 'warning' : 'neutral'}>
+                      <Chip
+                        tone={rivalry.isRivalry ? 'negative' : heat > 45 ? 'warning' : 'neutral'}
+                      >
                         {rivalry.isRivalry
                           ? `${ICON.streak} Grudge`
                           : heat > 45

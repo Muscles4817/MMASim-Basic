@@ -91,7 +91,7 @@ function bestFocus(f: Fighter): TrainingFocus {
 }
 
 /**
- * The strongest raw material the creation screen will sell at this debut age.
+ * The origin that actually produces the best careers, measured rather than assumed.
  *
  * **This fixture was `background: 'athlete'` until doc 31 § 12 step 10 deleted the flat picker**,
  * and the replacement is not equivalent — see § 23.6, which records what that measured. The old
@@ -103,12 +103,19 @@ function bestFocus(f: Fighter): TrainingFocus {
  * `national` at 22 rather than `world` at 25, measured: `world` has the better naturals and loses
  * more to the three years of career it costs (70.2 against 72.6), which is `minDebutAge` doing
  * exactly the job step 10 gave it.
+ *
+ * **It was `sprints` until doc 31 § 12 step 12, and the change is that step's point rather than a
+ * fixture search.** Step 12 removed the `motorLearning` lean four of the five athletic origins
+ * carried, because it made the athletic branch better at *skills* than the martial arts — the exact
+ * opposite of what the branch is (§ 25.4). `motorLearning` is the number a career is quietly decided
+ * by, so taking it off the athletic branch moves the best achievable career to a combat discipline,
+ * which is where it belongs. Measured over 40 careers: jiu-jitsu 72.6, wrestling 72.4, sprints 72.3.
  */
 const AGE = 22;
 
 function create(
   seed: string,
-  origin: FighterOrigin = { discipline: 'sprints', attainment: 'national' },
+  origin: FighterOrigin = { discipline: 'jiuJitsu', attainment: 'national' },
 ): Fighter {
   return createPlayerFighter(
     {
