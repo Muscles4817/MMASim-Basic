@@ -519,14 +519,34 @@ export interface AttainmentMeta {
   /**
    * What this rung is evidence of about the athlete, in rating points on the naturals.
    *
-   * The replacement for the deleted talent tier — see the note where layer 1 used to be. The spread
-   * is +/-6 against a roll with a standard deviation of 11 to 16, so it is the same size of shove
-   * the tiers were, arriving through something the player actually did rather than through a
-   * question about their genetics.
+   * The replacement for the deleted talent tier — see the note where layer 1 used to be.
    *
    * `motorLearning` is deliberately the largest term and `constitution` the smallest. Getting to a
    * world final is mostly evidence that you learn faster than the people who did not, and it is
    * almost no evidence at all about your chin — nothing in athletics tests one.
+   *
+   * ## The top two rungs were roughly tripled at doc 31 § 26
+   *
+   * They arrived at step 10 as +/-6 at the widest, chosen to be "the same size of shove the tiers
+   * were". That was the cautious choice and it was too cautious: § 23.6 measured the top of the
+   * created distribution falling 2.8 points when the free `freak` tier was deleted, § 25.4 took
+   * another 0.3, and this lever is the one both of those notes named as the way back.
+   *
+   * **A free dial has to be small; a paid one does not.** The talent tiers cost nothing but a line
+   * of flavour text, so a 12-point span was the most they could justify. Attainment is paid for in
+   * `minDebutAge` — three years of career between `regional` and `national`, six to `world` — and
+   * `applyAgeing` charges for them for the rest of the fighter's life. A rung somebody bought with
+   * a third of their twenties can say more about them than a rung they simply selected.
+   *
+   * Measured at these values (§ 26): ceiling-overall rises 3.3 to 4.1 points at the top two rungs,
+   * the rungs now read 63.8 / 66.6 / 72.6 / 75.2 against a champion bar of 78.4, and debut overall
+   * moves less than a point — so the fighter is a better *prospect* without being a better
+   * professional on day one, which is the shape this layer is supposed to have.
+   *
+   * The bound that matters is not the span, it is that **the roll can still beat the rung**, and
+   * `origin.test.ts` asserts exactly that. At these values the top rung's `motorLearning` reaches
+   * its clamp on 5.3% of rolls, which is the genuinely exceptional tail rather than a distribution
+   * squashed against a wall.
    */
   naturals: NaturalBias;
   /**
@@ -593,7 +613,7 @@ export const ATTAINMENT_META: Readonly<Record<Attainment, AttainmentMeta>> = {
     starPower: 7,
     minDebutAge: 22,
     realisation: 1.55,
-    naturals: { explosiveness: 3, engine: 3, motorLearning: 5, recovery: 2, constitution: 1 },
+    naturals: { explosiveness: 9, engine: 9, motorLearning: 11, recovery: 6, constitution: 3 },
     intake: 0.18,
   },
   world: {
@@ -609,7 +629,7 @@ export const ATTAINMENT_META: Readonly<Record<Attainment, AttainmentMeta>> = {
     starPower: 14,
     minDebutAge: 25,
     realisation: 2,
-    naturals: { explosiveness: 5, engine: 5, motorLearning: 8, recovery: 3, constitution: 2 },
+    naturals: { explosiveness: 13, engine: 13, motorLearning: 16, recovery: 9, constitution: 5 },
     intake: 0.04,
   },
 };
