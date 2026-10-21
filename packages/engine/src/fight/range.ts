@@ -30,7 +30,7 @@
  * control was replaced for.
  */
 
-import { clamp, clamp01, remap } from '../core/math.js';
+import { clamp, clamp01 } from '../core/math.js';
 import {
   GROUND_DOMINANCE,
   RANGES,
@@ -41,6 +41,7 @@ import {
   type StrikeTarget,
   type Weapon,
 } from './types.js';
+import { distanceControl } from '../ratings/functional.js';
 import type { Combatant } from './profile.js';
 import { stanceEdge } from './stance.js';
 
@@ -80,8 +81,16 @@ const SUITABILITY: Readonly<Record<Weapon, Readonly<Record<StrikeTarget, Record<
       // that works at every range, and a model that treats "kicks" as one thing cannot say so.
       legs: { outside: 1.3, boxing: 1.15, pocket: 0.6 },
     },
-    knee: { head: { outside: 1, boxing: 1, pocket: 1 }, body: { outside: 1, boxing: 1, pocket: 1 }, legs: { outside: 1, boxing: 1, pocket: 1 } },
-    elbow: { head: { outside: 1, boxing: 1, pocket: 1 }, body: { outside: 1, boxing: 1, pocket: 1 }, legs: { outside: 1, boxing: 1, pocket: 1 } },
+    knee: {
+      head: { outside: 1, boxing: 1, pocket: 1 },
+      body: { outside: 1, boxing: 1, pocket: 1 },
+      legs: { outside: 1, boxing: 1, pocket: 1 },
+    },
+    elbow: {
+      head: { outside: 1, boxing: 1, pocket: 1 },
+      body: { outside: 1, boxing: 1, pocket: 1 },
+      legs: { outside: 1, boxing: 1, pocket: 1 },
+    },
   };
 
 export function strikeSuitability(weapon: Weapon, target: StrikeTarget, range: Range): number {
@@ -128,7 +137,11 @@ export function targetFitness(target: StrikeTarget, range: Range): number {
  * when they change, which is fine: a reference mix that is right to a few points does the job,
  * and being wrong by that much moves the level by well under a per cent.
  */
-export const REFERENCE_MIX: Readonly<Record<Range, number>> = { outside: 0.45, boxing: 0.43, pocket: 0.12 };
+export const REFERENCE_MIX: Readonly<Record<Range, number>> = {
+  outside: 0.45,
+  boxing: 0.43,
+  pocket: 0.12,
+};
 
 /** Divide a per-range table through by its mean under the reference mix. Shape, never level. */
 function shapeOnly(raw: Readonly<Record<Range, number>>): Readonly<Record<Range, number>> {
@@ -177,11 +190,15 @@ export const RANGE_EXERTION = shapeOnly({ outside: 0.94, boxing: 1, pocket: 1.12
 /**
  * A fighter's ability to manage distance.
  *
- * **This function is the seam for a future Footwork attribute**, and it is written as one on
+ * **`distanceControl` is the seam for a future Footwork attribute**, and it is written as one on
  * purpose. `speed` is already carrying hand speed, reaction time and who lands first; cage
  * movement is a fourth job it should not have, and a fighter with astonishing hands and heavy
  * feet is a real and common fighter this model currently cannot describe. When a movement rating
- * lands, it enters here and nowhere else.
+ * lands, it enters there and nowhere else.
+ *
+ * This wrapper exists because the mix is also what `ratings/functional.ts` contests when it asks
+ * who gets to choose where a fight happens, and two copies of a seam is no seam at all. The
+ * simulator's version keeps the `Combatant` signature every call site here already uses.
  *
  * Reach is deliberately **not** a term in the sum. Long arms are threat geometry, not footwork —
  * they make closing on you dangerous, which is a different claim from being good at maintaining
@@ -189,13 +206,7 @@ export const RANGE_EXERTION = shapeOnly({ outside: 0.94, boxing: 1, pocket: 1.12
  * leverage on the skill instead, so it amplifies a good range manager and cannot manufacture one.
  */
 export function rangeControl(c: Combatant): number {
-  const a = c.attrs;
-  // Quickness to move, anticipation to know when, and the tank to keep doing it for 15 minutes.
-  return (
-    remap(a.speed, 25, 95, 25, 95) * 0.5 +
-    remap(a.fightIq, 25, 95, 25, 95) * 0.3 +
-    remap(a.cardio, 25, 95, 25, 95) * 0.2
-  );
+  return distanceControl(c.attrs);
 }
 
 /**
@@ -254,7 +265,8 @@ export function rangeChangeChance(input: {
    * direction its owner is trying to go.
    */
   const push = rangeControl(mover) * reach * intent * stanceEdge(mover, holder);
-  const resist = rangeControl(holder) * denial * (1 + stickiness * 0.55) * stanceEdge(holder, mover);
+  const resist =
+    rangeControl(holder) * denial * (1 + stickiness * 0.55) * stanceEdge(holder, mover);
 
   return clamp(push / (push + resist), 0.05, 0.9);
 }

@@ -338,6 +338,42 @@ them so far tonight. Detailed in [03 — Fight Engine](./03-fight-engine.md).
 
 ---
 
+## Two overall ratings, and why the flat one is going away
+
+`overallRating(attrs)` is a weighted mean of the fifteen attributes. It is what currently sorts
+rankings and screens, and it has one defect that no choice of weights can fix: **it cannot tell a
+hole from a strength that cancels it.** Nurmagomedov reads 79.3 on the shipped roster — below two
+men he beats comfortably — because his 44 is charged at a fifteenth of his rating even though
+nobody is allowed to reach it. The top fifteen points of the scale go unused, and measured against
+simulated win rate, its fifteen hand-chosen weights predict **no better than not weighting the
+attributes at all**.
+
+`functionalRating(attrs, context?)` replaces it, and reads:
+
+> **How good you are in the fight your opponent would choose — weighted by whether they get to
+> choose it.**
+
+Six contexts (long range, boxing range, the pocket, the clinch, on top, on the bottom — the
+engine's own states), a chained and _directional_ imposition term deciding who gets the fight they
+want, and a negative power mean over where the fight actually happens, so a context you lose costs
+more than its share of the clock. Cardio and durability are not contexts: they are the bill your
+route runs up, weighted by how much work your game requires and how much of the fight you chose.
+
+Two properties worth knowing while reading a number:
+
+- **A uniformly `v`-rated fighter reads exactly `v`**, at any level. The formula changes how shape
+  is read and nothing about where the scale sits — which is why the nineties are now reachable by a
+  realistically shaped all-timer (89.4) rather than only by a fighter with 90 in everything.
+- **With a `context` the five physicals are read against the division first**, so a flyweight and a
+  heavyweight of equal quality read the same. Without one they are read absolutely, which is honest
+  within a division and wrong across one.
+
+It ships alongside `overallRating`; consumers migrate one at a time. The full derivation, the
+acceptance measurements and the one population where it loses are in
+[31 — The Physical Ladder § 27](./31-the-physical-ladder.md).
+
+---
+
 ## Rating the seed roster honestly
 
 Rules the seeder must follow (enforced by review, and partly by lint tests):

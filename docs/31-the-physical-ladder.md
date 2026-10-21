@@ -3067,3 +3067,270 @@ those two statements is the difference between a cause and a consequence.
   is a coefficient asymmetry — `cardio` reads `engine` at full weight where Power, Speed and
   Strength read `explosiveness` damped by `QUALITY_ON_ENDS = 0.78`. A step 6 question, recorded here
   because this is where it was seen.
+
+---
+
+## 27. Functional ability: replacing the flat average
+
+> _§ 26 is the created-fighter ceiling, on a separate open change. This section is numbered to sit
+> after it._
+
+`overallRating` is a weighted mean of fifteen attributes, and its own doc comment has always
+admitted the defect:
+
+> Deliberately **not** used by the fight simulator: a single number cannot express that Khabib
+> beats a striker of equal "overall" nine times in ten.
+
+The comment is true. The function is still what sorts rankings, picks champions, sets star power,
+prices contracts and tells a player how good their fighter is. So the admission was never a
+disclaimer; it was a bug report nobody had actioned.
+
+### 27.1 The three symptoms
+
+Measured on the shipped 2026 roster (858 fighters):
+
+| symptom                                                                                                | measurement                                                                |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| **A hole nobody can reach is charged in full.** Nurmagomedov's 44 costs him a fifteenth of his rating. | 79.3, ranked below two men he beats comfortably                            |
+| **The top of the scale is dead.** Nobody reads above 85, so fifteen points of a 1–99 scale are unused. | max 84.6                                                                   |
+| **The weights do nothing.** Fifteen hand-chosen coefficients.                                          | predicts win rate exactly as well as not weighting them (0.8917 vs 0.8969) |
+
+That last row deserves its own sentence. Against simulated win rate, `overallRating`'s weighted
+mean scored **0.8969** and a plain unweighted average of the same fifteen attributes scored
+**0.8917**. Five thousandths. The weights were decoration.
+
+### 27.2 The shape of the answer
+
+> **Functional ability is how good you are in the fight your opponent would choose — weighted by
+> whether they get to choose it.**
+
+```
+functional = base · (1 − wCardio − wDurability) + cardio · wCardio + durability · wDurability
+
+base       = powerMean( contextScore(c), share(c) )          over six contexts, exponent −2
+share(c)   ∝ myDrive(c) + theirDrive(opposite(c))
+myDrive(c) = want(c) · imposition(c)
+```
+
+Six contexts, and they are the engine's own states rather than a taxonomy invented for the rating:
+`Range` is `outside | boxing | pocket`, `Position` is `distance | clinch | ground`, and the ground
+is sided. Crossed, that is the list — and it is also `PreferredState` minus the two entries that
+name an intent rather than a place.
+
+Two things the first draft got wrong and the implementation refuses:
+
+**Imposition is a chain, not a mix.** The simulator imposes in gates and each one admits the next.
+`ENTRY_EASE` is `outside 0.5 / boxing 1 / pocket 1.55`: a takedown from two metres out costs three
+times what it costs from the chest. So chain wrestling does not buy a takedown — it buys a takedown
+_once the range is won_. A weighted mean of `chainWrestling` and `clinchOffence` gives the pressure
+wrestler who can close and the one who cannot the same number, which is the defect in miniature.
+
+**Imposition is directional.** Refusing to let the fight happen anywhere but your range _is_
+imposition. A single Imposition scalar built out of wrestling and clinch scores Machida zero, and
+Machida dictated fights for a decade. So it is computed toward each of the six destinations, and a
+long-range striker's imposition toward `outside` measures 0.61–0.85 against an ordinary
+professional.
+
+### 27.3 Cardio and durability are the bill, not a context
+
+Neither is a place you fight. What they are is _conditional_, and the condition is the fighter's own
+game:
+
+> A pressure fighter with garbage cardio and no knockout power is going to suck. If he has
+> outstanding knockout power he can compensate for his poor cardio, but great power and no pressure
+> means his cardio comes back into effect.
+
+All three cases come out of one pair of weights:
+
+```
+wCardio     = CARDIO_WEIGHT_MAX     · f(workload) · (1 − control · finishingInstinct/100)
+wDurability = DURABILITY_WEIGHT_MAX · f(exposure) · (0.45 + 0.55 · (1 − control))
+```
+
+`workload` is the share-weighted exertion of the places the fight actually happens and `exposure`
+their hazard, both read off tables that mirror `RANGE_EXERTION` and `RANGE_HAZARD` — so the bill is
+a reading of one the simulator already issues rather than a new claim about fighting. The discount
+is gated on **`control`, not on power**, which is the third sentence exactly: a man with a bomb who
+cannot force a fight is still in a long one, by the other man's choice. Measured, the three cases
+separate as the sentence says they should, and the unit test asserts each one.
+
+**Style is derived, never declared.** `want` comes from attributes, the way `strikeLean` and
+`deriveTendencies` already do. `TacticalPlan` is the _corner's_ instruction, which is a choice — if
+the rating read the game plan, a fighter's number would move when his coach changed his mind, and a
+rating that moves without the fighter moving is not a property of the fighter.
+
+### 27.4 Three things the measurements killed
+
+Each of these was built, measured, and thrown away. They are the content of the section.
+
+**A single generic opponent cannot punish a hole.** The first version read every fighter against one
+all-55 opponent. `ARCHETYPES.striker` — whose own docstring calls him "the classic exploitable
+striker", 90/88/88 striking against 35 wrestling and 42 takedown defence — read **77.9**, above the
+grinder and almost level with the smotherer. The formula was not wrong; the reference was. **A
+fighter is exploitable by a _style_, not by an average.** `REFERENCE_PANEL` is five opponents of
+identical mean and different shape, combined by soft minimum, and the same striker now reads 67.7.
+
+**A time-share average cannot see a context you lose.** With the panel in place, the striker still
+read **73.5** against the top wrestler — who reaches top position against him 44% of the time and
+outscores him 70 to 48 once there — against 74.4 versus an opponent who cannot wrestle at all. Nine
+tenths of a point. Nineteen per cent of a fight on the bottom is not nineteen per cent of a cost,
+and no re-weighting of a linear average says otherwise.
+
+The fix is a negative power mean over contexts — the move `ATTRIBUTE_META.convexity` makes on a
+single attribute, applied to a distribution over places. At exponent −2 the same striker reads
+**66.9** against the wrestler and **72.5** against the kickboxer, a 5.6-point spread where the
+arithmetic mean produced 0.9. The exponent was swept against win rate: −2 and −0.5 score best, +1
+worst. And it is safe to tune, because a power mean of identical values is that value — the uniform
+anchor holds at any exponent, so the knob changes how holes are charged and nothing about where the
+scale sits.
+
+**And the elegant fix for cardio was wrong.** Since a convex cost was the right instrument for
+contexts, folding cardio into the same power mean _looked_ like the principled way to make a
+catastrophic tank ruinous without a large linear weight. Measured, it is worse than the linear blend
+at every weight tested (0.273 against 0.373 on matched means at the same weight). The engine's
+cardio dependence is broad and roughly linear, not a cliff — because cardio is not only "do you
+gas": it feeds `distanceControl` at 0.2, `chainWrestling` at 0.3, the `highVolume` tendency, and
+fatigue accrual. A good theory, falsified in one sweep.
+
+### 27.5 The acceptance test
+
+The criterion agreed before any of it was written: **it must predict simulated win rate better than
+`overallRating`, including better than a flat average with better weights, or be discarded.** Three
+populations, `tests/statistical/functional-rating.test.ts`, Spearman rank correlation pooled as
+within-cohort ranks:
+
+| population                                                    | functional | overall    | flat mean |
+| ------------------------------------------------------------- | ---------- | ---------- | --------- |
+| **General** — 5 divisions of generated fighters, round robin  | **0.9428** | 0.8969     | 0.8917    |
+| **Matched means** — every fighter the same arithmetic average | **0.6763** | 0.3448     | 0.0599    |
+| **Orthogonal** — one attribute ±24 against an even spread     | 0.2207     | **0.3567** | —         |
+
+Criterion met on the two populations that matter, and the second is where the claim lives: among
+fighters a mean cannot distinguish, the new rating predicts who wins and the old one is three times
+worse. The third is a loss, and § 27.6 is why.
+
+The falsifier also holds. The all-rounder and the imposer both reach the top tier by visibly
+different routes: a realistically-shaped all-timer reads **89.4** with best ≈ worst and nothing
+targetable, while a Khabib peak reads **83.9** against a flat average of 81.1, on a `control` of
+0.66 and 51% of the fight in the clinch and on top. And the scale is alive — a uniform 90 reads
+exactly 90, because a power mean of identical values is that value.
+
+### 27.6 What the engine pays for, and why the rating refuses to say so
+
+The orthogonal population is a diagnostic, not a quality bar. One attribute moved ±24 against an
+even spread of the other fourteen, so nothing is confounded with anything. The marginal value of
+those 48 rating points, in win-rate points — the test's own two-level means, consistent with a
+three-level sweep whose per-attribute ranges are recorded on `CARDIO_WEIGHT_MAX`:
+
+| attribute       | marginal | attribute       | marginal  |
+| --------------- | -------- | --------------- | --------- |
+| cardio          | **+66**  | durability      | +0.3      |
+| power           | +30      | takedownDefence | +0.2      |
+| speed           | +28      | strength        | −1.9      |
+| fightIq         | +17      | groundControl   | −2.2      |
+| strikingDefence | +6.6     | composure       | **−8.2**  |
+| wrestling       | +4.1     | strikingOffence | **−9.6**  |
+| submissions     | +2.6     | kicking         | **−15.3** |
+| scrambling      | +0.6     |                 |           |
+
+A fighter at +24 cardio wins **82–88%** of his bouts; the same fighter at −24 wins **14–26%**.
+Cardio is worth more than twice power, more than four times fight IQ, and more than fifteen times
+wrestling. And `strikingOffence`, `kicking` and `composure` have **negative** marginal value: at a
+fixed attribute budget the engine pays you to take points out of them.
+
+**This is a defect in the simulator's balance, and a rating must not enshrine it.** Correlation with
+win rate climbs monotonically as the cardio weight rises, all the way to a mean weight near 0.60 —
+at which point two thirds of a pressure fighter's rating would be his gas tank. Fitted that far,
+`functionalRating` would output "cardio, plus a little power and speed", score about 0.95 on the
+general population, and be worthless as a description of a fighter.
+
+So `CARDIO_WEIGHT_MAX = 0.40` takes the part of the measurement that is also a defensible claim
+about fighting — a tank is the most load-bearing physical there is, and worth far more to a man
+whose game is pressure than to a counter-striker — and stops. **The compromise is nearly free:** on
+a general roster 0.40 scores 0.9428 and the fully-fitted 0.60 scores 0.9478. Five thousandths, for a
+claim that would have been four times too strong. The fit only pays on the pathological population
+built out of the imbalance, and there the rating loses on purpose: 0.22 against 0.36.
+
+Two consequences, both recorded as debt rather than acted on here:
+
+- **The attribute economy needs flattening.** Three attributes with negative marginal value is not a
+  calibration nuance. The bounds in the test fail if it widens, and will fail on purpose when it is
+  fixed; the target is `cardio` under +45 and nothing below −8.
+- **`CARDIO_WEIGHT_MAX` is a reading of one simulator at one calibration, not a constant of
+  nature.** If the engine's cardio dependence is retuned, it must be re-measured.
+
+### 27.7 What this change does and does not do
+
+`functionalRating` ships **alongside** `overallRating`, and nothing is migrated. Spearman between the
+two on the shipped roster is **0.993** — the authored elite have no holes (minimum attribute 58–74
+in the top fifteen), so a hole-detecting rating finds little to change there and the ordering barely
+moves. That is reassuring rather than disappointing: migrating the consumers one at a time will not
+shock the economy. It also means the roster and the generator, not the rating, are why the game's
+best man reads 83.8 rather than 90 — see § 27.8.
+
+Also landed, because the rating needed it and § 7.1 had already specified it:
+
+- **`ratings/competitive.ts`** — § 7.1's `competitiveRating`, now real. A physical re-expressed
+  against its division's rostered expectation. `displayBand` was carrying a private copy of this
+  arithmetic since step 12; it now imports it, and the five physicals enter the functional rating as
+  division-relative readings rather than absolute ones. Without it a functional rating built on raw
+  Power would have reintroduced exactly the division bias step 12 removed. Worth 0.0055 of
+  correlation on the general population.
+- **`distanceControl`** — `fight/range.ts` said `rangeControl` "is the seam for a future Footwork
+  attribute… it enters here and nowhere else", and the functional rating needs the same contest.
+  Two copies of a seam is no seam at all, so the mix moved to `ratings/functional.ts` and
+  `rangeControl` is now a one-line delegation keeping its `Combatant` signature.
+
+### 27.8 The nineties are now reachable by the formula and by nobody in the game
+
+The brief asked for the top of the scale to be _possible, not probable_. Half of that is done and
+the other half is not this module's to do, and the measurement separates them cleanly.
+
+**The formula no longer caps.** A uniform 90 reads exactly 90, and a realistically-shaped all-timer
+— elite everywhere that matters, nothing above 95, no attribute uniform — reads **89.4**. Under
+`overallRating` nobody on the roster read above 84.6 and the top fifteen points were dead.
+
+**Nothing in the world can get there.** Reading `potential` rather than `attributes`:
+
+| population                                 | best functional ceiling | reaching 88 |
+| ------------------------------------------ | ----------------------- | ----------- |
+| The shipped 2026 roster, 858 fighters      | 87.7 (Topuria)          | 0           |
+| Generated fighters, 4,000 draws at tier 70 | 84.7                    | 0           |
+| Generated fighters, 4,000 draws at tier 85 | 85.9                    | 0           |
+| Generated fighters, 4,000 draws at tier 95 | 87.0                    | 0           |
+
+Twelve thousand draws at the three highest tiers the generator accepts, and **not one fighter whose
+ceiling is 88.** The authored roster does no better: its best functional potential is 87.7 and its
+best `overallRating` potential 87.6, so this is not an artefact of the new rating — the old one says
+the same thing. The sport in this game cannot produce a fighter who lives in the nineties, because
+nobody's potential allows it.
+
+That is a **naturals-and-potential question**, in the territory § 26 opens for the player's created
+fighter and leaves untouched for everyone else. It is the right next change if the brief is to be
+met, and it is deliberately not bundled here: raising the world's ceiling moves every balance
+measurement in the repo, and doing it in the same commit as a new rating would make both
+unfalsifiable.
+
+### 27.9 Still open
+
+- **Pressure is not a term distinct from footwork.** The range gate is `distanceControl` — speed,
+  anticipation and the tank to keep moving — which is _footwork_, and `range.ts` is emphatic that
+  "range is also **not** pressure": walking somebody backwards and closing the gap on them are
+  related and not identical. In the engine pressure is an _entry style_, a plan choice, and § 27.3
+  is why a rating must not read the plan. So the ability to walk a man down currently reaches this
+  module only through the attributes that fund it (cardio in `distanceControl`, durability in the
+  pocket's `want`), and never as itself. The clean fix is the same one `range.ts` is waiting for: a
+  Footwork attribute, and beside it something that means forward pressure. Until one exists there
+  is no honest attribute to read, and inventing a proxy would be a worse answer than the gap.
+- **Reach is not a term.** `functionalRating` takes an `Attributes` block so it is a drop-in for
+  `overallRating` at forty-odd call sites, and `reachLeverage` is capped at ±12% in the simulator
+  precisely so long arms cannot carry a fighter. A `Fighter`-level variant can add the geometry.
+- **Traits and personality are not terms**, for the same reason and with a weaker case: a trait
+  modifies behaviour, and the behaviour is already read through the attributes that drive it.
+- **A matchup reading is not monotone in the opponent's level**, and does not claim to be. The
+  opponent's level enters only through _where_ the fight happens; a fighter with nothing to protect
+  moves a few tenths either way as the route bill shifts. Fenced in the unit test rather than
+  asserted away.
+- **`GAME_PLANNING`, `TARGET_TAU`, `PANEL_TAU` and `WANT_TAU` were not swept.** `CONTEXT_POWER` and
+  the two route maxima were. The four unswept ones were set from reasoning and are the obvious next
+  place to look for accuracy.

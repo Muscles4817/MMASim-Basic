@@ -25,68 +25,17 @@
  * is not an omission but the other half of the claim.
  */
 
-import {
-  PHYSICAL_SCALE_KEYS,
-  expectedPhysical,
-  isPhysicalScaleKey,
-  type PhysicalScaleKey,
-} from './physicalScale.js';
-import {
-  ratingBand,
-  toRating,
-  type AttributeKey,
-  type RATING_BANDS,
-  type Rating,
-} from './attributes.js';
-import type { Sex } from '../domain/divisions.js';
+import { PHYSICAL_SCALE_KEYS, isPhysicalScaleKey, type PhysicalScaleKey } from './physicalScale.js';
+import { ratingBand, type AttributeKey, type RATING_BANDS, type Rating } from './attributes.js';
+import { competitiveRating, type CompetitiveContext } from './competitive.js';
 
 /**
- * Where the band table's own reference population sits, in rating points.
+ * The reference a comparative band is taken against.
  *
- * `RATING_BANDS` puts "Average" at 50–61 and doc/02 glosses it as "average for a major-promotion
- * roster", so that band's midpoint is what the table means by an ordinary rostered professional.
- * Re-centring a physical on 55 therefore makes it read the way the table already claims to read,
- * rather than inventing a new scale for the labels to sit on.
+ * The same object `competitive.ts` works in, aliased because a screen asks for a *band* and should
+ * not have to know that the shift behind it is shared with the ranking and functional ratings.
  */
-const BAND_REFERENCE = 55;
-
-/**
- * A physical rating, re-expressed as the equivalent rating for an ordinary professional.
- *
- * Shifts by the gap between this division's median and the band table's reference, so a fighter
- * exactly at his division's rostered median reads 55 — the middle of "Average" — whether he is a
- * flyweight or a heavyweight. A fighter twenty points clear of his own division reads 75 in both.
- *
- * `ELITE_LIFT` is added to `expectedPhysical` because the band table's reference is the rostered
- * population and `expectedPhysical` reports the whole professional one. Getting that wrong would
- * shift every physical label by seven to nine points, which is most of a band.
- */
-function comparativeRating(
-  key: PhysicalScaleKey,
-  rating: Rating,
-  divisionId: string,
-  sex: Sex,
-  eliteLift: number,
-): Rating {
-  const expected = expectedPhysical(key, divisionId, sex);
-  if (expected === undefined) return rating;
-  return toRating(rating - (expected + eliteLift - BAND_REFERENCE));
-}
-
-/** The reference a comparative band is taken against, named so a screen can say which it used. */
-export interface BandContext {
-  divisionId: string;
-  sex: Sex;
-  /**
-   * Points added to the whole-population median to reach the rostered one, per attribute.
-   *
-   * Passed in rather than imported so this module does not have to decide *which* population a
-   * given screen is comparing against — a regional promotion's roster is not the UFC's, and doc 31
-   * § 4.2 is explicit that the lift between them is a measured quantity rather than a constant of
-   * nature.
-   */
-  eliteLift: Readonly<Record<PhysicalScaleKey, number>>;
-}
+export type BandContext = CompetitiveContext;
 
 /**
  * The band to put beside an attribute on a screen.
@@ -101,9 +50,7 @@ export function displayBand(
   context?: BandContext,
 ): (typeof RATING_BANDS)[number] {
   if (!context || !isPhysicalScaleKey(key)) return ratingBand(rating);
-  return ratingBand(
-    comparativeRating(key, rating, context.divisionId, context.sex, context.eliteLift[key]),
-  );
+  return ratingBand(competitiveRating(key, rating, context));
 }
 
 /**
