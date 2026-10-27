@@ -268,7 +268,7 @@ export type Milestone =
  * other corner of the same fight — and moves the same axes by the same amount the other way. So a
  * career can move a fighter, but the sport as a whole cannot drift: the first version had only the
  * humbling half of most pairs, and over ten years of the 2026 seed the world's mean aggression fell
- * 49.6 → 46.7 and ambition 51.4 → 47.5. `twenty-years.test.ts` holds every axis mean inside ±1.5.
+ * 49.6 → 46.7 and ambition 51.4 → 47.5. `generations.test.ts` (long-sim) holds the mean of each drifting axis inside ±1.5.
  */
 const DRIFT: Readonly<Record<Milestone, Partial<Personality>>> = {
   // A belt makes people bigger and, for a while, a little less hungry; losing it, the reverse.
@@ -302,10 +302,10 @@ export function driftAfter(p: Personality, milestones: readonly Milestone[]): Pe
   return out;
 }
 
-/** Which milestones a result is, from one fighter's side of it. */
 /** How many straight results, either way, make a run worth changing somebody. */
 export const RUN_LENGTH = 3;
 
+/** Which milestones a result is, from one fighter's side of it. */
 export function milestonesOf(input: {
   won: boolean;
   /** Stopped by strikes. */
