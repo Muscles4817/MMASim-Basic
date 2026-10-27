@@ -266,11 +266,20 @@ describe('the sport keeps its belts occupied', () => {
       (n) => n.kind === 'titleChange' && /vacated/i.test(n.headline),
     );
     expect(news.length, `no vacancy reported for ${divisionId}`).toBeGreaterThan(0);
+    // The retiree no longer holds it. The division may already have a new champion: the world
+    // now books the vacant title in the same advance, because it reads the belt as it stands
+    // rather than as it stood when the advance began (doc 34 B6).
     expect(
       (fresh.promotions.findById(promotion.id) as unknown as Promotion).champions[
         divisionId as never
       ],
-    ).toBeUndefined();
+    ).not.toBe(championId);
+    // And the lineage says why the reign ended, whoever holds it now.
+    const title = fresh.championships.findById(
+      championshipId(promotion.id, divisionId as never),
+    ) as Championship;
+    const ended = title.lineage.find((r) => r.fighterId === championId && r.lostDay !== undefined);
+    expect(ended?.lostBy?.vacated).toBe('retired');
   });
 
   it('never lets a champion be cut, or walk out over inactivity', () => {
