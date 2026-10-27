@@ -101,6 +101,11 @@ import {
   earnedNickname,
   nicknamesTaken,
   uniqueNickname,
+  driftAfter,
+  milestonesOf,
+  stayChance,
+  leavingPromotion,
+  withLedgerEntry,
   trimFeed,
   type BoutSeed,
   type CardBout,
@@ -135,6 +140,7 @@ import {
 import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
 import { settleFightInjuries } from './fightInjuries';
+import { afterTheBout } from './memory';
 import { money } from '../ui/format';
 
 type StoredNews = NewsItem & Entity;
@@ -1260,6 +1266,24 @@ export function runCardBout(ctx: {
   if (winner && nickname)
     developed[winner.id === red.id ? 'red' : 'blue'] = { ...winner, nickname };
 
+  // Drift, memory and voice: what the night leaves in the people on it. Doc 34 C3.
+  const remembered = afterTheBout({
+    db,
+    day,
+    promotion,
+    red: developed.red,
+    blue: developed.blue,
+    boutId,
+    winnerId: result.winnerId,
+    method: result.method,
+    isTitleFight,
+    championId: champion,
+    ranked: divisionRanked,
+    quiet: bulk,
+  });
+  developed.red = remembered.red;
+  developed.blue = remembered.blue;
+
   const item = bulk
     ? undefined
     : fightNews({
@@ -1293,6 +1317,8 @@ export function runCardBout(ctx: {
       }),
     );
   }
+
+  news.push(...remembered.news);
 
   if (winner && !bulk) {
     const streak = streakNews({
@@ -1416,6 +1442,20 @@ function runStatisticalCard(ctx: {
 
   const card = rng.fork('card').shuffle(pairs).slice(0, CARD_SIZE);
   const booked = new Set<string>();
+  /*
+   * Nicknames already worn, per division, built on first use and kept current as names are earned
+   * on this card — one roster scan per division per card, not one per earned name.
+   */
+  const takenByDivision = new Map<string, Set<string>>();
+  const takenIn = (divisionId: Fighter['divisionId']): Set<string> => {
+    const key = divisionId as string;
+    let taken = takenByDivision.get(key);
+    if (!taken) {
+      taken = nicknamesTaken(db.fighters.findAll() as Fighter[], divisionId);
+      takenByDivision.set(key, taken);
+    }
+    return taken;
+  };
 
   for (const [a, b] of card) {
     if (booked.has(a.id as string) || booked.has(b.id as string)) continue;
@@ -1484,13 +1524,42 @@ function runStatisticalCard(ctx: {
         bodyWear: clamp(stored.condition.bodyWear + (finishes ? 0.6 : 1.1), 0, 100),
       };
 
+      const summary = summariseRecord(record);
+      /*
+       * The same two things a full bout does to a person, at the same cost (doc 34 C3): a career's
+       * milestones move the personality, and a highlight finish can earn a name — unique in the
+       * division, like every other nickname.
+       */
+      const earned =
+        outcome === 'win'
+          ? earnedNickname(
+              stored,
+              record[record.length - 1]!,
+              boutRng.fork(`nickname:${fighter.id}`),
+            )
+          : undefined;
+      const nickname =
+        earned && uniqueNickname(earned, fighter.id as string, takenIn(stored.divisionId));
+      if (nickname) takenIn(stored.divisionId).add(nickname);
       const next: Fighter = {
         ...stored,
         record,
-        summary: summariseRecord(record),
+        summary,
         condition,
         // Standing moves with results, or nothing ever climbs out of the bottom of the sport.
         reputation: clamp(stored.reputation + (outcome === 'win' ? 1.6 : -0.8), 0, 100),
+        personality: driftAfter(
+          stored.personality,
+          milestonesOf({
+            won: outcome === 'win',
+            knockedOut: stopped,
+            scoredKnockout: outcome === 'win' && isKoMethod(method),
+            wonTitle: false,
+            lostTitle: false,
+            streak: summary.streak,
+          }),
+        ),
+        ...(nickname ? { nickname } : {}),
       };
 
       // No camp here either — `ageEveryone` trains everybody, including these two.
@@ -1596,6 +1665,16 @@ function releaseIfCut(
     ...fighter,
     promotionId: undefined,
     agreementId: undefined,
+    // Cut by the player's promotion: remembered, and the rest of the relationship forgotten.
+    ...(getWorld(db).playerPromotionId === promotion.id
+      ? {
+          ledger: withLedgerEntry(leavingPromotion(fighter.ledger, promotion.id), {
+            day,
+            promotionId: promotion.id,
+            kind: 'cut',
+          }),
+        }
+      : {}),
   } as Fighter & Entity);
 
   const skid = Math.max(0, -fighter.summary.streak);
@@ -1855,7 +1934,10 @@ function resolveFreeAgency(
     const next =
       stepUp.length > 0 && fRng.chance(0.7)
         ? fRng.pickWeighted(stepUp, (p) => room(p) * Math.max(1, p.prestige) ** 1.4)
-        : promotion && pool.includes(promotion) && fRng.chance(0.7)
+        : // Stays more readily where they were treated well, less where they were not (doc 34 C3).
+          promotion &&
+            pool.includes(promotion) &&
+            fRng.chance(stayChance(fighter, promotion.id, day))
           ? promotion
           : whereThereIsRoom();
 
@@ -1883,6 +1965,10 @@ function resolveFreeAgency(
       promotionId: next.id,
       agreementId: signed.id,
       resentment: 0,
+      // Leaving ends the working relationship; only a cut is carried out of the door (doc 34 C3).
+      ...(promotion && promotion.id !== next.id && fighter.ledger
+        ? { ledger: leavingPromotion(fighter.ledger, promotion.id) }
+        : {}),
     } as Fighter & { id: string });
 
     // Keep the divisional index current, so the rest of this quarter's free agents do not all

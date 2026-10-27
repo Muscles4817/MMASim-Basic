@@ -26,6 +26,8 @@ export * from './domain/personality.js';
 export * from './domain/confidence.js';
 export * from './domain/traits.js';
 export * from './domain/disposition.js';
+export * from './domain/voice.js';
+export * from './domain/relationship.js';
 export * from './domain/divisions.js';
 export * from './domain/nationalities.js';
 export * from './domain/gameplan.js';

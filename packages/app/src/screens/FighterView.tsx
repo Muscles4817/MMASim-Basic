@@ -40,6 +40,10 @@ import {
   careerArc,
   conditionRead,
   deriveRatings,
+  describeLedger,
+  relationshipWith,
+  voiceFor,
+  wantVoice,
   drawRead,
   describeFairness,
   describeHeat,
@@ -1056,6 +1060,9 @@ function ContractTab({
     daysIdle: daysUnbookedBy(fighter, day, getWorld(db).startedDay ?? day),
     aggrieved: (standing.fairness ?? 1) < 0.7,
   });
+  const situation = wantVoice(wants.id);
+  const said = situation ? voiceFor(fighter, situation, day) : undefined;
+  const relationship = promotion ? relationshipWith(fighter, promotion.id, day) : undefined;
 
   return (
     <Console
@@ -1178,7 +1185,36 @@ function ContractTab({
 
           <Card title={words.wants}>
             <KeyStat value={wants.label} label="Next" detail={wants.detail} />
+            {/* In their own words, when the want is one they would say out loud. Doc 34 C3. */}
+            {said && (
+              <blockquote className="prose voice-quote" style={{ margin: 'var(--space-3) 0 0' }}>
+                “{said.quote}”
+              </blockquote>
+            )}
           </Card>
+
+          {/*
+            What they remember about this promotion. Read through their personality on the day, so
+            the same history is a grudge to one fighter and water under the bridge to another.
+          */}
+          {relationship && promotion && (
+            <Card title={self ? `You and ${promotion.shortName}` : `With ${promotion.shortName}`}>
+              <KeyStat
+                value={relationship.label}
+                label="Relationship"
+                detail={
+                  relationship.worst && relationship.score < 0
+                    ? `${self ? 'You have' : 'They have'} not forgotten ${describeLedger(relationship.worst.kind)}.`
+                    : relationship.best && relationship.score > 0
+                      ? `${self ? 'You remember' : 'They remember'} ${describeLedger(relationship.best.kind)}.`
+                      : 'No history worth remembering either way yet.'
+                }
+                tone={
+                  relationship.score <= -10 ? 'bad' : relationship.score >= 10 ? 'good' : 'neutral'
+                }
+              />
+            </Card>
+          )}
 
           {standing.manager && (
             <Card title="Represented by">
