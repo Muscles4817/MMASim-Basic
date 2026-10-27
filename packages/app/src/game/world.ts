@@ -947,7 +947,17 @@ function buildNight(ctx: {
       purses,
       bonuses: bonusPoolFor(promotion),
     });
-    const allowed = inDistress(promotion, ctx.roster.length) ? 0 : purses * LOSS_TOLERANCE;
+    /*
+     * Except at the bottom of the sport, which runs at a loss by nature: a town show is a
+     * promoter with a phone book, its fighters need the fights, and a card it cannot quite pay
+     * for still goes ahead. Applied there, this emptied the smallest local shows in pre-history —
+     * no card was ever worth staging, so nobody fought, and every deal walked out on inactivity.
+     */
+    const allowed = inDistress(promotion, ctx.roster.length)
+      ? 0
+      : promotion.tier === 'developmental'
+        ? Infinity
+        : purses * LOSS_TOLERANCE;
     return expected.profit >= -allowed;
   };
   if (!tolerable(card)) {
