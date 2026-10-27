@@ -50,7 +50,7 @@ export const AUTO_RENEW_OPTIONS: readonly {
   { id: 'off', label: 'Nobody' },
   { id: 'champions', label: 'Champions' },
   { id: 'winners', label: 'On a run' },
-  { id: 'everyone', label: 'Everybody' },
+  { id: 'everyone', label: 'All of them' },
 ];
 
 /** Run whatever orders are standing, for today. */
