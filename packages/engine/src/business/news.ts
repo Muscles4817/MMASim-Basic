@@ -19,6 +19,7 @@ import type { DivisionId, FighterId, NewsId, PromotionId } from '../core/ids.js'
 import { asId } from '../core/ids.js';
 import type { FinishMethod } from '../domain/fighter.js';
 import { isKoMethod } from '../domain/fighter.js';
+import { getDivision } from '../domain/divisions.js';
 
 export type NewsKind =
   | 'result'
@@ -32,6 +33,8 @@ export type NewsKind =
   | 'streak'
   | 'signing'
   | 'release'
+  /** A card that did not happen. A promoter's own missed date is the case this exists for. */
+  | 'cancellation'
   | 'nickname';
 
 /**
@@ -97,6 +100,13 @@ export interface FightNewsInput {
   submissionName?: string;
   divisionId: DivisionId;
   promotionId?: PromotionId;
+  /**
+   * The promotion's short name, so a belt is somebody's belt.
+   *
+   * A generated world has dozens of promotions each with a title in every division it runs, and
+   * "X is the new champion" with no promotion and no weight reads as if there were only one.
+   */
+  promotionName?: string;
   /** Ranks before the fight, 1-indexed. Undefined for the unranked. */
   winnerRank?: number;
   loserRank?: number;
@@ -136,6 +146,9 @@ export function fightNews(input: FightNewsInput): NewsItem | undefined {
   const base = { day, fighterIds, divisionId, promotionId, involvesPlayer };
 
   if (isTitleFight) {
+    const belt = input.promotionName
+      ? `the ${input.promotionName} ${getDivision(divisionId).name} title`
+      : 'the title';
     return titleChangedHands
       ? {
           ...base,
@@ -143,7 +156,7 @@ export function fightNews(input: FightNewsInput): NewsItem | undefined {
           kind: 'titleChange',
           weight: 'major',
           headline: `${winnerName} is the new champion.`,
-          detail: `Beat ${loserName} ${how} to take the title.`,
+          detail: `Beat ${loserName} ${how} to take ${belt}.`,
         }
       : {
           ...base,
@@ -151,7 +164,7 @@ export function fightNews(input: FightNewsInput): NewsItem | undefined {
           kind: 'titleDefence',
           weight: 'major',
           headline: `${winnerName} keeps the belt.`,
-          detail: `Turned back ${loserName} ${how}.`,
+          detail: `Turned back ${loserName} ${how} to keep ${belt}.`,
         };
   }
 

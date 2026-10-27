@@ -25,6 +25,7 @@
  */
 
 import { clamp } from '../core/math.js';
+import { createRng } from '../core/rng.js';
 import type { Promotion, PromotionTier } from '../domain/organisations.js';
 import { CARD_SIZE } from './events.js';
 import { periodCosts, COST_PERIOD_DAYS } from './promotionCosts.js';
@@ -118,6 +119,33 @@ export function cardsPerYear(promotion: Promotion, rosterSize: number): number {
  * second constant that would have to be kept in step with this one.
  */
 export const MAX_CARDS_PER_YEAR = Math.max(...Object.values(TIER_AMBITION));
+
+/** Years a promotion had been running before the records begin: a range, picked per promotion. */
+const PRE_RECORD_YEARS: readonly [number, number] = [3, 9];
+
+/**
+ * Cards a year it ran in that time: a range, picked per promotion.
+ *
+ * Deliberately not the tier's schedule. A promotion's tier moves once prestige can move it, and a
+ * past derived from today's tier would renumber every card it has ever announced — backwards, for
+ * a promotion that falls.
+ */
+const PRE_RECORD_CARDS_PER_YEAR: readonly [number, number] = [6, 18];
+
+/**
+ * Cards a promotion had already staged before the records begin.
+ *
+ * The world keeps a promotion's nights only from the day the player arrives — pre-history is
+ * simulated in bulk and stores none — so counting stored nights alone numbered an eight-year-old
+ * promotion's next show `1`. This is the past the save does not hold, derived from nothing but the
+ * world's seed and the promotion's id, so it is the same number every time it is asked, never
+ * moves, and never needs storing.
+ */
+export function cardsStagedBefore(promotionId: string, worldSeed: string): number {
+  const rng = createRng(`history:${worldSeed}:${promotionId}`);
+  const years = rng.range(...PRE_RECORD_YEARS);
+  return Math.max(1, Math.round(years * rng.range(...PRE_RECORD_CARDS_PER_YEAR)));
+}
 
 /** Days between this promotion's cards. `Infinity` when it cannot stage any. */
 export function daysBetweenCards(promotion: Promotion, rosterSize: number): number {

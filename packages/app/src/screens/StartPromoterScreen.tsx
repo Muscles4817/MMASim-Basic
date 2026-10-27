@@ -103,6 +103,7 @@ export function StartPromoterScreen() {
       id: 'budget',
       label: 'Cash',
       render: (p) => money(p.budget),
+      renderPhone: (p) => `${money(p.budget)} cash`,
       sort: (a, b) => a.budget - b.budget,
       numeric: true,
       onPhone: 'secondary',
@@ -112,6 +113,7 @@ export function StartPromoterScreen() {
       label: 'Roster',
       title: 'Active fighters signed here',
       render: (p) => rosterSize.get(p.id as string) ?? 0,
+      renderPhone: (p) => `${rosterSize.get(p.id as string) ?? 0} fighters`,
       sort: (a, b) => (rosterSize.get(a.id as string) ?? 0) - (rosterSize.get(b.id as string) ?? 0),
       numeric: true,
       onPhone: 'secondary',
@@ -126,6 +128,11 @@ export function StartPromoterScreen() {
         const n = vacantBelts(p);
         return n > 0 ? <Chip tone="info">{n}</Chip> : <span className="faint">—</span>;
       },
+      // A dash on a phone row is just a dash; with no belts open there is nothing to say.
+      renderPhone: (p) => {
+        const n = vacantBelts(p);
+        return n > 0 ? <Chip tone="info">{n} vacant</Chip> : null;
+      },
       sort: (a, b) => vacantBelts(a) - vacantBelts(b),
       onPhone: 'trailing',
     },
@@ -134,6 +141,7 @@ export function StartPromoterScreen() {
       label: 'Prestige',
       title: 'What a fight is worth simply for happening here',
       render: (p) => p.prestige,
+      renderPhone: (p) => `Prestige ${p.prestige}`,
       sort: (a, b) => a.prestige - b.prestige,
       numeric: true,
       onPhone: 'trailing',

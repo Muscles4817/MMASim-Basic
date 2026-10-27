@@ -23,6 +23,7 @@ import {
   freshnessOf,
   recoveryRate,
   type AttributeKey,
+  type EventPlan,
   type Fighter,
   type FighterId,
   type InboxItem,
@@ -32,7 +33,7 @@ import { advanceWorld, type WorldExclusion } from './world';
 import { getBooking } from './career';
 import { toll } from './contracts';
 import { readInbox, scanForInbox } from './inbox';
-import { scanPromoterInbox } from './plans';
+import { fightNightOn, missPlans, nextCardDay, scanPromoterInbox } from './plans';
 
 /*
  * There is no step any more, and that is the change.
@@ -60,6 +61,15 @@ export interface AdvanceResult {
   truncated: boolean;
   /** What the days did to the player's own fighter. Absent in promoter mode. */
   player?: PlayerElapsed;
+  /**
+   * The player's card on the day the clock stopped, when it stopped for one.
+   *
+   * Not an interrupt in the inbox sense — there is nothing to answer — but a harder stop than
+   * any of them: the clock never runs through a promoter's own fight night.
+   */
+  fightNight?: EventPlan;
+  /** Cards whose date this advance walked past unrun, and which are now cancelled. */
+  missed?: readonly EventPlan[];
 }
 
 /**
@@ -193,11 +203,24 @@ function exclusionFor(db: GameDb): WorldExclusion {
  * Idempotent about the past: asking to advance to a day that has already passed does nothing
  * rather than running the world backwards.
  */
-export function advanceTo(db: GameDb, targetDay: number): AdvanceResult {
+export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
   const start = getWorld(db).day;
-  if (targetDay <= start) {
+  if (requestedDay <= start) {
     return { day: start, interrupted: false, waiting: [], fights: 0, truncated: false };
   }
+
+  /*
+   * Fight night is a wall, not an interrupt.
+   *
+   * Nothing stopped the clock on the player's own card day, so "a month" from the week before a
+   * show walked straight past it — and the card, now in the past, dropped off every screen that
+   * reads forward from today while its fighters stayed booked on it for ever. Clamping the
+   * target here means no caller can skip one by asking for a longer span. Leaving fight night
+   * itself is still possible (the stop is exclusive of today), and `missPlans` charges for it.
+   */
+  const promotionId = getWorld(db).playerPromotionId;
+  const cardDay = nextCardDay(db, promotionId, start, requestedDay);
+  const targetDay = cardDay ?? requestedDay;
 
   const exclusion = exclusionFor(db);
   let day = start;
@@ -242,14 +265,18 @@ export function advanceTo(db: GameDb, targetDay: number): AdvanceResult {
   // whose advance was interrupted on day three has lived three days, not thirty.
   const player = passTimeForPlayer(db, start, day);
 
+  const missed = missPlans(db, day);
+  const fightNight = fightNightOn(db, promotionId, day);
+  const stopped = { fights, truncated, player, fightNight, missed };
+
   const fresh = blocking(readInbox(db)).filter((i) => !alreadyWaiting.has(i.id));
   if (fresh.length > 0) {
     db.save();
-    return { day, interrupted: true, waiting: fresh, fights, truncated, player };
+    return { day, interrupted: true, waiting: fresh, ...stopped };
   }
 
   db.save();
-  return { day, interrupted: false, waiting: [], fights, truncated, player };
+  return { day, interrupted: false, waiting: [], ...stopped };
 }
 
 /** Named spans, so a screen offers choices rather than a number field. */

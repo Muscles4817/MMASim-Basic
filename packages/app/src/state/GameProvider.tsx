@@ -219,13 +219,20 @@ function syncRegistry(db: GameDb, saveId: string | undefined): void {
     const player = world.playerFighterId
       ? (db.fighters.findById(world.playerFighterId) as Fighter | undefined)
       : undefined;
+    // A promoter has no fighter, so their save stayed "career" for ever. The promotion is who
+    // they are playing, and its name is what they will look for in the list.
+    const promotion =
+      world.playerRole === 'promoter' && world.playerPromotionId
+        ? (db.promotions.findById(world.playerPromotionId) as { name: string } | undefined)
+        : undefined;
+    const playing = player ? displayName(player) : promotion?.name;
 
     upsertSave(store, {
       ...existing,
       // The save takes the player's name the moment there is one, because "2026 career" is a
       // placeholder and their name is what they will look for in the list.
-      name: player ? displayName(player) : existing.name,
-      playerName: player ? displayName(player) : undefined,
+      name: playing ?? existing.name,
+      playerName: playing,
       playerRole: world.playerRole,
       day: world.day,
       record: player ? recordString(player.summary) : undefined,
