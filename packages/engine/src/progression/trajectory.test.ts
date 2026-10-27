@@ -4,10 +4,17 @@
 
 import { describe, expect, it } from 'vitest';
 import { createRng } from '../core/rng.js';
+import { ageOn } from '../core/clock.js';
 import { asDivisionId } from '../core/ids.js';
 import type { Fighter } from '../domain/fighter.js';
 import { generateFighter } from './generation.js';
-import { BREAKOUT_CHANCE, STALL_CHANCE, developmentTrend, trajectoryOf } from './trajectory.js';
+import {
+  BREAKOUT_CHANCE,
+  STALL_CHANCE,
+  developmentTrend,
+  trajectoryAhead,
+  trajectoryOf,
+} from './trajectory.js';
 
 const DAY = 365 * 30;
 
@@ -62,6 +69,21 @@ describe('a trajectory', () => {
       }
     }
     expect(kinds.size).toBe(3);
+  });
+});
+
+describe('the year ahead', () => {
+  it('weighs this year and next by how much of the coming year each covers', () => {
+    const who = { id: 'ahead' as never, birthDay: 0 as never };
+    // The 25th birthday, found the way the calendar finds it (leap years included).
+    let birthday = 365 * 25 - 10;
+    while (ageOn(0 as never, birthday as never) < 25) birthday += 1;
+    const after = (birthday + 2) as never;
+    const before = (birthday - 3) as never;
+    // Just after a birthday the coming year is almost all this age-year.
+    expect(trajectoryAhead(who, after)).toBeCloseTo(trajectoryOf(who, after).rate, 1);
+    // Just before one it is almost all the next.
+    expect(trajectoryAhead(who, before)).toBeCloseTo(trajectoryOf(who, after).rate, 1);
   });
 });
 

@@ -66,6 +66,33 @@ export function trajectoryOf(fighter: Pick<Fighter, 'id' | 'birthDay'>, day: Gam
   return { pace, phase, rate: pace * yearRate };
 }
 
+/**
+ * The trajectory over the year ahead, rather than this age-year's alone.
+ *
+ * A year's roll is keyed to the age in whole years, so a 365-day window from any day crosses a
+ * birthday about halfway through on average, and the year after is an independent roll. Reading
+ * only this year's made the read right for a few months and a coin toss for the rest. Both rolls
+ * are already fixed (keyed by id and age), so the honest read is the two weighted by how much of
+ * the coming year each covers.
+ */
+export function trajectoryAhead(fighter: Pick<Fighter, 'id' | 'birthDay'>, day: GameDay): number {
+  // `ageOn` is whole years, so find the next birthday: the first day the age ticks over.
+  const age = ageOn(fighter.birthDay, day);
+  let lo = 1;
+  let hi = 366;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (ageOn(fighter.birthDay, (day + mid) as GameDay) > age) hi = mid;
+    else lo = mid + 1;
+  }
+  const nextBirthday = (day + lo) as GameDay;
+  const thisYear = Math.min(1, lo / 365);
+  return (
+    thisYear * trajectoryOf(fighter, day).rate +
+    (1 - thisYear) * trajectoryOf(fighter, nextBirthday).rate
+  );
+}
+
 // --- What a scout sees ------------------------------------------------------------------------
 
 export type DevelopmentTrendId = 'improvingFast' | 'improving' | 'plateaued' | 'slipping';
@@ -100,13 +127,13 @@ const TREND: Readonly<Record<DevelopmentTrendId, Omit<DevelopmentTrend, 'id'>>> 
  *
  * Read off the same things that move them: the age against their own peak (with the body's
  * mileage, the way `applyAgeing` reads it), how fast someone of that age still learns, and this
- * fighter's trajectory this year.
+ * fighter's trajectory over the year ahead (`trajectoryAhead`).
  */
 export function developmentTrend(fighter: Fighter, day: GameDay): DevelopmentTrend {
   const age = ageOn(fighter.birthDay, day);
   const worn = age + mileageYears(fighter, day);
   const peak = peakAgeOf(fighter.naturals.ageCurve);
-  const pace = trajectoryOf(fighter, day).rate * learningRate(age, fighter.naturals.ageCurve);
+  const pace = trajectoryAhead(fighter, day) * learningRate(age, fighter.naturals.ageCurve);
 
   const id: DevelopmentTrendId =
     worn >= peak + 5
