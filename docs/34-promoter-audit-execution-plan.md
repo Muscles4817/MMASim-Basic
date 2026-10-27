@@ -167,8 +167,8 @@ week, 4 fighters as people, 5 development over time.
 | C4 Negotiation                  | 4     | C           | Done                                                    | #55      |
 | C5 Real careers over time       | 5     | C           | Done                                                    | #57      |
 | C6 Career events                | 5     | C           | Passed; merging master                                  | #63      |
-| B4 Rival promotions             | 5     | C           | In progress                                             |          |
-| B5 Investment and season        | 5     | B           | Not started                                             |          |
+| B4 Rival promotions             | 5     | C           | In review                                               | #67      |
+| B5 Investment and season        | 5     | C           | In progress                                             |          |
 | B6 History, scenarios, rankings | 5     | A           | Parts 1–2 in review; part 3 in progress                 | #64, #65 |
 | Content pass after each phase   | all   | Coordinator | Not started                                             |          |
 
