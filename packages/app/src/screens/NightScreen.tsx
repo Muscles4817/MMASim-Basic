@@ -13,8 +13,8 @@
  *    main event is in. It can be stepped, revealed in one go, or skipped, and it does not
  *    auto-play for anybody who has asked for reduced motion.
  *  - **The recap** (`NightRecap`) is what the night did: where the money came from, every result
- *    (each one opens the fight itself), and the bonuses the promoter hands out. The post-fight
- *    callouts follow once the voice module they are written in (C3) has landed.
+ *    (each one opens the fight itself), the bonuses the promoter hands out, and the callouts from
+ *    the microphone — each one a single tap from being pencilled onto the next card.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -29,7 +29,15 @@ import { formatGameDay } from '../shell/Shell';
 import { money } from '../ui/format';
 import { positionLabel } from '../game/night';
 import { hasTape } from '../game/broadcasts';
-import { confirmAwards, nightResults, planName, type BoutResult } from '../game/plans';
+import {
+  calloutsFor,
+  confirmAwards,
+  nightResults,
+  pencilCallout,
+  planName,
+  type BoutResult,
+  type Callout,
+} from '../game/plans';
 
 /** How long each result holds before the next, when the show plays itself. */
 const BEAT_MS = 1400;
@@ -152,6 +160,8 @@ export function NightRecap({ plan, onDone }: { plan: EventPlan; onDone(): void }
   const [version, setVersion] = useState(0);
   const night = nightOf(db, plan);
   const results = useMemo(() => nightResults(db, plan), [db, plan, version]);
+  const callouts = useMemo(() => calloutsFor(db, plan), [db, plan]);
+  const [pencilled, setPencilled] = useState<Set<string>>(new Set());
   const outcome = plan.outcome;
 
   return (
@@ -216,6 +226,33 @@ export function NightRecap({ plan, onDone }: { plan: EventPlan; onDone(): void }
             toast('Bonuses paid.', 'good');
           }}
         />
+      )}
+
+      {callouts.length > 0 && (
+        <Card title="On the microphone">
+          <div className="stack" style={{ gap: 'var(--space-3)' }}>
+            {callouts.map((callout) => (
+              <CalloutRow
+                key={callout.winnerId}
+                callout={callout}
+                done={pencilled.has(callout.winnerId)}
+                onPencil={() => {
+                  const placed = pencilCallout(db, callout);
+                  if ('reason' in placed) {
+                    toast(placed.reason, 'warn');
+                    return;
+                  }
+                  commit();
+                  setPencilled((s) => new Set(s).add(callout.winnerId));
+                  toast(
+                    `Pencilled onto ${planName(db, placed.plan)}. Nobody has been offered it yet.`,
+                    'good',
+                  );
+                }}
+              />
+            ))}
+          </div>
+        </Card>
       )}
 
       <Button variant="primary" block onClick={onDone}>
@@ -359,6 +396,33 @@ function Awards({
         Pay the bonuses
       </Button>
     </Card>
+  );
+}
+
+function CalloutRow({
+  callout,
+  done,
+  onPencil,
+}: {
+  callout: Callout;
+  done: boolean;
+  onPencil(): void;
+}) {
+  return (
+    <div className="row" style={{ justifyContent: 'space-between', gap: 'var(--space-3)' }}>
+      <span className="prose" style={{ fontSize: 'var(--text-sm)', flex: 1 }}>
+        {callout.line}
+        {callout.forTheBelt && (
+          <>
+            {' '}
+            <Chip tone="accent">For the belt</Chip>
+          </>
+        )}
+      </span>
+      <Button size="sm" variant={done ? 'ghost' : 'secondary'} disabled={done} onClick={onPencil}>
+        {done ? 'Pencilled in' : 'Pencil it in'}
+      </Button>
+    </div>
   );
 }
 
