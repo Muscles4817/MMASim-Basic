@@ -90,10 +90,13 @@ describe('a generated world’s careers', () => {
     const afterYear = active();
     const byTrend = (ids: readonly string[]) =>
       mean(change(afterYear.filter((f) => ids.includes(trend.get(f.id as string) ?? ''))));
-    const rising = byTrend(['improving', 'improvingFast']);
+    // Each read on its own: fast ahead of steady, steady ahead of flat, flat ahead of slipping.
+    const fast = byTrend(['improvingFast']);
+    const rising = byTrend(['improving']);
     const flat = byTrend(['plateaued']);
     const slipping = byTrend(['slipping']);
-    expect(rising, 'improving vs plateaued').toBeGreaterThan(flat);
+    expect(fast, 'improving fast vs still improving').toBeGreaterThan(rising);
+    expect(rising, 'still improving vs plateaued').toBeGreaterThan(flat);
     expect(flat, 'plateaued vs slipping').toBeGreaterThan(slipping);
 
     // Three years: an age curve with a peak.
