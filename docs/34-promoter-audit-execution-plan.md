@@ -161,7 +161,7 @@ week, 4 fighters as people, 5 development over time.
 | A3 Fight-night show and recap   | 3     | A           | Done                      | #54 |
 | A4 Matchmaking UX               | 3     | A           | Done                      | #58 |
 | A5 Fight week                   | 3     | A           | Changes requested (small) | #62 |
-| A6 Onboarding and readability   | 1/3   | A           | Passed; merging master    | #61 |
+| A6 Onboarding and readability   | 1/3   | A           | Done                      | #61 |
 | C2 Star power surfaced          | 4     | C           | Done                      | #51 |
 | C3 Memory, wants and voice      | 4     | C           | Done                      | #52 |
 | C4 Negotiation                  | 4     | C           | Done                      | #55 |
