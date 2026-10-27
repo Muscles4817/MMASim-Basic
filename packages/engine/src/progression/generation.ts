@@ -239,10 +239,13 @@ export function athleticTier(rng: Rng, tier: number): number {
  * near-identical linear combinations of `explosiveness` and `frame` (rho = 0.85, doc 31 § 13.1), and
  * that is step 6's work, kept out of this change so the two can be measured independently.
  */
-export function generateNaturals(rng: Rng, tier: number): Naturals {
+export function generateNaturals(rng: Rng, tier: number, key?: string): Naturals {
   // Forked so that adding the second axis does not reshuffle every draw made after it, and so the
-  // athletic roll stays put if the learning side is ever retuned.
-  const athletic = naturalsCentre(athleticTier(rng.fork('athletic'), tier));
+  // athletic roll stays put if the learning side is ever retuned. Keyed by the fighter when there
+  // is one: see `ownFork` in `generateFighter`.
+  const athletic = naturalsCentre(
+    athleticTier(rng.fork(key === undefined ? 'athletic' : `athletic:${key}`), tier),
+  );
   const learning = naturalsCentre(tier);
   const body = (sd: number) => toRating(rng.normalClamped(athletic, sd, 12, 97));
 
@@ -765,6 +768,18 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
   const age = options.age ?? rng.int(21, 26);
 
   /*
+   * Every sub-stream keyed by the fighter. Doc 34 C5.
+   *
+   * `Rng.fork` derives from the stream's *seed*, not its position, so a caller that generated
+   * several fighters from one stream handed every one of them the same background, the same body
+   * search and the same athletic tier — identical twins under different names. The world's own
+   * generation happens to use a stream per fighter and escaped it; a test, a tool or a future
+   * caller would not. Keying the label by id makes each fork this fighter's own whatever stream it
+   * came from.
+   */
+  const ownFork = (label: string): Rng => rng.fork(`${label}:${options.id}`);
+
+  /*
    * The body first, and the division second. Doc 31 § 12 step 2.
    *
    * This was `division.limitLbs * rng.range(1.04, 1.15)`, which made walking weight a function of
@@ -791,17 +806,17 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
    *
    * Forked because it draws a variable number of times, exactly like the body below it.
    */
-  const background = sampleBackground(rng.fork('background'), options.divisionId, age);
+  const background = sampleBackground(ownFork('background'), options.divisionId, age);
 
   const body = sampleBodyForDivision(
-    rng.fork('body'),
+    ownFork('body'),
     options.sex,
     options.divisionId,
     bodyPriorFor(background, options.divisionId),
   );
 
   const naturals = leanNaturals(
-    generateNaturals(rng, tier),
+    generateNaturals(rng, tier, options.id),
     naturalsLeanFor(background, options.divisionId, age),
   );
   const potential = ceilingsFromNaturals(naturals, body, rng);
@@ -857,7 +872,7 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     // move a decade of measured balance that has nothing to do with aptitudes.
     background,
     aptitudes: leanAptitudes(
-      generateAptitudes(rng.fork('aptitudes'), naturals.motorLearning),
+      generateAptitudes(ownFork('aptitudes'), naturals.motorLearning),
       aptitudeLeanFor(background, options.divisionId),
     ),
     potential,

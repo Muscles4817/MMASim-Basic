@@ -136,3 +136,22 @@ describe('generated fighters wear traits that describe them', () => {
     expect(generateTraits(rng.fork('a'), 2)).toHaveLength(2);
   });
 });
+
+describe('fighters generated from one stream', () => {
+  it('are different people, not one background and body under several names', () => {
+    // Doc 34 C5: `Rng.fork` reads the seed, not the position, so unkeyed forks were shared.
+    const rng = createRng('shared-stream');
+    const [a, b] = ['twin_a', 'twin_b'].map((id) =>
+      generateFighter(rng, {
+        id,
+        divisionId: asDivisionId('mens-lightweight'),
+        sex: 'male',
+        day: 0,
+        age: 25,
+      }),
+    );
+    expect(a!.background).not.toEqual(b!.background);
+    expect(a!.physique).not.toEqual(b!.physique);
+    expect(a!.aptitudes).not.toEqual(b!.aptitudes);
+  });
+});
