@@ -29,7 +29,9 @@
 import {
   GROUP_ORDER,
   withLedgerEntry,
+  currentHeat,
   describeCounter,
+  fightSells,
   replyDelayDays,
   shapeBoutCounter,
   wantsOf,
@@ -76,6 +78,7 @@ import {
   type CardBout,
   type Championship,
   type CardPosition,
+  type BoutCounter,
   type CornerAnswer,
   type EventPlan,
   type EventScale,
@@ -107,7 +110,9 @@ import {
   runCardBout,
 } from './world';
 import { rememberNight } from './broadcasts';
+import { getRivalry } from './rivalries';
 import { currentPurse } from './money';
+import { money } from '../ui/format';
 import { raise, recordOfferOutcome } from './inbox';
 import {
   addToDigest,
@@ -606,6 +611,27 @@ export interface OpponentOption {
 }
 
 /**
+ * What putting these two on this card sells, in one line for the picker row. Doc 34 C2.
+ *
+ * The engine's `fightSells` with what only the game knows filled in: the card's market, whether
+ * a champion of this promotion in this division is in it (so the belt can be on the line), and
+ * the heat between them as the rivalry ledger has it today.
+ */
+export function whatItSells(input: {
+  ctx: PromoterContext;
+  plan: EventPlan;
+  a: Fighter;
+  b: Fighter;
+}): string {
+  const { ctx, plan, a, b } = input;
+  const isTitleFight =
+    a.divisionId === b.divisionId && (isChampionHere(ctx, a) || isChampionHere(ctx, b));
+  const heat = currentHeat(getRivalry(ctx.db, a.id, b.id, ctx.day), ctx.day as never);
+  return fightSells({ a, b, day: ctx.day as never, market: plan.country, isTitleFight, heat })
+    .headline;
+}
+
+/**
  * The opponents worth considering for a chosen fighter, grouped by what kind of fight it is.
  *
  * Deliberately not an alphabetical roster with a search box. A promoter picking an opponent is
@@ -882,6 +908,152 @@ export interface OfferOutcome {
 }
 
 /**
+ * What a corner that countered is asking for, in the words a promoter uses: "Wants £8.5k".
+ *
+ * A counter is a price, not a refusal, and the slot used to say "Turned down" either way — which
+ * hid the one answer the player can still do something about. Since C4 a corner can ask for more
+ * than money — a better slot, five rounds, a different opponent — and each gets its own words,
+ * short enough for a chip on the card.
+ */
+export function counterLabel(answer: CornerAnswer): string | undefined {
+  if (answer.verdict !== 'countered') return undefined;
+  const counter = answer.counter;
+  switch (counter?.kind) {
+    case 'slot':
+      return counter.position === 'coMain' ? 'Wants the co-main' : 'Wants the main card';
+    case 'rounds':
+      return 'Wants five rounds';
+    case 'opponent':
+      return 'Wants another opponent';
+    default:
+      return answer.askingPurse !== undefined ? `Wants ${money(answer.askingPurse)}` : 'Wants more';
+  }
+}
+
+const SLOT_WORDS: Readonly<Record<CardPosition, string>> = {
+  mainEvent: 'the main event',
+  coMain: 'the co-main event',
+  mainCard: 'the main card',
+  prelim: 'the prelims',
+};
+
+/** One thing a counter asks for, said as what the promoter would be agreeing to. */
+export interface CounterTerm {
+  fighterId: string;
+  kind: BoutCounter['kind'];
+  /** "Pay Ruiz £8.5k to show", "Move it to the co-main event", "Make it five rounds". */
+  text: string;
+}
+
+export interface CounterTerms {
+  terms: CounterTerm[];
+  /** What the money terms add up to, thousands. */
+  pay: number;
+  /** Each money term on its own: who, and the show purse they asked for. */
+  purses: { fighterId: string; askingPurse: number }[];
+  /** Why the counter cannot be met in one step from this slot, when it cannot. */
+  blocked?: string;
+  /** The fight a corner asked for instead, for the screen to offer to pencil in. */
+  instead?: { fighterId: string; preferredId: string };
+  /** Where the bout sits once the terms are met: this slot, or the better one asked for. */
+  targetSlotId: string;
+  /** The distance once the terms are met. */
+  rounds: PlannedBout['rounds'];
+}
+
+/**
+ * What meeting a bout's counters would take, and whether it can be done from here.
+ *
+ * **The one place the counter rules live.** The screen reads it to say what agreeing costs, and
+ * `acceptCounter` applies it, so what the button promises and what the tap does cannot drift:
+ *  - a flat refusal from either corner blocks everything — no terms change a no;
+ *  - a different opponent cannot be granted here — it is a new fight, offered as `instead`;
+ *  - a better slot is given if that position on this card has a free slot, else it blocks;
+ *  - five rounds are granted on the spot;
+ *  - money is paid, as each corner's asking purse.
+ *
+ * Undefined when nobody countered.
+ */
+export function counterTerms(
+  plan: EventPlan,
+  slotId: string,
+  nameOf: (id: string) => string,
+): CounterTerms | undefined {
+  const bout = plan.slots.find((s) => s.id === slotId)?.bout;
+  const counters = (bout?.answers ?? []).filter((a) => a.verdict === 'countered');
+  if (!bout || counters.length === 0) return undefined;
+
+  const terms: CounterTerm[] = [];
+  const purses: CounterTerms['purses'] = [];
+  let pay = 0;
+  let blocked: string | undefined;
+  let instead: CounterTerms['instead'];
+  let targetSlotId = slotId;
+  let rounds = bout.rounds;
+
+  for (const answer of counters) {
+    const id = answer.fighterId as string;
+    const counter = answer.counter;
+    if (counter?.kind === 'opponent') {
+      const preferredId = counter.preferredId as string;
+      terms.push({
+        fighterId: id,
+        kind: 'opponent',
+        text: `${nameOf(id)} wants ${nameOf(preferredId)} instead`,
+      });
+      instead ??= { fighterId: id, preferredId };
+      blocked ??=
+        'A different opponent is a new fight, not a term. Pencil it in, or book somebody else.';
+      continue;
+    }
+    if (counter?.kind === 'slot') {
+      const where = SLOT_WORDS[counter.position];
+      terms.push({ fighterId: id, kind: 'slot', text: `Move it to ${where}` });
+      const free = plan.slots.find((s) => s.position === counter.position && !s.bout);
+      if (free) targetSlotId = free.id;
+      else blocked ??= `Nothing is free on ${where} of this card. Clear a slot there first.`;
+    }
+    if (counter?.kind === 'rounds') {
+      terms.push({ fighterId: id, kind: 'rounds', text: 'Make it five rounds' });
+      rounds = counter.rounds;
+    }
+    if (answer.askingPurse !== undefined) {
+      pay += answer.askingPurse;
+      purses.push({ fighterId: id, askingPurse: answer.askingPurse });
+      terms.push({
+        fighterId: id,
+        kind: 'money',
+        text: `Pay ${nameOf(id)} ${money(answer.askingPurse)} to show`,
+      });
+    }
+  }
+
+  const refused = (bout.answers ?? []).find((a) => a.verdict === 'declined');
+  if (refused) {
+    blocked = `${nameOf(refused.fighterId as string)} said no outright, and no terms change that.`;
+  }
+  return {
+    terms,
+    pay: Math.round(pay * 10) / 10,
+    purses,
+    blocked,
+    instead,
+    targetSlotId,
+    rounds,
+  };
+}
+
+/** The slot-level read of a bout: what its chip says. A counter outranks a flat refusal. */
+export function boutStatusLabel(bout: PlannedBout): string {
+  if (bout.status === 'agreed') return 'Signed';
+  if (bout.status === 'offered') return 'Offered';
+  if (bout.status === 'draft') return 'Pencilled in';
+  const answers = bout.answers ?? [];
+  if (answers.some((a) => a.verdict === 'declined')) return 'Turned down';
+  return answers.map(counterLabel).find((l) => l !== undefined) ?? 'Turned down';
+}
+
+/**
  * Put an offer in front of both corners and find out.
  *
  * Seeded on the bout and the card day rather than on the call, so re-reading an offer cannot
@@ -1150,37 +1322,25 @@ export function acceptCounter(input: {
   const slot = plan.slots.find((s) => s.id === slotId);
   if (!slot?.bout) return plan;
 
+  // The rules are `counterTerms`'s, so this does exactly what the screen said it would.
+  const nameOf = (id: string) => {
+    const fighter = ctx.db.fighters.findById(id) as Fighter | undefined;
+    return fighter ? displayName(fighter) : 'Somebody';
+  };
+  const meet = counterTerms(plan, slotId, nameOf);
+  if (!meet || meet.blocked !== undefined) return plan;
   const counters = (slot.bout.answers ?? []).filter((a) => a.verdict === 'countered');
-  if (counters.length === 0) return plan;
-  // A corner that flatly declined cannot be bought, so the fight is still off.
-  if ((slot.bout.answers ?? []).some((a) => a.verdict === 'declined')) return plan;
+  const bout: PlannedBout = { ...slot.bout, rounds: meet.rounds };
+  const targetSlotId = meet.targetSlotId;
 
   /*
-   * What each counter costs to meet (doc 34 C4). Money is paid; five rounds are granted on the
-   * spot; a better slot is given if that slot on this card is free; a different opponent cannot
-   * be granted here at all — that is a new booking, and the player makes it.
-   */
-  let bout = slot.bout;
-  let targetSlotId = slotId;
-  for (const answer of counters) {
-    const counter = answer.counter;
-    if (counter?.kind === 'opponent') return plan;
-    if (counter?.kind === 'rounds') bout = { ...bout, rounds: counter.rounds };
-    if (counter?.kind === 'slot') {
-      const free = plan.slots.find((s) => s.position === counter.position && !s.bout);
-      if (!free) return plan;
-      targetSlotId = free.id;
-    }
-  }
-
-  /*
-   * The extra money comes off the budget when the card is settled rather than now, but the
+   * The money. It comes off the budget when the card is settled rather than now, but the
    * agreement is repapered immediately — a promoter who agrees a purse and does not write it
-   * down is the reason `showPurse` exists.
+   * down is the reason `showPurse` exists. (B1, #56, prices the repaper against the slot here.)
    */
-  for (const counter of counters) {
-    const fighter = ctx.db.fighters.findById(counter.fighterId as string) as Fighter | undefined;
-    if (!fighter?.agreementId || counter.askingPurse === undefined) continue;
+  for (const { fighterId, askingPurse } of meet.purses) {
+    const fighter = ctx.db.fighters.findById(fighterId) as Fighter | undefined;
+    if (!fighter?.agreementId) continue;
     const agreement = ctx.db.agreements.findById(fighter.agreementId as string) as
       PromotionalAgreement | undefined;
     if (!agreement) continue;
@@ -1193,7 +1353,7 @@ export function acceptCounter(input: {
      */
     const atSlot = currentPurse(ctx.db, fighter, slot.position)?.show ?? 0;
     const repapered =
-      atSlot > 0 ? (agreement.showPurse * counter.askingPurse) / atSlot : counter.askingPurse;
+      atSlot > 0 ? (agreement.showPurse * askingPurse) / atSlot : askingPurse;
     ctx.db.agreements.upsert({
       ...agreement,
       showPurse: Math.max(agreement.showPurse, Math.round(repapered * 10) / 10),
@@ -1323,6 +1483,85 @@ export interface Suggestion {
   /** 0–1, before the offer goes out. */
   acceptance: number;
   cost: number;
+  /** Set when the suggestion is a championship bout — always, when a champion is in it. */
+  titleKind?: TitleKind;
+  /** Why the matchmaker reached for this one first, when it answers an open situation. */
+  because?: string;
+}
+
+/** Whether a fighter holds this promotion's belt in their division. */
+const isChampionHere = (ctx: PromoterContext, fighter: Fighter): boolean =>
+  ctx.promotion.champions[fighter.divisionId] === fighter.id;
+
+interface PriorityBout {
+  red: Fighter;
+  blue: Fighter;
+  titleKind: TitleKind;
+  because: string;
+}
+
+/**
+ * The fights the promotion's open situations are asking for, most pressing first.
+ *
+ * What the dashboard nags about, the matchmaker should reach for: a vacant belt with two
+ * contenders gets its vacant-title fight, and a champion gets a defence against the best-ranked
+ * contender who can make the date. Only fights `titleOptionsFor` says can legitimately be for
+ * the belt are proposed, so the autofill never invents a title fight the screen would refuse.
+ */
+function priorityBouts(ctx: PromoterContext, plan: EventPlan, taken: Set<string>): PriorityBout[] {
+  const free = (f: Fighter) =>
+    !taken.has(f.id as string) &&
+    f.promotionId === ctx.promotion.id &&
+    !blockerFor({ ctx, fighter: f, plan });
+  const vacant: PriorityBout[] = [];
+  const defences: { bout: PriorityBout; idle: number }[] = [];
+
+  for (const [divisionId, ranked] of ctx.ranks) {
+    const champion = championOfDivision(ctx, divisionId);
+    const contenders = ranked
+      .filter((r) => r.position > 0)
+      .map((r) => r.fighter)
+      .filter(free);
+
+    if (!champion) {
+      const [red, blue] = contenders;
+      if (!red || !blue) continue;
+      const vacantOption = titleOptionsFor({ ctx, red, blue, plan }).find(
+        (o) => o.kind === 'vacant' && o.available,
+      );
+      if (vacantOption) {
+        vacant.push({
+          red,
+          blue,
+          titleKind: 'vacant',
+          because: `The ${getDivision(divisionId as never).name} belt is vacant, and these are the top two.`,
+        });
+      }
+      continue;
+    }
+
+    if (!free(champion)) continue;
+    for (const challenger of contenders) {
+      const available = titleOptionsFor({ ctx, red: champion, blue: challenger, plan }).some(
+        (o) => o.kind === 'undisputed' && o.available,
+      );
+      if (!available) continue;
+      defences.push({
+        bout: {
+          red: champion,
+          blue: challenger,
+          titleKind: 'undisputed',
+          because: `${displayName(champion)} is owed a defence, and ${displayName(challenger)} is the best-placed contender who can make the date.`,
+        },
+        idle: daysUnbookedBy(champion, ctx.day, ctx.startedDay),
+      });
+      break;
+    }
+  }
+
+  // Vacancies first — a division with no champion has nothing to climb toward — then the
+  // longest-idle champion.
+  return [...vacant, ...defences.sort((a, b) => b.idle - a.idle).map((d) => d.bout)];
 }
 
 /**
@@ -1357,6 +1596,38 @@ export function suggestFills(input: {
     if (slot.bout || !scopeMatches(scope, slot.position)) continue;
 
     const purpose = intent ?? defaultIntentFor(slot.position);
+
+    /*
+     * The top of the card answers the open situations first: a vacant belt, a champion owed a
+     * defence. These are also the only way a champion reaches a card through autofill — always
+     * for the belt, never in a three-round bout they have nothing to gain from.
+     */
+    if (slot.position === 'mainEvent' || slot.position === 'coMain') {
+      const priority = priorityBouts(ctx, plan, taken)[0];
+      const option = priority
+        ? opponentsFor({ ctx, plan, slot, subject: priority.red, limit: 400 }).find(
+            (o) => o.fighter.id === priority.blue.id && !o.blocker,
+          )
+        : undefined;
+      if (priority && option) {
+        out.push({
+          slotId: slot.id,
+          position: slot.position,
+          redId: priority.red.id as string,
+          blueId: priority.blue.id as string,
+          divisionId: priority.red.divisionId as string,
+          appraisal: option.appraisal,
+          acceptance: option.acceptance,
+          cost: option.cost,
+          titleKind: priority.titleKind,
+          because: priority.because,
+        });
+        taken.add(priority.red.id as string);
+        taken.add(priority.blue.id as string);
+        continue;
+      }
+    }
+
     let best: { suggestion: Suggestion; score: number } | undefined;
 
     /*
@@ -1367,7 +1638,9 @@ export function suggestFills(input: {
      * for a convenience feature. Whoever has been waiting longest is also the *right* shortlist:
      * a matchmaker filling a card starts with the people owed a fight, not with the alphabet.
      */
-    const shortlist = shortlistFor(ctx, plan, taken);
+    // Champions are left to the title path above: a champion in an ordinary bout risks the belt's
+    // standing for nothing, and the screen would have asked whether it was for the title.
+    const shortlist = shortlistFor(ctx, plan, taken).filter((f) => !isChampionHere(ctx, f));
 
     for (const subject of shortlist) {
       const options = opponentsFor({
@@ -1377,7 +1650,9 @@ export function suggestFills(input: {
         subject,
         intent: purpose,
         limit: 4,
-      }).filter((o) => !o.blocker && !taken.has(o.fighter.id as string));
+      }).filter(
+        (o) => !o.blocker && !taken.has(o.fighter.id as string) && !isChampionHere(ctx, o.fighter),
+      );
 
       for (const option of options) {
         /*
@@ -1428,6 +1703,7 @@ export function applySuggestion(plan: EventPlan, suggestion: Suggestion): EventP
     redId: suggestion.redId,
     blueId: suggestion.blueId,
     divisionId: suggestion.divisionId,
+    titleKind: suggestion.titleKind,
   });
 }
 
@@ -2039,9 +2315,10 @@ export function calloutsFor(db: GameDb, plan: EventPlan, limit = 3): Callout[] {
     if (!winner) continue;
     const said = db.news.findById(newsId(plan.day as never, `callout_${row.bout.boutId}`)) as
       NewsItem | undefined;
-    // `afterTheBout` lists the winner first and the fighter they named second.
-    const targetId = said?.fighterIds?.[1] as string | undefined;
-    if (!said?.detail || !targetId || targetId === (winner.id as string)) continue;
+    // The fighter named is whoever the item is about besides the winner, read by role rather
+    // than by position in `fighterIds`. A missing item, or one aimed at nobody, is no callout.
+    const targetId = said?.fighterIds?.find((id) => id !== winner.id) as string | undefined;
+    if (!said?.detail || !targetId) continue;
 
     const divisionId = row.bout.divisionId as string;
     out.push({
@@ -2091,6 +2368,13 @@ export function pencilCallout(
       blockerFor({ ctx, fighter: blue, plan, ignoreSlotId: slot.id });
     if (blocked) continue;
 
+    // A callout aimed at the champion is a call for the belt, so it goes on for the belt when the
+    // title rules allow it here; otherwise it is pencilled in as a fight and the player decides.
+    const titleKind = callout.forTheBelt
+      ? titleOptionsFor({ ctx, red, blue, plan }).find(
+          (o) => o.kind === 'undisputed' && o.available,
+        )?.kind
+      : undefined;
     const next = savePlan(
       db,
       placeBout({
@@ -2099,6 +2383,7 @@ export function pencilCallout(
         redId: callout.winnerId,
         blueId: callout.targetId,
         divisionId: callout.divisionId,
+        titleKind,
       }),
     );
     return { plan: next, slotId: slot.id };
