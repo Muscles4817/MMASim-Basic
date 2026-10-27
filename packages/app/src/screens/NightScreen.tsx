@@ -29,7 +29,13 @@ import { formatGameDay } from '../shell/Shell';
 import { money } from '../ui/format';
 import { positionLabel } from '../game/night';
 import { hasTape } from '../game/broadcasts';
-import { confirmAwards, nightResults, planName, type BoutResult } from '../game/plans';
+import {
+  confirmAwards,
+  nightResults,
+  planName,
+  weighInLines,
+  type BoutResult,
+} from '../game/plans';
 
 /** How long each result holds before the next, when the show plays itself. */
 const BEAT_MS = 1400;
@@ -153,6 +159,7 @@ export function NightRecap({ plan, onDone }: { plan: EventPlan; onDone(): void }
   const night = nightOf(db, plan);
   const results = useMemo(() => nightResults(db, plan), [db, plan, version]);
   const outcome = plan.outcome;
+  const weighIns = weighInLines(db, plan);
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
@@ -192,6 +199,17 @@ export function NightRecap({ plan, onDone }: { plan: EventPlan; onDone(): void }
           </Ledger>
         )}
       </Card>
+
+      {/* Doc 34 C6: a missed weight, and what was decided — including by default. */}
+      {weighIns.length > 0 && (
+        <Card title="Weigh-ins">
+          {weighIns.map((line) => (
+            <p key={line} className="prose" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+              {line}
+            </p>
+          ))}
+        </Card>
+      )}
 
       <Card flush title="Results">
         <div className="list">

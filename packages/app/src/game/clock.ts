@@ -41,6 +41,7 @@ import {
   scanPromoterInbox,
   settlePendingAwards,
   settleReplies,
+  rollWeighIns,
 } from './plans';
 import { graceEnds } from './alerts';
 
@@ -281,6 +282,8 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
     // happen. This is the one place that legitimately knows about both.
     // Bout offers answer on their own day (doc 34 C4), so a counter can stop the clock when it lands.
     settleReplies(db, onDay);
+    // The scales the day before a card (doc 34 C6): a miss is a decision, so it can stop the clock.
+    rollWeighIns(db, onDay);
     scanForInbox(db, onDay);
     scanPromoterInbox(db, onDay);
     return blocking(readInbox(db)).some((i) => !alreadyWaiting.has(i.id));
@@ -297,6 +300,7 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
 
   // Once more on the day the clock stopped — fight night included — so nothing is left waiting.
   settleReplies(db, day);
+  rollWeighIns(db, day);
   const missed = missPlans(db, day);
   const fightNight = fightNightOn(db, promotionId, day);
   const stopped = { fights, truncated, player, fightNight, missed };

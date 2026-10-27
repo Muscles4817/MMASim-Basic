@@ -19,6 +19,7 @@ import { Alert } from '../ui/signals';
 import { formatGameDay } from '../shell/Shell';
 import { markItemRead, readInbox, resolveItem } from '../game/inbox';
 import { answerBoutOffer } from '../game/career';
+import { answerWeighIn } from '../game/plans';
 
 export function InboxScreen() {
   const { db, world, commit, playerFighter } = useGame();
@@ -47,6 +48,8 @@ export function InboxScreen() {
       if (booking) navigate({ name: 'camp' });
       return;
     }
+    // A missed weight on one of the player's cards (doc 34 C6).
+    answerWeighIn(db, item, actionId);
     resolveItem(db, item.id, actionId);
     commit();
   };

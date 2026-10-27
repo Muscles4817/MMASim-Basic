@@ -140,12 +140,7 @@ export function appraiseDivisionMove(
   const currentSeverity = cutSeverityOf(body, fighter.divisionId);
   const makeable = weighInFloorLbs(body) <= target.limitLbs;
 
-  const weightMissRisk = clamp01(
-    Math.pow(severity, 2.2) *
-      0.55 *
-      weightMissRiskMultiplier(fighter.personality) *
-      traitMul(fighter.traits, 'weightMissRisk'),
-  );
+  const missRisk = weightMissRisk(fighter, targetId);
 
   const fieldAverage =
     fieldOveralls.length > 0
@@ -211,9 +206,9 @@ export function appraiseDivisionMove(
       notes.push('You slot in about where you are now, relative to the field.');
     }
 
-    if (weightMissRisk > 0.2) {
+    if (missRisk > 0.2) {
       notes.push(
-        `Around a ${Math.round(weightMissRisk * 100)}% chance of missing weight, which forfeits part of the purse and follows you around.`,
+        `Around a ${Math.round(missRisk * 100)}% chance of missing weight, which forfeits part of the purse and follows you around.`,
       );
     }
   }
@@ -225,12 +220,32 @@ export function appraiseDivisionMove(
     makeable,
     severity,
     currentSeverity,
-    weightMissRisk,
+    weightMissRisk: missRisk,
     fieldGap,
     settledAttributeChange,
     settledWalkingWeightLbs,
     notes,
   };
+}
+
+/**
+ * The chance of missing weight for this division, 0–1.
+ *
+ * The one copy of the formula. Fighter mode's weigh-in and the division-move appraisal each carried
+ * their own, so the two could drift. `cutPenalty` is what a nutritionist buys (below 1 is better).
+ */
+export function weightMissRisk(
+  fighter: Pick<Fighter, 'personality' | 'traits'> & Parameters<typeof bodyOf>[0],
+  divisionId: DivisionId,
+  cutPenalty = 1,
+): number {
+  return clamp01(
+    Math.pow(cutSeverityOf(bodyOf(fighter), divisionId), 2.2) *
+      0.55 *
+      weightMissRiskMultiplier(fighter.personality) *
+      traitMul(fighter.traits, 'weightMissRisk') *
+      cutPenalty,
+  );
 }
 
 /**

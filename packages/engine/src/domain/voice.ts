@@ -193,7 +193,14 @@ export type VoiceSituation =
   | 'refusesPay'
   | 'refusesGrudge'
   | 'cardCancelled'
-  | 'titleSkipped';
+  | 'titleSkipped'
+  // Doc 34 C6: career events.
+  | 'opponentMissedWeight'
+  | 'consideringRetirement'
+  | 'farewellFight'
+  | 'comeback'
+  | 'wantsMoveUp'
+  | 'rivalry';
 
 const SAYS: Readonly<Record<VoiceSituation, Readonly<Record<Tone, readonly string[]>>>> = {
   wantsTitleShot: {
@@ -356,6 +363,99 @@ const SAYS: Readonly<Record<VoiceSituation, Readonly<Record<Tone, readonly strin
       'That was my shot. I want it back.',
     ],
     plain: ['I thought the shot was mine.', 'Not happy to be passed over.'],
+  },
+  opponentMissedWeight: {
+    brash: [
+      'I made weight. They could not even manage that. Unprofessional.',
+      'Missed weight? I will make them pay for every pound of it.',
+    ],
+    cold: ['I did my job. They did not.', 'They missed. That is on them.'],
+    respectful: [
+      'Disappointing. I did everything right this camp and I expected the same back.',
+      'It happens, but it should not happen at this level.',
+    ],
+    hungry: [
+      'I do not care what they weigh. Let me fight.',
+      'Heavier or not, I am not going home without a fight.',
+    ],
+    plain: ['I made weight. They did not.', 'Not happy about the miss.'],
+  },
+  consideringRetirement: {
+    brash: [
+      'I have nothing left to prove to anybody. Maybe it is time.',
+      'Everybody wants to see me go one more time. I will think about it.',
+    ],
+    cold: ['I am thinking about stopping.', 'Not sure I want to do this much longer.'],
+    respectful: [
+      'I am taking some time to think about what comes next. I owe my family that.',
+      'This sport has given me a lot. I need to decide whether I have more to give it.',
+    ],
+    hungry: [
+      'Part of me wants to stop. Part of me still wants that last big night.',
+      'If I go again, it has to be for something that matters.',
+    ],
+    plain: ['I am thinking about retiring.', 'Not sure how many fights I have left.'],
+  },
+  farewellFight: {
+    brash: [
+      'One more. Give me a big name and a big crowd and I will go out on top.',
+      'I want a send-off. Main event. Nothing less.',
+    ],
+    cold: ['One more fight. Then I am done.', 'Last one. Make it count.'],
+    respectful: [
+      'I would like one last fight, in front of the fans who have supported me.',
+      'If the promotion will have me, I would love a farewell fight.',
+    ],
+    hungry: [
+      'I want to finish on my terms. One more night.',
+      'Give me one last fight and I will empty the tank.',
+    ],
+    plain: ['I want one last fight.', 'One more and I will call it a day.'],
+  },
+  comeback: {
+    brash: [
+      'Did you miss me? I am back, and the division is not ready.',
+      'Retirement was boring. Time to remind everybody who I am.',
+    ],
+    cold: ['I am coming back.', 'Unfinished business.'],
+    respectful: [
+      'I have missed it more than I expected. I would like to compete again.',
+      'I feel healthy and hungry. I want to give it another go.',
+    ],
+    hungry: ['I cannot sit at home watching. Get me a fight.', 'I am back. I want to fight soon.'],
+    plain: ['I want to fight again.', 'Thinking about a comeback.'],
+  },
+  wantsMoveUp: {
+    brash: [
+      'I am killing myself to make this weight. Let me go up and run that division too.',
+      'This cut is beneath me. Book me a weight up.',
+    ],
+    cold: ['The cut is too much. I want to move up.', 'I am done making this weight.'],
+    respectful: [
+      'I think my body is telling me it is time to move up a division.',
+      'The weight cut is getting harder. I would like to try the next class up.',
+    ],
+    hungry: [
+      'Let me fight at a weight where I can actually perform.',
+      'Move me up and you will see the real me.',
+    ],
+    plain: ['I want to move up a weight.', 'The cut is too hard now.'],
+  },
+  rivalry: {
+    brash: [
+      'We are not done. I will settle this for good.',
+      'Everybody knows I won that. Run it back and I will prove it.',
+    ],
+    cold: ['This is not finished.', 'That one again. Good.'],
+    respectful: [
+      'We have a lot of history. I would like to settle it properly.',
+      'They are a great competitor, and I think the fans want to see it again.',
+    ],
+    hungry: [
+      'I want that fight again. As soon as possible.',
+      'There is only one fight I care about right now.',
+    ],
+    plain: ['I want the rematch.', 'We have unfinished business.'],
   },
 };
 
