@@ -28,6 +28,7 @@
 
 import {
   GROUP_ORDER,
+  withLedgerEntry,
   acceptanceOf,
   appraiseMatchup,
   awardBonuses,
@@ -208,8 +209,6 @@ export function nextCardDay(
  * show's 30–45 that was a fifth of its attention for one missed date.
  */
 export const MISSED_CARD_BUZZ = MAX_BUZZ_SWING;
-/** Resentment added to everybody who had agreed to fight on it, and so had camped for nothing. */
-export const MISSED_CARD_RESENTMENT = 15;
 
 /**
  * Cancel every card of the player's whose date has passed unrun, and charge for it.
@@ -220,8 +219,9 @@ export const MISSED_CARD_RESENTMENT = 15;
  * six weeks" — forever, since nothing would ever run it.
  *
  * Cancelling frees them, because `plansFor` (and with it every commitment check) only sees live
- * cards. The cost lands three ways, all on things that already exist: the promotion's `buzz`,
- * the `resentment` of everybody who had signed, and a line in the news and the inbox so the
+ * cards. The cost lands three ways: the promotion's `buzz`, a `cardCancelled` entry in the
+ * relationship ledger of everybody who had signed (doc 34 C3 — it was a flat +15 resentment, which
+ * the next contract settlement recomputed away), and a line in the news and the inbox so the
  * player is told rather than left to notice.
  */
 export function missPlans(db: GameDb, day: number): EventPlan[] {
@@ -253,7 +253,11 @@ export function missPlans(db: GameDb, day: number): EventPlan[] {
       if (!fighter) continue;
       db.fighters.upsert({
         ...fighter,
-        resentment: clamp(fighter.resentment + MISSED_CARD_RESENTMENT, 0, 100),
+        ledger: withLedgerEntry(fighter.ledger, {
+          day: plan.day as never,
+          promotionId: plan.promotionId,
+          kind: 'cardCancelled',
+        }),
       } as Fighter & Entity);
     }
 
@@ -651,6 +655,9 @@ export function opponentsFor(input: {
       manager: managerOf(ctx.db, fighter),
       notice: plan.day - ctx.day < 35 ? 'short' : 'full',
       isTitleFight: slot.bout?.titleKind !== undefined,
+      day: ctx.day,
+      rank: rankOfFighter(ctx, fighter),
+      opponentRank: subjectRank,
     });
 
     return {
@@ -903,6 +910,9 @@ export function sendOffer(input: {
       manager: managerOf(ctx.db, fighter),
       notice,
       isTitleFight: bout.titleKind !== undefined,
+      day: ctx.day,
+      rank: rankOfFighter(ctx, fighter),
+      opponentRank: rankOfFighter(ctx, opponent),
     });
 
     const rng = createRng(
@@ -942,7 +952,8 @@ export function sendOffer(input: {
       answers.push({
         fighterId: fighter.id,
         verdict: 'declined',
-        note: read.concern ?? 'Not interested in this one.',
+        // Their own words after the reason, when they have any. Doc 34 C3.
+        note: [read.concern ?? 'Not interested in this one.', read.quote].filter(Boolean).join(' '),
       });
     }
   }

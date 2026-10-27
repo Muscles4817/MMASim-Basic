@@ -27,6 +27,9 @@ import { stepUpAcceptance } from '../domain/personality.js';
 import { traitAdd, traitMul } from '../domain/traits.js';
 import { overallRating } from '../ratings/attributes.js';
 import { connectionTo, priority, stableConflictCost, type Manager } from './managers.js';
+import { wantMet, wantsOf } from '../domain/disposition.js';
+import { describeLedger, relationshipWith } from '../domain/relationship.js';
+import { voiceFor, wantVoice, type VoiceSituation } from '../domain/voice.js';
 
 export type BoutAgreementStatus = 'offered' | 'signed' | 'refused';
 
@@ -58,7 +61,25 @@ export interface AcceptanceRead {
   chance: number;
   /** The single biggest reason it is not higher. Shown to the player. */
   concern?: string;
+  /**
+   * The same reason in the fighter's own words, when `day` was given. Doc 34 C3: a refusal that
+   * arrives as a sentence from a person reads as a negotiation; one that arrives as a probability
+   * reads as a dice roll.
+   */
+  quote?: string;
 }
+
+/** Doc 34 C3: the offer is the fight they want (×1.15), or plainly is not (×0.9). */
+export const WANT_MET = 1.15;
+export const WANT_UNMET = 0.9;
+/**
+ * Doc 34 C3: a fighter in the red takes fights more readily (docs/17); one sitting on more than
+ * `RICH_BANK` thousand can afford to be choosy about a step up of more than `RICH_STEP` overall.
+ */
+export const BANK_BROKE = 1.12;
+export const BANK_RICH = 0.92;
+export const RICH_BANK = 250;
+export const RICH_STEP = 4;
 
 export function acceptanceOf(input: {
   fighter: Fighter;
@@ -68,10 +89,19 @@ export function acceptanceOf(input: {
   notice?: Notice;
   /** True when this fight is for a belt, which almost nobody turns down. */
   isTitleFight?: boolean;
+  /**
+   * Today. Turns on what the fighter remembers about this promotion (`relationshipWith`) and what
+   * they want next (`wantsOf`), and lets the answer be said in their own words. Without it the
+   * answer is the history-blind one this function always gave.
+   */
+  day?: GameDay;
+  /** The fighter's own rank here, and the opponent's, for the wants. 0 is the champion. */
+  rank?: number;
+  opponentRank?: number;
 }): AcceptanceRead {
-  const { fighter, opponent, promotion, manager, notice = 'full', isTitleFight } = input;
+  const { fighter, opponent, promotion, manager, notice = 'full', isTitleFight, day } = input;
 
-  const concerns: { label: string; weight: number }[] = [];
+  const concerns: { label: string; weight: number; situation?: VoiceSituation }[] = [];
 
   /*
    * How big a step this is. Positive means the opponent is better.
@@ -93,7 +123,11 @@ export function acceptanceOf(input: {
       ? clamp(1 + Math.min(-step, 20) / 60, 1, 1.3)
       : clamp(1 - (step / 30) * (1 - appetite), 0.15, 1);
   if (step > 4 && stepTerm < 0.98) {
-    concerns.push({ label: `A clear step up, and ${fighter.lastName} knows it`, weight: 1 - stepTerm });
+    concerns.push({
+      label: `A clear step up, and ${fighter.lastName} knows it`,
+      weight: 1 - stepTerm,
+      situation: 'refusesStepUp',
+    });
   }
 
   /*
@@ -107,7 +141,11 @@ export function acceptanceOf(input: {
       ? clamp(0.45 + traitAdd(fighter.traits, 'shortNoticeWillingness'), 0.05, 1)
       : 1;
   if (notice === 'short' && noticeTerm < 0.7) {
-    concerns.push({ label: 'Not enough notice to be ready', weight: 1 - noticeTerm });
+    concerns.push({
+      label: 'Not enough notice to be ready',
+      weight: 1 - noticeTerm,
+      situation: 'refusesShortNotice',
+    });
   }
 
   /*
@@ -118,7 +156,10 @@ export function acceptanceOf(input: {
   const standing = connectionTo(manager, promotion.id);
   const connectionTerm = clamp(0.7 + standing * 0.5, 0.7, 1.2);
   if (standing < 0.35 && manager) {
-    concerns.push({ label: `${manager.name} does not owe this promotion any favours`, weight: 0.3 });
+    concerns.push({
+      label: `${manager.name} does not owe this promotion any favours`,
+      weight: 0.3,
+    });
   }
 
   /*
@@ -146,11 +187,63 @@ export function acceptanceOf(input: {
    */
   const resentmentTerm = clamp(1 - (fighter.resentment / 100) * 0.35, 0.65, 1);
   if (fighter.resentment > 55) {
-    concerns.push({ label: 'Unhappy with the deal, and in no hurry to do you a favour', weight: 0.35 });
+    concerns.push({
+      label: 'Unhappy with the deal, and in no hurry to do you a favour',
+      weight: 0.35,
+      situation: 'refusesPay',
+    });
   }
 
   // A belt is a belt. Almost nobody turns one down, whatever else is true.
   const titleTerm = isTitleFight ? 2.2 : 1;
+
+  /*
+   * What they remember about this promotion. Doc 34 C3. A fighter who was skipped for a shot or
+   * had a card cancelled on them answers more coolly; one who was given their chance, more warmly.
+   * Bounded tighter than the belt, because memory shades an answer rather than deciding it.
+   */
+  const relationship = day !== undefined ? relationshipWith(fighter, promotion.id, day) : undefined;
+  const relationshipTerm = relationship ? clamp(1 + relationship.score / 300, 0.7, 1.15) : 1;
+  if (relationship?.worst && relationship.score <= -10) {
+    concerns.push({
+      label: `Has not forgotten ${describeLedger(relationship.worst.kind)}`,
+      weight: clamp(-relationship.score / 100, 0.1, 0.5),
+      situation: relationship.worst.kind === 'cardCancelled' ? 'cardCancelled' : 'refusesGrudge',
+    });
+  }
+
+  /*
+   * What they want next, and whether this is it. A fighter chasing a title shot is keener on the
+   * belt fight and cooler on everything else; one who needs any win is wary of a step up.
+   */
+  const lastBout = fighter.record[fighter.record.length - 1];
+  const want =
+    day !== undefined
+      ? wantsOf({
+          fighter,
+          day,
+          rank: input.rank,
+          daysIdle: lastBout ? day - lastBout.day : 0,
+        })
+      : undefined;
+  const met = want
+    ? wantMet(want, { opponent, isTitleFight, opponentRank: input.opponentRank, step })
+    : undefined;
+  const wantTerm = met === true ? WANT_MET : met === false ? WANT_UNMET : 1;
+  if (met === false && want) {
+    concerns.push({
+      label: `Not the fight they are after — they want ${want.label.toLowerCase()}`,
+      weight: 0.1,
+      situation: wantVoice(want.id),
+    });
+  }
+
+  /*
+   * The bank. A fighter in the red takes fights they otherwise would not (docs/17), and one
+   * sitting on a fortune can afford to be choosy about a step up.
+   */
+  const bankTerm =
+    fighter.bank < 0 ? BANK_BROKE : fighter.bank > RICH_BANK && step > RICH_STEP ? BANK_RICH : 1;
 
   const chance = clamp01(
     0.9 *
@@ -160,7 +253,10 @@ export function acceptanceOf(input: {
       conflictTerm *
       priorityTerm *
       resentmentTerm *
-      titleTerm,
+      titleTerm *
+      relationshipTerm *
+      wantTerm *
+      bankTerm,
   );
 
   /*
@@ -171,7 +267,12 @@ export function acceptanceOf(input: {
    * four small things is exactly the case where the player most needs to be told something.
    */
   const worst = concerns.sort((a, b) => b.weight - a.weight)[0];
-  return { chance, concern: chance >= 0.85 ? undefined : worst?.label };
+  if (chance >= 0.85) return { chance };
+  const quote =
+    day !== undefined && worst?.situation
+      ? voiceFor(fighter, worst.situation, day).text
+      : undefined;
+  return { chance, concern: worst?.label, quote };
 }
 
 /** How the answer reads on screen. Never a percentage — a promoter hears a person, not a number. */
