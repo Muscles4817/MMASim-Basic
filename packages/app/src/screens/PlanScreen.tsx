@@ -58,7 +58,7 @@ import { Console, Ledger, LedgerRow, LedgerRule } from '../ui/console';
 import { formatGameDay } from '../shell/Shell';
 import { useToast } from '../ui/toast';
 import { NightRecap, NightShow } from './NightScreen';
-import { TaleOfTheTape } from './FightScreen';
+import { TaleOfTheTape } from '../ui/TaleOfTheTape';
 import { money } from '../ui/format';
 import { DrawBadge } from '../ui/DrawBadge';
 import {
@@ -536,7 +536,7 @@ function MatchupCompare({
   if (red && blue) {
     return (
       <Card title="Tale of the tape">
-        <TaleOfTheTape red={red} blue={blue} day={ctx.day} boutId="" />
+        <TaleOfTheTape red={red} blue={blue} day={ctx.day} />
         <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 0 }}>
           On paper: {describeOdds(paperOdds(red, blue)).toLowerCase()}.
         </p>
