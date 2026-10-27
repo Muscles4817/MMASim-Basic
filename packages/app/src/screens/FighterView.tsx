@@ -666,7 +666,7 @@ function DrawCard({
   return (
     <Card title={self ? 'Your draw' : 'Draw'}>
       <div className="stack" style={{ gap: 'var(--space-3)' }}>
-        <DrawBadge fighter={fighter} day={day} read={read} detail />
+        <DrawBadge fighter={fighter} day={day} read={read} />
         <p className="prose" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
           {read.blurb} {read.trend.detail}
         </p>
