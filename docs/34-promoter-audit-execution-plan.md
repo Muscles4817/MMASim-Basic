@@ -159,7 +159,7 @@ week, 4 fighters as people, 5 development over time.
 | B2 Broadcaster and owner        | 2     | B           | In progress       |     |
 | B3 Prestige and tiers           | 2     | B           | Not started       |     |
 | A3 Fight-night show and recap   | 3     | A           | Done              | #54 |
-| A4 Matchmaking UX               | 3     | A           | In progress       |     |
+| A4 Matchmaking UX               | 3     | A           | In review         | #58 |
 | A5 Fight week                   | 3     | A           | Not started       |     |
 | A6 Onboarding and readability   | 1/3   | A           | In progress       |     |
 | C2 Star power surfaced          | 4     | C           | Done              | #51 |
