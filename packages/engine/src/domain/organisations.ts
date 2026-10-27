@@ -9,6 +9,8 @@ import type { GameDay } from '../core/clock.js';
 import type { CoachId, DivisionId, FighterId, GymId, PromotionId } from '../core/ids.js';
 import type { SponsorshipPolicy } from '../business/money.js';
 import type { MatchmakingStyleId } from '../business/matchmakingStyle.js';
+import type { RightsDeal } from '../business/rightsDeal.js';
+import type { Owner } from '../business/owner.js';
 import type { Personality } from './personality.js';
 
 /** Where a promotion sits in the market. Drives budget, reach and talent pull. */
@@ -28,6 +30,13 @@ export interface Promotion {
    * market (`homeMarket`). Authored world state, like `baseCountry`.
    */
   homeCity?: string;
+  /**
+   * The television deal its cards are carried under (`business/rightsDeal.ts`). Opened the first
+   * time the world runs with it, from what its broadcasting already earned.
+   */
+  rightsDeal?: RightsDeal;
+  /** Who it answers to. Only the player's promotion has one; see `business/owner.ts`. */
+  owner?: Owner;
   /** 1–100. Brand strength: what a fight is worth simply for happening here. */
   prestige: number;
   /** Cash on hand, in thousands. */

@@ -30,6 +30,7 @@ const game = () => createNewGame({ adapter: undefined });
 const revenue = (profit: number): EventRevenue => ({
   gate: profit,
   broadcast: 0,
+  sponsorship: 0,
   costs: 0,
   profit,
   attendance: 1000,

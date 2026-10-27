@@ -231,6 +231,7 @@ describe('a promotion’s standing', () => {
   const revenue = (profit: number) => ({
     gate: profit,
     broadcast: 0,
+    sponsorship: 0,
     costs: 0,
     profit,
     attendance: 1000,
