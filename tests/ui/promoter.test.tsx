@@ -271,6 +271,23 @@ describe('matchmaking', () => {
     expect(document.querySelectorAll('.candidate__why').length).toBeGreaterThan(0);
   });
 
+  it('says what each fighter draws, and what each pairing sells', async () => {
+    // The question on every row is not only who wins but what the promoter is selling.
+    const user = userEvent.setup();
+    await openMainEvent(user);
+    const candidates = await screen.findAllByRole('button', { name: /Unranked|#\d+/ });
+    expect(candidates[0]!.textContent).toMatch(/Draw:/);
+    await user.click(candidates[0]!);
+
+    await screen.findByRole('heading', { name: /Who fights/i });
+    const rows = [...document.querySelectorAll('.candidate')];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.textContent).toMatch(/Draw:/);
+      expect(row.textContent).toMatch(/Sells: \S/);
+    }
+  });
+
   it('lets the promoter say what the fight is for, and re-ranks on it', async () => {
     const user = userEvent.setup();
     await openMainEvent(user);

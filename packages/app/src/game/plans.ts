@@ -29,7 +29,9 @@
 import {
   GROUP_ORDER,
   withLedgerEntry,
+  currentHeat,
   describeCounter,
+  fightSells,
   replyDelayDays,
   shapeBoutCounter,
   wantsOf,
@@ -72,6 +74,7 @@ import {
   type CardBout,
   type Championship,
   type CardPosition,
+  type BoutCounter,
   type CornerAnswer,
   type EventPlan,
   type EventScale,
@@ -101,6 +104,7 @@ import {
   runCardBout,
 } from './world';
 import { rememberNight } from './broadcasts';
+import { getRivalry } from './rivalries';
 import { currentPurse } from './money';
 import { money } from '../ui/format';
 import { raise, recordOfferOutcome } from './inbox';
@@ -635,6 +639,30 @@ export interface OpponentOption {
 }
 
 /**
+ * What putting these two on this card sells, in one line for the picker row. Doc 34 C2.
+ *
+ * The engine's `fightSells` with what only the game knows filled in: the card's market, whether
+ * a champion of this promotion in this division is in it (so the belt can be on the line), and
+ * the heat between them as the rivalry ledger has it today.
+ */
+export function whatItSells(input: {
+  ctx: PromoterContext;
+  plan: EventPlan;
+  a: Fighter;
+  b: Fighter;
+}): string {
+  const { ctx, plan, a, b } = input;
+  const champion = ctx.promotion.champions[a.divisionId as never] as string | undefined;
+  const isTitleFight =
+    a.divisionId === b.divisionId &&
+    champion !== undefined &&
+    (champion === (a.id as string) || champion === (b.id as string));
+  const heat = currentHeat(getRivalry(ctx.db, a.id, b.id, ctx.day), ctx.day as never);
+  return fightSells({ a, b, day: ctx.day as never, market: plan.country, isTitleFight, heat })
+    .headline;
+}
+
+/**
  * The opponents worth considering for a chosen fighter, grouped by what kind of fight it is.
  *
  * Deliberately not an alphabetical roster with a search box. A promoter picking an opponent is
@@ -914,13 +942,111 @@ export interface OfferOutcome {
  * What a corner that countered is asking for, in the words a promoter uses: "Wants £8.5k".
  *
  * A counter is a price, not a refusal, and the slot used to say "Turned down" either way — which
- * hid the one answer the player can still do something about. Money is the only counter there is
- * today; C4's negotiation adds the others (a better slot, five rounds, a different opponent), and
- * this is where they get their words.
+ * hid the one answer the player can still do something about. Since C4 a corner can ask for more
+ * than money — a better slot, five rounds, a different opponent — and each gets its own words,
+ * short enough for a chip on the card.
  */
 export function counterLabel(answer: CornerAnswer): string | undefined {
   if (answer.verdict !== 'countered') return undefined;
-  return answer.askingPurse !== undefined ? `Wants ${money(answer.askingPurse)}` : 'Wants more';
+  const counter = answer.counter;
+  switch (counter?.kind) {
+    case 'slot':
+      return counter.position === 'coMain' ? 'Wants the co-main' : 'Wants the main card';
+    case 'rounds':
+      return 'Wants five rounds';
+    case 'opponent':
+      return 'Wants another opponent';
+    default:
+      return answer.askingPurse !== undefined ? `Wants ${money(answer.askingPurse)}` : 'Wants more';
+  }
+}
+
+const SLOT_WORDS: Readonly<Record<CardPosition, string>> = {
+  mainEvent: 'the main event',
+  coMain: 'the co-main event',
+  mainCard: 'the main card',
+  prelim: 'the prelims',
+};
+
+/** One thing a counter asks for, said as what the promoter would be agreeing to. */
+export interface CounterTerm {
+  fighterId: string;
+  kind: BoutCounter['kind'];
+  /** "Pay Ruiz £8.5k to show", "Move it to the co-main event", "Make it five rounds". */
+  text: string;
+}
+
+export interface CounterTerms {
+  terms: CounterTerm[];
+  /** What the money terms add up to, thousands. */
+  pay: number;
+  /** Why the counter cannot be met in one step from this slot, when it cannot. */
+  blocked?: string;
+  /** The fight a corner asked for instead, for the screen to offer to pencil in. */
+  instead?: { fighterId: string; preferredId: string };
+}
+
+/**
+ * What meeting a bout's counters would take, and whether it can be done from here.
+ *
+ * The same rules `acceptCounter` applies, said before the tap rather than discovered after it:
+ * money is paid, five rounds are granted, a better slot is given if it is free on this card, and
+ * a different opponent is a new booking rather than a term. Undefined when nobody countered.
+ */
+export function counterTerms(
+  plan: EventPlan,
+  slotId: string,
+  nameOf: (id: string) => string,
+): CounterTerms | undefined {
+  const bout = plan.slots.find((s) => s.id === slotId)?.bout;
+  const counters = (bout?.answers ?? []).filter((a) => a.verdict === 'countered');
+  if (!bout || counters.length === 0) return undefined;
+
+  const terms: CounterTerm[] = [];
+  let pay = 0;
+  let blocked: string | undefined;
+  let instead: CounterTerms['instead'];
+
+  for (const answer of counters) {
+    const id = answer.fighterId as string;
+    const counter = answer.counter;
+    if (counter?.kind === 'opponent') {
+      const preferredId = counter.preferredId as string;
+      terms.push({
+        fighterId: id,
+        kind: 'opponent',
+        text: `${nameOf(id)} wants ${nameOf(preferredId)} instead`,
+      });
+      instead ??= { fighterId: id, preferredId };
+      blocked ??=
+        'A different opponent is a new fight, not a term. Pencil it in, or book somebody else.';
+      continue;
+    }
+    if (counter?.kind === 'slot') {
+      const where = SLOT_WORDS[counter.position];
+      terms.push({ fighterId: id, kind: 'slot', text: `Move it to ${where}` });
+      if (!plan.slots.some((s) => s.position === counter.position && !s.bout)) {
+        blocked ??= `Nothing is free on ${where} of this card. Clear a slot there first.`;
+      }
+    }
+    if (counter?.kind === 'rounds') {
+      terms.push({ fighterId: id, kind: 'rounds', text: 'Make it five rounds' });
+    }
+    if (answer.askingPurse !== undefined) {
+      pay += answer.askingPurse;
+      terms.push({
+        fighterId: id,
+        kind: 'money',
+        text: `Pay ${nameOf(id)} ${money(answer.askingPurse)} to show`,
+      });
+    }
+  }
+
+  const refused = (bout.answers ?? []).find((a) => a.verdict === 'declined');
+  if (refused) {
+    blocked = `${nameOf(refused.fighterId as string)} said no outright, and no terms change that.`;
+  }
+  return { terms, pay: Math.round(pay * 10) / 10, blocked, instead };
 }
 
 /** The slot-level read of a bout: what its chip says. A counter outranks a flat refusal. */
