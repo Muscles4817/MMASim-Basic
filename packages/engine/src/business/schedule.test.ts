@@ -5,7 +5,12 @@
 import { describe, expect, it } from 'vitest';
 import { makePromotion } from '../testing/fixtures.js';
 import { CARD_SIZE } from './events.js';
-import { MAX_CARDS_PER_YEAR, cardsPerYear, daysBetweenCards } from './schedule.js';
+import {
+  MAX_CARDS_PER_YEAR,
+  cardsPerYear,
+  cardsStagedBefore,
+  daysBetweenCards,
+} from './schedule.js';
 import type { Promotion, PromotionTier } from '../domain/organisations.js';
 
 const of = (tier: PromotionTier, over: Partial<Promotion> = {}): Promotion =>
@@ -78,5 +83,20 @@ describe('money is a schedule constraint', () => {
     // `chargeCosts` bills whether or not anybody fights, so a promotion that stops running cards
     // has no way back. It cuts back; it does not close.
     expect(cardsPerYear(of('regional', { budget: 0 }), 100)).toBeGreaterThan(0);
+  });
+});
+
+describe('a promotion has a past', () => {
+  it('arrives with cards behind it, the same number every time it is asked', () => {
+    expect(cardsStagedBefore('p_x', 'seed')).toBe(cardsStagedBefore('p_x', 'seed'));
+    expect(cardsStagedBefore('p_x', 'seed')).toBeGreaterThanOrEqual(3 * 6);
+    expect(cardsStagedBefore('p_x', 'seed')).toBeLessThanOrEqual(9 * 18);
+  });
+
+  it('differs between promotions and between worlds', () => {
+    const counts = new Set(
+      ['a', 'b', 'c', 'd'].flatMap((id) => ['s1', 's2'].map((s) => cardsStagedBefore(id, s))),
+    );
+    expect(counts.size).toBeGreaterThan(4);
   });
 });

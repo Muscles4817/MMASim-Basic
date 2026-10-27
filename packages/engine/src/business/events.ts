@@ -445,20 +445,23 @@ export function revenueShareFor(points: number, revenue: EventRevenue): number {
 /**
  * What the night is called.
  *
- * Numbered for a pay-per-view, named after the main event otherwise — which is exactly how
- * the sport does it, and which tells a player at a glance how big the night is.
+ * The promotion's short name and the card's number, and the main event once there is one —
+ * `LFA 190`, then `LFA 190: Reyes vs Blachowicz` — which is how every promotion below the leader
+ * numbers its shows, and how the leader names its biggest. A card the promoter has titled
+ * themselves keeps that title in place of the number.
+ *
+ * It used to say "Fight Night" for everything that was not pay-per-view, which at a regional
+ * show is the leader's house style borrowed by a promotion that streams to a few thousand.
  */
 export function eventName(input: {
   promotion: Promotion;
-  broadcast: Broadcast;
   number: number;
+  title?: string;
   mainEventNames?: readonly [string, string];
 }): string {
-  const { promotion, broadcast, number, mainEventNames } = input;
-  if (broadcast === 'ppv') return `${promotion.shortName} ${number}`;
-  return mainEventNames
-    ? `${promotion.shortName} Fight Night: ${mainEventNames[0]} vs ${mainEventNames[1]}`
-    : `${promotion.shortName} Fight Night ${number}`;
+  const { promotion, number, title, mainEventNames } = input;
+  const base = title ?? `${promotion.shortName} ${number}`;
+  return mainEventNames ? `${base}: ${mainEventNames[0]} vs ${mainEventNames[1]}` : base;
 }
 
 /** Which broadcast model a promotion can run, given what is on the card. */

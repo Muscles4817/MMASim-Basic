@@ -74,6 +74,7 @@ import {
   planById,
   promoterContext,
   rollWithdrawals,
+  planName,
   runPlan,
   savePlan,
   sendAllDrafts,
@@ -239,7 +240,7 @@ export function PlanScreen({ id }: { id: string }) {
                   aria-disabled={progress.agreed === 0}
                   onClick={() => progress.agreed > 0 && runIt()}
                 >
-                  Run fight night: {plan.name}
+                  Run fight night: {planName(db, plan)}
                 </Button>
               </Card>
             )}
@@ -250,7 +251,7 @@ export function PlanScreen({ id }: { id: string }) {
                 style={{ justifyContent: 'space-between', alignItems: 'baseline' }}
               >
                 <p className="section-title" style={{ margin: 0 }}>
-                  {plan.name}
+                  {planName(db, plan)}
                 </p>
                 <Button size="sm" variant="ghost" onClick={() => setSettings((s) => !s)}>
                   {settings ? 'Done' : 'Card settings'}
@@ -1311,7 +1312,7 @@ function CardSettings({
       {confirming ? (
         <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           <Button variant="danger" onClick={onCancel}>
-            Yes — cancel {plan.name}
+            Yes — cancel this card
           </Button>
           <Button variant="ghost" onClick={() => setConfirming(false)}>
             Keep it
@@ -1347,7 +1348,7 @@ function CardResults({ plan, onDone }: { plan: EventPlan; onDone(): void }) {
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
       <Card raised>
-        <p className="section-title">{night?.name ?? plan.name}</p>
+        <p className="section-title">{night?.name ?? planName(db, plan)}</p>
         <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
           {formatGameDay(plan.day)} · {plan.city}, {plan.country}
         </p>
@@ -1410,7 +1411,7 @@ function CardCancelled({ plan, onDone }: { plan: EventPlan; onDone(): void }) {
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
       <Card raised>
-        <p className="section-title">{plan.name}</p>
+        <p className="section-title">{planName(db, plan)}</p>
         <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
           {formatGameDay(plan.day)} · {plan.city}, {plan.country}
         </p>
