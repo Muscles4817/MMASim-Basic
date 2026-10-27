@@ -44,6 +44,7 @@ import {
 } from './plans';
 import { graceEnds } from './alerts';
 import { considerCounterProgramming } from './counterProgramming';
+import { scanFightWeek } from './fightWeek';
 
 /*
  * There is no step any more, and that is the change.
@@ -197,13 +198,15 @@ function exclusionFor(db: GameDb, day: number): WorldExclusion {
      * (`walkDay` never falls inside the grace period, and a booked fighter is never warned
      * about), so the rule they warn about has to keep the same promise.
      */
-    const hold = new Set<string>(
-      [...bookingsFor(db, promotionId)].filter(([, b]) => b.signed).map(([id]) => id),
-    );
-    if (day < graceEnds(db)) {
+    const hold = new Map<string, number>();
+    const grace = graceEnds(db);
+    if (day < grace) {
       for (const f of db.fighters.findAll() as Fighter[]) {
-        if (f.promotionId === promotionId) hold.add(f.id as string);
+        if (f.promotionId === promotionId) hold.set(f.id as string, grace);
       }
+    }
+    for (const [id, booking] of bookingsFor(db, promotionId)) {
+      if (booking.signed) hold.set(id, Number.POSITIVE_INFINITY);
     }
     return { promotionId, activityHold: hold };
   }
@@ -284,6 +287,8 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
     settleReplies(db, onDay);
     // Rivals hear about the player's dates a month out, and some book against them (doc 34 B4).
     considerCounterProgramming(db, onDay);
+    // Fight week (doc 34 A5): a signed fighter can fall out on any day of the run-up.
+    scanFightWeek(db, onDay);
     scanForInbox(db, onDay);
     scanPromoterInbox(db, onDay);
     return blocking(readInbox(db)).some((i) => !alreadyWaiting.has(i.id));

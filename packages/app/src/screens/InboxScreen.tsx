@@ -16,8 +16,10 @@ import { useGame } from '../state/GameProvider';
 import { routeOf, useRouter } from '../state/router';
 import { Button, Card, Chip, Empty } from '../ui';
 import { Alert } from '../ui/signals';
+import { Tip } from '../ui/tip';
 import { formatGameDay } from '../shell/Shell';
 import { markItemRead, readInbox, resolveItem } from '../game/inbox';
+import { presentAlert } from '../game/plans';
 import { answerBoutOffer } from '../game/career';
 import { answerPoach } from '../game/rivalMoves';
 
@@ -25,7 +27,14 @@ export function InboxScreen() {
   const { db, world, commit, playerFighter } = useGame();
   const { navigate } = useRouter();
 
-  const items = useMemo(() => readInbox(db).slice().sort(inboxOrder), [db, world.day]);
+  // Open decisions are read with today's countdowns (`presentAlert`), not the day they arrived.
+  const items = useMemo(
+    () =>
+      readInbox(db)
+        .map((item) => presentAlert(db, item, world.day))
+        .sort(inboxOrder),
+    [db, world.day],
+  );
 
   const decisions = items.filter(isBlocking);
   const rest = items.filter((i) => !isBlocking(i));
@@ -85,6 +94,10 @@ export function InboxScreen() {
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
+      <Tip id="inbox-decisions" title="Decisions first">
+        Only a decision stops the clock. Everything else worth knowing is gathered into one item a
+        week, with a line for each thing and a link to it.
+      </Tip>
       {decisions.length > 0 && (
         <Alert tone="warn" title={`${decisions.length} waiting on you`}>
           Time will not move past these. Answer them, or say you have understood and deal with it

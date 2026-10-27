@@ -172,7 +172,8 @@ export interface EventPlan {
    * Why a cancelled plan was cancelled, and when.
    *
    * `missed` is a date that passed with the card unrun — the promoter did not turn up to their
-   * own show — and it costs the promotion in a way that calling a card off in advance does not.
+   * own show. Calling a card off costs too (doc 34 A5): as much as missing it inside fight week,
+   * less the further out it is called, so cancelling on the night is no way round the penalty.
    *
    * `name` is what the card was called on the day, kept like a night's name is kept. A live card's
    * name is derived from its place among the promotion's live cards, and a cancelled card has no
@@ -187,6 +188,42 @@ export interface EventPlan {
   rivalCard?: { promotionId: PromotionId; split: number };
   /** Rivals have looked at this date and decided, whether or not one booked against it. */
   rivalsConsidered?: boolean;
+  /** What happened in the run-up: the press conference and who fell out. Doc 34 A5. */
+  fightWeek?: FightWeek;
+}
+
+/** How the promoter plays the press conference. */
+export type PressChoice = 'civil' | 'trashTalk' | 'confrontation';
+
+export interface PressConference {
+  day: GameDay;
+  choice: PressChoice;
+  /** The main event's corners, in their own words: red first. */
+  lines: readonly string[];
+  /** What the heat between the main event's fighters rose by. */
+  heatGained: number;
+  /** Buzz the promotion gained from the coverage. */
+  buzzDelta: number;
+  /** Whether it got physical. */
+  scuffle: boolean;
+  /** Thousands, paid by the promotion. Zero when nobody was fined. */
+  fine: number;
+}
+
+/** A fighter who fell out in the run-up, and the corner left without an opponent. */
+export interface RunUpWithdrawal {
+  day: GameDay;
+  slotId: string;
+  fighterId: FighterId;
+  /** Still ready, and still wants a fight. */
+  opponentId: FighterId;
+  divisionId: DivisionId;
+  note: string;
+}
+
+export interface FightWeek {
+  press?: PressConference;
+  withdrawals?: readonly RunUpWithdrawal[];
 }
 
 export interface PlanOutcome {
