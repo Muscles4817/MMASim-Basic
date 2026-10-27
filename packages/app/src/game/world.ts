@@ -1241,6 +1241,7 @@ export function runCardBout(ctx: {
         submissionName: result.submissionName,
         divisionId: red.divisionId,
         promotionId: promotion.id,
+        promotionName: promotion.shortName,
         winnerRank: winner ? rankOfId(winner.id) : undefined,
         loserRank: loser ? rankOfId(loser.id) : undefined,
         isTitleFight,
@@ -2412,7 +2413,9 @@ function ageEveryone(
  * jumped by two.
  */
 export const nextEventNumber = (db: GameDb, promotion: Promotion): number =>
-  cardsStagedBefore(promotion) + db.events.count({ where: { promotionId: promotion.id } }) + 1;
+  cardsStagedBefore(promotion, getWorld(db).seed) +
+  db.events.count({ where: { promotionId: promotion.id } }) +
+  1;
 
 /** The surnames a card is billed under, the way the sport writes them: `Reyes vs Hill`. */
 export function headlineNames(
