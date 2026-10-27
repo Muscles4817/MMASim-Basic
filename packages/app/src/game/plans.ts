@@ -156,16 +156,116 @@ export function savePlan(db: GameDb, plan: EventPlan): EventPlan {
 export const isLive = (plan: EventPlan): boolean =>
   plan.status !== 'run' && plan.status !== 'cancelled';
 
-export function cancelPlan(db: GameDb, planId: string): void {
+/** Fight week: from here in, calling a card off costs as much as not turning up. Doc 34 A5. */
+export const FIGHT_WEEK_DAYS = 7;
+
+/** Inside a camp's last month, calling a card off still costs, at half the rate. */
+export const LATE_CANCEL_DAYS = 28;
+
+/** What calling a card off today would cost, said before the button rather than after it. */
+export interface CancellationCost {
+  buzz: number;
+  /** Signed fights, whose fighters each remember it (`cardCancelled` in the ledger). */
+  signedFights: number;
+}
+
+/**
+ * The price of calling a card off, by how much notice it gets.
+ *
+ * Calling a card off used to be free, which made cancelling on the night the way round the cost
+ * of missing it. Now it costs as much inside fight week, half that in the last month, and only a
+ * point of buzz further out — an announced card still disappointed somebody. Everybody who signed
+ * remembers it however far out it was, because they had already started a camp.
+ */
+export function cancellationCost(plan: EventPlan, day: number): CancellationCost {
+  const away = plan.day - day;
+  const signedFights = plan.slots.filter((s) => s.bout?.status === 'agreed').length;
+  const buzz =
+    away <= FIGHT_WEEK_DAYS
+      ? MISSED_CARD_BUZZ
+      : away <= LATE_CANCEL_DAYS
+        ? Math.ceil(MISSED_CARD_BUZZ / 2)
+        : signedFights > 0
+          ? 1
+          : 0;
+  return { buzz, signedFights };
+}
+
+/**
+ * Charge a card that will not run: the buzz, and a `cardCancelled` memory for everybody signed.
+ * Shared by a card called off and a card missed, so the two cannot drift apart.
+ */
+function chargeForCancellation(db: GameDb, plan: EventPlan, buzz: number, day: number): string[] {
+  // Only signed bouts cost goodwill. An offer still waiting on an answer simply lapses with the
+  // card — nobody had camped for it yet.
+  const signed = plan.slots
+    .filter((s) => s.bout?.status === 'agreed')
+    .flatMap((s) => [s.bout!.redId as string, s.bout!.blueId as string]);
+  for (const id of signed) {
+    const fighter = db.fighters.findById(id) as Fighter | undefined;
+    if (!fighter) continue;
+    db.fighters.upsert({
+      ...fighter,
+      ledger: withLedgerEntry(fighter.ledger, {
+        day: day as never,
+        promotionId: plan.promotionId,
+        kind: 'cardCancelled',
+      }),
+    } as Fighter & Entity);
+  }
+
+  const promotion = db.promotions.findById(plan.promotionId as string) as Promotion | undefined;
+  if (promotion && buzz > 0) {
+    db.promotions.upsert({
+      ...promotion,
+      buzz: clamp(promotion.buzz - buzz, 1, 100),
+    } as Promotion & Entity);
+  }
+  return signed;
+}
+
+export function cancelPlan(db: GameDb, planId: string): CancellationCost | undefined {
   const plan = planById(db, planId);
-  if (!plan) return;
+  if (!plan || !isLive(plan)) return undefined;
+  const day = getWorld(db).day;
+  const name = planName(db, plan);
+  const cost = cancellationCost(plan, day);
+
   // Kept rather than deleted: a cancelled card is a thing that happened, and the fighters who
   // were on it have a legitimate grievance the roster screen should be able to see.
   savePlan(db, {
     ...plan,
     status: 'cancelled',
-    cancelled: { day: getWorld(db).day as never, reason: 'calledOff', name: planName(db, plan) },
+    cancelled: { day: day as never, reason: 'calledOff', name },
   });
+  const signed = chargeForCancellation(db, plan, cost.buzz, day);
+
+  if (cost.buzz > 0 || signed.length > 0) {
+    const fights = cost.signedFights;
+    const detail = [
+      fights > 0
+        ? `${fights} signed ${fights === 1 ? 'fight is' : 'fights are'} off, and the fighters remember it.`
+        : undefined,
+      cost.buzz > 0 ? `The promotion lost ${cost.buzz} buzz.` : undefined,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    appendNews(db, [
+      {
+        id: newsId(day as never, `calledoff:${plan.id}`),
+        day: day as never,
+        kind: 'cancellation',
+        weight: plan.day - day <= FIGHT_WEEK_DAYS ? 'major' : 'minor',
+        headline: `${name} has been called off`,
+        detail,
+        fighterIds: [...new Set(signed)] as never,
+        promotionId: plan.promotionId,
+        involvesPlayer: true,
+      },
+    ]);
+  }
+  db.save();
+  return cost;
 }
 
 // --- Fight night ---------------------------------------------------------------------------------
@@ -244,31 +344,7 @@ export function missPlans(db: GameDb, day: number): EventPlan[] {
       }),
     );
 
-    // Only signed bouts cost goodwill. An offer still waiting on an answer simply lapses with the
-    // card — nobody had camped for it yet.
-    const signed = plan.slots
-      .filter((s) => s.bout?.status === 'agreed')
-      .flatMap((s) => [s.bout!.redId as string, s.bout!.blueId as string]);
-    for (const id of signed) {
-      const fighter = db.fighters.findById(id) as Fighter | undefined;
-      if (!fighter) continue;
-      db.fighters.upsert({
-        ...fighter,
-        ledger: withLedgerEntry(fighter.ledger, {
-          day: plan.day as never,
-          promotionId: plan.promotionId,
-          kind: 'cardCancelled',
-        }),
-      } as Fighter & Entity);
-    }
-
-    const promotion = db.promotions.findById(plan.promotionId as string) as Promotion | undefined;
-    if (promotion) {
-      db.promotions.upsert({
-        ...promotion,
-        buzz: clamp(promotion.buzz - MISSED_CARD_BUZZ, 1, 100),
-      } as Promotion & Entity);
-    }
+    const signed = chargeForCancellation(db, plan, MISSED_CARD_BUZZ, plan.day);
 
     const fights = signed.length / 2;
     const detail =
@@ -1046,7 +1122,9 @@ export function sendOffer(input: {
         ),
       ),
   );
-  if (replyDay <= ctx.day) {
+  // Inside fight week a corner answers on the spot (doc 34 A5): a short-notice replacement is a
+  // phone call, and a reply due in four days would land after the weigh-in.
+  if (replyDay <= ctx.day || plan.day - ctx.day <= FIGHT_WEEK_DAYS) {
     const done = answered({ ...bout, pending: answers, offeredDay: ctx.day as never });
     const next = withSlot(plan, slotId, done);
     const accepted = done.status === 'agreed';
@@ -2102,6 +2180,12 @@ function alertStillTrue(
   if (kind === 'mainevent') {
     const plan = planById(db, a!);
     return plan !== undefined && isLive(plan) && !planProgress(plan).hasMainEvent;
+  }
+
+  // A run-up withdrawal (doc 34 A5): open until the slot is filled again or the card is gone.
+  if (kind === 'withdrawal') {
+    const plan = planById(db, a!);
+    return plan !== undefined && isLive(plan) && !plan.slots.find((s) => s.id === b)?.bout;
   }
 
   if (kind === 'counter') {
