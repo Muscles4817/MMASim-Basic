@@ -18,7 +18,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { App } from '../../packages/app/src/App';
@@ -175,6 +175,17 @@ describe('the dashboard', () => {
     await screen.findByRole('heading', { name: /Needs you/i });
     const withThousands = screen.queryAllByText(/£[\d,]{5,}k/).map((el) => el.textContent);
     expect(withThousands, 'a five-digit £…k figure escaped the formatter').toEqual([]);
+  });
+
+  it('funds departments from the dashboard, and the books show what they cost (doc 34 B5)', async () => {
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    expect(await screen.findByRole('heading', { name: /^Departments$/i })).toBeTruthy();
+    expect(screen.queryByText(/— departments/)).toBeNull();
+    const medical = screen.getByRole('radiogroup', { name: /Medical staff/i });
+    await user.click(within(medical).getByRole('radio', { name: '●●' }));
+    expect(await screen.findByText(/— departments/)).toBeTruthy();
+    expect(screen.getByText(/fewer camp injuries/i)).toBeTruthy();
   });
 
   it('shows the champions and who is behind them', async () => {

@@ -29,6 +29,9 @@
 import {
   GROUP_ORDER,
   withLedgerEntry,
+  investmentLevel,
+  matchmakerAcceptance,
+  matchmakerReach,
   currentHeat,
   describeCounter,
   fightSells,
@@ -1206,7 +1209,9 @@ export function sendOffer(input: {
       `${world.seed}:offer:${plan.id}:${slotId}:${bout.redId}:${bout.blueId}:${fighter.id}`,
     );
 
-    if (rng.chance(read.chance)) {
+    // A matchmaker who knows the manager gets more of them over the line (doc 34 B5).
+    const matchmaker = matchmakerAcceptance(investmentLevel(ctx.promotion, 'matchmaker'));
+    if (rng.chance(Math.min(1, read.chance * matchmaker))) {
       answers.push({ fighterId: fighter.id, verdict: 'accepted', note: 'They will take it.' });
       continue;
     }
@@ -1535,14 +1540,19 @@ function shortlistFor(ctx: PromoterContext, plan: EventPlan, taken: Set<string>)
 
   const queues = [...byDivision.values()];
   const out: Fighter[] = [];
-  for (let round = 0; out.length < AUTOFILL_SUBJECTS; round++) {
+  // A matchmaker looks further down the roster (doc 34 B5).
+  const reach = Math.max(
+    AUTOFILL_SUBJECTS,
+    matchmakerReach(investmentLevel(ctx.promotion, 'matchmaker')),
+  );
+  for (let round = 0; out.length < reach; round++) {
     let added = false;
     for (const queue of queues) {
       const next = queue[round];
       if (!next) continue;
       out.push(next);
       added = true;
-      if (out.length >= AUTOFILL_SUBJECTS) break;
+      if (out.length >= reach) break;
     }
     if (!added) break;
   }

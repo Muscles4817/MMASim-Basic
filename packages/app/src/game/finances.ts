@@ -15,6 +15,7 @@
 
 import {
   COST_PERIOD_DAYS,
+  investmentCost,
   isActive,
   periodCosts,
   type Fighter,
@@ -32,6 +33,8 @@ export interface FinancialSnapshot {
   monthlyBurn: number;
   overheads: number;
   rosterUpkeep: number;
+  /** The departments the promotion funds (doc 34 B5), per 30 days. */
+  departments: number;
   /** What the fighters currently under contract cost per bout, if every one of them fought. */
   contractedPurses: number;
   /** Purses already committed to bouts on planned cards. */
@@ -61,7 +64,8 @@ export function financialSnapshot(input: {
   );
 
   const costs = periodCosts({ promotion, rosterSize: roster.length });
-  const monthlyBurn = Math.round((costs.total * DAYS_PER_MONTH) / COST_PERIOD_DAYS);
+  const departments = investmentCost(promotion, costs.overheads);
+  const monthlyBurn = Math.round(((costs.total + departments) * DAYS_PER_MONTH) / COST_PERIOD_DAYS);
 
   /*
    * What the roster would cost if you actually used it.
@@ -113,6 +117,7 @@ export function financialSnapshot(input: {
     monthlyBurn,
     overheads: Math.round((costs.overheads * DAYS_PER_MONTH) / COST_PERIOD_DAYS),
     rosterUpkeep: Math.round((costs.rosterUpkeep * DAYS_PER_MONTH) / COST_PERIOD_DAYS),
+    departments: Math.round((departments * DAYS_PER_MONTH) / COST_PERIOD_DAYS),
     contractedPurses: Math.round(contractedPurses),
     committed: Math.round(committed),
     projectedFromNextCard: nextCardProfit,

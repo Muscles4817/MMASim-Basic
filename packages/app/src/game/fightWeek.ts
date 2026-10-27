@@ -23,6 +23,7 @@
  *    `screens/FightWeekPanel.tsx`'s `WeighInPanel` once it lands.
  */
 
+import { medicalFactorFor } from './investment';
 import {
   createRng,
   inboxId,
@@ -92,7 +93,8 @@ export function rollRunUp(db: GameDb, day: number): RunUpWithdrawal[] {
         const fighter = db.fighters.findById(id as string) as Fighter | undefined;
         if (!fighter) continue;
         const rng = createRng(`${world.seed}:runup:${plan.id}:${slot.id}:${id}:${day}`);
-        if (!rng.chance(dailyPullOutRisk(fighter))) continue;
+        // Medical staff keep more of them in (doc 34 B5).
+        if (!rng.chance(dailyPullOutRisk(fighter) * medicalFactorFor(db, fighter))) continue;
 
         const reason = rng.pickWeighted(REASONS, (r) =>
           r === 'injury' ? 6 : r === 'illness' ? 2 : r === 'weight' ? 2 : 1,

@@ -82,6 +82,7 @@ import { contractStanding } from '../game/contracts';
 import { currentPurse, promotionOf } from '../game/money';
 import { GROUP_LABELS } from '../game/labels';
 import { daysUnbookedBy } from '../game/plans';
+import { scoutingAccuracyOf } from '../game/investment';
 import { IdentityStrip } from './FighterIdentity';
 import { DrawBadge } from '../ui/DrawBadge';
 import './FighterView.css';
@@ -236,7 +237,9 @@ export function FighterView({
    * a coach sees their own fighter's, which is what being in the room means.
    */
   const scouted = viewer === 'promoter';
-  const seen = scouted ? scoutedAttributes(fighter) : fighter.attributes;
+  // How good the promoter's scouting network is (doc 34 B5): it narrows every range on the page.
+  const accuracy = scouted ? scoutingAccuracyOf(db) : 1;
+  const seen = scouted ? scoutedAttributes(fighter, accuracy) : fighter.attributes;
   const availability = availabilityOf({ fighter, day, booked });
   const standing = contractStanding(db, fighter);
 
@@ -525,7 +528,7 @@ export function FighterView({
                     key={key}
                     label={
                       scouted
-                        ? `${ATTRIBUTE_META[key].label} (scouted ${scoutedRating(fighter, key).low}–${scoutedRating(fighter, key).high})`
+                        ? `${ATTRIBUTE_META[key].label} (scouted ${scoutedRating(fighter, key, accuracy).low}–${scoutedRating(fighter, key, accuracy).high})`
                         : ATTRIBUTE_META[key].label
                     }
                     value={seen[key]}
@@ -548,7 +551,7 @@ export function FighterView({
                       key={key}
                       label={ATTRIBUTE_META[key].label}
                       value={seen[key]}
-                      range={scouted ? scoutedRange(fighter, key) : undefined}
+                      range={scouted ? scoutedRange(fighter, key, accuracy) : undefined}
                       hint={ATTRIBUTE_META[key].blurb}
                       attribute={key}
                       bands={bands}
@@ -621,8 +624,12 @@ function contractLine(standing: ReturnType<typeof contractStanding>): string {
 }
 
 /** A rating's scouted range, for `MiniRating`. */
-function scoutedRange(fighter: Fighter, key: Parameters<typeof scoutedRating>[1]) {
-  const read = scoutedRating(fighter, key);
+function scoutedRange(
+  fighter: Fighter,
+  key: Parameters<typeof scoutedRating>[1],
+  accuracy: number,
+) {
+  const read = scoutedRating(fighter, key, accuracy);
   return [read.low, read.high] as const;
 }
 

@@ -28,6 +28,16 @@ import {
   isActive,
   planHealth,
   planProgress,
+  COST_PERIOD_DAYS,
+  INVESTMENTS,
+  INVESTMENT_LEVELS,
+  INVESTMENT_META,
+  departmentCost,
+  describeEffect,
+  investmentLevel,
+  periodCosts,
+  type InvestmentId,
+  type InvestmentLevel,
   rankDivision,
   recordString,
   type EventPlan,
@@ -38,7 +48,7 @@ import {
 import type { GameDb } from '@mmasim/data';
 import { useGame } from '../state/GameProvider';
 import { routeOf, useRouter } from '../state/router';
-import { Button, Card, Chip, Empty, ListItem } from '../ui';
+import { Button, Card, Chip, Empty, ListItem, Segmented } from '../ui';
 import { Fact, KeyStat } from '../ui/signals';
 import { AttentionRow, Console, Ledger, LedgerRow, LedgerRule, PipelineCard } from '../ui/console';
 import { NewsFeed } from '../ui/NewsFeed';
@@ -60,6 +70,7 @@ import { FIRST_WEEK, dismiss, firstWeek, firstWeekOver } from '../game/onboardin
 import { readNews } from '../game/world';
 import { PromoterSubNav } from './promoterNav';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
+import { setInvestment } from '../game/investment';
 
 /** How many rows the dashboard shows before it stops being a dashboard. */
 const ATTENTION_SHOWN = 6;
@@ -397,6 +408,9 @@ export function PromotionHubScreen() {
                     label={`— roster (${finances.rosterSize})`}
                     value={money(finances.rosterUpkeep)}
                   />
+                  {finances.departments > 0 && (
+                    <LedgerRow label="— departments" value={money(finances.departments)} />
+                  )}
                   <LedgerRule />
                   <LedgerRow label="Committed to booked fights" value={money(finances.committed)} />
                   <LedgerRow
@@ -416,6 +430,15 @@ export function PromotionHubScreen() {
                 </Ledger>
               </Card>
             )}
+
+            <DepartmentsCard
+              promotion={promotion}
+              rosterSize={roster.length}
+              onChange={(id, level) => {
+                setInvestment(db, promotion.id as string, id, level);
+                commit();
+              }}
+            />
 
             <Card flush title="Champions">
               <div className="list">
@@ -582,6 +605,51 @@ function FirstWeek() {
           </li>
         ))}
       </ol>
+    </Card>
+  );
+}
+
+/**
+ * The departments the promotion funds (doc 34 B5): each a monthly cost against what an
+ * organisation this size pays, and a sentence saying what it buys.
+ */
+function DepartmentsCard({
+  promotion,
+  rosterSize,
+  onChange,
+}: {
+  promotion: Promotion;
+  rosterSize: number;
+  onChange(id: InvestmentId, level: InvestmentLevel): void;
+}) {
+  const overheads = periodCosts({ promotion, rosterSize }).overheads;
+  const monthly = (perPeriod: number) => Math.round((perPeriod * 30) / COST_PERIOD_DAYS);
+  return (
+    <Card title="Departments">
+      <div className="stack" style={{ gap: 'var(--space-3)' }}>
+        {INVESTMENTS.map((id) => {
+          const level = investmentLevel(promotion, id);
+          const meta = INVESTMENT_META[id];
+          return (
+            <div key={id} className="stack" style={{ gap: 'var(--space-1)' }}>
+              <Segmented
+                label={meta.label}
+                value={String(level)}
+                options={INVESTMENT_LEVELS.map((l) => ({
+                  value: String(l),
+                  label: l === 0 ? 'None' : `${'●'.repeat(l)}`,
+                }))}
+                onChange={(v) => onChange(id, Number(v) as InvestmentLevel)}
+              />
+              <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+                {level === 0
+                  ? meta.blurb
+                  : `${describeEffect(id, level)} ${money(monthly(departmentCost(id, level, overheads)))} a month.`}
+              </p>
+            </div>
+          );
+        })}
+      </div>
     </Card>
   );
 }

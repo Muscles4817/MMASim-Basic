@@ -184,9 +184,16 @@ export function scoutingMargin(bouts: number): number {
 export function scoutedRating(
   fighter: Pick<Fighter, 'id' | 'attributes' | 'summary'>,
   key: AttributeKey,
+  /**
+   * How good the viewer's scouting is, as a multiplier on the error and the range: 1 for a
+   * promotion with no network, smaller for one that funds one (doc 34 B5, `scoutingAccuracy`).
+   * The fixed draw per fighter and attribute stays the same, so better scouting moves the same
+   * estimate closer rather than re-rolling it.
+   */
+  accuracy = 1,
 ): ScoutedRating {
   const s = fighter.summary;
-  const margin = scoutingMargin(s.wins + s.losses + s.draws);
+  const margin = Math.max(1, Math.round(scoutingMargin(s.wins + s.losses + s.draws) * accuracy));
   const error = clamp(createRng(`scouted:${fighter.id as string}:${key}`).normal(), -2, 2);
   const estimate = Math.round(clamp(fighter.attributes[key] + error * margin * 0.5, 1, 100));
   return {
@@ -199,10 +206,11 @@ export function scoutedRating(
 /** Every attribute's estimate, for anything computed from the ratings (derived stats, badges). */
 export function scoutedAttributes(
   fighter: Pick<Fighter, 'id' | 'attributes' | 'summary'>,
+  accuracy = 1,
 ): Attributes {
   const out = { ...fighter.attributes };
   for (const key of Object.keys(out) as AttributeKey[])
-    out[key] = scoutedRating(fighter, key).estimate;
+    out[key] = scoutedRating(fighter, key, accuracy).estimate;
   return out;
 }
 

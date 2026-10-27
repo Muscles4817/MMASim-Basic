@@ -50,6 +50,11 @@ import {
   describeVacancy,
   vacate,
   chargeCosts,
+  periodCosts,
+  investmentCost,
+  COST_PERIOD_DAYS,
+  marketingFloor,
+  investmentLevel,
   DELIVERY_MEMORY,
   broadcastFor,
   buildCard,
@@ -148,6 +153,7 @@ import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
 import { settleFightInjuries } from './fightInjuries';
 import { afterTheBout } from './memory';
+import { medicalFactorFor } from './investment';
 import { money } from '../ui/format';
 
 type StoredNews = NewsItem & Entity;
@@ -2051,7 +2057,9 @@ function develop(
    */
   const withInjury = ((): Fighter => {
     const injuryRng = rng.fork('campInjury');
-    if (!injuryRng.chance(campInjuryChance(trained, injuryWeeks, day))) return trained;
+    // Fewer of them where the promotion pays for medical staff (doc 34 B5).
+    const chance = campInjuryChance(trained, injuryWeeks, day) * medicalFactorFor(db, trained);
+    if (!injuryRng.chance(chance)) return trained;
     const injury = rollInjury({
       fighter: trained,
       source: 'camp',
@@ -2693,7 +2701,18 @@ function chargePromotions(db: GameDb, days: number): void {
       (f) => f.promotionId === promotion.id && f.retiredDay === undefined,
     ).length;
     const { promotion: charged } = chargeCosts({ promotion, rosterSize, days });
-    db.promotions.upsert(charged as Promotion & Entity);
+    /*
+     * And the departments it chose to fund (doc 34 B5), priced against its own overheads. The
+     * marketing department's floor holds buzz up between cards, which is what it is paid for.
+     */
+    const overheads = periodCosts({ promotion, rosterSize }).overheads;
+    const invested = Math.round(investmentCost(promotion, overheads) * (days / COST_PERIOD_DAYS));
+    const floor = marketingFloor(investmentLevel(promotion, 'marketing'));
+    db.promotions.upsert({
+      ...charged,
+      budget: Math.max(0, charged.budget - invested),
+      buzz: Math.max(charged.buzz, floor),
+    } as Promotion & Entity);
   }
 }
 
