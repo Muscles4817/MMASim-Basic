@@ -3205,8 +3205,11 @@ export function comebacks(
   for (const fighter of db.fighters.findAll() as Fighter[]) {
     if (fighter.retiredDay === undefined || fighter.id === exceptId) continue;
     if (!rng.fork(fighter.id as string).chance(comebackChance(fighter, day as never))) continue;
+    // Their nickname, unless somebody active in the division has taken it since (doc 34 C6).
+    const taken = nicknamesTaken(db.fighters.findAll() as Fighter[], fighter.divisionId);
     const back: Fighter = {
       ...fighter,
+      nickname: nicknameOnArrival(fighter.nickname, taken),
       retiredDay: undefined,
       comebackDay: day as never,
       notes: undefined,

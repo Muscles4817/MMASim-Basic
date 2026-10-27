@@ -58,8 +58,12 @@ describe('comebacks', () => {
   it('bring a retired fighter back as a free agent, in their own words', () => {
     const { db, active, day } = world();
     const f = active.find((x) => x.condition.headTrauma < 30)!;
+    // Somebody still active in the division has since taken their nickname.
+    const holder = active.find((x) => x.divisionId === f.divisionId && x.id !== f.id)!;
+    db.fighters.upsert({ ...holder, nickname: 'The Comeback Test' } as never);
     db.fighters.upsert({
       ...f,
+      nickname: 'The Comeback Test',
       retiredDay: day - 365,
       bank: -50,
       birthDay: day - 31 * 365,
@@ -76,6 +80,7 @@ describe('comebacks', () => {
     expect(back.retiredDay).toBeUndefined();
     expect(back.promotionId).toBeUndefined();
     expect(back.comebackDay).toBeDefined();
+    expect(back.nickname, 'a nickname taken while they were away').toBeUndefined();
   });
 });
 
