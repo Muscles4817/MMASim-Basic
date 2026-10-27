@@ -151,7 +151,7 @@ week, 4 fighters as people, 5 development over time.
 | A1 Fight night unmissable       | 1     | A           | Done        | #47 |
 | A2 Alert hygiene                | 1     | A           | In progress |     |
 | B0 Generated names (content)    | 1     | B           | In review   | #48 |
-| C1 Identity on the page         | 4     | C           | In progress |     |
+| C1 Identity on the page         | 4     | C           | In review   | #49 |
 | B1 Economy and buzz             | 2     | B           | Not started |     |
 | B2 Broadcaster and owner        | 2     | B           | Not started |     |
 | B3 Prestige and tiers           | 2     | B           | Not started |     |
@@ -171,15 +171,19 @@ week, 4 fighters as people, 5 development over time.
 
 ## Follow-ups routed from reviews and builder reports
 
-| From       | Follow-up                                                                                   | Routed to              |
-| ---------- | ------------------------------------------------------------------------------------------- | ---------------------- |
-| #47 review | Calling a card off on the night is free, so the missed-card penalty can be dodged           | A5 (fight week)        |
-| #47        | Missed-card buzz −8 / resentment +15 are placeholders                                       | B1 / C3 tuning         |
-| #48 report | Calendar `describeGap` says "1 months"; "Go to X's contract expires" reads awkwardly        | A2                     |
-| #48 report | `PromotionHubScreen` repeats tier labels instead of `PROMOTION_TIER_LABELS`                 | A2                     |
-| #48 report | Upset news "Number 6 beats number 2" lacks division and promotion                           | C3 (voice)             |
-| #48 report | Venue cities don't match the promotion's region                                             | B1 (markets)           |
-| #48 report | Generated promotions share every character field except tier/prestige/budget; all USA-based | B4 / B5                |
-| #47 review | Move `DeleteSave` from `MenuScreen` into `ui/`                                              | A2                     |
-| #48 review | Event pre-history count must not depend on `tier` once tiers move                           | B0 fix / B3            |
-| #48 review | `events.count` scan is quadratic over a long save                                           | B1 if it shows in perf |
+| From       | Follow-up                                                                                                                                          | Routed to              |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| #47 review | Calling a card off on the night is free, so the missed-card penalty can be dodged                                                                  | A5 (fight week)        |
+| #47        | Missed-card buzz −8 / resentment +15 are placeholders                                                                                              | B1 / C3 tuning         |
+| #48 report | Calendar `describeGap` says "1 months"; "Go to X's contract expires" reads awkwardly                                                               | A2                     |
+| #48 report | `PromotionHubScreen` repeats tier labels instead of `PROMOTION_TIER_LABELS`                                                                        | A2                     |
+| #48 report | Upset news "Number 6 beats number 2" lacks division and promotion                                                                                  | C3 (voice)             |
+| #48 report | Venue cities don't match the promotion's region                                                                                                    | B1 (markets)           |
+| #48 report | Generated promotions share every character field except tier/prestige/budget; all USA-based                                                        | B4 / B5                |
+| #47 review | Move `DeleteSave` from `MenuScreen` into `ui/`                                                                                                     | A2                     |
+| #48 review | Event pre-history count must not depend on `tier` once tiers move                                                                                  | B0 fix / B3            |
+| #48 review | `events.count` scan is quadratic over a long save                                                                                                  | B1 if it shows in perf |
+| #49 report | `rng.fork` depends only on the stream's original seed, so several fighters drawn from one stream share identical `background` forks (pre-existing) | C5                     |
+| #49 report | ~3% of fighters carry a trait their ratings contradict after age drift; veto only acts at generation                                               | C5                     |
+| #49 report | Earned nicknames only from full-detail card bouts, not statistical cards or fighter-mode bouts                                                     | C3                     |
+| #49 report | Scouted error does not scale with scouting investment                                                                                              | B5                     |
