@@ -276,6 +276,7 @@ export function MiniRating({
   hint,
   attribute,
   bands,
+  range,
 }: {
   label: string;
   value: Rating;
@@ -283,6 +284,11 @@ export function MiniRating({
   attribute?: AttributeKey;
   /** The division a physical's label is compared against. Doc 31 § 12 step 12 / § 7.3. */
   bands?: BandContext;
+  /**
+   * A scouted reading rather than a known one: `value` is the best estimate and this is where it
+   * could plausibly sit. The number gains a `~` and the bar draws the range. Doc 29 § 8.
+   */
+  range?: readonly [number, number];
 }) {
   // The dense row has to say the same thing the full one does, or the toggle between them changes
   // the verdict. See `RatingRow` for why a physical's label is comparative and the number is not.
@@ -304,7 +310,7 @@ export function MiniRating({
         {label}
       </span>
       <span className="mini-rating__value" style={{ color: colour }} aria-hidden="true">
-        {value}
+        {range ? `~${value}` : value}
       </span>
       <span
         className="mini-rating__track"
@@ -312,9 +318,22 @@ export function MiniRating({
         aria-valuenow={value}
         aria-valuemin={1}
         aria-valuemax={100}
-        aria-label={`${label}: ${value} out of 100, ${band.label}`}
+        aria-label={
+          range
+            ? `${label}: scouted at ${range[0]} to ${range[1]}, best estimate ${value}, ${band.label}`
+            : `${label}: ${value} out of 100, ${band.label}`
+        }
       >
-        <span className="mini-rating__fill" style={{ width: `${value}%`, background: colour }} />
+        <span
+          className="mini-rating__fill"
+          style={{ width: `${range ? range[0] : value}%`, background: colour }}
+        />
+        {range && (
+          <span
+            className="mini-rating__range"
+            style={{ width: `${range[1] - range[0]}%`, background: colour }}
+          />
+        )}
       </span>
       <span className="mini-rating__band" style={{ color: colour }} aria-hidden="true">
         {band.short}

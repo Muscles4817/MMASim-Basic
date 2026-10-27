@@ -56,7 +56,9 @@ import {
   walkingWeightLbs,
   type Body,
 } from './body.js';
+import { displayBand, type BandContext } from '../ratings/displayBand.js';
 import {
+  ELITE_LIFT,
   PHYSICAL_SCALE_KEYS,
   expectedPhysical,
   medianRatingAtMass,
@@ -505,6 +507,37 @@ export function traitReferenceFor(
 }
 
 /**
+ * Whether the fighter's own ratings say the opposite of what a trait claims.
+ *
+ * `traitFit`'s floor keeps an unlikely trait *possible*, on purpose — and the audit found what that
+ * produced at the far end: a Cardio Machine whose cardio the same page labels a Liability, and a
+ * Glass Cannon with a chin rated very good. Unlikely is texture; flatly contradicted is a bug the
+ * player can see, because the trait and the band sit on the same screen.
+ *
+ * So the test is the band the page shows, not a distance from a pivot. A trait that leans on an
+ * attribute (weight ≥ 0.5) is refused when that attribute reads Liability or worse; one that leans
+ * against it is refused when it reads Very good or better. Anything in between stays a weight.
+ */
+const CONTRADICTION_WEIGHT = 0.5;
+const LIABILITY: ReadonlySet<string> = new Set(['liability', 'absent']);
+const STRENGTH: ReadonlySet<string> = new Set(['veryGood', 'elite', 'worldBest', 'allTime']);
+
+export function traitContradicts(
+  trait: TraitDef,
+  attributes: Attributes,
+  context?: BandContext,
+): boolean {
+  if (!trait.affinity) return false;
+  return (Object.entries(trait.affinity) as [AffinityAttribute, number][]).some(([key, weight]) => {
+    const band = displayBand(key, attributes[key], context).key;
+    return (
+      (weight >= CONTRADICTION_WEIGHT && LIABILITY.has(band)) ||
+      (weight <= -CONTRADICTION_WEIGHT && STRENGTH.has(band))
+    );
+  });
+}
+
+/**
  * Roll traits, refusing any combination that contradicts itself.
  *
  * Weighted by `traitFit` since docs/19 phase 3. The uniform draw this replaces gave every fighter
@@ -518,10 +551,15 @@ export function generateTraits(
   count = 2,
   attributes?: Attributes,
   reference?: Readonly<Partial<Record<AttributeKey, number>>>,
+  /** The division the physical bands compare against, for `traitContradicts`. */
+  context?: BandContext,
 ): TraitId[] {
   const traits: TraitId[] = [];
-  // Acquired traits are earned in play, not handed out at generation.
-  const pool = ALL_TRAITS.filter((t) => !t.acquirable);
+  // Acquired traits are earned in play, not handed out at generation, and a trait the ratings
+  // flatly contradict is not handed out at all.
+  const pool = ALL_TRAITS.filter(
+    (t) => !t.acquirable && !(attributes && traitContradicts(t, attributes, context)),
+  );
 
   for (let attempt = 0; attempt < 30 && traits.length < count; attempt++) {
     const candidate = attributes
@@ -738,7 +776,11 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     ),
     potential,
     personality: generatePersonality(rng),
-    traits: generateTraits(rng, rng.int(1, 3), attributes, reference),
+    traits: generateTraits(rng, rng.int(1, 3), attributes, reference, {
+      divisionId: options.divisionId as string,
+      sex: options.sex,
+      eliteLift: ELITE_LIFT,
+    }),
 
     condition: freshCondition(),
     record: [],

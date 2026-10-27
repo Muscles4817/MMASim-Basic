@@ -1,0 +1,102 @@
+/* The fighter page's own pieces: the identity strip in the header (FighterIdentity.tsx) and the
+   recent-form pips. */
+
+.identity {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  margin-top: var(--space-3);
+}
+
+.identity__facts {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2) var(--space-3);
+}
+
+.identity__fact {
+  min-width: 0;
+}
+
+.identity__fact--wide {
+  grid-column: 1 / -1;
+}
+
+.identity__fact dt {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.identity__fact dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.identity__sub {
+  display: block;
+  color: var(--text-muted);
+}
+
+.silhouette {
+  flex: none;
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.silhouette__ground {
+  fill: var(--surface-sunken);
+}
+
+.silhouette__body {
+  fill: var(--text-faint);
+}
+
+.silhouette__hair {
+  fill: var(--text);
+  opacity: 0.55;
+}
+
+@media (min-width: 48rem) {
+  .identity__fact--wide {
+    grid-column: auto;
+  }
+  .identity__facts {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Recent form: one pip per bout, oldest first, so the run reads left to right. */
+.record-form {
+  display: flex;
+  gap: var(--space-1);
+  margin: 0 0 var(--space-2);
+}
+
+.record-form__pip {
+  min-width: 1.75rem;
+  padding: 2px var(--space-1);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.record-form__pip--win {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.record-form__pip--loss {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
