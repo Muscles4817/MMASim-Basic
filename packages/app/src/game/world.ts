@@ -101,6 +101,8 @@ import {
   earnedNickname,
   nicknamesTaken,
   uniqueNickname,
+  driftAfter,
+  milestonesOf,
   trimFeed,
   type BoutSeed,
   type CardBout,
@@ -135,6 +137,7 @@ import {
 import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
 import { settleFightInjuries } from './fightInjuries';
+import { afterTheBout } from './memory';
 import { money } from '../ui/format';
 
 type StoredNews = NewsItem & Entity;
@@ -1249,6 +1252,24 @@ export function runCardBout(ctx: {
   if (winner && nickname)
     developed[winner.id === red.id ? 'red' : 'blue'] = { ...winner, nickname };
 
+  // Drift, memory and voice: what the night leaves in the people on it. Doc 34 C3.
+  const remembered = afterTheBout({
+    db,
+    day,
+    promotion,
+    red: developed.red,
+    blue: developed.blue,
+    boutId,
+    winnerId: result.winnerId,
+    method: result.method,
+    isTitleFight,
+    championId: champion,
+    ranked: divisionRanked,
+    quiet: bulk,
+  });
+  developed.red = remembered.red;
+  developed.blue = remembered.blue;
+
   const item = bulk
     ? undefined
     : fightNews({
@@ -1282,6 +1303,8 @@ export function runCardBout(ctx: {
       }),
     );
   }
+
+  news.push(...remembered.news);
 
   if (winner && !bulk) {
     const streak = streakNews({
@@ -1473,13 +1496,45 @@ function runStatisticalCard(ctx: {
         bodyWear: clamp(stored.condition.bodyWear + (finishes ? 0.6 : 1.1), 0, 100),
       };
 
+      const summary = summariseRecord(record);
+      /*
+       * The same two things a full bout does to a person, at the same cost (doc 34 C3): a career's
+       * milestones move the personality, and a highlight finish can earn a name — unique in the
+       * division, like every other nickname.
+       */
+      const earned =
+        outcome === 'win'
+          ? earnedNickname(
+              stored,
+              record[record.length - 1]!,
+              boutRng.fork(`nickname:${fighter.id}`),
+            )
+          : undefined;
+      const nickname =
+        earned &&
+        uniqueNickname(
+          earned,
+          fighter.id as string,
+          nicknamesTaken(db.fighters.findAll() as Fighter[], stored.divisionId),
+        );
       const next: Fighter = {
         ...stored,
         record,
-        summary: summariseRecord(record),
+        summary,
         condition,
         // Standing moves with results, or nothing ever climbs out of the bottom of the sport.
         reputation: clamp(stored.reputation + (outcome === 'win' ? 1.6 : -0.8), 0, 100),
+        personality: driftAfter(
+          stored.personality,
+          milestonesOf({
+            won: outcome === 'win',
+            knockedOut: stopped,
+            wonTitle: false,
+            lostTitle: false,
+            streak: summary.streak,
+          }),
+        ),
+        ...(nickname ? { nickname } : {}),
       };
 
       // No camp here either — `ageEveryone` trains everybody, including these two.

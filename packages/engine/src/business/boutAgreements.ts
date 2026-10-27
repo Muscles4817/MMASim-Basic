@@ -27,9 +27,9 @@ import { stepUpAcceptance } from '../domain/personality.js';
 import { traitAdd, traitMul } from '../domain/traits.js';
 import { overallRating } from '../ratings/attributes.js';
 import { connectionTo, priority, stableConflictCost, type Manager } from './managers.js';
-import { wantMet, wantsOf, type FighterWant } from '../domain/disposition.js';
+import { wantMet, wantsOf } from '../domain/disposition.js';
 import { describeLedger, relationshipWith } from '../domain/relationship.js';
-import { voiceFor, type VoiceSituation } from '../domain/voice.js';
+import { voiceFor, wantVoice, type VoiceSituation } from '../domain/voice.js';
 
 export type BoutAgreementStatus = 'offered' | 'signed' | 'refused';
 
@@ -222,7 +222,7 @@ export function acceptanceOf(input: {
     concerns.push({
       label: `Not the fight they are after — they want ${want.label.toLowerCase()}`,
       weight: 0.1,
-      situation: wantSituation(want.id),
+      situation: wantVoice(want.id),
     });
   }
 
@@ -260,26 +260,6 @@ export function acceptanceOf(input: {
       ? voiceFor(fighter, worst.situation, day).text
       : undefined;
   return { chance, concern: worst?.label, quote };
-}
-
-/** The line a fighter says when the fight on offer is not the one they want. */
-function wantSituation(id: FighterWant): VoiceSituation | undefined {
-  switch (id) {
-    case 'titleShot':
-    case 'worthyChallenger':
-    case 'superfight':
-      return 'wantsTitleShot';
-    case 'rematch':
-      return 'wantsRematch';
-    case 'moneyFight':
-      return 'wantsMoney';
-    case 'oneLastRun':
-      return 'wantsLegacy';
-    case 'anyWin':
-      return 'refusesStepUp';
-    default:
-      return undefined;
-  }
 }
 
 /** How the answer reads on screen. Never a percentage — a promoter hears a person, not a number. */

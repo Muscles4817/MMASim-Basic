@@ -254,3 +254,58 @@ export function rivalryIgnition(p: Personality): number {
     1,
   );
 }
+
+// --- Drift --------------------------------------------------------------------------------------
+
+/** The moments in a career that change the person having it. */
+export type Milestone = 'wonTitle' | 'lostTitle' | 'knockedOut' | 'winningRun' | 'losingRun';
+
+const DRIFT: Readonly<Record<Milestone, Partial<Personality>>> = {
+  // A belt makes people bigger and, for a while, a little less hungry.
+  wonTitle: { ego: 4, charisma: 2, ambition: -2 },
+  // Losing it either humbles or hardens; the average is a little of both.
+  lostTitle: { ego: -3, resilience: 2 },
+  // Being put to sleep makes most fighters more careful, and a few angrier.
+  knockedOut: { aggression: -2, ambition: -1 },
+  // Five straight: confidence becomes swagger.
+  winningRun: { ego: 3, ambition: 2 },
+  // Three straight losses: the ego goes first, then the appetite.
+  losingRun: { ego: -3, ambition: -3 },
+};
+
+/**
+ * The personality after a milestone. Doc 34 C3.
+ *
+ * Axes are "~stable" (doc 04) — stable, not frozen. These are small, a few points a milestone, so a
+ * career moves a fighter by a band or so rather than turning them into somebody else; and they are
+ * deterministic, because the same night should change the same person the same way.
+ */
+export function driftAfter(p: Personality, milestones: readonly Milestone[]): Personality {
+  if (milestones.length === 0) return p;
+  const out = { ...p };
+  for (const m of milestones) {
+    for (const [axis, delta] of Object.entries(DRIFT[m]) as [PersonalityAxis, number][]) {
+      out[axis] = clamp(out[axis] + delta, 1, 100);
+    }
+  }
+  return out;
+}
+
+/** Which milestones a result is, from one fighter's side of it. */
+export function milestonesOf(input: {
+  won: boolean;
+  /** Stopped by strikes. */
+  knockedOut: boolean;
+  wonTitle: boolean;
+  lostTitle: boolean;
+  /** The streak after this fight: positive for wins, negative for losses. */
+  streak: number;
+}): Milestone[] {
+  const out: Milestone[] = [];
+  if (input.wonTitle) out.push('wonTitle');
+  if (input.lostTitle) out.push('lostTitle');
+  if (input.knockedOut) out.push('knockedOut');
+  if (input.streak === 5) out.push('winningRun');
+  if (input.streak === -3) out.push('losingRun');
+  return out;
+}

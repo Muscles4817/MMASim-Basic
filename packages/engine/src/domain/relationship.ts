@@ -18,6 +18,8 @@ import type { GameDay } from '../core/clock.js';
 import type { PromotionId } from '../core/ids.js';
 import { clamp } from '../core/math.js';
 import type { Personality } from './personality.js';
+import { isKoMethod, type Fighter, type FinishMethod } from './fighter.js';
+import { overallRating } from '../ratings/attributes.js';
 
 export type LedgerKind =
   | 'titleShotGiven'
@@ -116,4 +118,38 @@ export function relationshipWith(
             ? 'Warm'
             : 'Neutral';
   return { score, worst: worst?.entry, best: best?.entry, label };
+}
+
+/** Overall-rating gap that makes a fight a mismatch, either way. */
+export const MISMATCH_GAP = 12;
+
+/**
+ * What a bout leaves a fighter remembering about the promotion that made it.
+ *
+ * Pure: the caller decides whose ledger it lands in. The two-sided ones are judged on ratings,
+ * not on the result alone — a mismatch is being fed to somebody far better and being finished,
+ * and being protected is being handed somebody far worse.
+ */
+export function boutMemories(input: {
+  fighter: Pick<Fighter, 'id' | 'attributes' | 'record'>;
+  opponent: Pick<Fighter, 'id' | 'attributes'>;
+  boutId: string;
+  winnerId?: Fighter['id'];
+  method: FinishMethod;
+  isTitleFight: boolean;
+  championId?: Fighter['id'];
+}): LedgerKind[] {
+  const { fighter, opponent, boutId, winnerId, method, isTitleFight, championId } = input;
+  const out: LedgerKind[] = [];
+  if (isTitleFight && fighter.id !== championId) out.push('titleShotGiven');
+
+  const gap = overallRating(opponent.attributes) - overallRating(fighter.attributes);
+  const finished = isKoMethod(method) || method === 'submission';
+  if (winnerId === opponent.id && finished && gap >= MISMATCH_GAP) out.push('mismatch');
+  if (winnerId === fighter.id && gap <= -MISMATCH_GAP) out.push('protected');
+
+  // A rematch they were owed: the last time they met before tonight, this fighter lost.
+  const earlier = fighter.record.filter((r) => r.opponentId === opponent.id && r.boutId !== boutId);
+  if (earlier[earlier.length - 1]?.outcome === 'loss') out.push('rematchGiven');
+  return out;
 }

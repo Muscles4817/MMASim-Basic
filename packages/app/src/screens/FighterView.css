@@ -100,3 +100,11 @@
   background: var(--negative-soft);
   color: var(--negative);
 }
+
+/* A fighter in their own words (doc 34 C3). */
+.voice-quote {
+  padding-left: var(--space-3);
+  border-left: 3px solid var(--border-strong);
+  color: var(--text-muted);
+  font-style: italic;
+}

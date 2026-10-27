@@ -17,6 +17,7 @@ import { hashSeed } from '../core/rng.js';
 import type { GameDay } from '../core/clock.js';
 import { getDivision } from './divisions.js';
 import { isKoMethod, type Fighter, type FinishMethod } from './fighter.js';
+import type { FighterWant } from './disposition.js';
 
 // --- Who is talking --------------------------------------------------------------------------
 
@@ -372,6 +373,30 @@ export function voiceFor(
   previous?: string,
 ): VoiceLine {
   return line(speaker, SAYS[situation], `${situation}:${when}`, {}, previous);
+}
+
+/** The situation a want is voiced as, when it has one. */
+export function wantVoice(id: FighterWant): VoiceSituation | undefined {
+  switch (id) {
+    case 'titleShot':
+    case 'worthyChallenger':
+    case 'superfight':
+      return 'wantsTitleShot';
+    case 'rematch':
+      return 'wantsRematch';
+    case 'moneyFight':
+      return 'wantsMoney';
+    case 'oneLastRun':
+      return 'wantsLegacy';
+    case 'anyWin':
+      return 'refusesStepUp';
+    case 'activity':
+      return 'wantsActivity';
+    case 'money':
+      return 'wantsMoney';
+    default:
+      return undefined;
+  }
 }
 
 /** Every pool, for tests that check the register and the length of what is said. */
