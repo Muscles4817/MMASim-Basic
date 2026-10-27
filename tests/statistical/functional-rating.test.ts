@@ -63,7 +63,10 @@ function spearman(a: readonly number[], b: readonly number[]): number {
   const ra = ranksOf(a);
   const rb = ranksOf(b);
   const n = a.length;
-  const d2 = ra.reduce((acc, _, i) => acc + (ra[i] - rb[i]) ** 2, 0);
+  // `ranksOf` fills every index, and the reduce walks `ra`'s own length against `rb` of the same
+  // length, so both reads are in bounds. The assertions are for `noUncheckedIndexedAccess`, which
+  // the tests project turns on and the engine's does not.
+  const d2 = ra.reduce((acc, _, i) => acc + (ra[i]! - rb[i]!) ** 2, 0);
   return 1 - (6 * d2) / (n * (n * n - 1));
 }
 
