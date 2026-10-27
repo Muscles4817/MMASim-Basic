@@ -1797,7 +1797,7 @@ export interface BoutResult {
   how: string;
   /** The belt moment, on a title fight: a new champion, or one who kept it. */
   title?: 'won' | 'defended';
-  /** The night's bonuses this bout earned, once they are given out (or suggested). */
+  /** The night's bonuses this bout earned, once they have been given out. */
   fightOfTheNight?: boolean;
   performance?: readonly string[];
 }
@@ -1814,7 +1814,9 @@ export function nightResults(db: GameDb, plan: EventPlan): BoutResult[] {
     : undefined;
   if (!night) return [];
 
-  const performers = new Set((night.awards?.performanceOfTheNight ?? []) as readonly string[]);
+  // Only once given out: a suggestion the promoter has not confirmed is not an award yet.
+  const given = night.awards?.pending ? undefined : night.awards;
+  const performers = new Set((given?.performanceOfTheNight ?? []) as readonly string[]);
 
   return night.bouts.map((bout) => {
     const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
@@ -1843,7 +1845,7 @@ export function nightResults(db: GameDb, plan: EventPlan): BoutResult[] {
       winner,
       how: entry ? describeMethod(entry.method, entry.round) : '',
       title,
-      fightOfTheNight: night.awards?.fightOfTheNight === bout.boutId,
+      fightOfTheNight: given?.fightOfTheNight === bout.boutId,
       performance: [bout.redId as string, bout.blueId as string].filter((id) => performers.has(id)),
     };
   });

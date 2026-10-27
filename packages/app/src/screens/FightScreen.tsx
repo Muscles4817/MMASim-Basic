@@ -353,6 +353,8 @@ function PreFight({
   day: number;
   onWalkOut(): void;
 }) {
+  // A promoter is watching a bout on their card, not fighting in it.
+  const promoter = useGame().world.playerRole === 'promoter';
   /*
    * The night in the order it happened, not the order it was advertised in.
    *
@@ -458,7 +460,7 @@ function PreFight({
                   <span className="card-row__names">
                     {boutRed?.lastName ?? '—'} vs {boutBlue?.lastName ?? '—'}
                     {bout.isTitleFight && <span aria-hidden="true"> 🏆</span>}
-                    {isPlayer && <Chip tone="accent">You, next</Chip>}
+                    {isPlayer && <Chip tone="accent">{promoter ? 'Next' : 'You, next'}</Chip>}
                   </span>
                   <span className="card-row__result">
                     {isPlayer
@@ -833,6 +835,8 @@ function FightSummary({
   undercard: readonly { boutId: string; winnerName?: string; method: string; round: number }[];
   tactics?: TacticalPlan;
 }) {
+  // A promoter is watching a bout on their card, not fighting in it.
+  const promoter = useGame().world.playerRole === 'promoter';
   const methodLabel = isKoMethod(result.method)
     ? result.method === 'ko'
       ? 'Knockout'
@@ -930,7 +934,7 @@ function FightSummary({
                   <span className="card-row__names">
                     {boutRed?.lastName ?? '—'} vs {boutBlue?.lastName ?? '—'}
                     {bout.isTitleFight && <span aria-hidden="true"> 🏆</span>}
-                    {isPlayer && <Chip tone="accent">You</Chip>}
+                    {isPlayer && <Chip tone="accent">{promoter ? 'This fight' : 'You'}</Chip>}
                   </span>
                   <span className="card-row__result">
                     {isPlayer

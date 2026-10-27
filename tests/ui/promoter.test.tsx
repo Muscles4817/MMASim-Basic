@@ -418,12 +418,26 @@ describe('fight night', () => {
     // Every advance was a month long and none of them walked past the card.
     await user.click(await screen.findByRole('button', { name: /^Run fight night: / }));
 
+    /*
+     * Under reduced motion the show does not play itself: every bout waits for the player.
+     * Stubbed for the run only, so the rest of the walk is the default.
+     */
+    const matchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      ...matchMedia(query),
+      matches: query.includes('prefers-reduced-motion'),
+    })) as typeof window.matchMedia;
+
     // Withdrawals can empty a slot first; the button is still there to press again.
     for (let i = 0; i < 3; i++) {
       const run = screen.queryByRole('button', { name: /^Run fight night: / });
       if (!run) break;
       await user.click(run);
     }
+
+    expect(await screen.findByRole('button', { name: /^First bout$/i })).toBeTruthy();
+    expect(screen.getAllByText(/still to come/i).length).toBeGreaterThan(0);
+    window.matchMedia = matchMedia;
 
     // The show first; the recap after it.
     await user.click(
