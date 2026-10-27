@@ -149,28 +149,28 @@ week, 4 fighters as people, 5 development over time.
 
 ## Tracker
 
-| Item                            | Phase | Lane        | Status            | PR  |
-| ------------------------------- | ----- | ----------- | ----------------- | --- |
-| A1 Fight night unmissable       | 1     | A           | Done              | #47 |
-| A2 Alert hygiene                | 1     | A           | Done              | #50 |
-| B0 Generated names (content)    | 1     | B           | Done              | #48 |
-| C1 Identity on the page         | 4     | C           | Done              | #49 |
-| B1 Economy and buzz             | 2     | B           | Changes requested | #56 |
-| B2 Broadcaster and owner        | 2     | B           | In progress       |     |
-| B3 Prestige and tiers           | 2     | B           | Not started       |     |
-| A3 Fight-night show and recap   | 3     | A           | Done              | #54 |
-| A4 Matchmaking UX               | 3     | A           | In review         | #58 |
-| A5 Fight week                   | 3     | A           | Not started       |     |
-| A6 Onboarding and readability   | 1/3   | A           | In progress       |     |
-| C2 Star power surfaced          | 4     | C           | Done              | #51 |
-| C3 Memory, wants and voice      | 4     | C           | Done              | #52 |
-| C4 Negotiation                  | 4     | C           | Done              | #55 |
-| C5 Real careers over time       | 5     | C           | In review         | #57 |
-| C6 Career events                | 5     | C           | In progress       |     |
-| B4 Rival promotions             | 5     | B           | Not started       |     |
-| B5 Investment and season        | 5     | B           | Not started       |     |
-| B6 History, scenarios, rankings | 5     | B           | Not started       |     |
-| Content pass after each phase   | all   | Coordinator | Not started       |     |
+| Item                            | Phase | Lane        | Status              | PR  |
+| ------------------------------- | ----- | ----------- | ------------------- | --- |
+| A1 Fight night unmissable       | 1     | A           | Done                | #47 |
+| A2 Alert hygiene                | 1     | A           | Done                | #50 |
+| B0 Generated names (content)    | 1     | B           | Done                | #48 |
+| C1 Identity on the page         | 4     | C           | Done                | #49 |
+| B1 Economy and buzz             | 2     | B           | Re-review           | #56 |
+| B2 Broadcaster and owner        | 2     | B           | In progress         |     |
+| B3 Prestige and tiers           | 2     | B           | Not started         |     |
+| A3 Fight-night show and recap   | 3     | A           | Done                | #54 |
+| A4 Matchmaking UX               | 3     | A           | In review           | #58 |
+| A5 Fight week                   | 3     | A           | In progress         |     |
+| A6 Onboarding and readability   | 1/3   | A           | Built, PR after #58 |     |
+| C2 Star power surfaced          | 4     | C           | Done                | #51 |
+| C3 Memory, wants and voice      | 4     | C           | Done                | #52 |
+| C4 Negotiation                  | 4     | C           | Done                | #55 |
+| C5 Real careers over time       | 5     | C           | In review           | #57 |
+| C6 Career events                | 5     | C           | In progress         |     |
+| B4 Rival promotions             | 5     | B           | Not started         |     |
+| B5 Investment and season        | 5     | B           | Not started         |     |
+| B6 History, scenarios, rankings | 5     | B           | Not started         |     |
+| Content pass after each phase   | all   | Coordinator | Not started         |     |
 
 ## Follow-ups routed from reviews and builder reports
 
@@ -212,3 +212,4 @@ week, 4 fighters as people, 5 development over time.
 | #55 review       | Stale `Fighter.talks` never pruned for unsigned fighters                                                                                                                                                                                                                                                                        | C5                             |
 | #57 report       | Young share (≤23) ~7% vs ~16% in the hand-authored world; acceptable, could be pushed further                                                                                                                                                                                                                                   | Later                          |
 | C6 (in progress) | Weigh-ins: engine `business/weighIn.ts` (`weightMissRisk`, `rollWeighIn`, `opponentTakesCatchweight`); app `rollWeighIns` on card day − 1 writes `PlannedBout.weighIn`, blocking inbox item; `resolveMissedWeight(db, planId, slotId, 'catchweight' \| 'cancel')`. A5's UI reads `bout.weighIn` and calls `resolveMissedWeight` | A5                             |
+| #59              | A3 callouts follow-up: recap callouts read C3's feed line, one-tap pencil-in                                                                                                                                                                                                                                                    | In review (#59)                |
