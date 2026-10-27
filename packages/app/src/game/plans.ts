@@ -2280,6 +2280,112 @@ export function nightResults(db: GameDb, plan: EventPlan): BoutResult[] {
   });
 }
 
+// --- After the night: the callouts ------------------------------------------------------------
+
+/** A winner asking for a fight, and who they are asking for. */
+export interface Callout {
+  winnerId: string;
+  targetId: string;
+  divisionId: string;
+  /** The line as the feed has it, in the winner's voice (`calloutFor`). */
+  line: string;
+  /** Whether the target holds the belt, which is what makes it the call it is. */
+  forTheBelt: boolean;
+}
+
+/**
+ * The callouts from the microphone, top of the card first.
+ *
+ * The moment a promoter's next card is born in: a winner naming who they want. The words are the
+ * ones the night already said — C3's `calloutFor`, written into the feed as each bout settled —
+ * read back rather than generated again, so the recap and the news can never quote a fighter
+ * differently. Only callouts that name somebody are here, because a callout aimed at a whole
+ * division is not a fight anybody can pencil in.
+ */
+export function calloutsFor(db: GameDb, plan: EventPlan, limit = 3): Callout[] {
+  const promotion = db.promotions.findById(plan.promotionId as string) as Promotion | undefined;
+  if (!promotion) return [];
+  const out: Callout[] = [];
+
+  for (const row of nightResults(db, plan)) {
+    if (out.length >= limit) break;
+    const winner = row.winner;
+    if (!winner) continue;
+    const said = db.news.findById(newsId(plan.day as never, `callout_${row.bout.boutId}`)) as
+      NewsItem | undefined;
+    // `afterTheBout` lists the winner first and the fighter they named second.
+    const targetId = said?.fighterIds?.[1] as string | undefined;
+    if (!said?.detail || !targetId || targetId === (winner.id as string)) continue;
+
+    const divisionId = row.bout.divisionId as string;
+    out.push({
+      winnerId: winner.id as string,
+      targetId,
+      divisionId,
+      line: said.detail,
+      forTheBelt: promotion.champions[divisionId as never] === targetId,
+    });
+  }
+  return out;
+}
+
+/**
+ * Put a callout on the next card with room for it, as a pencilled-in draft.
+ *
+ * Nothing is offered: the player still sends it, which is the whole rule of the planner. The
+ * card chosen is the soonest live one at least `MINIMUM_LEAD_DAYS` out on which neither fighter
+ * is blocked, in its highest empty slot — the main event first, because a callout worth taking
+ * is usually a headline.
+ */
+export function pencilCallout(
+  db: GameDb,
+  callout: Callout,
+): { plan: EventPlan; slotId: string } | { reason: string } {
+  const world = getWorld(db);
+  const promotion = db.promotions.findById(world.playerPromotionId as string) as
+    Promotion | undefined;
+  if (!promotion) return { reason: 'No promotion.' };
+  const red = db.fighters.findById(callout.winnerId) as Fighter | undefined;
+  const blue = db.fighters.findById(callout.targetId) as Fighter | undefined;
+  if (!red || !blue) return { reason: 'One of them is gone.' };
+
+  const ctx = promoterContext({ db, promotion, day: world.day });
+  const order: readonly CardPosition[] = ['mainEvent', 'coMain', 'mainCard', 'prelim'];
+  const candidates = plansFor(db, promotion.id as string).filter(
+    (p) => p.day >= world.day + MINIMUM_LEAD_DAYS,
+  );
+
+  for (const plan of candidates) {
+    const slot = order
+      .flatMap((position) => plan.slots.filter((s) => s.position === position))
+      .find((s) => !s.bout);
+    if (!slot) continue;
+    const blocked =
+      blockerFor({ ctx, fighter: red, plan, ignoreSlotId: slot.id }) ??
+      blockerFor({ ctx, fighter: blue, plan, ignoreSlotId: slot.id });
+    if (blocked) continue;
+
+    const next = savePlan(
+      db,
+      placeBout({
+        plan,
+        slotId: slot.id,
+        redId: callout.winnerId,
+        blueId: callout.targetId,
+        divisionId: callout.divisionId,
+      }),
+    );
+    return { plan: next, slotId: slot.id };
+  }
+
+  return {
+    reason:
+      candidates.length === 0
+        ? 'There is no card far enough out to put it on. Plan one first.'
+        : 'No card coming up has room for it with both of them cleared.',
+  };
+}
+
 /** Odds as words. A promoter hears a fight, not a probability. */
 export const describeOdds = (redOdds: number): string => {
   const gap = Math.abs(redOdds - 0.5);
