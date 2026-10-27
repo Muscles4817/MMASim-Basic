@@ -355,6 +355,22 @@ export type BoutCounter =
   | { kind: 'rounds'; rounds: 5 }
   | { kind: 'opponent'; preferredId: FighterId; reason: string };
 
+/** A counter in a sentence, for the card and the inbox. */
+export function describeCounter(counter: BoutCounter): string {
+  switch (counter.kind) {
+    case 'money':
+      return `Wants ${Math.round(counter.askingPurse * 10) / 10}k to show to take it.`;
+    case 'slot':
+      return counter.position === 'coMain'
+        ? 'Will take it as the co-main event, not lower.'
+        : 'Will take it on the main card, not the prelims.';
+    case 'rounds':
+      return 'Will take it over five rounds, not three.';
+    case 'opponent':
+      return counter.reason;
+  }
+}
+
 /**
  * How many days a corner takes to answer: two to seven.
  *

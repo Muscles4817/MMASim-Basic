@@ -13,6 +13,7 @@
  */
 
 import {
+  describeCounter,
   displayName,
   agreementStatus,
   inboxId,
@@ -305,7 +306,11 @@ export function recordOfferOutcome(input: {
       // A counter is a decision with a price on it, and letting the clock run past one is how a
       // makeable fight becomes a hole in the card.
       priority: 'decision',
-      title: `${nameOf(counter.fighterId as string)} wants ${money(counter.askingPurse ?? 0)}`,
+      // Money, or the slot, the distance or the opponent they asked for instead (doc 34 C4).
+      title:
+        counter.counter && counter.counter.kind !== 'money'
+          ? `${nameOf(counter.fighterId as string)}: ${describeCounter(counter.counter)}`
+          : `${nameOf(counter.fighterId as string)} wants ${money(counter.askingPurse ?? 0)}`,
       body: `${counter.note} The fight is ${red} vs ${blue} on ${cardName}.`,
       actions: [
         {
