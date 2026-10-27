@@ -5,7 +5,13 @@
 import { describe, expect, it } from 'vitest';
 import { makePromotion } from '../testing/fixtures.js';
 import { CARD_SIZE } from './events.js';
-import { MAX_CARDS_PER_YEAR, cardsPerYear, daysBetweenCards } from './schedule.js';
+import { asPromotionId } from '../core/ids.js';
+import {
+  MAX_CARDS_PER_YEAR,
+  cardsPerYear,
+  cardsStagedBefore,
+  daysBetweenCards,
+} from './schedule.js';
 import type { Promotion, PromotionTier } from '../domain/organisations.js';
 
 const of = (tier: PromotionTier, over: Partial<Promotion> = {}): Promotion =>
@@ -78,5 +84,15 @@ describe('money is a schedule constraint', () => {
     // `chargeCosts` bills whether or not anybody fights, so a promotion that stops running cards
     // has no way back. It cuts back; it does not close.
     expect(cardsPerYear(of('regional', { budget: 0 }), 100)).toBeGreaterThan(0);
+  });
+});
+
+describe('a promotion has a past', () => {
+  it('arrives with cards behind it, more at the top of the sport, the same every time', () => {
+    const apex = of('global', { id: asPromotionId('p_x') });
+    const local = of('developmental', { id: asPromotionId('p_x') });
+    expect(cardsStagedBefore(apex)).toBe(cardsStagedBefore({ ...apex }));
+    expect(cardsStagedBefore(apex)).toBeGreaterThan(cardsStagedBefore(local));
+    expect(cardsStagedBefore(local)).toBeGreaterThan(0);
   });
 });

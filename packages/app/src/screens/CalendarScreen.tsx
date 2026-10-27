@@ -444,15 +444,22 @@ function PlanACard({
 /**
  * What the "go to next" button is actually going to.
  *
- * A card's title is a proper name — `RIZIN 1`, not `rizin 1` — so it goes in as written. Only the
- * sentence-shaped titles ("Your contract expires") get lowercased to sit inside the button's own
- * sentence.
+ * A title goes in as written unless it opens with an ordinary word ("Your contract expires",
+ * "Camp began"), and then only that first letter drops to sit inside the button's own sentence.
+ * Lowercasing the whole title turned every name in it into a typo — "go to samran prasert's
+ * contract expires", "go to you fight jon reyes" — and a card's title is a name all the way
+ * through.
  */
 function describeNext(entries: readonly CalendarEntry[], day: number): string {
   const entry = entries.find((e) => e.day === day && e.ownership === 'yours');
   if (!entry) return 'the next thing';
-  return entry.kind === 'plan' || entry.kind === 'card' ? entry.title : entry.title.toLowerCase();
+  return SENTENCE_START.test(entry.title)
+    ? entry.title[0]!.toLowerCase() + entry.title.slice(1)
+    : entry.title;
 }
+
+/** The calendar's titles that start with a common word rather than a name. */
+const SENTENCE_START = /^(You|Your|Camp|Medically)\b/;
 
 /** How far away, in the words a person uses. Never "in 37 days". */
 function describeGap(days: number): string {

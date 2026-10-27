@@ -80,7 +80,7 @@ import {
   type TitleKind,
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
-import { appendNews, runCardBout } from './world';
+import { appendNews, headlineNames, nextEventNumber, runCardBout } from './world';
 import { currentPurse } from './money';
 import { raise, recordOfferOutcome } from './inbox';
 
@@ -128,11 +128,47 @@ export function cancelPlan(db: GameDb, planId: string): void {
 }
 
 /**
+ * What a card is called, today.
+ *
+ * The promotion's short name and the card's number — `GCFC 12` — and the main event once both
+ * corners have signed: `GCFC 12: Reyes vs Hill`. A title the promoter typed takes the number's
+ * place. Derived on every read rather than stored, because the number moves when an earlier card
+ * is cancelled and the headline moves when the main event changes; a card that has run is called
+ * whatever its night was called.
+ *
+ * The number counts the nights the promotion has already staged, then its open cards in date
+ * order, so the next card on the calendar is always the next number.
+ */
+export function planName(db: GameDb, plan: EventPlan): string {
+  if (plan.nightId) {
+    const night = db.events.findById(plan.nightId) as FightNight | undefined;
+    if (night) return night.name;
+  }
+  const promotion = db.promotions.findById(plan.promotionId as string) as Promotion | undefined;
+  if (!promotion) return plan.name ?? 'Untitled card';
+
+  const main = plan.slots.find((s) => s.position === 'mainEvent')?.bout;
+  return eventName({
+    promotion,
+    number: planNumber(db, plan, promotion),
+    title: plan.name,
+    mainEventNames: main?.status === 'agreed' ? headlineNames(db, main) : undefined,
+  });
+}
+
+/** One more than the nights already staged, plus the open cards dated ahead of this one. */
+function planNumber(db: GameDb, plan: EventPlan, promotion: Promotion): number {
+  const ahead = plansFor(db, promotion.id as string).filter(
+    (p) => p.id !== plan.id && (p.day < plan.day || (p.day === plan.day && p.id < plan.id)),
+  ).length;
+  return nextEventNumber(db, promotion) + ahead;
+}
+
+/**
  * A new, empty card on a chosen date.
  *
- * Named provisionally from the promotion and the date. A card two hundred days out has no main
- * event to be named after, and `eventName` needs one — so the plan carries a working title and
- * takes its real name on the night, when there is a headline to name it for.
+ * Unnamed unless the promoter titled it: `planName` numbers it, and adds the main event once
+ * there is one to bill it under.
  */
 export function createPlan(input: {
   db: GameDb;
@@ -145,12 +181,13 @@ export function createPlan(input: {
 }): EventPlan {
   const { db, promotion, day, scale = 'standard' } = input;
   const existing = allPlans(db).filter((p) => p.promotionId === promotion.id).length;
+  const title = input.name?.trim();
 
   const plan: EventPlan = {
     id: `plan_${promotion.id}_${day}_${existing}`,
     promotionId: promotion.id,
     day,
-    name: input.name?.trim() || `${promotion.shortName} ${existing + 1}`,
+    ...(title ? { name: title } : {}),
     city: input.city ?? defaultMarket(promotion).city,
     country: input.country ?? defaultMarket(promotion).country,
     scale,
@@ -790,7 +827,15 @@ export function sendOffer(input: {
    * The inbox is where things wait until they are dealt with, which is exactly what an
    * unanswered price is.
    */
-  recordOfferOutcome({ db, plan, slotId, bout: next, accepted, answers });
+  recordOfferOutcome({
+    db,
+    plan,
+    cardName: planName(db, plan),
+    slotId,
+    bout: next,
+    accepted,
+    answers,
+  });
 
   return {
     plan: withSlot(plan, slotId, next),
@@ -1293,14 +1338,6 @@ export function runPlan(input: {
 
   const card = buildCard(seeds);
   const rng = createRng(`${world.seed}:card:${plan.id}`);
-  const headline = card[0];
-  const headlineRed = headline
-    ? (db.fighters.findById(headline.redId as string) as Fighter | undefined)
-    : undefined;
-  const headlineBlue = headline
-    ? (db.fighters.findById(headline.blueId as string) as Fighter | undefined)
-    : undefined;
-
   const headlineDraw = Math.max(0, ...seeds.map((s) => s.draw));
   const attendanceEstimate = expectedDemand(promotion, headlineDraw, card.length);
 
@@ -1308,15 +1345,13 @@ export function runPlan(input: {
     id: `${plan.id}_night` as never,
     promotionId: promotion.id,
     day: plan.day as never,
-    name:
-      headlineRed && headlineBlue
-        ? eventName({
-            promotion,
-            broadcast: plan.broadcast,
-            number: Math.floor(plan.day / 14) + 1,
-            mainEventNames: [headlineRed.lastName, headlineBlue.lastName],
-          })
-        : plan.name,
+    // Billed under whatever actually tops the card, which a late withdrawal can change.
+    name: eventName({
+      promotion,
+      number: planNumber(db, plan, promotion),
+      title: plan.name,
+      mainEventNames: headlineNames(db, card[0]),
+    }),
     venue: {
       ...venueFor(promotion, attendanceEstimate, rng.fork('venue')),
       city: plan.city,
@@ -1521,7 +1556,7 @@ export function scanPromoterInbox(db: GameDb, day: number): number {
         day,
         kind: 'card',
         priority: 'decision',
-        title: `${plan.name} still has no main event`,
+        title: `${planName(db, plan)} still has no main event`,
         body: `${away} days out. The main event sells the night, and there is nothing on it.`,
         actions: [
           {
@@ -1544,7 +1579,7 @@ export function scanPromoterInbox(db: GameDb, day: number): number {
         day,
         kind: 'card',
         priority: 'notable',
-        title: `${plan.name} is ${progress.slots - progress.filled} fights short`,
+        title: `${planName(db, plan)} is ${progress.slots - progress.filled} fights short`,
         body: 'Two weeks out. What is not booked now is a short card, and a short card is worth less at the gate.',
         link: { route: 'plan', id: plan.id },
         promotionId: promotion.id,

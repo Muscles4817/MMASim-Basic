@@ -43,7 +43,7 @@ import { formatGameDay } from '../shell/Shell';
 import { money } from '../ui/format';
 import { attentionFor } from '../game/attention';
 import { describeRunway, financialSnapshot } from '../game/finances';
-import { forecastPlan, plansFor, promoterContext } from '../game/plans';
+import { forecastPlan, planName, plansFor, promoterContext } from '../game/plans';
 import { PromoterSubNav } from './promoterNav';
 
 /** How many rows the dashboard shows before it stops being a dashboard. */
@@ -156,7 +156,7 @@ export function PromotionHubScreen() {
                 <div className="stack" style={{ gap: 'var(--space-3)' }}>
                   <div>
                     <p style={{ fontSize: 'var(--text-xl)', fontWeight: 800, margin: 0 }}>
-                      {next.name}
+                      {planName(db, next)}
                     </p>
                     <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
                       {formatGameDay(next.day)} · {next.city} · in {next.day - world.day} days
@@ -242,7 +242,7 @@ export function PromotionHubScreen() {
                     return (
                       <PipelineCard
                         key={plan.id}
-                        name={plan.name}
+                        name={planName(db, plan)}
                         when={formatGameDay(plan.day)}
                         meta={`${plan.city} · ${describeHealth(health)}`}
                         filled={progress.filled}

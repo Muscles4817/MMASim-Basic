@@ -29,6 +29,7 @@ import {
   type DepthTarget,
 } from '../seed/depth.js';
 import { buildSeedWorld } from '../seed/index.js';
+import { createPromotionNamer, type PyramidRung } from './promotionNames.js';
 import {
   DIVISIONS,
   asFighterId,
@@ -130,7 +131,7 @@ export const PREHISTORY_YEARS = 8;
 export const STATISTICAL_BELOW_PRESTIGE = 44;
 
 interface TierSpec {
-  label: string;
+  label: PyramidRung;
   tier: PromotionTier;
   count: number;
   /** Signed fighters per promotion. */
@@ -347,6 +348,7 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
 
   const promotions: Promotion[] = [];
   const targets: DepthTarget[] = [];
+  const nameFor = createPromotionNamer(seed);
 
   for (const spec of PYRAMID) {
     const shape = sizes.get(spec.label)!;
@@ -364,8 +366,7 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
       promotions.push({
         ...template,
         id: asPromotionId(id),
-        name: `${spec.label} ${i + 1}`,
-        shortName: `${spec.label.slice(0, 3).toUpperCase()}${i + 1}`,
+        ...nameFor(spec.label),
         tier: spec.tier,
         prestige,
         // Scaled to the operation, so `solvency` and `chargeCosts` see a plausible business.

@@ -126,6 +126,16 @@ describe('it builds a sport', () => {
       expect(banned.test(p.shortName), p.shortName).toBe(false);
     }
   });
+
+  it('gives every promotion a name of its own rather than its rung of the pyramid', () => {
+    // The new-game picker used to be eleven rows of `national N`, and every card on them `NAT4 1`.
+    for (const p of promotions) {
+      expect(p.name, p.name).not.toMatch(/\b(apex|major|national|feeder|local)\b|\d/i);
+      expect(p.shortName, p.shortName).not.toMatch(/\d/);
+    }
+    expect(new Set(promotions.map((p) => p.name)).size).toBe(promotions.length);
+    expect(new Set(promotions.map((p) => p.shortName)).size).toBe(promotions.length);
+  });
 });
 
 describe('and eight years of it having happened', () => {

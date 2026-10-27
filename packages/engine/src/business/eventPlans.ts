@@ -126,7 +126,14 @@ export interface EventPlan {
   id: string;
   promotionId: PromotionId;
   day: GameDay;
-  name: string;
+  /**
+   * The promoter's own title for the card, when they gave it one.
+   *
+   * Only that. The default — `GCFC 12`, then `GCFC 12: Reyes vs Hill` once the main event signs —
+   * is derived from the promotion's numbering and the card's main event (`planName` in the app),
+   * because both change after the plan is created and a stored copy would go stale.
+   */
+  name?: string;
   city: string;
   country: string;
   venueName?: string;

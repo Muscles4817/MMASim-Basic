@@ -25,6 +25,7 @@
  */
 
 import { clamp } from '../core/math.js';
+import { createRng } from '../core/rng.js';
 import type { Promotion, PromotionTier } from '../domain/organisations.js';
 import { CARD_SIZE } from './events.js';
 import { periodCosts, COST_PERIOD_DAYS } from './promotionCosts.js';
@@ -118,6 +119,20 @@ export function cardsPerYear(promotion: Promotion, rosterSize: number): number {
  * second constant that would have to be kept in step with this one.
  */
 export const MAX_CARDS_PER_YEAR = Math.max(...Object.values(TIER_AMBITION));
+
+/**
+ * Cards a promotion had already staged before the records begin.
+ *
+ * The world keeps a promotion's nights only from the day the player arrives — pre-history is
+ * simulated in bulk and stores none — so counting stored nights alone numbered an eight-year-old
+ * promotion's next show `1`. This is the past the save does not hold: three to nine years of its
+ * tier's schedule, varied per promotion and derived from its id, so it is the same number every
+ * time it is asked and never needs storing.
+ */
+export function cardsStagedBefore(promotion: Promotion): number {
+  const years = createRng(`history:${promotion.id}`).range(3, 9);
+  return Math.max(1, Math.round(years * TIER_AMBITION[promotion.tier] * 0.75));
+}
 
 /** Days between this promotion's cards. `Infinity` when it cannot stage any. */
 export function daysBetweenCards(promotion: Promotion, rosterSize: number): number {

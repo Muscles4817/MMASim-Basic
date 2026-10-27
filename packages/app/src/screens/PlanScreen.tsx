@@ -73,6 +73,7 @@ import {
   planById,
   promoterContext,
   rollWithdrawals,
+  planName,
   runPlan,
   savePlan,
   sendAllDrafts,
@@ -217,7 +218,7 @@ export function PlanScreen({ id }: { id: string }) {
                 style={{ justifyContent: 'space-between', alignItems: 'baseline' }}
               >
                 <p className="section-title" style={{ margin: 0 }}>
-                  {plan.name}
+                  {planName(db, plan)}
                 </p>
                 <Button size="sm" variant="ghost" onClick={() => setSettings((s) => !s)}>
                   {settings ? 'Done' : 'Card settings'}
@@ -1294,7 +1295,7 @@ function CardSettings({
       {confirming ? (
         <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           <Button variant="danger" onClick={onCancel}>
-            Yes — cancel {plan.name}
+            Yes — cancel this card
           </Button>
           <Button variant="ghost" onClick={() => setConfirming(false)}>
             Keep it

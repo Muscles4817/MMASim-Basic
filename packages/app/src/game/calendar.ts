@@ -30,7 +30,7 @@ import {
 } from '@mmasim/engine';
 import { getWorld, type GameDb, type WorldMeta } from '@mmasim/data';
 import { getBooking } from './career';
-import { plansFor } from './plans';
+import { planName, plansFor } from './plans';
 
 export type CalendarKind =
   'plan' | 'card' | 'fight' | 'camp' | 'contract' | 'medical' | 'inactivity';
@@ -98,7 +98,7 @@ export function buildCalendar(db: GameDb, range: CalendarRange): CalendarEntry[]
     entries.push({
       day: plan.day,
       kind: 'plan',
-      title: plan.name,
+      title: planName(db, plan),
       /*
        * Signed, not merely filled.
        *
