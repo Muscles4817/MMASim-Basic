@@ -146,48 +146,54 @@ week, 4 fighters as people, 5 development over time.
 
 ## Tracker
 
-| Item                            | Phase | Lane        | Status            | PR  |
-| ------------------------------- | ----- | ----------- | ----------------- | --- |
-| A1 Fight night unmissable       | 1     | A           | Done              | #47 |
-| A2 Alert hygiene                | 1     | A           | Changes requested | #50 |
-| B0 Generated names (content)    | 1     | B           | Done              | #48 |
-| C1 Identity on the page         | 4     | C           | In review         | #49 |
-| B1 Economy and buzz             | 2     | B           | In progress       |     |
-| B2 Broadcaster and owner        | 2     | B           | Not started       |     |
-| B3 Prestige and tiers           | 2     | B           | Not started       |     |
-| A3 Fight-night show and recap   | 3     | A           | In progress       |     |
-| A4 Matchmaking UX               | 3     | A           | Not started       |     |
-| A5 Fight week                   | 3     | A           | Not started       |     |
-| A6 Onboarding and readability   | 1/3   | A           | Not started       |     |
-| C2 Star power surfaced          | 4     | C           | In review         | #51 |
-| C3 Memory, wants and voice      | 4     | C           | In progress       |     |
-| C4 Negotiation                  | 4     | C           | Not started       |     |
-| C5 Real careers over time       | 5     | C           | Not started       |     |
-| C6 Career events                | 5     | C           | Not started       |     |
-| B4 Rival promotions             | 5     | B           | Not started       |     |
-| B5 Investment and season        | 5     | B           | Not started       |     |
-| B6 History, scenarios, rankings | 5     | B           | Not started       |     |
-| Content pass after each phase   | all   | Coordinator | Not started       |     |
+| Item                            | Phase | Lane        | Status      | PR  |
+| ------------------------------- | ----- | ----------- | ----------- | --- |
+| A1 Fight night unmissable       | 1     | A           | Done        | #47 |
+| A2 Alert hygiene                | 1     | A           | Done        | #50 |
+| B0 Generated names (content)    | 1     | B           | Done        | #48 |
+| C1 Identity on the page         | 4     | C           | Done        | #49 |
+| B1 Economy and buzz             | 2     | B           | In progress |     |
+| B2 Broadcaster and owner        | 2     | B           | Not started |     |
+| B3 Prestige and tiers           | 2     | B           | Not started |     |
+| A3 Fight-night show and recap   | 3     | A           | In progress |     |
+| A4 Matchmaking UX               | 3     | A           | Not started |     |
+| A5 Fight week                   | 3     | A           | Not started |     |
+| A6 Onboarding and readability   | 1/3   | A           | Not started |     |
+| C2 Star power surfaced          | 4     | C           | In review   | #51 |
+| C3 Memory, wants and voice      | 4     | C           | In review   | #52 |
+| C4 Negotiation                  | 4     | C           | Not started |     |
+| C5 Real careers over time       | 5     | C           | Not started |     |
+| C6 Career events                | 5     | C           | Not started |     |
+| B4 Rival promotions             | 5     | B           | Not started |     |
+| B5 Investment and season        | 5     | B           | Not started |     |
+| B6 History, scenarios, rankings | 5     | B           | Not started |     |
+| Content pass after each phase   | all   | Coordinator | Not started |     |
 
 ## Follow-ups routed from reviews and builder reports
 
-| From       | Follow-up                                                                                                                                          | Routed to              |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| #47 review | Calling a card off on the night is free, so the missed-card penalty can be dodged                                                                  | A5 (fight week)        |
-| #47        | Missed-card buzz −8 / resentment +15 are placeholders                                                                                              | B1 / C3 tuning         |
-| #48 report | Calendar `describeGap` says "1 months"; "Go to X's contract expires" reads awkwardly                                                               | A2                     |
-| #48 report | `PromotionHubScreen` repeats tier labels instead of `PROMOTION_TIER_LABELS`                                                                        | A2                     |
-| #48 report | Upset news "Number 6 beats number 2" lacks division and promotion                                                                                  | C3 (voice)             |
-| #48 report | Venue cities don't match the promotion's region                                                                                                    | B1 (markets)           |
-| #48 report | Generated promotions share every character field except tier/prestige/budget; all USA-based                                                        | B4 / B5                |
-| #47 review | Move `DeleteSave` from `MenuScreen` into `ui/`                                                                                                     | A2                     |
-| #48 review | Event pre-history count must not depend on `tier` once tiers move                                                                                  | B0 fix / B3            |
-| #48 review | `events.count` scan is quadratic over a long save                                                                                                  | B1 if it shows in perf |
-| #49 report | `rng.fork` depends only on the stream's original seed, so several fighters drawn from one stream share identical `background` forks (pre-existing) | C5                     |
-| #49 report | ~3% of fighters carry a trait their ratings contradict after age drift; veto only acts at generation                                               | C5                     |
-| #49 report | Earned nicknames only from full-detail card bouts, not statistical cards or fighter-mode bouts                                                     | C3                     |
-| #49 report | Scouted error does not scale with scouting investment                                                                                              | B5                     |
-| #50 report | An open decision's title is fixed when raised, so an unanswered 7-day warning still says "in 7 days"                                               | A6                     |
-| #50 review | Grace period is decided once per advance and can overrun its end by one advance                                                                    | A6 (minor)             |
-| #51 report | Persona and trend can describe the same fighter differently (a "Grinder" whose trend is rising on finishes)                                        | C3                     |
-| #51 report | A4 picker rows: `<DrawBadge fighter day market detail />` and `fightSells(...).headline`                                                           | A4                     |
+| From       | Follow-up                                                                                                                                                  | Routed to              |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| #47 review | Calling a card off on the night is free, so the missed-card penalty can be dodged                                                                          | A5 (fight week)        |
+| #47        | Missed-card buzz −8 / resentment +15 are placeholders                                                                                                      | B1 / C3 tuning         |
+| #48 report | Calendar `describeGap` says "1 months"; "Go to X's contract expires" reads awkwardly                                                                       | A2                     |
+| #48 report | `PromotionHubScreen` repeats tier labels instead of `PROMOTION_TIER_LABELS`                                                                                | A2                     |
+| #48 report | Upset news "Number 6 beats number 2" lacks division and promotion                                                                                          | C3 (voice)             |
+| #48 report | Venue cities don't match the promotion's region                                                                                                            | B1 (markets)           |
+| #48 report | Generated promotions share every character field except tier/prestige/budget; all USA-based                                                                | B4 / B5                |
+| #47 review | Move `DeleteSave` from `MenuScreen` into `ui/`                                                                                                             | A2                     |
+| #48 review | Event pre-history count must not depend on `tier` once tiers move                                                                                          | B0 fix / B3            |
+| #48 review | `events.count` scan is quadratic over a long save                                                                                                          | B1 if it shows in perf |
+| #49 report | `rng.fork` depends only on the stream's original seed, so several fighters drawn from one stream share identical `background` forks (pre-existing)         | C5                     |
+| #49 report | ~3% of fighters carry a trait their ratings contradict after age drift; veto only acts at generation                                                       | C5                     |
+| #49 report | Earned nicknames only from full-detail card bouts, not statistical cards or fighter-mode bouts                                                             | C3                     |
+| #49 report | Scouted error does not scale with scouting investment                                                                                                      | B5                     |
+| #50 report | An open decision's title is fixed when raised, so an unanswered 7-day warning still says "in 7 days"                                                       | A6                     |
+| #50 review | Grace period is decided once per advance and can overrun its end by one advance                                                                            | A6 (minor)             |
+| #51 report | Persona and trend can describe the same fighter differently (a "Grinder" whose trend is rising on finishes)                                                | C3                     |
+| #51 report | A4 picker rows: `<DrawBadge fighter day market detail />` and `fightSells(...).headline`                                                                   | A4                     |
+| #49 review | `scoutingRead` picks strengths from true ratings; Rankings "Ability" sorts by true overall (pre-existing) — small leaks of hidden ratings in promoter mode | B6 (rankings)          |
+| #49 review | A fighter who changes division may keep a nickname already used there                                                                                      | C6 (division moves)    |
+| #49 review | Missing tests: Contract-tab `daysIdle` wiring; coach view shows true ratings                                                                               | C2/C3 follow-up        |
+| #50 review | `bookedOnPlans` keeps an unused `day` param                                                                                                                | A3 (trivial)           |
+| #52 report | Player's own re-sign flow doesn't read the relationship ledger yet                                                                                         | C4                     |
+| #52 report | "Move up a weight" want folded into superfight; not derived from the weight cut                                                                            | C6                     |
