@@ -149,28 +149,28 @@ week, 4 fighters as people, 5 development over time.
 
 ## Tracker
 
-| Item                            | Phase | Lane        | Status                                                  | PR  |
-| ------------------------------- | ----- | ----------- | ------------------------------------------------------- | --- |
-| A1 Fight night unmissable       | 1     | A           | Done                                                    | #47 |
-| A2 Alert hygiene                | 1     | A           | Done                                                    | #50 |
-| B0 Generated names (content)    | 1     | B           | Done                                                    | #48 |
-| C1 Identity on the page         | 4     | C           | Done                                                    | #49 |
-| B1 Economy and buzz             | 2     | B           | Changes requested                                       | #56 |
-| B2 Broadcaster and owner        | 2     | B           | Changes requested                                       | #60 |
-| B3 Prestige and tiers           | 2     | B           | In progress                                             |     |
-| A3 Fight-night show and recap   | 3     | A           | Done                                                    | #54 |
-| A4 Matchmaking UX               | 3     | A           | Done                                                    | #58 |
-| A5 Fight week                   | 3     | A           | Done; marketing + weigh-in wiring follow up after B1/C6 | #62 |
-| A6 Onboarding and readability   | 1/3   | A           | Done                                                    | #61 |
-| C2 Star power surfaced          | 4     | C           | Done                                                    | #51 |
-| C3 Memory, wants and voice      | 4     | C           | Done                                                    | #52 |
-| C4 Negotiation                  | 4     | C           | Done                                                    | #55 |
-| C5 Real careers over time       | 5     | C           | Done                                                    | #57 |
-| C6 Career events                | 5     | C           | Passed; merging master                                  | #63 |
-| B4 Rival promotions             | 5     | C           | In progress                                             |     |
-| B5 Investment and season        | 5     | B           | Not started                                             |     |
-| B6 History, scenarios, rankings | 5     | A           | Part 1 in review; parts 2–3 in progress                 | #64 |
-| Content pass after each phase   | all   | Coordinator | Not started                                             |     |
+| Item                            | Phase | Lane        | Status                                                  | PR       |
+| ------------------------------- | ----- | ----------- | ------------------------------------------------------- | -------- |
+| A1 Fight night unmissable       | 1     | A           | Done                                                    | #47      |
+| A2 Alert hygiene                | 1     | A           | Done                                                    | #50      |
+| B0 Generated names (content)    | 1     | B           | Done                                                    | #48      |
+| C1 Identity on the page         | 4     | C           | Done                                                    | #49      |
+| B1 Economy and buzz             | 2     | B           | Changes requested                                       | #56      |
+| B2 Broadcaster and owner        | 2     | B           | Changes requested                                       | #60      |
+| B3 Prestige and tiers           | 2     | B           | In progress                                             |          |
+| A3 Fight-night show and recap   | 3     | A           | Done                                                    | #54      |
+| A4 Matchmaking UX               | 3     | A           | Done                                                    | #58      |
+| A5 Fight week                   | 3     | A           | Done; marketing + weigh-in wiring follow up after B1/C6 | #62      |
+| A6 Onboarding and readability   | 1/3   | A           | Done                                                    | #61      |
+| C2 Star power surfaced          | 4     | C           | Done                                                    | #51      |
+| C3 Memory, wants and voice      | 4     | C           | Done                                                    | #52      |
+| C4 Negotiation                  | 4     | C           | Done                                                    | #55      |
+| C5 Real careers over time       | 5     | C           | Done                                                    | #57      |
+| C6 Career events                | 5     | C           | Passed; merging master                                  | #63      |
+| B4 Rival promotions             | 5     | C           | In progress                                             |          |
+| B5 Investment and season        | 5     | B           | Not started                                             |          |
+| B6 History, scenarios, rankings | 5     | A           | Parts 1–2 in review; part 3 in progress                 | #64, #65 |
+| Content pass after each phase   | all   | Coordinator | Not started                                             |          |
 
 ## Follow-ups routed from reviews and builder reports
 
