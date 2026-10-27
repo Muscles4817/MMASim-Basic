@@ -40,7 +40,7 @@ import {
   type PromotionalAgreement,
 } from '@mmasim/engine';
 import { getWorld, type GameDb } from '@mmasim/data';
-import { bookingsFor, daysUnbookedBy, plansFor } from './plans';
+import { bookingsFor, daysUnbookedBy, planName, plansFor } from './plans';
 import { walkDay } from './alerts';
 import type { InboxLink } from '@mmasim/engine';
 
@@ -88,7 +88,7 @@ export function attentionFor(db: GameDb, promotion: Promotion | undefined): Atte
 
   const startedDay = world.startedDay ?? day;
 
-  items.push(...cardIssues(upcoming, day));
+  items.push(...cardIssues(db, upcoming, day));
   items.push(...titleIssues({ db, promotion, roster, upcoming, day, startedDay, booked }));
   items.push(...rosterIssues({ db, promotion, roster, day, startedDay, booked }));
 
@@ -97,7 +97,7 @@ export function attentionFor(db: GameDb, promotion: Promotion | undefined): Atte
 
 // --- Cards -------------------------------------------------------------------------------------
 
-function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
+function cardIssues(db: GameDb, plans: readonly EventPlan[], day: number): AttentionItem[] {
   const items: AttentionItem[] = [];
 
   if (plans.length === 0) {
@@ -120,6 +120,7 @@ function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
     const progress = planProgress(plan);
     const mainSlot = plan.slots.find((s) => s.position === 'mainEvent');
     const empty = plan.slots.length - bouts.length;
+    const name = planName(db, plan);
 
     // The closer the card, the louder the same problem gets. A card in ten weeks with no main
     // event is a plan; the same card in ten days is an emergency.
@@ -136,9 +137,7 @@ function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
         kind: 'card',
         tone: away <= 28 ? 'danger' : 'warn',
         urgency: Math.round(60 + 38 * pressure),
-        title: mainSlot?.bout
-          ? `${plan.name}'s main event is not signed`
-          : `${plan.name} has no main event`,
+        title: mainSlot?.bout ? `${name}'s main event is not signed` : `${name} has no main event`,
         detail: `${away} days out and nothing signed is topping the card. The main event sells the night; everything else stops it being a discount.`,
         action: { label: 'Book it', route: 'plan', id: plan.id, slot: mainSlot?.id },
       });
@@ -150,7 +149,7 @@ function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
         kind: 'card',
         tone: away <= 21 ? 'warn' : 'info',
         urgency: Math.round(35 + 30 * pressure),
-        title: `${plan.name} is ${empty} fight${empty === 1 ? '' : 's'} short`,
+        title: `${name} is ${empty} fight${empty === 1 ? '' : 's'} short`,
         detail: `${away} days to fill them. A thin card is worth less at the gate, and short notice costs more in purses.`,
         action: { label: 'Fill the card', route: 'plan', id: plan.id },
       });
@@ -164,7 +163,7 @@ function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
         kind: 'card',
         tone: 'warn',
         urgency: 72,
-        title: `${declined} bout${declined === 1 ? '' : 's'} turned down on ${plan.name}`,
+        title: `${declined} bout${declined === 1 ? '' : 's'} turned down on ${name}`,
         detail:
           'Those slots are still holding fights nobody agreed to. Replace them or send a better offer.',
         action: { label: 'Fix the card', route: 'plan', id: plan.id, slot: firstDeclined?.id },
@@ -446,7 +445,7 @@ function rosterIssues(input: {
         tone: 'danger',
         urgency: 90,
         title: `${displayName(fighter)} is booked and will not be cleared`,
-        detail: `Suspended until ${(fighter.readyOnDay ?? 0) - booking.plan.day} days after ${booking.plan.name}. One of the two has to change.`,
+        detail: `Their suspension runs ${(fighter.readyOnDay ?? 0) - booking.plan.day} days past ${planName(db, booking.plan)}, so they cannot fight on it. Replace them, or move the bout.`,
         action: {
           label: 'Look at the bout',
           route: 'plan',

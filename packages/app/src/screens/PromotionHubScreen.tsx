@@ -43,7 +43,7 @@ import { formatGameDay } from '../shell/Shell';
 import { money } from '../ui/format';
 import { attentionFor } from '../game/attention';
 import { describeRunway, financialSnapshot } from '../game/finances';
-import { fightNightOn, forecastPlan, plansFor, promoterContext } from '../game/plans';
+import { fightNightOn, forecastPlan, planName, plansFor, promoterContext } from '../game/plans';
 import { PromoterSubNav } from './promoterNav';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 
@@ -159,7 +159,7 @@ export function PromotionHubScreen() {
                 <div className="stack" style={{ gap: 'var(--space-3)' }}>
                   <div>
                     <p style={{ fontSize: 'var(--text-xl)', fontWeight: 800, margin: 0 }}>
-                      {next.name}
+                      {planName(db, next)}
                     </p>
                     <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
                       {formatGameDay(next.day)} · {next.city} ·{' '}
@@ -221,7 +221,7 @@ export function PromotionHubScreen() {
                     onClick={() => navigate({ name: 'plan', id: next.id })}
                   >
                     {tonight
-                      ? `Run fight night: ${next.name}`
+                      ? `Run fight night: ${planName(db, next)}`
                       : planProgress(next).complete
                         ? 'Open the card'
                         : 'Continue booking'}
@@ -249,7 +249,7 @@ export function PromotionHubScreen() {
                     return (
                       <PipelineCard
                         key={plan.id}
-                        name={plan.name}
+                        name={planName(db, plan)}
                         when={formatGameDay(plan.day)}
                         meta={`${plan.city} · ${describeHealth(health)}`}
                         filled={progress.filled}

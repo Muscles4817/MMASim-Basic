@@ -35,6 +35,7 @@ import {
   MINIMUM_LEAD_DAYS,
   createPlan,
   fightNightOn,
+  planName,
 } from '../game/plans';
 import { PromoterSubNav } from './promoterNav';
 
@@ -122,7 +123,7 @@ export function CalendarScreen() {
               block
               onClick={() => navigate({ name: 'plan', id: tonight.id })}
             >
-              Run fight night: {tonight.name}
+              Run fight night: {planName(db, tonight)}
             </Button>
           ) : (
             <Button
@@ -151,7 +152,8 @@ export function CalendarScreen() {
           </div>
           {tonight && (
             <p className="faint prose" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
-              Moving the clock on without running {tonight.name} cancels it, and that costs you.
+              Moving the clock on without running {planName(db, tonight)} cancels it, and that costs
+              you.
             </p>
           )}
         </div>
@@ -162,7 +164,7 @@ export function CalendarScreen() {
         got eleven days knows why rather than wondering whether the button worked.
       */}
       {lastAdvance?.fightNight && !lastAdvance.interrupted && (
-        <Alert tone="info" title={`Time stopped for ${lastAdvance.fightNight.name}`}>
+        <Alert tone="info" title={`Time stopped for ${planName(db, lastAdvance.fightNight)}`}>
           It is fight night. Run the card, or move the clock on and cancel it.
         </Alert>
       )}
@@ -170,7 +172,7 @@ export function CalendarScreen() {
       {lastAdvance?.missed && lastAdvance.missed.length > 0 && (
         <Alert
           tone="danger"
-          title={`${lastAdvance.missed.map((p) => p.name).join(', ')} never ran`}
+          title={`${lastAdvance.missed.map((p) => planName(db, p)).join(', ')} never ran`}
         >
           The date passed without the show, so it is cancelled. The fighters on it are free again
           and unhappy about it, and the promotion&rsquo;s buzz took the hit.

@@ -93,6 +93,7 @@ import {
   summariseRecord,
   type FinishMethod,
   daysBetweenCards,
+  cardsStagedBefore,
   hashSeed,
   simulateFight,
   streakNews,
@@ -922,8 +923,8 @@ function buildNight(ctx: {
     day,
     name: eventName({
       promotion,
-      broadcast,
-      number: Math.floor(day / 14) + 1,
+      number: nextEventNumber(db, promotion),
+      mainEventNames: headlineNames(db, card[0]),
     }),
     // Booked to the crowd it will actually draw. See `venueFor`: both card runners used to
     // pick uniformly from one list, so the smallest promotion in the game took an
@@ -1251,6 +1252,7 @@ export function runCardBout(ctx: {
         submissionName: result.submissionName,
         divisionId: red.divisionId,
         promotionId: promotion.id,
+        promotionName: promotion.shortName,
         winnerRank: winner ? rankOfId(winner.id) : undefined,
         loserRank: loser ? rankOfId(loser.id) : undefined,
         isTitleFight,
@@ -2408,6 +2410,30 @@ function ageEveryone(
 }
 
 // --- Storage ---------------------------------------------------------------------------------
+
+/**
+ * The number this promotion's next card goes out under.
+ *
+ * Its past before the records began, plus every night the save holds for it. It used to be the
+ * fortnight of the calendar — `Math.floor(day / 14) + 1` — which gave every promotion in the world
+ * the same number on the same day, a negative one before 2020, and a monthly show numbers that
+ * jumped by two.
+ */
+export const nextEventNumber = (db: GameDb, promotion: Promotion): number =>
+  cardsStagedBefore(promotion.id as string, getWorld(db).seed) +
+  db.events.count({ where: { promotionId: promotion.id } }) +
+  1;
+
+/** The surnames a card is billed under, the way the sport writes them: `Reyes vs Hill`. */
+export function headlineNames(
+  db: GameDb,
+  bout: { redId: FighterId | string; blueId: FighterId | string } | undefined,
+): [string, string] | undefined {
+  if (!bout) return undefined;
+  const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
+  const blue = db.fighters.findById(bout.blueId as string) as Fighter | undefined;
+  return red && blue ? [red.lastName, blue.lastName] : undefined;
+}
 
 /** Add to the feed and trim it, so a twenty-year career does not grow an unbounded table. */
 export function appendNews(db: GameDb, items: readonly NewsItem[]): NewsItem[] {

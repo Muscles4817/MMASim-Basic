@@ -25,6 +25,7 @@ import {
   fightNightOn,
   nightResults,
   planById,
+  planName,
   plansFor,
   promoterContext,
   runPlan,
@@ -75,12 +76,15 @@ describe('the clock stops on fight night', () => {
 describe('a card nobody ran', () => {
   it('is cancelled once its date has passed, rather than left in the past', () => {
     const { db, plan } = withCard();
+    const name = planName(db, plan);
     advanceTo(db, plan.day);
     advanceTo(db, plan.day + 1);
 
     const after = planById(db, plan.id)!;
     expect(after.status).toBe('cancelled');
-    expect(after.cancelled).toEqual({ day: plan.day, reason: 'missed' });
+    // Keeps the name it had: derived after the fact it would take the next live card's number.
+    expect(after.cancelled).toEqual({ day: plan.day, reason: 'missed', name });
+    expect(planName(db, after)).toBe(name);
     expect(plansFor(db, plan.promotionId as string).map((p) => p.id)).not.toContain(plan.id);
   });
 
@@ -107,6 +111,7 @@ describe('a card nobody ran', () => {
     const { db, promotion, plan } = withCard();
     const signedId = plannedBouts(plan)[0]!.redId as string;
     const before = db.fighters.findById(signedId) as Fighter;
+    const name = planName(db, plan);
 
     advanceTo(db, plan.day);
     const result = advanceTo(db, plan.day + 1);
@@ -120,9 +125,8 @@ describe('a card nobody ran', () => {
     expect(fighter.resentment).toBe(Math.min(100, before.resentment + MISSED_CARD_RESENTMENT));
 
     const news = db.news.findAll() as NewsItem[];
-    expect(news.some((n) => n.kind === 'cancellation' && n.headline.includes(plan.name))).toBe(
-      true,
-    );
+    expect(news.some((n) => n.kind === 'cancellation' && n.headline.includes(name))).toBe(true);
+    expect(name).not.toMatch(/undefined/);
     expect(readInbox(db).some((i) => i.link?.id === plan.id && /cancelled/i.test(i.title))).toBe(
       true,
     );

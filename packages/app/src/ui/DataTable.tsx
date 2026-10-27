@@ -44,6 +44,14 @@ export interface Column<T> {
    * `hidden` — desktop only. Use for a column that genuinely does not survive the width.
    */
   onPhone?: 'primary' | 'secondary' | 'trailing' | 'hidden';
+  /**
+   * The cell on a phone, when it differs from the desktop one.
+   *
+   * A phone row has no header row above it, so a bare number there is unlabelled — the
+   * promotion picker read `£3.6m · 30 — 58`. A column of quantities says what it is here
+   * ("30 fighters", "prestige 58").
+   */
+  renderPhone?(row: T): ReactNode;
   /** Header-only hint for a column whose label has to be abbreviated. */
   title?: string;
 }
@@ -198,13 +206,13 @@ export function DataTable<T>({
           const body = (
             <>
               <span className="datatable__row-body">
-                <span className="datatable__row-primary">{phone.primary?.render(row)}</span>
+                <span className="datatable__row-primary">{phoneCell(phone.primary, row)}</span>
                 {phone.secondary.length > 0 && (
                   <span className="datatable__row-secondary">
                     {phone.secondary.map((column, i) => (
                       <span key={column.id}>
                         {i > 0 && <span aria-hidden="true"> · </span>}
-                        {column.render(row)}
+                        {phoneCell(column, row)}
                       </span>
                     ))}
                   </span>
@@ -213,7 +221,7 @@ export function DataTable<T>({
               {phone.trailing.length > 0 && (
                 <span className="datatable__row-trailing">
                   {phone.trailing.map((column) => (
-                    <span key={column.id}>{column.render(row)}</span>
+                    <span key={column.id}>{phoneCell(column, row)}</span>
                   ))}
                 </span>
               )}
@@ -245,3 +253,7 @@ export function DataTable<T>({
     </>
   );
 }
+
+/** A column as a phone row shows it: its own phone cell if it has one, the desktop cell if not. */
+const phoneCell = <T,>(column: Column<T> | undefined, row: T): ReactNode =>
+  !column ? null : column.renderPhone ? column.renderPhone(row) : column.render(row);

@@ -256,12 +256,14 @@ export function scanForInbox(db: GameDb, day: number): number {
 export function recordOfferOutcome(input: {
   db: GameDb;
   plan: EventPlan;
+  /** What the card is called, from `planName` — which lives with the plans, not here. */
+  cardName: string;
   slotId: string;
   bout: PlannedBout;
   accepted: boolean;
   answers: readonly CornerAnswer[];
 }): void {
-  const { db, plan, slotId, bout, accepted, answers } = input;
+  const { db, plan, cardName, slotId, bout, accepted, answers } = input;
   const day = getWorld(db).day;
 
   const nameOf = (id: string): string => {
@@ -281,7 +283,7 @@ export function recordOfferOutcome(input: {
       title: `${red} vs ${blue} is signed`,
       body: `Both corners have agreed${
         bout.titleKind ? ' — and it is for the belt' : ''
-      }. It goes on ${plan.name}.`,
+      }. It goes on ${cardName}.`,
       link: { route: 'plan', id: plan.id, slot: slotId },
       fighterId: bout.redId,
       opponentId: bout.blueId,
@@ -304,7 +306,7 @@ export function recordOfferOutcome(input: {
       // makeable fight becomes a hole in the card.
       priority: 'decision',
       title: `${nameOf(counter.fighterId as string)} wants ${money(counter.askingPurse ?? 0)}`,
-      body: `${counter.note} The fight is ${red} vs ${blue} on ${plan.name}.`,
+      body: `${counter.note} The fight is ${red} vs ${blue} on ${cardName}.`,
       actions: [
         {
           id: 'acknowledge',

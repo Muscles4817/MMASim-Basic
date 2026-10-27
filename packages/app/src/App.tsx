@@ -31,7 +31,7 @@ import { ChampionsScreen } from './screens/ChampionsScreen';
 import { PromoterRosterScreen } from './screens/PromoterRosterScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { InboxScreen } from './screens/InboxScreen';
-import { planById } from './game/plans';
+import { planById, planName } from './game/plans';
 
 export function App() {
   const { route, replace } = useRouter();
@@ -44,7 +44,10 @@ export function App() {
 
   // The card's own name in the header, not the word "Card". A promoter has several open at
   // once and a generic title makes them indistinguishable in a back stack.
-  const planTitle = (id: string): string | undefined => planById(db, id)?.name;
+  const planTitle = (id: string): string | undefined => {
+    const plan = planById(db, id);
+    return plan && planName(db, plan);
+  };
 
   // A first-time visitor landing on the career hub with no fighter would see an empty
   // screen; send them to the one decision that has to be made first.

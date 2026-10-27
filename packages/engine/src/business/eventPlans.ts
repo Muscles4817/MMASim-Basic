@@ -126,7 +126,14 @@ export interface EventPlan {
   id: string;
   promotionId: PromotionId;
   day: GameDay;
-  name: string;
+  /**
+   * The promoter's own title for the card, when they gave it one.
+   *
+   * Only that. The default — `GCFC 12`, then `GCFC 12: Reyes vs Hill` once the main event signs —
+   * is derived from the promotion's numbering and the card's main event (`planName` in the app),
+   * because both change after the plan is created and a stored copy would go stale.
+   */
+  name?: string;
   city: string;
   country: string;
   venueName?: string;
@@ -152,8 +159,12 @@ export interface EventPlan {
    *
    * `missed` is a date that passed with the card unrun — the promoter did not turn up to their
    * own show — and it costs the promotion in a way that calling a card off in advance does not.
+   *
+   * `name` is what the card was called on the day, kept like a night's name is kept. A live card's
+   * name is derived from its place among the promotion's live cards, and a cancelled card has no
+   * place — derived after the fact it would take the number of the next live card.
    */
-  cancelled?: { day: GameDay; reason: 'calledOff' | 'missed' };
+  cancelled?: { day: GameDay; reason: 'calledOff' | 'missed'; name: string };
 }
 
 export interface PlanOutcome {

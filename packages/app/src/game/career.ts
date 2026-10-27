@@ -1075,6 +1075,9 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
   // The player's own career belongs in their own news feed. `recordPlayerNews` existed with
   // no callers, and `NewsFeed` styled a "You" badge that could never fire — so the hub
   // reported on everybody in the sport except the person playing it.
+  const boutPromotion = db.promotions.findById(booking.bout.promotionId as string) as
+    | Promotion
+    | undefined;
   const playerItem = fightNews({
     day,
     boutId: booking.bout.id,
@@ -1086,7 +1089,10 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
     round: result.round,
     submissionName: result.submissionName,
     divisionId: booking.bout.divisionId,
-    promotionId: red.promotionId,
+    // The bout's promotion, not the red corner's: the item is filed under the promotion whose
+    // belt it names.
+    promotionId: boutPromotion?.id,
+    promotionName: boutPromotion?.shortName,
     isTitleFight: booking.bout.isTitleFight,
     titleChangedHands: titleNotes.length > 0,
     involvesPlayer: true,
