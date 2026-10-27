@@ -92,6 +92,7 @@ import {
   headlineNames,
   holdsABeltAnywhere,
   nextEventNumber,
+  payBonuses,
   runCardBout,
 } from './world';
 import { rememberNight } from './broadcasts';
@@ -1543,7 +1544,6 @@ export function runPlan(input: { db: GameDb; plan: EventPlan }): NightOutcome | 
       buzzDelta: outcome.buzz,
       gate: outcome.revenue.gate,
       broadcast: outcome.revenue.broadcast,
-      costs: outcome.revenue.costs,
     },
   });
   return outcome;
@@ -1728,47 +1728,32 @@ export interface AwardPicks {
 }
 
 /**
- * Give out the night's bonuses, once.
+ * Give out the night's bonuses, once, through the same `payBonuses` the world's cards use.
  *
- * Pays each recipient from the pool — a quarter each, two for the fight and up to two for
- * performances, which is how `awardBonuses` has always split it — and writes the award onto
- * their record line for that bout, which is what lets the rest of the game know it happened.
+ * Performance of the Night goes to winners only — up to two, each of whom won their bout on this
+ * card — and a pick that is not one is dropped rather than paid.
  */
 export function confirmAwards(db: GameDb, nightId: string, picks: AwardPicks): boolean {
   const night = db.events.findById(nightId) as FightNight | undefined;
   if (!night?.awards?.pending) return false;
-  const { perAward } = night.awards;
 
-  const pay = (fighterId: string, boutId: string, bonus: 'fight' | 'performance') => {
-    const fighter = db.fighters.findById(fighterId) as Fighter | undefined;
-    if (!fighter) return;
-    db.fighters.upsert({
-      ...fighter,
-      bank: Math.round((fighter.bank + perAward) * 10) / 10,
-      lifetimeGross: Math.round((fighter.lifetimeGross + perAward) * 10) / 10,
-      record: fighter.record.map((e) => (e.boutId === boutId ? { ...e, bonus } : e)),
-    } as Fighter & Entity);
+  const wonHere = (id: string) => {
+    const fighter = db.fighters.findById(id) as Fighter | undefined;
+    const bout = night.bouts.find((b) => b.redId === id || b.blueId === id);
+    return (
+      bout !== undefined && fighter?.record.find((e) => e.boutId === bout.boutId)?.outcome === 'win'
+    );
+  };
+  const awards = {
+    fightOfTheNight: night.bouts.find((b) => b.boutId === picks.fightOfTheNight)?.boutId,
+    performanceOfTheNight: [...new Set(picks.performanceOfTheNight)]
+      .filter(wonHere)
+      .slice(0, 2) as never,
+    perAward: night.awards.perAward,
   };
 
-  const fotn = night.bouts.find((b) => b.boutId === picks.fightOfTheNight);
-  if (fotn) {
-    pay(fotn.redId as string, fotn.boutId, 'fight');
-    pay(fotn.blueId as string, fotn.boutId, 'fight');
-  }
-  const performances = picks.performanceOfTheNight.slice(0, 2);
-  for (const id of performances) {
-    const bout = night.bouts.find((b) => b.redId === id || b.blueId === id);
-    if (bout) pay(id, bout.boutId, 'performance');
-  }
-
-  db.events.upsert({
-    ...night,
-    awards: {
-      fightOfTheNight: fotn?.boutId,
-      performanceOfTheNight: performances as never,
-      perAward,
-    },
-  } as FightNight & Entity);
+  payBonuses(db, night.bouts, awards);
+  db.events.upsert({ ...night, awards } as FightNight & Entity);
   db.save();
   return true;
 }

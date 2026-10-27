@@ -152,7 +152,6 @@ describe('a card that ran', () => {
       buzzDelta: ran.buzz,
       gate: ran.revenue.gate,
       broadcast: ran.revenue.broadcast,
-      costs: ran.revenue.costs,
     });
     expect(ran.night.attendance).toBe(ran.attendance);
 
