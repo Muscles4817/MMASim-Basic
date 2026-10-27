@@ -43,6 +43,7 @@ import {
   settleReplies,
 } from './plans';
 import { graceEnds } from './alerts';
+import { considerCounterProgramming } from './counterProgramming';
 import { scanFightWeek } from './fightWeek';
 
 /*
@@ -284,6 +285,8 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
     // happen. This is the one place that legitimately knows about both.
     // Bout offers answer on their own day (doc 34 C4), so a counter can stop the clock when it lands.
     settleReplies(db, onDay);
+    // Rivals hear about the player's dates a month out, and some book against them (doc 34 B4).
+    considerCounterProgramming(db, onDay);
     // Fight week (doc 34 A5): a signed fighter can fall out on any day of the run-up.
     scanFightWeek(db, onDay);
     scanForInbox(db, onDay);

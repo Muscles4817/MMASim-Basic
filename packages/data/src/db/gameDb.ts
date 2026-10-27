@@ -122,6 +122,11 @@ export interface WorldMeta extends Entity {
    */
   intakeRampUntil?: number;
   /**
+   * Cards rivals have booked against the player's (doc 34 B4): the rival runs a show on that day
+   * whatever its own calendar says. Removed once the day has passed.
+   */
+  rivalCards?: readonly { promotionId: string; day: number }[];
+  /**
    * Which size this world was generated at, when it was generated rather than seeded.
    *
    * Absent on a seeded save, which is how the two are told apart — the eras become what doc 27

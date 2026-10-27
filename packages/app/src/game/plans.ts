@@ -29,6 +29,7 @@
 import {
   GROUP_ORDER,
   withLedgerEntry,
+  afterCounterProgramming,
   currentHeat,
   describeCounter,
   fightSells,
@@ -497,6 +498,34 @@ export const MARKETS: readonly { city: string; country: string; note: string }[]
     country: 'Netherlands',
     note: 'A small room and a hard crowd. Where reputations start.',
   },
+  // Every home market a generated promotion can have (doc 34 B4), so nobody's default is abroad.
+  {
+    city: 'São Paulo',
+    country: 'Brazil',
+    note: 'Fight-mad, and it knows a real one when it sees it.',
+  },
+  {
+    city: 'Warsaw',
+    country: 'Poland',
+    note: 'Stadium crowds for home fighters, and only for them.',
+  },
+  { city: 'Moscow', country: 'Russia', note: 'Big rooms and a deep pool of grapplers.' },
+  { city: 'Paris', country: 'France', note: 'A young market, growing fast and paying for it.' },
+  { city: 'Sydney', country: 'Australia', note: 'Far from everywhere, and it turns out anyway.' },
+  {
+    city: 'Toronto',
+    country: 'Canada',
+    note: 'A big room that remembers the sport’s best nights.',
+  },
+  { city: 'Mexico City', country: 'Mexico', note: 'Altitude, noise and a crowd that wants a war.' },
+  { city: 'Prague', country: 'Czechia', note: 'Small country, sold-out shows.' },
+  { city: 'Singapore', country: 'Singapore', note: 'The hub for the whole of Asia.' },
+  {
+    city: 'Dublin',
+    country: 'Ireland',
+    note: 'Punches far above its size when one of its own fights.',
+  },
+  { city: 'Stockholm', country: 'Sweden', note: 'A careful market. Sells out for the right card.' },
 ];
 
 // --- Reading the world around a plan --------------------------------------------------------------
@@ -2007,7 +2036,7 @@ export function runPlan(input: { db: GameDb; plan: EventPlan }): NightOutcome | 
     bonusPool: bonusPoolFor(promotion),
   };
 
-  const outcome = runNight({ db, night, promotion });
+  const outcome = runNight({ db, night, promotion, rivalSplit: plan.rivalCard?.split ?? 0 });
   if (!outcome) return undefined;
 
   savePlan(db, {
@@ -2037,8 +2066,10 @@ function runNight(input: {
   db: GameDb;
   night: FightNight;
   promotion: Promotion;
+  /** The share of the gate a rival's card against this one takes (doc 34 B4). */
+  rivalSplit?: number;
 }): NightOutcome | undefined {
-  const { db, night, promotion } = input;
+  const { db, night, promotion, rivalSplit = 0 } = input;
   const world = getWorld(db);
   const rng = createRng(`${world.seed}:run:${night.id}`);
   const readyOn = new Map<string, number>();
@@ -2106,15 +2137,18 @@ function runNight(input: {
         })
       : 0;
 
-  const revenue = eventRevenue({
-    promotion: current,
-    venue: night.venue,
-    broadcast: night.broadcast,
-    headlineDraw,
-    bouts: night.bouts.length,
-    purses: Math.round(purses),
-    bonuses: night.bonusPool,
-  });
+  const revenue = afterCounterProgramming(
+    eventRevenue({
+      promotion: current,
+      venue: night.venue,
+      broadcast: night.broadcast,
+      headlineDraw,
+      bouts: night.bouts.length,
+      purses: Math.round(purses),
+      bonuses: night.bonusPool,
+    }),
+    rivalSplit,
+  );
 
   const settlement = settleNight({
     promotion: current,

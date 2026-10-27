@@ -182,6 +182,13 @@ describe('the dashboard', () => {
     await becomePromoter(user);
     expect(await screen.findByRole('heading', { name: /^Champions$/i })).toBeTruthy();
   });
+
+  it('names the rivals and what kind of rival each one is (doc 34 B4)', async () => {
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    expect(await screen.findByRole('heading', { name: /^Rivals$/i })).toBeTruthy();
+    expect(screen.queryAllByText(/^(Aggressor|Developer|Moneyball)$/).length).toBeGreaterThan(0);
+  });
 });
 
 describe('planning a card', () => {

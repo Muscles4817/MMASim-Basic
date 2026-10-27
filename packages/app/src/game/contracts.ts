@@ -32,6 +32,13 @@ import {
   tollAgreement,
   willRepresent,
   canMatch,
+  bidInterest,
+  bidTerms,
+  fighterAge,
+  MAX_BIDS,
+  openingTerms,
+  overallRating,
+  termsValue,
   resumeTalks,
   type Negotiation,
   type TableContext,
@@ -455,26 +462,52 @@ export interface RivalBid {
 }
 
 /**
- * Who else wants one of your fighters as their deal runs down, and on what terms.
+ * Who else wants one of your fighters as their deal runs down, and on what terms. Doc 34 B4.
  *
- * The hook for doc 34 B4's rival promotions: today it is read straight off the free-agency market
- * (`offersOnTheTable`), which already prices what each rival would pay. B4 can replace the source
- * with promotions that bid on purpose and leave every caller as it is. Empty outside the last
- * `BID_WINDOW_DAYS` of a written deal.
+ * Rivals bid on purpose now. Each promotion that runs the fighter's division looks at them through
+ * its posture (`bidInterest`: an aggressor wants names, a developer the young, a moneyball outfit
+ * ability nobody is paying for yet), decides once per contract — seeded on the agreement, so the
+ * bids do not change between reads — and shapes its terms the same way (`bidTerms`). At most
+ * `MAX_BIDS`, best first. Empty outside the last `BID_WINDOW_DAYS` of a written deal.
+ *
+ * `onDay` lets the world read the bids that stood on the last day of the deal, when it decides
+ * where an unmatched fighter goes.
  */
-export function rivalBidsFor(db: GameDb, fighter: Fighter, incumbent: Promotion): RivalBid[] {
+export function rivalBidsFor(
+  db: GameDb,
+  fighter: Fighter,
+  incumbent: Promotion,
+  onDay?: number,
+): RivalBid[] {
   const agreement = agreementOf(db, fighter);
-  const day = getWorld(db).day;
+  const day = onDay ?? getWorld(db).day;
   if (!agreement || fighter.promotionId !== incumbent.id) return [];
   if (agreement.expiresDay - day > BID_WINDOW_DAYS || agreement.expiresDay <= day) return [];
-  return offersOnTheTable(db, fighter)
-    .offers.filter((o) => o.promotion.id !== incumbent.id)
-    .map((o) => ({
-      promotion: o.promotion,
-      terms: o.terms,
-      matchable: canMatch(incumbent, o.terms),
+  const seed = getWorld(db).seed;
+  const read = {
+    age: fighterAge(fighter, day),
+    overall: overallRating(fighter.attributes),
+    ranked: fighter.reputation >= 50,
+    champion: Object.values(incumbent.champions).includes(fighter.id),
+  };
+  const bids: RivalBid[] = [];
+  for (const rival of db.promotions.findAll() as unknown as Promotion[]) {
+    if (rival.id === incumbent.id || !rival.divisions.includes(fighter.divisionId)) continue;
+    // Somebody they could not afford is not somebody they bid on.
+    if (marketValue(fighter, rival) > rival.budget * 0.08) continue;
+    const interest = bidInterest(rival, fighter, read);
+    if (!createRng(`${seed}:bid:${agreement.id}:${rival.id}`).chance(interest * 0.6)) continue;
+    const terms = bidTerms(rival, openingTerms(fighter, rival));
+    bids.push({
+      promotion: rival,
+      terms,
+      matchable: canMatch(incumbent, terms),
       expiresDay: agreement.expiresDay,
-    }));
+    });
+  }
+  return bids
+    .sort((a, b) => termsValue(fighter, b.terms) - termsValue(fighter, a.terms))
+    .slice(0, MAX_BIDS);
 }
 
 /**

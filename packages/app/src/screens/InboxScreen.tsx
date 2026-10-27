@@ -21,6 +21,7 @@ import { formatGameDay } from '../shell/Shell';
 import { markItemRead, readInbox, resolveItem } from '../game/inbox';
 import { presentAlert } from '../game/plans';
 import { answerBoutOffer } from '../game/career';
+import { answerPoach } from '../game/rivalMoves';
 
 export function InboxScreen() {
   const { db, world, commit, playerFighter } = useGame();
@@ -56,6 +57,8 @@ export function InboxScreen() {
       if (booking) navigate({ name: 'camp' });
       return;
     }
+    // A rival's offer for one of the player's champions (doc 34 B4).
+    answerPoach(db, item, actionId);
     resolveItem(db, item.id, actionId);
     commit();
   };
