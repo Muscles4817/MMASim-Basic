@@ -165,6 +165,15 @@ describe('the dashboard', () => {
     expect(withThousands, 'a five-digit £…k figure escaped the formatter').toEqual([]);
   });
 
+  it('shows who the promoter answers to: the owner’s objectives and the broadcaster', async () => {
+    // Doc 34 B2. The job arrives with both, and the dashboard is where the player checks on them.
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    expect(await screen.findByRole('heading', { name: /^The board$/i })).toBeTruthy();
+    expect(screen.getByText(/Cards this deal year/i)).toBeTruthy();
+    expect(screen.getAllByText(/On track|Not yet/).length).toBe(3);
+  });
+
   it('shows the champions and who is behind them', async () => {
     const user = userEvent.setup();
     await becomePromoter(user);

@@ -146,6 +146,7 @@ import {
 } from '@mmasim/data';
 import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
+import { buyOutTheBroke } from './boardroom';
 import { getRivalry } from './rivalries';
 import { settleFightInjuries } from './fightInjuries';
 import { afterTheBout } from './memory';
@@ -633,6 +634,12 @@ export function advanceWorld(
    * every local show in the sport before the player arrived.
    */
   if (!bulk) chargePromotions(db, fromDay, reached);
+
+  /*
+   * And a promotion the bill has emptied is bought (doc 34 B2), rather than sitting at zero for
+   * ever staging nothing. Not in pre-history, which charges nothing and so empties nobody.
+   */
+  if (!bulk) news.push(...buyOutTheBroke(db, reached));
 
   // And the deals of anybody the world forgot to book. See `enforceActivity`.
   news.push(

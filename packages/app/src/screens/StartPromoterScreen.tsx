@@ -32,6 +32,7 @@ import { money } from '../ui/format';
 import { attentionFor } from '../game/attention';
 import { describeRunway, financialSnapshot } from '../game/finances';
 import { clearTransientCareerState } from '../game/career';
+import { openBoardroom } from '../game/boardroom';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 
 export function StartPromoterScreen() {
@@ -72,6 +73,8 @@ export function StartPromoterScreen() {
   /** The only place in this flow that writes `playerRole`. */
   const takeControl = (promotion: Promotion) => {
     clearTransientCareerState();
+    // The broadcaster and the owner come with the job (doc 34 B2).
+    openBoardroom(db, promotion.id as string, world.day);
     updateWorld({
       playerRole: 'promoter',
       playerPromotionId: promotion.id as string,
@@ -245,10 +248,7 @@ function PromotionPreview({
   onCancel(): void;
   onConfirm(): void;
 }) {
-  const finances = useMemo(
-    () => financialSnapshot({ db, promotion }),
-    [db, promotion, day],
-  );
+  const finances = useMemo(() => financialSnapshot({ db, promotion }), [db, promotion, day]);
   /*
    * What you would inherit — minus the things that are true of every promotion in the world.
    *
@@ -298,8 +298,8 @@ function PromotionPreview({
           <div className="stack" style={{ gap: 'var(--space-2)' }}>
             <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
               {money(finances.cash)} in the bank, {rosterSize} fighters on the books, and{' '}
-              {attention.length} thing{attention.length === 1 ? '' : 's'} already needing an
-              answer. From here it is your promotion and its problems.
+              {attention.length} thing{attention.length === 1 ? '' : 's'} already needing an answer.
+              From here it is your promotion and its problems.
             </p>
             <div className="row" style={{ flexWrap: 'wrap' }}>
               <Button variant="primary" onClick={onConfirm}>
@@ -339,7 +339,10 @@ function PromotionPreview({
           />
           <LedgerRow label="Minimum purse" value={money(promotion.minimumPurse)} />
         </Ledger>
-        <p className="prose muted" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
+        <p
+          className="prose muted"
+          style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}
+        >
           {describeRunway(finances)}
         </p>
       </Card>
@@ -348,8 +351,8 @@ function PromotionPreview({
         {vacant > 0 && (
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <Alert tone="info" title={`${vacant} vacant`}>
-              A vacant belt is a tournament you can build a year around, and a division nobody has
-              a reason to care about yet.
+              A vacant belt is a tournament you can build a year around, and a division nobody has a
+              reason to care about yet.
             </Alert>
           </div>
         )}
@@ -383,8 +386,8 @@ function PromotionPreview({
       <Panel title={attention.length === 0 ? 'Nothing outstanding' : 'What you would inherit'}>
         {attention.length === 0 ? (
           <p className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
-            Nothing urgent on the books. A quiet promotion is a blank page, which is its own kind
-            of problem.
+            Nothing urgent on the books. A quiet promotion is a blank page, which is its own kind of
+            problem.
           </p>
         ) : (
           <div className="attention">

@@ -17,6 +17,7 @@
 import { clamp } from '../core/math.js';
 import type { GameDay } from '../core/clock.js';
 import type { Promotion } from '../domain/organisations.js';
+import { depthMultiplier } from './events.js';
 
 export interface RightsDeal {
   /** Who carries the cards. */
@@ -97,10 +98,20 @@ const TITLE_RATING = 8;
  * What an ordinary card of this promotion's rates, which is what a broadcaster signs up for.
  *
  * An ordinary headline draws about the promotion's prestige (`drawWeight` with a typical pairing),
- * on a full card with no belt.
+ * with no belt, on an ordinary card: `ORDINARY_BOUTS` fights rather than a full nine. Below the
+ * top of the sport a card rarely fills every slot, and a target only a full card reached put
+ * every regional deal on a slow slide into review whatever the promoter did.
  */
 export const ordinaryRating = (promotion: Promotion): number =>
-  cardRating({ promotion, headlineDraw: promotion.prestige, depth: 1, titleFights: 0 });
+  cardRating({
+    promotion,
+    headlineDraw: promotion.prestige,
+    depth: depthMultiplier(ORDINARY_BOUTS),
+    titleFights: 0,
+  });
+
+/** The fights on the card a broadcaster expects. */
+const ORDINARY_BOUTS = 7;
 
 /**
  * The deal a promotion starts the save with.

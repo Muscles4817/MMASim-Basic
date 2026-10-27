@@ -587,7 +587,9 @@ const TV_FEE_PER_PRESTIGE = 10;
  * card, in thousands, with no deal in the way. What a rights deal opens at.
  */
 export function broadcastFee(promotion: Promotion, broadcast: Broadcast): number {
-  return promotion.prestige * (broadcast === 'streamed' ? STREAM_FEE_PER_PRESTIGE : TV_FEE_PER_PRESTIGE);
+  return (
+    promotion.prestige * (broadcast === 'streamed' ? STREAM_FEE_PER_PRESTIGE : TV_FEE_PER_PRESTIGE)
+  );
 }
 
 /** A stream's rights fee per prestige point, in thousands. Was 2, on a card that did not have to exist. */

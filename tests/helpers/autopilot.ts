@@ -54,6 +54,8 @@ export interface CardLog {
   attendance: number;
   buzz: number;
   cash: number;
+  /** How the broadcaster feels after the card (doc 34 B2), when there is a deal. */
+  satisfaction?: number;
 }
 
 const promotions = (db: GameDb) => db.promotions.findAll() as unknown as Promotion[];
@@ -193,6 +195,7 @@ export function runOneCard(input: {
     attendance: ran?.attendance ?? 0,
     buzz: after.buzz,
     cash: after.budget,
+    satisfaction: after.rightsDeal?.satisfaction,
   };
 }
 

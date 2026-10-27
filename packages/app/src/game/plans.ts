@@ -103,6 +103,7 @@ import {
   runCardBout,
 } from './world';
 import { currentPurse } from './money';
+import { broadcastFor, rateCard } from './boardroom';
 import { raise, recordOfferOutcome } from './inbox';
 import {
   addToDigest,
@@ -382,9 +383,8 @@ export function createPlan(input: {
   return savePlan(db, plan);
 }
 
-/** Broadcast follows the promotion's platform, which is not yet a player decision. */
-export const broadcastFor = (promotion: Promotion): FightNight['broadcast'] =>
-  promotion.tier === 'global' ? 'ppv' : promotion.tier === 'major' ? 'televised' : 'streamed';
+// Broadcast follows the promotion's platform; the rights deal it is carried under lives there too.
+export { broadcastFor };
 
 // --- Reading the world around a plan --------------------------------------------------------------
 
@@ -1828,6 +1828,16 @@ function runNight(input: {
 
   const ran: FightNight = { ...night, status: 'complete', attendance: revenue.attendance };
   db.events.upsert(ran as FightNight & Entity);
+  // What the broadcaster made of it (doc 34 B2).
+  news.push(
+    ...rateCard(db, {
+      promotionId: current.id as string,
+      day: night.day,
+      headlineDraw,
+      bouts: night.bouts.length,
+      titles: night.bouts.filter((b) => b.isTitleFight).length,
+    }),
+  );
   appendNews(db, news);
   db.save();
 

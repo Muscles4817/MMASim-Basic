@@ -12,6 +12,7 @@
 
 import { clamp } from '../core/math.js';
 import type { GameDay } from '../core/clock.js';
+import { REVIEW_CLEARED } from './rightsDeal.js';
 
 /** What the owner cares about, which decides which three objectives they set. */
 export type OwnerTemperament = 'moneyman' | 'showman' | 'builder' | 'patient';
@@ -34,6 +35,8 @@ export interface Owner {
   yearStartDay: GameDay;
   /** Cash on that day, which the profit objective is measured from. A fact, not a derivation. */
   yearStartCash: number;
+  /** The day confidence ran out and the promoter was let go. The year stops being measured. */
+  firedDay?: GameDay;
 }
 
 /** How the year is measured, for every objective an owner can set. */
@@ -101,13 +104,23 @@ export function setObjectives(input: {
 }): Objective[] {
   const { temperament, cash, buzz, minimumCards, averageCrowd } = input;
   const target: Record<ObjectiveKind, number> = {
-    // A moneyman wants a return; everybody else wants it not to lose money.
-    profit: temperament === 'moneyman' ? Math.round(cash * 0.05) : 0,
+    /*
+     * A moneyman wants a return; everybody else wants it not to lose money. A return on the cash
+     * in the bank, which for a regional promotion is decades of overheads: 5% of it was more than
+     * a year of good cards could make, so the objective could only be missed.
+     */
+    profit: temperament === 'moneyman' ? Math.round(cash * 0.01) : 0,
     cards: minimumCards,
-    buzz: Math.round(Math.min(95, buzz + 3)),
-    deal: 55,
+    /*
+     * Hold on to the attention there is. Attention drifts back to what the tier is used to
+     * between cards, so asking for more than the year began with was asking for a run of great
+     * nights from a promotion that may have started the year on one.
+     */
+    buzz: Math.round(Math.min(95, buzz * 0.9)),
+    // Out of review, with a little room: a broadcaster that is merely watching still counts.
+    deal: REVIEW_CLEARED,
     belts: 0,
-    crowd: Math.round(averageCrowd * 1.1),
+    crowd: Math.round(averageCrowd),
   };
   return OWNER_TEMPERAMENTS[temperament].wants.map((kind) => ({ kind, target: target[kind] }));
 }
@@ -152,12 +165,16 @@ export function objectiveMet(objective: Objective, year: OwnerYear): boolean {
   }
 }
 
+/** Thousands as the game writes money: `£450k`, and `£1.2m` from a million up. */
+const pounds = (thousands: number): string =>
+  thousands >= 1000 ? `£${Math.round(thousands / 100) / 10}m` : `£${Math.round(thousands)}k`;
+
 /** One line for the dashboard: the objective, in the owner's words. */
 export function describeObjective(objective: Objective): string {
   switch (objective.kind) {
     case 'profit':
       return objective.target > 0
-        ? `Make £${Math.round(objective.target)}k this year`
+        ? `Make ${pounds(objective.target)} this year`
         : 'Do not lose money this year';
     case 'cards':
       return `Run at least ${objective.target} cards`;

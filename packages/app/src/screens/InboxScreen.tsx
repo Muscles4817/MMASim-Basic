@@ -19,6 +19,7 @@ import { Alert } from '../ui/signals';
 import { formatGameDay } from '../shell/Shell';
 import { markItemRead, readInbox, resolveItem } from '../game/inbox';
 import { answerBoutOffer } from '../game/career';
+import { jobIn, takeJob } from '../game/jobs';
 
 export function InboxScreen() {
   const { db, world, commit, playerFighter } = useGame();
@@ -45,6 +46,15 @@ export function InboxScreen() {
       // Straight into camp, exactly as accepting from the hub does. Landing back on the inbox
       // after taking a fight would leave the player to go and find the camp they just started.
       if (booking) navigate({ name: 'camp' });
+      return;
+    }
+    // A new job, after being fired (doc 34 B2): the save moves to that promotion.
+    const job = jobIn(actionId);
+    if (job) {
+      takeJob(db, job);
+      resolveItem(db, item.id, actionId);
+      commit();
+      navigate({ name: 'promotion' });
       return;
     }
     resolveItem(db, item.id, actionId);
