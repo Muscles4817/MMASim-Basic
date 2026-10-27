@@ -44,6 +44,7 @@ import {
   type PromotionalAgreement,
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
+import { rivalAggression } from './difficulty';
 
 type StoredAgreement = PromotionalAgreement & Entity;
 type StoredManager = Manager & Entity;
@@ -466,7 +467,9 @@ export function rivalBidsFor(db: GameDb, fighter: Fighter, incumbent: Promotion)
   const agreement = agreementOf(db, fighter);
   const day = getWorld(db).day;
   if (!agreement || fighter.promotionId !== incumbent.id) return [];
-  if (agreement.expiresDay - day > BID_WINDOW_DAYS || agreement.expiresDay <= day) return [];
+  // How early rivals start circling is the difficulty's rival aggression (doc 34 B6).
+  const window = BID_WINDOW_DAYS * rivalAggression(db);
+  if (agreement.expiresDay - day > window || agreement.expiresDay <= day) return [];
   return offersOnTheTable(db, fighter)
     .offers.filter((o) => o.promotion.id !== incumbent.id)
     .map((o) => ({

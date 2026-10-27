@@ -59,6 +59,7 @@ import { describeBuzz } from './NightScreen';
 import { FIRST_WEEK, dismiss, firstWeek, firstWeekOver } from '../game/onboarding';
 import { readNews } from '../game/world';
 import { PromoterSubNav } from './promoterNav';
+import { StandingOrdersCard } from './StandingOrdersCard';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 
 /** How many rows the dashboard shows before it stops being a dashboard. */
@@ -382,6 +383,8 @@ export function PromotionHubScreen() {
                 tone={promotion.budget <= 0 ? 'bad' : undefined}
               />
             </Card>
+
+            <StandingOrdersCard />
 
             {/*
               The money, as an operating position rather than a balance. And in one notation:

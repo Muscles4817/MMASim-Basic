@@ -137,7 +137,39 @@ export interface WorldMeta extends Entity {
    * every session would not.
    */
   dismissed?: readonly string[];
+  /**
+   * How a promoter save was set up (doc 34 B6): the scenario it started in and the difficulty it
+   * runs at. Absent on saves made before scenarios existed, which read as the standard start at
+   * normal difficulty.
+   */
+  promoterSetup?: PromoterSetup;
+  /** Busywork a promoter has handed off (doc 34 B6). Absent means nothing has been. */
+  standingOrders?: StandingOrders;
   schemaVersion: number;
+}
+
+/** One of three settings a difficulty dial can take. */
+export type DifficultyLevel = 'gentle' | 'normal' | 'hard';
+
+export interface PromoterSetup {
+  scenario: 'standard' | 'bankruptRescue' | 'upstart' | 'championWantsOut';
+  /** How hard fighters push their money up when they negotiate. */
+  purseInflation: DifficultyLevel;
+  /** How hard rival promotions come for your fighters as their deals run down. */
+  rivalAggression: DifficultyLevel;
+  /** How long an owner waits for results. Read by B2's owner when it lands. */
+  ownerPatience: DifficultyLevel;
+  /** The giant an upstart is up against, when the scenario names one. */
+  rivalId?: string;
+  /** The champion who wants out, when the scenario names one. */
+  championId?: string;
+}
+
+export interface StandingOrders {
+  /** The matchmaker fills and offers the prelims of every card from six weeks out. */
+  matchmakerOwnsPrelims?: boolean;
+  /** Who is re-signed automatically as their deal runs down, at the going rate. */
+  autoRenew?: 'off' | 'champions' | 'winners' | 'everyone';
 }
 
 type Flushable = { flush(): void; isDirty(): boolean };

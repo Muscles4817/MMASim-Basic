@@ -103,6 +103,7 @@ import {
   runCardBout,
 } from './world';
 import { rememberNight } from './broadcasts';
+import { purseInflation } from './difficulty';
 import { getRivalry } from './rivalries';
 import { currentPurse } from './money';
 import { money } from '../ui/format';
@@ -1238,7 +1239,10 @@ export function sendOffer(input: {
               daysIdle: daysUnbookedBy(fighter, ctx.day, ctx.startedDay),
             }),
             preferred: preferredOpponent(ctx, fighter, opponent),
-            show: currentPurse(ctx.db, fighter, slot.position)?.show ?? ctx.promotion.minimumPurse,
+            // The difficulty's purse inflation (doc 34 B6) scales what a counter asks for.
+            show:
+              (currentPurse(ctx.db, fighter, slot.position)?.show ?? ctx.promotion.minimumPurse) *
+              purseInflation(ctx.db),
             buyable: buyable && !read.holdout,
           })
         : undefined;

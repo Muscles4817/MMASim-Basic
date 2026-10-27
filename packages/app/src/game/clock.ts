@@ -44,6 +44,7 @@ import {
 } from './plans';
 import { graceEnds } from './alerts';
 import { scanFightWeek } from './fightWeek';
+import { runStandingOrders } from './standingOrders';
 
 /*
  * There is no step any more, and that is the change.
@@ -286,6 +287,8 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
     settleReplies(db, onDay);
     // Fight week (doc 34 A5): a signed fighter can fall out on any day of the run-up.
     scanFightWeek(db, onDay);
+    // Busywork the promoter has handed off (doc 34 B6).
+    runStandingOrders(db, onDay);
     scanForInbox(db, onDay);
     scanPromoterInbox(db, onDay);
     return blocking(readInbox(db)).some((i) => !alreadyWaiting.has(i.id));
