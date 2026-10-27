@@ -60,8 +60,11 @@ export function staffLevel(promotion: Promotion): StaffLevel {
   return level;
 }
 
-/** Years of overheads a promotion keeps its organisation for. Below this, it downsizes. */
-export const STAFF_RUNWAY_YEARS = 2;
+/**
+ * Years of overheads a promotion keeps its organisation for. Below this, it downsizes. One, now
+ * that a generated promotion starts with a couple of years of all its costs rather than decades.
+ */
+export const STAFF_RUNWAY_YEARS = 1;
 
 /** A year of a cost charged every `COST_PERIOD_DAYS`. */
 export const yearOf = (perPeriod: number): number => (perPeriod * 365) / COST_PERIOD_DAYS;
@@ -83,7 +86,7 @@ export const yearOf = (perPeriod: number): number => (perPeriod * 365) / COST_PE
 export const STAFF_LEVEL_OVERHEADS: Readonly<Record<StaffLevel, number>> = {
   1: 0.2,
   2: 1,
-  3: 3.5,
+  3: 6,
   4: 15,
   5: 120,
 };

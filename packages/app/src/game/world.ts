@@ -336,6 +336,11 @@ export interface WorldExclusion {
    */
   activityHold?: ReadonlySet<string>;
   /**
+   * Fighters signed onto the player's cards, who free agency leaves where they are until the bout
+   * is fought. Answered by the clock, like `activityHold`.
+   */
+  booked?: ReadonlySet<string>;
+  /**
    * How the world resolves its own bouts. Defaults to `simulateFight`.
    *
    * Doc 27 § 5's Reduced level, passed in rather than switched on inside, because *which* fights
@@ -465,7 +470,9 @@ export function advanceWorld(
       news.push(...retireTheDrifted(db, day, rng.fork(`drift:${day}`), exceptId));
       news.push(...replenish(db, day, rng, promotions, rosterSizes));
       // Deals run out across the roster too, so the market has other people in it.
-      news.push(...resolveFreeAgency(db, day, rng, promotions, exceptId, rosterSizes));
+      news.push(
+        ...resolveFreeAgency(db, day, rng, promotions, exceptId, rosterSizes, exclusion.booked),
+      );
       news.push(...fillHoles(db, day, rng, promotions));
       reindex();
     }
@@ -954,6 +961,14 @@ function buildNight(ctx: {
      * promoter with a phone book, its fighters need the fights, and a card it cannot quite pay
      * for still goes ahead. Applied there, this emptied the smallest local shows in pre-history —
      * no card was ever worth staging, so nobody fought, and every deal walked out on inactivity.
+     *
+     * Why that matters past the town shows themselves: the developmental tier is where the sport's
+     * fighters get their first bouts, records and reputations, and every tier above signs from it.
+     * A bottom of the pyramid that stopped fighting whenever a card did not pay left the feeders
+     * with nobody ready to move up, and the generator's depth checks failing. So a developmental
+     * card is never called off for the money alone. It is called off when the promotion is in
+     * distress (less than `DISTRESS_RUNWAY_YEARS` of costs left): a floor under the sport's
+     * activity, not a licence to lose money for ever.
      */
     const allowed = inDistress(promotion, ctx.roster.length)
       ? 0
@@ -1744,6 +1759,7 @@ function resolveFreeAgency(
   promotions: readonly Promotion[],
   exceptId: FighterId | undefined,
   rosterSizes: ReadonlyMap<string, number>,
+  booked?: ReadonlySet<string>,
 ): NewsItem[] {
   const world = getWorld(db);
   const news: NewsItem[] = [];
@@ -1814,6 +1830,13 @@ function resolveFreeAgency(
      */
     if (fighter.id === exceptId) continue;
     if (fighter.retiredDay !== undefined) continue;
+    /*
+     * Nor a fighter who has signed for a bout on the player's card. They are held to it until it
+     * is fought: a contract that ran out a fortnight before the night let the leader sign the
+     * player's main eventer, who then fought on the regional card at the leader's purse — a
+     * £40k card became a £160k loss with nothing on the screen to say why.
+     */
+    if (booked?.has(fighter.id as string)) continue;
 
     const agreement = fighter.agreementId
       ? (db.agreements.findById(fighter.agreementId as string) as
@@ -2554,7 +2577,7 @@ function depthByPromotion(active: readonly Fighter[]): Map<string, number> {
  * for good. A promotion in that position signs local debutants until it can make a fight again.
  * Run after free agency, which is what most often empties a small promotion's weight class.
  */
-function fillHoles(
+export function fillHoles(
   db: GameDb,
   day: number,
   rng: Rng,
@@ -2562,13 +2585,39 @@ function fillHoles(
 ): NewsItem[] {
   const news: NewsItem[] = [];
   const all = db.fighters.findAll() as Fighter[];
+  const player = getWorld(db).playerPromotionId;
   for (const division of DIVISIONS) {
     const depthHere = depthByPromotion(
       all.filter((f) => f.divisionId === division.id && f.retiredDay === undefined),
     );
     for (const promotion of promotions) {
       if (!promotion.divisions.includes(division.id)) continue;
-      for (let n = depthHere.get(promotion.id as string) ?? 0; n < MIN_FIGHTS_DEEP; n++) {
+      const depth = depthHere.get(promotion.id as string) ?? 0;
+      if (depth >= MIN_FIGHTS_DEEP) continue;
+      /*
+       * Never onto the player's roster. Who a promoter signs is theirs to decide, so their empty
+       * weight class is a suggestion in the inbox rather than a debutant they did not choose.
+       */
+      if (promotion.id === player) {
+        raise(db, {
+          id: inboxId(day as never, `thin:${division.id as string}`),
+          day: day as never,
+          kind: 'roster',
+          priority: 'notable',
+          title:
+            depth === 0
+              ? `Nobody left at ${division.shortName}`
+              : `One fighter left at ${division.shortName}`,
+          body:
+            `You run ${division.name} and cannot make a fight in it. Sign somebody, or the ` +
+            `division sits empty on every card you plan.`,
+          promotionId: promotion.id,
+          divisionId: division.id,
+          link: { route: 'promoterRoster' },
+        });
+        continue;
+      }
+      for (let n = depth; n < MIN_FIGHTS_DEEP; n++) {
         signDebutant(
           db,
           day,
@@ -2841,9 +2890,11 @@ const DISTRESSED_RESIGN_SHARE = 0.5;
 
 /**
  * Years of running costs below which a promotion behaves like it is in trouble: club shows, no
- * card it expects to lose money on, half its expiring deals let go.
+ * card it expects to lose money on, half its expiring deals let go. A year: a generated promotion
+ * starts with one and a half to three (`startingBudget` in the generator), so the three this was
+ * when every treasury held decades put the whole sport in distress on the first day.
  */
-const DISTRESS_RUNWAY_YEARS = 3;
+const DISTRESS_RUNWAY_YEARS = 1;
 
 function inDistress(promotion: Promotion, rosterSize: number): boolean {
   return promotion.budget < annualCosts({ promotion, rosterSize }) * DISTRESS_RUNWAY_YEARS;

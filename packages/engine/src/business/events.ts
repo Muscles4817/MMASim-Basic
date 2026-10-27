@@ -570,7 +570,7 @@ export function eventRevenue(input: {
  * does now that buzz starts where the tier is, and 16 while offers were answered on the spot; once
  * corners took days to reply and a card waited for them, more of every card got signed.
  */
-const SPONSOR_PER_THOUSAND = 12;
+const SPONSOR_PER_THOUSAND = 11;
 const SPONSOR_PER_PRESTIGE = 0.12;
 
 /*

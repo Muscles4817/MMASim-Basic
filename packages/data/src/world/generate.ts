@@ -32,6 +32,7 @@ import { buildSeedWorld } from '../seed/index.js';
 import { createPromotionNamer, type PyramidRung } from './promotionNames.js';
 import {
   DIVISIONS,
+  annualCosts,
   asFighterId,
   dedupeNicknames,
   asPromotionId,
@@ -161,6 +162,36 @@ interface TierSpec {
  * **There is only one apex.** That is the most important structural fact in doc 26 and the easiest
  * to get wrong: the leader is not the biggest of several majors, it is a different category.
  */
+/**
+ * Years of running costs a generated promotion starts with, by tier.
+ *
+ * Enough that one bad year does not end it and few enough that a good year shows: a promotion
+ * runs a schedule to stand still, and the money it makes or loses on its cards is a visible share
+ * of what it has. The leader carries the most, because it is the one with something to lose and
+ * the one whose cards make millions: on three years its first year grew it by more than half,
+ * which says more about the size of the cushion than about how the leader is run. Bringing what
+ * the leader makes into line is doc 34's B3.
+ */
+const RUNWAY_YEARS: Readonly<Record<PromotionTier, number>> = {
+  developmental: 1.5,
+  regional: 1.5,
+  major: 2.5,
+  global: 8,
+};
+
+/** Cards' worth of purses on top, so a promotion can book its first cards before they pay. */
+const FLOAT_CARDS = 2;
+/** Purses on a card at the floor: nine bouts, two fighters, show money only. */
+const PURSES_PER_CARD = 18;
+
+/** What a generated promotion has in the bank on the day the save begins. */
+function startingBudget(promotion: Promotion, rosterSize: number): number {
+  // Costs at the organisation the promotion is built to run, before any downsizing for money.
+  const costs = annualCosts({ promotion: { ...promotion, budget: Infinity }, rosterSize });
+  const float = FLOAT_CARDS * PURSES_PER_CARD * promotion.minimumPurse;
+  return Math.round(costs * RUNWAY_YEARS[promotion.tier] + float);
+}
+
 const PYRAMID: readonly TierSpec[] = [
   {
     label: 'apex',
@@ -374,19 +405,25 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
       const prestige = spec.prestige[0] + Math.round(span * at);
       const buzz = Math.round(spec.buzz[0] + (spec.buzz[1] - spec.buzz[0]) * at);
 
-      const budget = Math.round(shape.roster * prestige * 3);
+      /*
+       * The size of the operation, which is what its purses are pitched at. It used to be the
+       * budget too, and that gave every promotion decades of running costs in the bank: the top
+       * regional started with £5.9m against about £150k a year, so a year of the best play
+       * available moved its cash by 3% and the worst by about as much. Money did not matter.
+       */
+      const scale = shape.roster * prestige * 3;
+      const minimumPurse = Math.max(1, Math.round(0.09 * Math.sqrt(scale)));
       const divisions = divisionsFor(shape.roster, spec.divisions, i);
       const womensDivisions = divisions.filter((d) => d.sex === 'female').length;
 
-      promotions.push({
+      const promotion: Promotion = {
         ...template,
         id: asPromotionId(id),
         ...nameFor(spec.label),
         tier: spec.tier,
         prestige,
         buzz,
-        // Scaled to the operation, so `solvency` and `chargeCosts` see a plausible business.
-        budget,
+        budget: 0,
         /*
          * What a purse floor looks like at this level of the sport.
          *
@@ -400,7 +437,7 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
          * The exponent is fitted to the hand-authored 2026 era, whose eight promotions run from
          * a budget of 62,000 at a floor of 26 down to 1,400 at 2.
          */
-        minimumPurse: Math.max(1, Math.round(0.09 * Math.sqrt(budget))),
+        minimumPurse,
         /*
          * Points on the gate are something only a promotion with its own platform can grant, and
          * `template` said yes for all of them — which quietly deleted the fringe's one unmatchable
@@ -409,7 +446,8 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
         revenueShareCapable: spec.tier === 'global' || spec.tier === 'major',
         divisions: divisions.map((d) => d.id),
         champions: {},
-      });
+      };
+      promotions.push({ ...promotion, budget: startingBudget(promotion, shape.roster) });
 
       // Whatever is left over after the floors, spread across the weight classes they do run.
       const spare = Math.max(0, shape.roster - divisions.length * MIN_DIVISION_DEPTH);
@@ -418,9 +456,7 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
         promotionId: id,
         mens,
         womens:
-          womensDivisions === 0
-            ? 0
-            : Math.max(MIN_WOMENS_DIVISION_DEPTH, Math.round(mens * 0.55)),
+          womensDivisions === 0 ? 0 : Math.max(MIN_WOMENS_DIVISION_DEPTH, Math.round(mens * 0.55)),
         tier: spec.quality,
         spread: 11,
         divisions: divisions.map((d) => d.id),

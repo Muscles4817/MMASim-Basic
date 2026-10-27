@@ -1339,13 +1339,15 @@ export function suggestFills(input: {
   plan: EventPlan;
   scope: FillScope;
   intent?: MatchIntentId;
+  /** Fighters not to suggest: who already said no to this card. */
+  exclude?: ReadonlySet<string>;
 }): Suggestion[] {
-  const { ctx, plan, scope, intent } = input;
+  const { ctx, plan, scope, intent, exclude } = input;
   const out: Suggestion[] = [];
 
   // Names already used, including by earlier suggestions in this same pass — otherwise the
   // matchmaker cheerfully books one fighter into four slots.
-  const taken = new Set<string>();
+  const taken = new Set<string>(exclude);
   for (const bout of plannedBouts(plan)) {
     taken.add(bout.redId as string);
     taken.add(bout.blueId as string);

@@ -8,10 +8,14 @@
  * leader from £19m to £133m. Doc 34's B1 rebuilt the money underneath that; this pins what it is
  * meant to produce.
  *
- * Six worlds, and every claim is about their mean. A year of the running world is chaotic: one
- * world's sloppy year measured anywhere from +9% to −15%, so a bound on any single world tests the
- * seed as much as the design. The same six for both policies, so the comparison is the decision
- * and nothing else.
+ * Eight worlds, and every claim is about their mean. A year of the running world is chaotic: the
+ * same policy measured anywhere from −20% to +50% depending on the world, so a bound on any single
+ * world tests the seed as much as the design. The same eight for every policy, so the comparison
+ * is the decisions and nothing else.
+ *
+ * A generated promotion starts with a couple of years of running costs in the bank, so a year's
+ * cards are a visible share of it: doing nothing loses a third, and how the cards are run decides
+ * whether the rest of the year wins it back.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -32,6 +36,8 @@ const SEEDS = [
   'economy-d',
   'economy-e',
   'economy-f',
+  'economy-g',
+  'economy-h',
 ] as const;
 const YEAR = 365;
 
@@ -65,6 +71,7 @@ async function run(seed: string, policy: AutopilotPolicy): Promise<Run> {
   };
 }
 
+const idle = await Promise.all(SEEDS.map((seed) => run(seed, 'idle')));
 const sloppy = await Promise.all(SEEDS.map((seed) => run(seed, 'sloppy')));
 const sensible = await Promise.all(SEEDS.map((seed) => run(seed, 'sensible')));
 
@@ -76,11 +83,21 @@ const summary = (runs: readonly Run[]) =>
   runs.map((r) => `${r.seed} ${r.policy} ${pct(r.growth)}`).join(', ');
 
 describe('a year on autopilot', () => {
+  it('loses a promoter who runs nothing a large part of what they started with', () => {
+    expect(mean(idle.map((r) => r.growth)), summary(idle)).toBeLessThan(-0.25);
+  });
+
+  it('pays a promoter who runs good cards, clearly ahead of running none', () => {
+    const good = mean(sensible.map((r) => r.growth));
+    expect(good, summary(sensible)).toBeGreaterThan(0.12);
+    expect(good - mean(idle.map((r) => r.growth)), summary(sensible)).toBeGreaterThan(0.3);
+  });
+
   it('costs a sloppy promoter a little, rather than making them rich', () => {
     /*
      * Paying every counter-offer and running whatever the matchmaker hands you should end the
      * first year between flat and a tenth down: a business being run badly, not one being run
-     * into the ground and not one that cannot be lost. Averaged over the six worlds; one world
+     * into the ground and not one that cannot be lost. Averaged over the eight worlds; one world
      * on its own swings several points either way on who happened to counter.
      */
     const growth = mean(sloppy.map((r) => r.growth));
@@ -88,17 +105,17 @@ describe('a year on autopilot', () => {
     expect(growth, summary(sloppy)).toBeGreaterThanOrEqual(-0.1);
   });
 
-  it('rewards turning a bad price down', () => {
+  it('rewards running the cards well: pricing counters, keeping fights that pay, calling off losers', () => {
     /*
-     * Same worlds, one decision different, and it has to show in the bank. On the mean: a single
+     * Same worlds, a few decisions different, and it has to show in the bank. On the mean: a single
      * world can still go the other way, because the rest of the sport reacts to the player's
-     * cards as well, and the spread between two policies in one world was measured at about five
+     * cards as well, and the spread between two policies in one world was measured at up to thirty
      * points either way.
      */
     expect(
       mean(sensible.map((r) => r.growth)) - mean(sloppy.map((r) => r.growth)),
       `${summary(sloppy)} || ${summary(sensible)}`,
-    ).toBeGreaterThan(0.01);
+    ).toBeGreaterThan(0.15);
   });
 
   it('makes a regional night worth tens of thousands, not hundreds', () => {

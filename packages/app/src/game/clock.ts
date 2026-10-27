@@ -204,7 +204,10 @@ function exclusionFor(db: GameDb, day: number): WorldExclusion {
         if (f.promotionId === promotionId) hold.add(f.id as string);
       }
     }
-    return { promotionId, activityHold: hold };
+    const booked = new Set<string>(
+      [...bookingsFor(db, promotionId)].filter(([, b]) => b.signed).map(([id]) => id),
+    );
+    return { promotionId, activityHold: hold, booked };
   }
   return {
     fighterId: world.playerFighterId as FighterId | undefined,
