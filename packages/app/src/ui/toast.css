@@ -1,0 +1,57 @@
+/*
+ * Toasts sit above the bottom navigation on a phone and in the corner on a desktop. Nothing
+ * here may cover a primary button for long, which is why they are small and leave on their own.
+ */
+.toasts {
+  position: fixed;
+  inset-inline: var(--space-4);
+  bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+@media (min-width: 900px) {
+  .toasts {
+    inset-inline: auto var(--space-5, 1.5rem);
+    bottom: var(--space-5, 1.5rem);
+    align-items: flex-end;
+  }
+}
+
+.toast {
+  margin: 0;
+  max-width: 28rem;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: var(--shadow-lg);
+  font-size: var(--text-sm);
+  animation: toast-in 160ms ease-out;
+}
+
+.toast--good {
+  border-color: var(--positive);
+}
+
+.toast--warn {
+  border-color: var(--warning);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}

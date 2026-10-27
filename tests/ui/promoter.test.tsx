@@ -423,6 +423,8 @@ describe('fight night', () => {
     await waitFor(() => expect(screen.queryAllByText(/Signed/i).length).toBeGreaterThan(0), {
       timeout: 10000,
     });
+    // The receipt.
+    expect(await screen.findByText(/offers sent/i)).toBeTruthy();
 
     goTo('#/calendar');
     for (let i = 0; i < 8; i++) {
@@ -432,6 +434,16 @@ describe('fight night', () => {
     // Every advance was a month long and none of them walked past the card.
     await user.click(await screen.findByRole('button', { name: /^Run fight night: / }));
 
+    /*
+     * Under reduced motion the show does not play itself: every bout waits for the player.
+     * Stubbed for the run only, so the rest of the walk is the default.
+     */
+    const matchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      ...matchMedia(query),
+      matches: query.includes('prefers-reduced-motion'),
+    })) as typeof window.matchMedia;
+
     // Withdrawals can empty a slot first; the button is still there to press again.
     for (let i = 0; i < 3; i++) {
       const run = screen.queryByRole('button', { name: /^Run fight night: / });
@@ -439,9 +451,32 @@ describe('fight night', () => {
       await user.click(run);
     }
 
+    expect(await screen.findByRole('button', { name: /^First bout$/i })).toBeTruthy();
+    expect(screen.getAllByText(/still to come/i).length).toBeGreaterThan(0);
+    // The money is not shown until it is settled: no invented per-bout running total.
+    expect(screen.queryByText(/^The night$/)).toBeNull();
+    window.matchMedia = matchMedia;
+
+    // The show first; the recap after it.
+    await user.click(
+      await screen.findByRole('button', { name: /^Reveal all$/i }, { timeout: 10000 }),
+    );
+    expect(screen.getByText(/^The night$/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /The morning after/i }));
     expect(await screen.findByText(/^Results$/i, {}, { timeout: 10000 })).toBeTruthy();
     expect(screen.getAllByText(/ def\. | vs /).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: /Run fight night/i })).toBeNull();
+
+    // The bonuses are the promoter's to give, and every result opens its fight.
+    await user.click(screen.getByRole('button', { name: /Pay the bonuses/i }));
+    expect(await screen.findByText(/Bonuses paid/i)).toBeTruthy();
+    const watchable = document.querySelector('button.list__item') as HTMLElement;
+    await user.click(watchable);
+    expect(await screen.findByRole('button', { name: /Make the walk/i })).toBeTruthy();
+
+    // And the dashboard leads with the night that just happened.
+    goTo('#/promotion');
+    expect(await screen.findByText(/Last time out/i)).toBeTruthy();
   }, 60000);
 });
 

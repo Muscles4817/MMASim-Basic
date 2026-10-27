@@ -66,7 +66,7 @@ export function PromoterRosterScreen() {
     : undefined;
 
   const booked = useMemo(
-    () => bookedOnPlans(db, world.playerPromotionId, world.day),
+    () => bookedOnPlans(db, world.playerPromotionId),
     [db, world.playerPromotionId, world.day],
   );
 

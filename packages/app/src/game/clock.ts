@@ -39,6 +39,7 @@ import {
   missPlans,
   nextCardDay,
   scanPromoterInbox,
+  settlePendingAwards,
   settleReplies,
 } from './plans';
 import { graceEnds } from './alerts';
@@ -244,6 +245,10 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
   const promotionId = getWorld(db).playerPromotionId;
   const cardDay = nextCardDay(db, promotionId, start, requestedDay);
   const targetDay = cardDay ?? requestedDay;
+
+  // A night the player left without choosing its bonuses: the matchmaker's picks stand, and are
+  // paid before anything else happens to those fighters.
+  settlePendingAwards(db, getWorld(db).playerPromotionId);
 
   const exclusion = exclusionFor(db, start);
   let day = start;

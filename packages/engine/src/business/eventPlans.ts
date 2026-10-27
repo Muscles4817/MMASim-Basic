@@ -185,6 +185,16 @@ export interface PlanOutcome {
   /** Thousands. */
   profit: number;
   buzzDelta: number;
+  /**
+   * Where the money came from, as `eventRevenue` settled it. Thousands.
+   *
+   * Copied from the settlement rather than recomputed for display, so the recap reads the
+   * figures the promotion was actually paid even after the economy model changes underneath it.
+   * `broadcast` includes sponsorship, as the settlement does. What the night cost is not stored:
+   * it is these two less `profit`, and a third copy could only disagree with them.
+   */
+  gate?: number;
+  broadcast?: number;
 }
 
 // --- Building and editing ---------------------------------------------------------------------

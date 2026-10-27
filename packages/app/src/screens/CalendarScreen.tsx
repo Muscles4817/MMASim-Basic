@@ -25,7 +25,9 @@ import { useGame } from '../state/GameProvider';
 import { routeOf, useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
 import { Alert } from '../ui/signals';
-import { fromNow } from '../ui/format';
+import { fromNow, money } from '../ui/format';
+import { reviewSpan, type SpanReview } from '../game/review';
+import { useToast } from '../ui/toast';
 import { formatGameDay } from '../shell/Shell';
 import { buildCalendar, defaultFilter, nextStop, type CalendarEntry } from '../game/calendar';
 import { ADVANCE_STEPS, advanceTo, type AdvanceResult } from '../game/clock';
@@ -74,6 +76,8 @@ export function CalendarScreen() {
   const [filter, setFilter] = useState<'yours' | 'all'>(() => defaultFilter(world));
   const [lastAdvance, setLastAdvance] = useState<AdvanceResult | undefined>();
   const [planning, setPlanning] = useState(false);
+  const [review, setReview] = useState<SpanReview | undefined>();
+  const toast = useToast();
 
   const entries = useMemo(
     () => buildCalendar(db, { from: world.day, to: world.day + HORIZON_DAYS }),
@@ -87,16 +91,20 @@ export function CalendarScreen() {
     [db, world.playerPromotionId, world.day],
   );
 
-  const advance = (days: number) => {
-    setLastAdvance(advanceTo(db, world.day + days));
+  /*
+   * Every advance reports back what it did to the player, not only to the sport: the money
+   * before is taken here because nothing else remembers it.
+   */
+  const moveTo = (target: number) => {
+    const from = world.day;
+    const budgetBefore = promotion?.budget;
+    const result = advanceTo(db, target);
+    setLastAdvance(result);
+    setReview(isPromoter ? reviewSpan(db, from, result.day, budgetBefore) : undefined);
     commit();
   };
-
-  const advanceToNext = () => {
-    if (upNext === undefined) return;
-    setLastAdvance(advanceTo(db, upNext));
-    commit();
-  };
+  const advance = (days: number) => moveTo(world.day + days);
+  const advanceToNext = () => upNext !== undefined && moveTo(upNext);
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
@@ -192,10 +200,20 @@ export function CalendarScreen() {
         </Alert>
       )}
 
-      {lastAdvance && !lastAdvance.interrupted && lastAdvance.fights > 0 && (
-        <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
-          {lastAdvance.fights} fights happened across the sport while you waited.
-        </p>
+      {review ? (
+        <WeekInReview
+          review={review}
+          fights={lastAdvance?.fights ?? 0}
+          onFighter={(id) => navigate({ name: 'fighter', id })}
+        />
+      ) : (
+        lastAdvance &&
+        !lastAdvance.interrupted &&
+        lastAdvance.fights > 0 && (
+          <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
+            {lastAdvance.fights} fights happened across the sport while you waited.
+          </p>
+        )
       )}
 
       {/*
@@ -219,6 +237,10 @@ export function CalendarScreen() {
               onCreate={(input) => {
                 const plan = createPlan({ db, promotion, ...input });
                 commit();
+                toast(
+                  `${planName(db, plan)} is in the diary for ${formatGameDay(plan.day)}.`,
+                  'good',
+                );
                 setPlanning(false);
                 navigate({ name: 'plan', id: plan.id });
               }}
@@ -535,3 +557,83 @@ const toneFor = (entry: CalendarEntry): 'accent' | 'info' | 'warning' | 'neutral
         ? 'warning'
         : 'info';
 };
+
+/**
+ * What the days just passed did to the promoter: the money, their fighters' results, and who
+ * came and went. The sport's own total is the last line rather than the only one.
+ */
+function WeekInReview({
+  review,
+  fights,
+  onFighter,
+}: {
+  review: SpanReview;
+  fights: number;
+  onFighter(id: string): void;
+}) {
+  const days = review.to - review.from;
+  if (days <= 0) return null;
+  const shown = review.results.slice(0, 8);
+  return (
+    <Card title={`${days === 1 ? 'The day' : `The last ${days} days`}, for you`}>
+      {review.moneyDelta !== undefined && (
+        <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 0 }}>
+          Cash {review.moneyDelta >= 0 ? 'up' : 'down'} {money(Math.abs(review.moneyDelta))}.
+        </p>
+      )}
+      {shown.length > 0 ? (
+        <div className="list">
+          {shown.map((r) => (
+            <button
+              key={`${r.fighterId}-${r.day}`}
+              type="button"
+              className="list__item"
+              onClick={() => onFighter(r.fighterId)}
+            >
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span className="list__primary" style={{ display: 'block' }}>
+                  {r.name}{' '}
+                  {r.outcome === 'win' ? 'beat' : r.outcome === 'loss' ? 'lost to' : 'drew with'}{' '}
+                  {r.opponent}
+                </span>
+                <span className="list__secondary" style={{ display: 'block' }}>
+                  {formatGameDay(r.day)}
+                </span>
+              </span>
+              <Chip
+                tone={
+                  r.outcome === 'win' ? 'positive' : r.outcome === 'loss' ? 'negative' : 'neutral'
+                }
+              >
+                {r.outcome === 'win' ? 'Won' : r.outcome === 'loss' ? 'Lost' : 'Draw'}
+              </Chip>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
+          None of your fighters fought.
+        </p>
+      )}
+      {review.results.length > shown.length && (
+        <p className="faint" style={{ fontSize: 'var(--text-sm)' }}>
+          And {review.results.length - shown.length} more.
+        </p>
+      )}
+      {review.comings.length > 0 && (
+        <ul className="stack" style={{ listStyle: 'none', padding: 0, gap: 'var(--space-1)' }}>
+          {review.comings.map((n) => (
+            <li key={n.id as string} className="prose" style={{ fontSize: 'var(--text-sm)' }}>
+              {n.headline}
+            </li>
+          ))}
+        </ul>
+      )}
+      {fights > 0 && (
+        <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 0 }}>
+          {fights} fights happened across the sport.
+        </p>
+      )}
+    </Card>
+  );
+}
