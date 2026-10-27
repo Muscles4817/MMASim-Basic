@@ -96,6 +96,8 @@ import {
   hashSeed,
   simulateFight,
   streakNews,
+  nicknameNews,
+  earnedNickname,
   trimFeed,
   type BoutSeed,
   type CardBout,
@@ -1226,6 +1228,15 @@ export function runCardBout(ctx: {
         : undefined;
   const loser = winner ? (winner.id === red.id ? developed.blue : developed.red) : undefined;
 
+  // A highlight finish can earn a fighter without a nickname one. Doc 34 C1.
+  const lastBout = winner?.record[winner.record.length - 1];
+  const nickname =
+    winner && lastBout?.boutId === boutId
+      ? earnedNickname(winner, lastBout, rng.fork(`nickname:${winner.id}`))
+      : undefined;
+  if (winner && nickname)
+    developed[winner.id === red.id ? 'red' : 'blue'] = { ...winner, nickname };
+
   const item = bulk
     ? undefined
     : fightNews({
@@ -1246,6 +1257,18 @@ export function runCardBout(ctx: {
         titleChangedHands,
       });
   if (item) news.push(item);
+  if (winner && nickname && !bulk) {
+    news.push(
+      nicknameNews({
+        day,
+        fighterId: winner.id,
+        name: displayName(winner),
+        nickname,
+        divisionId: winner.divisionId,
+        promotionId: promotion.id,
+      }),
+    );
+  }
 
   if (winner && !bulk) {
     const streak = streakNews({
@@ -2118,8 +2141,7 @@ function pickStartingPromotion(
    */
   division: { id: string; sex: 'male' | 'female'; depthOf: (promotionId: string) => number },
 ): Promotion | undefined {
-  const floor =
-    division.sex === 'female' ? MIN_WOMENS_DIVISION_DEPTH : MIN_DIVISION_DEPTH;
+  const floor = division.sex === 'female' ? MIN_WOMENS_DIVISION_DEPTH : MIN_DIVISION_DEPTH;
 
   const eligible = promotions.filter((p) => p.divisions.includes(division.id as DivisionId));
   const weights = eligible.map((p) => {
@@ -2142,10 +2164,7 @@ function pickStartingPromotion(
     const room = target <= 0 ? 0 : Math.max(0.08, clamp01((target - have) / target));
     // Floored rather than zeroed, so a promotion whose division is full still occasionally signs
     // somebody — a roster is not a bucket that stops filling at a line.
-    const divisionRoom = Math.max(
-      0.1,
-      clamp01((floor - division.depthOf(p.id as string)) / floor),
-    );
+    const divisionRoom = Math.max(0.1, clamp01((floor - division.depthOf(p.id as string)) / floor));
     return Math.max(1, 100 - p.prestige) ** 2 * room * divisionRoom;
   });
   const total = weights.reduce((a, b) => a + b, 0);

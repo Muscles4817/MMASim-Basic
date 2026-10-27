@@ -38,6 +38,8 @@ import {
   type Naturals,
 } from '../ratings/attributes.js';
 import { generateName } from './names.js';
+import { rollNickname } from './nicknames.js';
+import { hometownOf } from './identity.js';
 import {
   aptitudeLeanFor,
   bodyPriorFor,
@@ -706,8 +708,9 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
    * and combinations like a Hiroshi Kowalski from Nigeria. `generateName` reads both.
    */
   const named = generateName(rng, options.sex, options.nationality);
+  const reference = traitReferenceFor(options.divisionId, options.sex);
 
-  return {
+  const fighter: Fighter = {
     id: asFighterId(options.id),
     firstName: options.firstName ?? named.firstName,
     lastName: options.lastName ?? named.lastName,
@@ -735,12 +738,7 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     ),
     potential,
     personality: generatePersonality(rng),
-    traits: generateTraits(
-      rng,
-      rng.int(1, 3),
-      attributes,
-      traitReferenceFor(options.divisionId, options.sex),
-    ),
+    traits: generateTraits(rng, rng.int(1, 3), attributes, reference),
 
     condition: freshCondition(),
     record: [],
@@ -778,4 +776,26 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
       1,
     ),
   };
+
+  /*
+   * A nickname for some of them. Forked, for the same reason as the background: it draws a variable
+   * number of times, and the stream every later draw reads must not depend on whether this fighter
+   * happened to arrive with a name. Keyed by id too, because a fork reads the stream's *seed* rather
+   * than its position, and a caller that generates a whole roster from one stream would otherwise
+   * hand every fighter in it the same roll.
+   */
+  const nickname = rollNickname(rng.fork(`nickname:${options.id}`), {
+    attributes,
+    reference,
+    background,
+    heightInches: body.heightInches,
+    reachInches: body.reachInches,
+    muscleIndex: fighter.physique.muscleIndex,
+    stance: fighter.stance,
+    hometown: hometownOf(fighter),
+    sex: options.sex,
+    age,
+    tier,
+  });
+  return nickname ? { ...fighter, nickname } : fighter;
 }

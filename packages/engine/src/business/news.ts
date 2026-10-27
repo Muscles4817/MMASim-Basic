@@ -31,7 +31,8 @@ export type NewsKind =
   | 'rivalry'
   | 'streak'
   | 'signing'
-  | 'release';
+  | 'release'
+  | 'nickname';
 
 /**
  * How loudly an item should be presented.
@@ -61,7 +62,11 @@ export interface NewsItem {
 export const newsId = (day: GameDay, key: string): NewsId => asId<NewsId>(`news_${day}_${key}`);
 
 /** How a result reads in a sentence. */
-export function describeMethod(method: FinishMethod, round: number, submissionName?: string): string {
+export function describeMethod(
+  method: FinishMethod,
+  round: number,
+  submissionName?: string,
+): string {
   if (method === 'ko') return `by knockout in round ${round}`;
   if (method === 'tko') return `by TKO in round ${round}`;
   if (method === 'doctorStoppage') return `on a doctor's stoppage in round ${round}`;
@@ -258,6 +263,35 @@ export function signingNews(input: {
     fighterIds: [input.fighterId],
     divisionId: input.divisionId,
     promotionId: input.promotionId,
+  };
+}
+
+/**
+ * A fighter picked up a name. See `progression/nicknames.ts:earnedNickname`.
+ *
+ * Minor, because it is texture rather than news — but it is the moment the name arrives, and a
+ * nickname that simply appears on a roster one day reads as a data change rather than a story.
+ */
+export function nicknameNews(input: {
+  day: GameDay;
+  fighterId: FighterId;
+  /** The name as it was, without the nickname. */
+  name: string;
+  nickname: string;
+  divisionId: DivisionId;
+  promotionId?: PromotionId;
+  involvesPlayer?: boolean;
+}): NewsItem {
+  return {
+    id: newsId(input.day, `nickname_${input.fighterId}`),
+    day: input.day,
+    kind: 'nickname',
+    weight: 'minor',
+    headline: `After a finish like that, they are calling ${input.name} "${input.nickname}".`,
+    fighterIds: [input.fighterId],
+    divisionId: input.divisionId,
+    promotionId: input.promotionId,
+    involvesPlayer: input.involvesPlayer,
   };
 }
 
