@@ -31,7 +31,9 @@ export type NewsKind =
   | 'rivalry'
   | 'streak'
   | 'signing'
-  | 'release';
+  | 'release'
+  /** A card that did not happen. A promoter's own missed date is the case this exists for. */
+  | 'cancellation';
 
 /**
  * How loudly an item should be presented.

@@ -136,6 +136,29 @@ export interface EventPlan {
   slots: readonly PlanSlot[];
   /** The night this plan became, once it has been run. */
   nightId?: string;
+  /**
+   * How the night went for the business, written once when it runs.
+   *
+   * Stored on the plan rather than recomputed, because the money is the one part of a night
+   * that cannot be read back off anything else: the bouts are in the fighters' records, but the
+   * gate and the buzz it moved were settled into the promotion and are gone. Without it a card
+   * reopened the next morning could show who won and not whether it was worth running.
+   */
+  outcome?: PlanOutcome;
+  /**
+   * Why a cancelled plan was cancelled, and when.
+   *
+   * `missed` is a date that passed with the card unrun — the promoter did not turn up to their
+   * own show — and it costs the promotion in a way that calling a card off in advance does not.
+   */
+  cancelled?: { day: GameDay; reason: 'calledOff' | 'missed' };
+}
+
+export interface PlanOutcome {
+  /** Thousands. */
+  profit: number;
+  buzzDelta: number;
+  attendance: number;
 }
 
 // --- Building and editing ---------------------------------------------------------------------

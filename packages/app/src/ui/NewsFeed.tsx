@@ -34,6 +34,7 @@ const KIND_ICON: Readonly<Record<NewsKind, string>> = {
   injury: '🩹',
   debut: '✍️',
   release: '✂️',
+  cancellation: '✖',
 };
 
 const KIND_LABEL: Readonly<Record<NewsKind, string>> = {
@@ -48,6 +49,7 @@ const KIND_LABEL: Readonly<Record<NewsKind, string>> = {
   injury: 'Injury',
   debut: 'Debut',
   release: 'Released',
+  cancellation: 'Card cancelled',
 };
 
 export function NewsFeed({
