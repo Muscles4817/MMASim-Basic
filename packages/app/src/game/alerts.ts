@@ -23,7 +23,8 @@
  *  until the player dismisses something that is no longer true.
  *
  *  **A new save gets a grace period.** The roster a player inherits is somebody else's
- *  neglect; it should not be able to walk out, or stop the clock, in the player's first weeks.
+ *  neglect: nobody can walk out over it for `GRACE_DAYS`, and nothing stops the clock until the
+ *  thirty-day warnings for the end of that period are due.
  */
 
 import { inboxId, type InboxEntry, type InboxItem, type InboxLink } from '@mmasim/engine';

@@ -24,7 +24,7 @@ import { advanceTo } from '../../packages/app/src/game/clock';
 import { readInbox, recordOfferOutcome } from '../../packages/app/src/game/inbox';
 import { attentionFor } from '../../packages/app/src/game/attention';
 import { GRACE_DAYS, graceEnds, raiseDecisions, walkDay } from '../../packages/app/src/game/alerts';
-import { bookingsFor, savePlan } from '../../packages/app/src/game/plans';
+import { bookingsFor, createPlan, savePlan } from '../../packages/app/src/game/plans';
 import { agreed, filledPlan } from '../helpers/plans';
 import { sign } from '../../packages/app/src/game/contracts';
 
@@ -123,7 +123,7 @@ describe('the walk-out warning', () => {
     }
     // Measured at 129 stops in two years before the rework; a few is the point.
     expect(stops).toBeGreaterThan(0);
-    expect(stops).toBeLessThanOrEqual(10);
+    expect(stops).toBeLessThanOrEqual(12);
   });
 
   it('never counts down from a deadline that has already passed', () => {
@@ -159,9 +159,11 @@ describe('the walk-out warning', () => {
 });
 
 describe('a new save', () => {
-  it('has a grace period in which nothing about the inherited roster stops the clock', () => {
+  it('opens quietly: nothing stops the clock until the walk-out warnings are due', () => {
+    // The warnings are allowed thirty days before the grace period lifts, so they can still be
+    // thirty-day warnings; before that, nothing.
     const { db, start } = asPromoter();
-    const result = advanceTo(db, start + GRACE_DAYS - 1);
+    const result = advanceTo(db, start + GRACE_DAYS - 31);
     expect(result.interrupted).toBe(false);
     expect(readInbox(db).filter(isBlocking)).toEqual([]);
   });
@@ -206,6 +208,13 @@ describe('the dashboard', () => {
     expect(item?.action).toMatchObject({ route: 'plan', id: plan.id, slot: slot.id });
   });
 
+  it('opens a save on a handful of rows, with one fact about the roster said once', () => {
+    const { db, promotion } = asPromoter();
+    const items = attentionFor(db, promotion);
+    expect(items.filter((i) => i.id.startsWith('decline:')).length).toBeLessThanOrEqual(2);
+    expect(items.length).toBeLessThanOrEqual(6);
+  });
+
   it('does not add a medical alert for every fighter put on a card', () => {
     const { db, promotion, start } = asPromoter();
     const before = attentionFor(db, promotion).length;
@@ -244,13 +253,12 @@ describe('decisions settle themselves', () => {
 
   it('stops blocking once the fighter it was about is booked', () => {
     const { db, promotion } = asPromoter();
-    const today = graceEnds(db);
-    setWorld(db, { day: today });
-
-    // Somebody with a deal, warned at the thirty-day stage.
+    // Somebody with a deal, warned at the thirty-day stage, twenty days out.
     sign(db, roster(db, promotion)[0]!, promotion, TERMS);
     const fighter = roster(db, promotion).find((f) => f.agreementId)!;
     const deadline = walkDay(db, fighter, agreementOf(db, fighter)!);
+    const today = deadline - 20;
+    setWorld(db, { day: today });
     raiseDecisions(
       db,
       today,
@@ -264,6 +272,9 @@ describe('decisions settle themselves', () => {
       ],
       { kind: 'activity', title: () => '', body: '' },
     );
+    expect(readInbox(db).filter(isBlocking)).toHaveLength(1);
+    // Saving a card that does not involve them changes nothing.
+    createPlan({ db, promotion, day: today + 60 });
     expect(readInbox(db).filter(isBlocking)).toHaveLength(1);
 
     // Put them on a card: the warning has nothing left to say.

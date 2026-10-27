@@ -335,6 +335,7 @@ function rosterIssues(input: {
 
   let owedSoon = 0;
   let expiring = 0;
+  const declining: AttentionItem[] = [];
 
   for (const fighter of roster) {
     const agreement = fighter.agreementId
@@ -474,7 +475,7 @@ function rosterIssues(input: {
     }
 
     if (arc.id === 'decliningStar') {
-      items.push({
+      declining.push({
         id: `decline:${id}`,
         kind: 'opportunity',
         tone: 'warn',
@@ -486,6 +487,26 @@ function rosterIssues(input: {
         fighterId: id,
       });
     }
+  }
+
+  /*
+   * Fading names, folded together past a couple. The biggest promotion opened its first day on
+   * seven separate "still sells and no longer wins" rows, which is a fact about the roster's age
+   * profile rather than seven decisions.
+   */
+  if (declining.length > 2) {
+    items.push({
+      id: 'decline:many',
+      kind: 'opportunity',
+      tone: 'warn',
+      urgency: 44,
+      title: `${declining.length} names still sell and no longer win`,
+      detail:
+        'The names are worth more than the fighters now. There is money in that for a while, and a point past which there is not.',
+      action: { label: 'Open the roster', route: 'promoterRoster' },
+    });
+  } else {
+    items.push(...declining);
   }
 
   // Aggregate rows rather than forty individual ones. A promoter needs to know that eight

@@ -94,6 +94,7 @@ import {
   settleDecisions,
   stageFor,
   walkDay,
+  STAGES,
   type Alert,
 } from './alerts';
 
@@ -1702,6 +1703,7 @@ export function bookingsFor(
  */
 function alertStillTrue(
   db: GameDb,
+  day: number,
   key: string,
   booked: () => Map<string, { plan: EventPlan; slotId: string }>,
 ): boolean | undefined {
@@ -1715,7 +1717,9 @@ function alertStillTrue(
     if (!fighter || !agreement || fighter.promotionId !== getWorld(db).playerPromotionId) {
       return false;
     }
-    return !booked().has(a!) && walkDay(db, fighter, agreement) === Number(b);
+    // The thirty-day warning is superseded by the seven-day one rather than left open beside it.
+    const deadline = walkDay(db, fighter, agreement);
+    return !booked().has(a!) && deadline === Number(b) && stageFor(deadline - day) === Number(c);
   }
 
   if (kind === 'mainevent') {
@@ -1742,7 +1746,7 @@ function alertStillTrue(
 export function settleAlerts(db: GameDb, day: number): void {
   let cache: Map<string, { plan: EventPlan; slotId: string }> | undefined;
   const booked = () => (cache ??= bookingsFor(db, getWorld(db).playerPromotionId));
-  settleDecisions(db, day, (key) => alertStillTrue(db, key, booked));
+  settleDecisions(db, day, (key) => alertStillTrue(db, day, key, booked));
 }
 
 /**
@@ -1764,8 +1768,13 @@ export function scanPromoterInbox(db: GameDb, day: number): number {
 
   settleAlerts(db, day);
 
-  // Nothing about the inherited roster stops the clock in the first weeks of a save.
-  if (day < graceEnds(db)) return 0;
+  /*
+   * Nothing about the inherited roster stops the clock in the first weeks of a save. The quiet
+   * ends thirty days before the grace period does, so a fighter who can walk the day it lifts
+   * still gets the thirty-day warning — ending it at the grace period itself let those arrive
+   * already at "can walk now", having never been warned.
+   */
+  if (day < graceEnds(db) - STAGES[0]) return 0;
 
   const plans = plansFor(db, promotion.id as string).filter((p) => p.day >= day);
   const booked = bookingsFor(db, promotion.id as string);
@@ -1821,10 +1830,10 @@ export function scanPromoterInbox(db: GameDb, day: number): number {
     if (!agreement) continue;
 
     /*
-     * About to walk over inactivity. A decision when booking them can still stop it — which, at
-     * thirty days, it always can. At seven it only can if there is a card of yours on or before
-     * the day to put them on; otherwise it is a last line in the digest rather than a stop the
-     * player can do nothing with.
+     * About to walk over inactivity. A decision at both stages, because booking them always
+     * stops it: a fighter on any card of yours is held from the day they are booked, however far
+     * off the card is (`activityHold`), so even at seven days a new card fourteen days out is an
+     * answer.
      */
     const isChampion = promotion.champions[fighter.divisionId] === fighter.id;
     if (!booked.has(id) && !isChampion) {
@@ -1844,8 +1853,7 @@ export function scanPromoterInbox(db: GameDb, day: number): number {
           fighterId: fighter.id,
           promotionId: promotion.id,
         };
-        const bookable = plans.some((p) => p.day <= Math.max(deadline, day + 7));
-        (stage === 30 || bookable ? decisions : digest).push(alert);
+        decisions.push(alert);
       }
     }
 
