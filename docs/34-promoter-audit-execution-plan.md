@@ -164,7 +164,7 @@ week, 4 fighters as people, 5 development over time.
 | A6 Onboarding and readability   | 1/3   | A           | In progress         |     |
 | C2 Star power surfaced          | 4     | C           | Done                | #51 |
 | C3 Memory, wants and voice      | 4     | C           | Done                | #52 |
-| C4 Negotiation                  | 4     | C           | Changes requested   | #55 |
+| C4 Negotiation                  | 4     | C           | Done                | #55 |
 | C5 Real careers over time       | 5     | C           | In progress         |     |
 | C6 Career events                | 5     | C           | Not started         |     |
 | B4 Rival promotions             | 5     | B           | Not started         |     |
@@ -209,3 +209,4 @@ week, 4 fighters as people, 5 development over time.
 | #56 report       | Generated leader's roster is cheap relative to its draw (~£1.5m purses vs £4.7m for 2026 UFC on a comparable card) — world-generation roster cost                                       | C5 / doc 33                    |
 | #56 report       | AI matchmaking still books by rankings; money-aware AI posture                                                                                                                          | B4                             |
 | #56 report       | Broke AI promotions stay at zero cash                                                                                                                                                   | B2 (buyout / recapitalisation) |
+| #55 review       | Stale `Fighter.talks` never pruned for unsigned fighters                                                                                                                                | C5                             |
