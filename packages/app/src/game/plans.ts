@@ -653,11 +653,8 @@ export function whatItSells(input: {
   b: Fighter;
 }): string {
   const { ctx, plan, a, b } = input;
-  const champion = ctx.promotion.champions[a.divisionId as never] as string | undefined;
   const isTitleFight =
-    a.divisionId === b.divisionId &&
-    champion !== undefined &&
-    (champion === (a.id as string) || champion === (b.id as string));
+    a.divisionId === b.divisionId && (isChampionHere(ctx, a) || isChampionHere(ctx, b));
   const heat = currentHeat(getRivalry(ctx.db, a.id, b.id, ctx.day), ctx.day as never);
   return fightSells({ a, b, day: ctx.day as never, market: plan.country, isTitleFight, heat })
     .headline;
@@ -981,18 +978,30 @@ export interface CounterTerms {
   terms: CounterTerm[];
   /** What the money terms add up to, thousands. */
   pay: number;
+  /** Each money term on its own: who, and the show purse they asked for. */
+  purses: { fighterId: string; askingPurse: number }[];
   /** Why the counter cannot be met in one step from this slot, when it cannot. */
   blocked?: string;
   /** The fight a corner asked for instead, for the screen to offer to pencil in. */
   instead?: { fighterId: string; preferredId: string };
+  /** Where the bout sits once the terms are met: this slot, or the better one asked for. */
+  targetSlotId: string;
+  /** The distance once the terms are met. */
+  rounds: PlannedBout['rounds'];
 }
 
 /**
  * What meeting a bout's counters would take, and whether it can be done from here.
  *
- * The same rules `acceptCounter` applies, said before the tap rather than discovered after it:
- * money is paid, five rounds are granted, a better slot is given if it is free on this card, and
- * a different opponent is a new booking rather than a term. Undefined when nobody countered.
+ * **The one place the counter rules live.** The screen reads it to say what agreeing costs, and
+ * `acceptCounter` applies it, so what the button promises and what the tap does cannot drift:
+ *  - a flat refusal from either corner blocks everything — no terms change a no;
+ *  - a different opponent cannot be granted here — it is a new fight, offered as `instead`;
+ *  - a better slot is given if that position on this card has a free slot, else it blocks;
+ *  - five rounds are granted on the spot;
+ *  - money is paid, as each corner's asking purse.
+ *
+ * Undefined when nobody countered.
  */
 export function counterTerms(
   plan: EventPlan,
@@ -1004,9 +1013,12 @@ export function counterTerms(
   if (!bout || counters.length === 0) return undefined;
 
   const terms: CounterTerm[] = [];
+  const purses: CounterTerms['purses'] = [];
   let pay = 0;
   let blocked: string | undefined;
   let instead: CounterTerms['instead'];
+  let targetSlotId = slotId;
+  let rounds = bout.rounds;
 
   for (const answer of counters) {
     const id = answer.fighterId as string;
@@ -1026,15 +1038,17 @@ export function counterTerms(
     if (counter?.kind === 'slot') {
       const where = SLOT_WORDS[counter.position];
       terms.push({ fighterId: id, kind: 'slot', text: `Move it to ${where}` });
-      if (!plan.slots.some((s) => s.position === counter.position && !s.bout)) {
-        blocked ??= `Nothing is free on ${where} of this card. Clear a slot there first.`;
-      }
+      const free = plan.slots.find((s) => s.position === counter.position && !s.bout);
+      if (free) targetSlotId = free.id;
+      else blocked ??= `Nothing is free on ${where} of this card. Clear a slot there first.`;
     }
     if (counter?.kind === 'rounds') {
       terms.push({ fighterId: id, kind: 'rounds', text: 'Make it five rounds' });
+      rounds = counter.rounds;
     }
     if (answer.askingPurse !== undefined) {
       pay += answer.askingPurse;
+      purses.push({ fighterId: id, askingPurse: answer.askingPurse });
       terms.push({
         fighterId: id,
         kind: 'money',
@@ -1047,7 +1061,15 @@ export function counterTerms(
   if (refused) {
     blocked = `${nameOf(refused.fighterId as string)} said no outright, and no terms change that.`;
   }
-  return { terms, pay: Math.round(pay * 10) / 10, blocked, instead };
+  return {
+    terms,
+    pay: Math.round(pay * 10) / 10,
+    purses,
+    blocked,
+    instead,
+    targetSlotId,
+    rounds,
+  };
 }
 
 /** The slot-level read of a bout: what its chip says. A counter outranks a flat refusal. */
@@ -1329,43 +1351,31 @@ export function acceptCounter(input: {
   const slot = plan.slots.find((s) => s.id === slotId);
   if (!slot?.bout) return plan;
 
+  // The rules are `counterTerms`'s, so this does exactly what the screen said it would.
+  const nameOf = (id: string) => {
+    const fighter = ctx.db.fighters.findById(id) as Fighter | undefined;
+    return fighter ? displayName(fighter) : 'Somebody';
+  };
+  const meet = counterTerms(plan, slotId, nameOf);
+  if (!meet || meet.blocked !== undefined) return plan;
   const counters = (slot.bout.answers ?? []).filter((a) => a.verdict === 'countered');
-  if (counters.length === 0) return plan;
-  // A corner that flatly declined cannot be bought, so the fight is still off.
-  if ((slot.bout.answers ?? []).some((a) => a.verdict === 'declined')) return plan;
+  const bout: PlannedBout = { ...slot.bout, rounds: meet.rounds };
+  const targetSlotId = meet.targetSlotId;
 
   /*
-   * What each counter costs to meet (doc 34 C4). Money is paid; five rounds are granted on the
-   * spot; a better slot is given if that slot on this card is free; a different opponent cannot
-   * be granted here at all — that is a new booking, and the player makes it.
-   */
-  let bout = slot.bout;
-  let targetSlotId = slotId;
-  for (const answer of counters) {
-    const counter = answer.counter;
-    if (counter?.kind === 'opponent') return plan;
-    if (counter?.kind === 'rounds') bout = { ...bout, rounds: counter.rounds };
-    if (counter?.kind === 'slot') {
-      const free = plan.slots.find((s) => s.position === counter.position && !s.bout);
-      if (!free) return plan;
-      targetSlotId = free.id;
-    }
-  }
-
-  /*
-   * The extra money comes off the budget when the card is settled rather than now, but the
+   * The money. It comes off the budget when the card is settled rather than now, but the
    * agreement is repapered immediately — a promoter who agrees a purse and does not write it
-   * down is the reason `showPurse` exists.
+   * down is the reason `showPurse` exists. (B1, #56, prices the repaper against the slot here.)
    */
-  for (const counter of counters) {
-    const fighter = ctx.db.fighters.findById(counter.fighterId as string) as Fighter | undefined;
-    if (!fighter?.agreementId || counter.askingPurse === undefined) continue;
+  for (const { fighterId, askingPurse } of meet.purses) {
+    const fighter = ctx.db.fighters.findById(fighterId) as Fighter | undefined;
+    if (!fighter?.agreementId) continue;
     const agreement = ctx.db.agreements.findById(fighter.agreementId as string) as
       PromotionalAgreement | undefined;
     if (!agreement) continue;
     ctx.db.agreements.upsert({
       ...agreement,
-      showPurse: Math.max(agreement.showPurse, counter.askingPurse),
+      showPurse: Math.max(agreement.showPurse, askingPurse),
     } as PromotionalAgreement & Entity);
   }
 
@@ -2279,6 +2289,121 @@ export function nightResults(db: GameDb, plan: EventPlan): BoutResult[] {
       performance: [bout.redId as string, bout.blueId as string].filter((id) => performers.has(id)),
     };
   });
+}
+
+// --- After the night: the callouts ------------------------------------------------------------
+
+/** A winner asking for a fight, and who they are asking for. */
+export interface Callout {
+  winnerId: string;
+  targetId: string;
+  divisionId: string;
+  /** The line as the feed has it, in the winner's voice (`calloutFor`). */
+  line: string;
+  /** Whether the target holds the belt, which is what makes it the call it is. */
+  forTheBelt: boolean;
+}
+
+/**
+ * The callouts from the microphone, top of the card first.
+ *
+ * The moment a promoter's next card is born in: a winner naming who they want. The words are the
+ * ones the night already said — C3's `calloutFor`, written into the feed as each bout settled —
+ * read back rather than generated again, so the recap and the news can never quote a fighter
+ * differently. Only callouts that name somebody are here, because a callout aimed at a whole
+ * division is not a fight anybody can pencil in.
+ */
+export function calloutsFor(db: GameDb, plan: EventPlan, limit = 3): Callout[] {
+  const promotion = db.promotions.findById(plan.promotionId as string) as Promotion | undefined;
+  if (!promotion) return [];
+  const out: Callout[] = [];
+
+  for (const row of nightResults(db, plan)) {
+    if (out.length >= limit) break;
+    const winner = row.winner;
+    if (!winner) continue;
+    const said = db.news.findById(newsId(plan.day as never, `callout_${row.bout.boutId}`)) as
+      NewsItem | undefined;
+    // The fighter named is whoever the item is about besides the winner, read by role rather
+    // than by position in `fighterIds`. A missing item, or one aimed at nobody, is no callout.
+    const targetId = said?.fighterIds?.find((id) => id !== winner.id) as string | undefined;
+    if (!said?.detail || !targetId) continue;
+
+    const divisionId = row.bout.divisionId as string;
+    out.push({
+      winnerId: winner.id as string,
+      targetId,
+      divisionId,
+      line: said.detail,
+      forTheBelt: promotion.champions[divisionId as never] === targetId,
+    });
+  }
+  return out;
+}
+
+/**
+ * Put a callout on the next card with room for it, as a pencilled-in draft.
+ *
+ * Nothing is offered: the player still sends it, which is the whole rule of the planner. The
+ * card chosen is the soonest live one at least `MINIMUM_LEAD_DAYS` out on which neither fighter
+ * is blocked, in its highest empty slot — the main event first, because a callout worth taking
+ * is usually a headline.
+ */
+export function pencilCallout(
+  db: GameDb,
+  callout: Callout,
+): { plan: EventPlan; slotId: string } | { reason: string } {
+  const world = getWorld(db);
+  const promotion = db.promotions.findById(world.playerPromotionId as string) as
+    Promotion | undefined;
+  if (!promotion) return { reason: 'No promotion.' };
+  const red = db.fighters.findById(callout.winnerId) as Fighter | undefined;
+  const blue = db.fighters.findById(callout.targetId) as Fighter | undefined;
+  if (!red || !blue) return { reason: 'One of them is gone.' };
+
+  const ctx = promoterContext({ db, promotion, day: world.day });
+  const order: readonly CardPosition[] = ['mainEvent', 'coMain', 'mainCard', 'prelim'];
+  const candidates = plansFor(db, promotion.id as string).filter(
+    (p) => p.day >= world.day + MINIMUM_LEAD_DAYS,
+  );
+
+  for (const plan of candidates) {
+    const slot = order
+      .flatMap((position) => plan.slots.filter((s) => s.position === position))
+      .find((s) => !s.bout);
+    if (!slot) continue;
+    const blocked =
+      blockerFor({ ctx, fighter: red, plan, ignoreSlotId: slot.id }) ??
+      blockerFor({ ctx, fighter: blue, plan, ignoreSlotId: slot.id });
+    if (blocked) continue;
+
+    // A callout aimed at the champion is a call for the belt, so it goes on for the belt when the
+    // title rules allow it here; otherwise it is pencilled in as a fight and the player decides.
+    const titleKind = callout.forTheBelt
+      ? titleOptionsFor({ ctx, red, blue, plan }).find(
+          (o) => o.kind === 'undisputed' && o.available,
+        )?.kind
+      : undefined;
+    const next = savePlan(
+      db,
+      placeBout({
+        plan,
+        slotId: slot.id,
+        redId: callout.winnerId,
+        blueId: callout.targetId,
+        divisionId: callout.divisionId,
+        titleKind,
+      }),
+    );
+    return { plan: next, slotId: slot.id };
+  }
+
+  return {
+    reason:
+      candidates.length === 0
+        ? 'There is no card far enough out to put it on. Plan one first.'
+        : 'No card coming up has room for it with both of them cleared.',
+  };
 }
 
 /** Odds as words. A promoter hears a fight, not a probability. */

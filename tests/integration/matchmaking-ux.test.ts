@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { createNewGame, getWorld } from '@mmasim/data';
 import { type Fighter, type PlannedBout, type Promotion } from '@mmasim/engine';
 import {
+  acceptCounter,
   boutStatusLabel,
   counterLabel,
   counterTerms,
@@ -243,5 +244,51 @@ describe('a counter that is not money', () => {
     expect(counterTerms(plan, plan.main, names)!.blocked).toBe(
       'Okafor said no outright, and no terms change that.',
     );
+  });
+
+  it('is exactly what accepting does, for every kind of counter', () => {
+    // The screen's promise and the tap's effect come from one set of rules.
+    const { ctx } = setup();
+    const cases: { name: string; answers: PlannedBout['answers']; fill: boolean }[] = [
+      {
+        name: 'money',
+        answers: [answer({ kind: 'money', askingPurse: 9 }, { askingPurse: 9 })],
+        fill: false,
+      },
+      { name: 'rounds', answers: [answer({ kind: 'rounds', rounds: 5 })], fill: false },
+      { name: 'slot, free', answers: [answer({ kind: 'slot', position: 'coMain' })], fill: false },
+      { name: 'slot, taken', answers: [answer({ kind: 'slot', position: 'coMain' })], fill: true },
+      {
+        name: 'opponent',
+        answers: [answer({ kind: 'opponent', preferredId: 'c' as never, reason: 'Wants C.' })],
+        fill: false,
+      },
+      {
+        name: 'refused',
+        answers: [
+          answer(undefined, { askingPurse: 9 }),
+          { fighterId: 'b' as never, verdict: 'declined', note: 'No.' },
+        ],
+        fill: false,
+      },
+    ];
+
+    for (const c of cases) {
+      const plan = card(c.answers, c.fill);
+      const terms = counterTerms(plan, plan.main, names)!;
+      const after = acceptCounter({ ctx, plan, slotId: plan.main });
+
+      if (terms.blocked !== undefined) {
+        expect(after, c.name).toBe(plan);
+        continue;
+      }
+      expect(after, c.name).not.toBe(plan);
+      const bout = after.slots.find((s) => s.id === terms.targetSlotId)!.bout!;
+      expect(bout.status, c.name).toBe('agreed');
+      expect(bout.rounds, c.name).toBe(terms.rounds);
+      if (terms.targetSlotId !== plan.main) {
+        expect(after.slots.find((s) => s.id === plan.main)!.bout, c.name).toBeUndefined();
+      }
+    }
   });
 });

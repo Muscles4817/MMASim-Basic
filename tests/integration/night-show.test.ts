@@ -19,9 +19,11 @@ import { advanceTo } from '../../packages/app/src/game/clock';
 import { readNews } from '../../packages/app/src/game/world';
 import { reviewSpan } from '../../packages/app/src/game/review';
 import {
+  calloutsFor,
   confirmAwards,
   createPlan,
   nightResults,
+  pencilCallout,
   planById,
   runPlan,
   savePlan,
@@ -181,6 +183,93 @@ describe('the results', () => {
     const outcome = planById(db, plan.id)!.outcome!;
     // The cost the recap shows is derived from these, and must be the night's real cost.
     expect(outcome.gate! + outcome.broadcast! - outcome.profit).toBeCloseTo(ran.revenue.costs, 0);
+  });
+});
+
+describe('the callouts', () => {
+  it('quote the night as the feed has it, and name who they want', () => {
+    const { db, plan } = ranCard();
+    runPlan({ db, plan });
+
+    const callouts = calloutsFor(db, planById(db, plan.id)!);
+    expect(callouts.length).toBeGreaterThan(0);
+    expect(callouts.length).toBeLessThanOrEqual(3);
+    const voices = readNews(db).filter((n) => n.kind === 'voice');
+    for (const c of callouts) {
+      expect(c.targetId).not.toBe(c.winnerId);
+      // One line, said once: the recap reads C3's callout rather than writing its own.
+      const said = voices.find((n) => n.detail === c.line)!;
+      expect(said.fighterIds).toEqual([c.winnerId, c.targetId]);
+    }
+  });
+
+  it('go onto the next card with room in one step, or say why not', () => {
+    const { db, promotion, plan } = ranCard();
+    runPlan({ db, plan });
+    setWorld(db, { day: plan.day });
+    const callouts = calloutsFor(db, planById(db, plan.id)!);
+
+    // No card to put it on yet: said, not thrown.
+    const none = pencilCallout(db, callouts[0]!);
+    expect('reason' in none).toBe(true);
+
+    const next = createPlan({ db, promotion, day: plan.day + 120 });
+    const placed = callouts.map((c) => ({ c, placed: pencilCallout(db, c) }));
+    const done = placed.find((p) => 'plan' in p.placed);
+    expect(done).toBeDefined();
+    if (done && 'plan' in done.placed) {
+      const { plan: onto, slotId } = done.placed;
+      expect(onto.id).toBe(next.id);
+      const bout = onto.slots.find((s) => s.id === slotId)!.bout!;
+      expect(bout.status).toBe('draft');
+      expect([bout.redId, bout.blueId]).toContain(done.c.targetId);
+    }
+  });
+
+  it('are left out, not invented, when the feed has no line for the bout', () => {
+    const { db, plan } = ranCard();
+    runPlan({ db, plan });
+    const ran = planById(db, plan.id)!;
+    const before = calloutsFor(db, ran);
+    expect(before.length).toBeGreaterThan(0);
+
+    // The first callout's news item is gone (pruned, or never written on a bulk night).
+    const gone = readNews(db).find((n) => n.detail === before[0]!.line)!;
+    db.news.remove(gone.id as string);
+    const after = calloutsFor(db, ran);
+    expect(after.map((c) => c.line)).not.toContain(before[0]!.line);
+    expect(after.every((c) => c.targetId !== c.winnerId)).toBe(true);
+  });
+
+  it('go on for the belt when they are aimed at the champion', () => {
+    const { db, promotion, plan } = ranCard();
+    setWorld(db, { day: plan.day });
+    const [divisionId, championId] = Object.entries(promotion.champions).find(
+      ([, id]) => id !== undefined,
+    )!;
+    const champion = db.fighters.findById(championId as string) as Fighter;
+    // A contender in the same division, on this roster, who could fight for it.
+    const winner = (db.fighters.findAll() as Fighter[]).find(
+      (f) =>
+        f.divisionId === divisionId &&
+        f.id !== champion.id &&
+        f.promotionId === promotion.id &&
+        f.retiredDay === undefined,
+    )!;
+    createPlan({ db, promotion, day: plan.day + 120 });
+
+    const placed = pencilCallout(db, {
+      winnerId: winner.id as string,
+      targetId: champion.id as string,
+      divisionId,
+      line: 'Give me the belt.',
+      forTheBelt: true,
+    });
+    expect('plan' in placed).toBe(true);
+    if ('plan' in placed) {
+      const bout = placed.plan.slots.find((s) => s.id === placed.slotId)!.bout!;
+      expect(bout.titleKind).toBe('undisputed');
+    }
   });
 });
 
