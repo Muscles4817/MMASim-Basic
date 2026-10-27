@@ -372,7 +372,7 @@ export function planIssues(plan: EventPlan): PlanIssue[] {
 }
 
 /** A one-line state for a calendar row: what this card looks like from a distance. */
-export type PlanHealth = 'ready' | 'thin' | 'atRisk' | 'empty' | 'run' | 'cancelled';
+export type PlanHealth = 'ready' | 'thin' | 'atRisk' | 'turnedDown' | 'empty' | 'run' | 'cancelled';
 
 export function planHealth(plan: EventPlan): PlanHealth {
   if (plan.status === 'run') return 'run';
@@ -380,7 +380,11 @@ export function planHealth(plan: EventPlan): PlanHealth {
 
   const progress = planProgress(plan);
   if (progress.filled === 0) return 'empty';
-  if (!progress.hasMainEvent || progress.declined > 0) return 'atRisk';
+  if (!progress.hasMainEvent) return 'atRisk';
+  // Its own state rather than folded into `atRisk`: the calendar row said "main event set" in
+  // its detail and "Needs a main event" on its chip, because a refusal elsewhere on the card
+  // was reported as the main event's problem.
+  if (progress.declined > 0) return 'turnedDown';
   if (progress.agreed < progress.slots) return 'thin';
   return 'ready';
 }
@@ -393,6 +397,8 @@ export function describeHealth(health: PlanHealth): string {
       return 'Still filling';
     case 'atRisk':
       return 'Needs a main event';
+    case 'turnedDown':
+      return 'Fights turned down';
     case 'empty':
       return 'Nothing booked';
     case 'run':

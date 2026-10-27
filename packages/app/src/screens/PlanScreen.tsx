@@ -105,7 +105,7 @@ const POSITION_LABEL: Record<CardPosition, string> = {
   prelim: 'Prelim',
 };
 
-export function PlanScreen({ id }: { id: string }) {
+export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
   const { db, world, commit } = useGame();
   const { navigate } = useRouter();
 
@@ -114,7 +114,17 @@ export function PlanScreen({ id }: { id: string }) {
     : undefined;
 
   const [version, setVersion] = useState(0);
-  const [editor, setEditor] = useState<SlotEditor>({ step: 'closed' });
+  /*
+   * Arriving with a slot opens it. An inbox item or a dashboard row about one bout used to land
+   * at the top of the card and leave the player to find the row it meant.
+   */
+  const [editor, setEditor] = useState<SlotEditor>(() => {
+    const target = focus ? planById(db, id)?.slots.find((s) => s.id === focus) : undefined;
+    if (!target) return { step: 'closed' };
+    return target.bout
+      ? { step: 'review', slotId: target.id }
+      : { step: 'subject', slotId: target.id };
+  });
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [settings, setSettings] = useState(false);
