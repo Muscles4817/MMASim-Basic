@@ -168,3 +168,15 @@ week, 4 fighters as people, 5 development over time.
 | B5 Investment and season        | 5     | B           | Not started |     |
 | B6 History, scenarios, rankings | 5     | B           | Not started |     |
 | Content pass after each phase   | all   | Coordinator | Not started |     |
+
+## Follow-ups routed from reviews and builder reports
+
+| From       | Follow-up                                                                                   | Routed to       |
+| ---------- | ------------------------------------------------------------------------------------------- | --------------- |
+| #47 review | Calling a card off on the night is free, so the missed-card penalty can be dodged           | A5 (fight week) |
+| #47        | Missed-card buzz −8 / resentment +15 are placeholders                                       | B1 / C3 tuning  |
+| #48 report | Calendar `describeGap` says "1 months"; "Go to X's contract expires" reads awkwardly        | A2              |
+| #48 report | `PromotionHubScreen` repeats tier labels instead of `PROMOTION_TIER_LABELS`                 | A2              |
+| #48 report | Upset news "Number 6 beats number 2" lacks division and promotion                           | C3 (voice)      |
+| #48 report | Venue cities don't match the promotion's region                                             | B1 (markets)    |
+| #48 report | Generated promotions share every character field except tier/prestige/budget; all USA-based | B4 / B5         |
