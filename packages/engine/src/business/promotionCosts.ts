@@ -91,7 +91,7 @@ export const STAFF_LEVEL_OVERHEADS: Readonly<Record<StaffLevel, number>> = {
   1: 0.2,
   2: 1,
   3: 6,
-  4: 13,
+  4: 15,
   5: 120,
 };
 

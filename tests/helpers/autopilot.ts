@@ -36,7 +36,6 @@ import {
   sendAllDrafts,
   suggestFills,
 } from '../../packages/app/src/game/plans';
-import * as planner from '../../packages/app/src/game/plans';
 
 /** `idle` runs no cards at all: the baseline any way of running the promotion has to beat. */
 export type AutopilotPolicy = 'sloppy' | 'sensible' | 'idle';
@@ -266,15 +265,8 @@ export function runOneCard(input: {
     };
   }
 
-  /*
-   * Withdrawals, once. Doc 34's A5 rolls them during fight week and deletes `rollWithdrawals`;
-   * until it lands they are rolled here on the night, so the economy is measured with the same
-   * late losses either way and nobody is ever rolled twice.
-   */
-  const roll = (planner as Record<string, unknown>).rollWithdrawals as
-    ((input: { db: GameDb; plan: EventPlan }) => { plan: EventPlan }) | undefined;
+  // As it stands on the night: withdrawals have already rolled during fight week (doc 34 A5).
   plan = db.plans.findById(plan.id) as EventPlan;
-  if (roll) plan = savePlan(db, roll({ db, plan }).plan);
   const agreed = plan.slots.filter((s) => s.bout?.status === 'agreed').length;
   const ran = runPlan({ db, plan });
   const after = db.promotions.findById(promotionId) as unknown as Promotion;
