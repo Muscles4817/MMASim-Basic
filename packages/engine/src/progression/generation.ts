@@ -604,6 +604,27 @@ export function withoutContradictions(
 }
 
 /**
+ * The fighter, without any trait their ratings have since come to contradict. Doc 34 C5.
+ *
+ * Generation refuses a contradicted trait, but ratings move for a whole career after it: a Cardio
+ * Machine at 34 whose engine has gone to Liability, or an Iron Chin worn down to nothing, kept the
+ * label for good. Measured on a generated world at the start date, 22 of 844 fighters carried a
+ * trait the same page contradicted. The trait goes and is not replaced: an innate label that time
+ * took away is not handed back as a different one. The same object when nothing changes.
+ */
+export function withTraitsStillTrue(fighter: Fighter): Fighter {
+  const context = {
+    divisionId: fighter.divisionId as string,
+    sex: fighter.sex,
+    eliteLift: ELITE_LIFT,
+  };
+  const kept = fighter.traits.filter(
+    (id) => !traitContradicts(TRAITS[id], fighter.attributes, context),
+  );
+  return kept.length === fighter.traits.length ? fighter : { ...fighter, traits: kept };
+}
+
+/**
  * How much of a given attribute's ceiling a fighter has already reached when they turn pro.
  *
  * One number per attribute, at 20 and at 30, because **"physical" is not one thing** and treating

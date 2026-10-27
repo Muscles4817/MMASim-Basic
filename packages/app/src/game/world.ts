@@ -27,6 +27,9 @@ import {
   applyAgeing,
   withoutStaleTalks,
   applyTraining,
+  trainingBlocks,
+  trajectoryOf,
+  withTraitsStillTrue,
   settleWeight,
   AMBIENT_BLOCKS_PER_WEEK,
   campInjuryChance,
@@ -2052,7 +2055,12 @@ function develop(
     // this was and which pulled every fighter in the world toward the same shape (docs/19 §12).
     focuses: [pickTrainingFocus(rng, fighter)],
     weeks,
-    blocks,
+    /*
+     * Scaled by where this career is. Doc 34 C5: a breakout year, a stalled one, and a pace of
+     * their own, so that two prospects of the same age and gym do not develop in lockstep. The
+     * world's fighters only: the player's own training is the player's to decide.
+     */
+    blocks: (blocks ?? trainingBlocks(weeks)) * trajectoryOf(fighter, day).rate,
     gym,
     coach,
     day,
@@ -2097,7 +2105,8 @@ function develop(
    * A no-op for anybody already inside their division's weight band, which is almost everybody
    * almost always: `settleWeight` returns the fighter unchanged on its second line.
    */
-  return settleWeight(aged);
+  // And a trait the ratings no longer bear out goes with them (doc 34 C5).
+  return settleWeight(withTraitsStillTrue(aged));
 }
 
 function finalise(

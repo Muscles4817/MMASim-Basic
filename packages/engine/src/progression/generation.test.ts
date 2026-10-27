@@ -16,7 +16,7 @@ import { createRng } from '../core/rng.js';
 import { asDivisionId } from '../core/ids.js';
 import { TRAITS, type TraitId } from '../domain/traits.js';
 import { uniformAttributes } from '../ratings/attributes.js';
-import { generateFighter, generateTraits, traitFit } from './generation.js';
+import { generateFighter, generateTraits, traitFit, withTraitsStillTrue } from './generation.js';
 
 /** A roster big enough for a correlation to mean something. */
 function roster(count: number) {
@@ -134,6 +134,20 @@ describe('generated fighters wear traits that describe them', () => {
     // yet — the editor's randomiser, fixtures — must not be forced to invent one.
     const rng = createRng('unweighted');
     expect(generateTraits(rng.fork('a'), 2)).toHaveLength(2);
+  });
+});
+
+describe('a trait the ratings stop bearing out', () => {
+  it('is dropped, and the fighter is untouched when every trait still holds', () => {
+    const f = roster(1)[0]!;
+    const machine = {
+      ...f,
+      traits: ['cardioMachine'] as TraitId[],
+      attributes: { ...f.attributes, cardio: 80 },
+    };
+    expect(withTraitsStillTrue(machine)).toBe(machine);
+    const gassed = { ...machine, attributes: { ...machine.attributes, cardio: 5 } };
+    expect(withTraitsStillTrue(gassed).traits).toEqual([]);
   });
 });
 
