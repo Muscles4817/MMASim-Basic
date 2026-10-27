@@ -594,7 +594,10 @@ export function advanceWorld(
           db,
           day,
           rng: rng.fork(`night:${promotion.id}:${day}`),
-          promotion,
+          // Fresh, so a belt won earlier in this advance is not booked as vacant again. See
+          // `runCardBout`.
+          promotion:
+            (db.promotions.findById(promotion.id as string) as Promotion | undefined) ?? promotion,
           available,
           readyOn,
           lastSeen,
@@ -1146,7 +1149,19 @@ export function runCardBout(ctx: {
   resolve?: BoutResolver;
   detail?: WorldDetail;
 }): { news: NewsItem[]; result: ReducedFightResult } | undefined {
-  const { db, day, rng, promotion, bout, readyOn, lastSeen } = ctx;
+  const { db, day, rng, bout, readyOn, lastSeen } = ctx;
+  /*
+   * The promotion as it stands now, not as the caller captured it (doc 34 B6).
+   *
+   * `advanceWorld` reads every promotion once at the start of a call and hands that object down,
+   * so by the second title fight of an advance the champions map it carries was out of date: a
+   * belt won on day 3 still read as vacant on day 20, another "vacant" title fight was booked,
+   * and its winner was crowned over a champion who never fought — measured, a median reign of a
+   * month. Two title fights on one card had the same problem within the night: the second
+   * `setChampion` wrote the stale map back over the first.
+   */
+  const promotion =
+    (db.promotions.findById(ctx.promotion.id as string) as Promotion | undefined) ?? ctx.promotion;
   const bulk = ctx.detail === 'bulk';
 
   const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
