@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
-import { listSaves } from '@mmasim/data';
+import { listSaves, namespaceFor, upsertSave } from '@mmasim/data';
 import { App } from '../../packages/app/src/App';
 import { SaveGate } from '../../packages/app/src/state/SaveGate';
 import { RouterProvider } from '../../packages/app/src/state/router';
@@ -157,9 +157,13 @@ describe('starting a game', () => {
      * makes this a claim about the world rather than about a dropdown.
      */
     window.location.hash = '#/roster';
-    const search = await screen.findByPlaceholderText(/Search all divisions/i, {}, {
-      timeout: 4000,
-    });
+    const search = await screen.findByPlaceholderText(
+      /Search all divisions/i,
+      {},
+      {
+        timeout: 4000,
+      },
+    );
     await user.type(search, 'Aspinall');
 
     // A 2026-only fighter. The 2020 roster does not contain him.
@@ -278,5 +282,82 @@ describe('deleting a save', () => {
     await user.click(screen.getByRole('button', { name: /^Delete/i }));
     await user.click(screen.getByRole('button', { name: /^Keep$/i }));
     expect(listSaves(localStorage)).toHaveLength(1);
+  });
+});
+
+describe('continuing a promotion', () => {
+  /*
+   * The audit's finding: Continue on a promoter save opened "New career / Who are you going to
+   * be?", because the menu is reached with an empty hash and an empty hash is the new-career
+   * screen. And the save sat in the list as "career · 2026 · 1 Jan 2020".
+   */
+  async function startPromoter(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('radio', { name: /2026/i }));
+    await user.click(screen.getByRole('button', { name: /New game/i }));
+    await user.click(await screen.findByRole('button', { name: /promot/i }));
+    const rows = await screen.findAllByRole('button', { name: /./ });
+    await user.click(rows.find((r) => r.classList.contains('datatable__rowbutton'))!);
+    await user.click(await screen.findByRole('button', { name: /^Run /i }));
+    await user.click(await screen.findByRole('button', { name: /^Yes — run /i }));
+    await screen.findByText(/Needs you/i);
+  }
+
+  it('opens the dashboard, not the new-career screen', async () => {
+    const user = userEvent.setup();
+    const first = renderApp();
+    await startPromoter(user);
+
+    first.unmount();
+    sessionStorage.clear();
+    window.location.hash = '';
+    renderApp();
+
+    await user.click(screen.getByRole('button', { name: /^Continue$/i }));
+    expect(await screen.findByText(/Needs you/i)).toBeTruthy();
+    expect(screen.queryByText(/Who are you going to be/i)).toBeNull();
+  });
+
+  it('is listed under the promotion’s name, as a promoter save', async () => {
+    const user = userEvent.setup();
+    const first = renderApp();
+    await startPromoter(user);
+    await waitFor(() => expect(listSaves(localStorage)[0]?.playerRole).toBe('promoter'));
+
+    const save = listSaves(localStorage)[0]!;
+    expect(save.name).not.toMatch(/career/i);
+    expect(save.day).toBeGreaterThan(0);
+
+    first.unmount();
+    sessionStorage.clear();
+    renderApp();
+    expect(screen.getAllByText(/^Promoter · 2026 · /).length).toBeGreaterThan(0);
+  });
+});
+
+describe('a save from an older version', () => {
+  it('is refused with a clear message rather than a crash, and can be deleted', async () => {
+    // Old saves were allowed to break at the fight-night rework; they must break cleanly.
+    const id = 'old-save';
+    upsertSave(localStorage, {
+      id,
+      name: 'An old career',
+      era: '2026',
+      createdAtIso: '2025-01-01T00:00:00.000Z',
+      lastPlayedIso: '2025-01-01T00:00:00.000Z',
+      day: 2192,
+    });
+    localStorage.setItem(
+      `${namespaceFor(id)}:world`,
+      JSON.stringify({ schemaVersion: 1, collection: 'world', rows: [{ id: 'world', day: 2192 }] }),
+    );
+
+    const user = userEvent.setup();
+    renderApp();
+    await user.click(screen.getByRole('button', { name: /^Continue$/i }));
+
+    expect(await screen.findByText(/This save is from an older version/i)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /Delete this save/i }));
+    await waitFor(() => expect(listSaves(localStorage)).toHaveLength(0));
+    expect(await screen.findByRole('button', { name: /New game/i })).toBeTruthy();
   });
 });
