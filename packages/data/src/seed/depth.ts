@@ -175,18 +175,20 @@ export function buildDepthFighters(options: DepthOptions): Fighter[] {
          * 27-year-olds has no shape: nobody is retiring, nobody is a prospect, and the world
          * cannot tell a story about a division turning over.
          *
-         * The whole draw slides down by `ageForwardYears`, so that a population about to be aged
-         * through pre-history arrives at the start date looking like the one this line describes
-         * rather than eight years past it.
+         * The age is drawn as the one this fighter should have **on the day the player arrives**,
+         * and they are built `ageForwardYears` younger. Somebody who would be too young to have
+         * been a professional when the population is built is not built at all: their slot is
+         * left open, and the intake fills it during pre-history with a debutant who arrives at the
+         * right age with a real record behind them (doc 34 C5).
+         *
+         * This used to slide the whole draw down and clamp it at the minimum age, which piled the
+         * young end of the distribution onto eighteen-year-olds who then all aged together: a
+         * generated Small world opened with 7 of 844 fighters aged 23 or under, against 141 of
+         * 858 in the hand-authored 2026 world, because nobody had left to make room for youth.
          */
-        const age = Math.round(
-          rng.normalClamped(
-            27 - shift,
-            4.5,
-            Math.max(MINIMUM_PRO_AGE, 20 - shift),
-            Math.max(MINIMUM_PRO_AGE + 1, 39 - shift),
-          ),
-        );
+        const arrivalAge = Math.round(rng.normalClamped(27, 4.5, 20, 39));
+        const age = arrivalAge - shift;
+        if (age < MINIMUM_PRO_AGE) continue;
 
         generated.push(
           generateFighter(rng, {

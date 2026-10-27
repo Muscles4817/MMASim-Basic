@@ -70,6 +70,7 @@ export * from './progression/nicknames.js';
 export * from './progression/identity.js';
 export * from './progression/ringRust.js';
 export * from './progression/development.js';
+export * from './progression/trajectory.js';
 export * from './progression/trainingPlan.js';
 export * from './progression/origin.js';
 export * from './progression/createFighter.js';

@@ -114,6 +114,14 @@ export interface WorldMeta extends Entity {
    */
   rosterTargets?: Record<string, number>;
   /**
+   * Until this day, `replenish` fills open slots a share at a time rather than all at once.
+   *
+   * Set by a generated world for its pre-history (doc 34 C5): the youngest slots are left open when
+   * the population is built and filled across the years that follow, so the world arrives with an
+   * age structure rather than a single cohort that has aged together.
+   */
+  intakeRampUntil?: number;
+  /**
    * Which size this world was generated at, when it was generated rather than seeded.
    *
    * Absent on a seeded save, which is how the two are told apart — the eras become what doc 27

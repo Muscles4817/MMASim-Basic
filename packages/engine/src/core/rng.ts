@@ -35,6 +35,10 @@ export interface Rng {
    * Fork per subsystem so that adding a random call in one system does not shift every
    * downstream result — this is what keeps regression baselines stable across unrelated
    * changes.
+   *
+   * Derived from the stream's **seed**, not its position: forking the same label twice from one
+   * stream gives the same stream both times, however many draws were made in between. Code that
+   * forks once per item from a shared stream must put the item in the label (`body:${id}`).
    */
   fork(label: string): Rng;
 }

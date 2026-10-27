@@ -493,11 +493,19 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
   );
   db.fighters.upsertMany(fighters as (Fighter & Entity)[]);
 
+  /*
+   * The shape the world is meant to have, from the depth targets rather than from the fighters
+   * built: with pre-history, the youngest slots are deliberately left open for the intake to fill
+   * (see `buildDepthFighters`), so counting the built fighters would undercount the sport.
+   */
   const divisionTargets: Record<string, number> = {};
   const rosterTargets: Record<string, number> = {};
-  for (const f of fighters) {
-    divisionTargets[f.divisionId] = (divisionTargets[f.divisionId] ?? 0) + 1;
-    if (f.promotionId) rosterTargets[f.promotionId] = (rosterTargets[f.promotionId] ?? 0) + 1;
+  for (const t of targets) {
+    for (const divisionId of t.divisions ?? DIVISIONS.map((d) => d.id)) {
+      const want = DIVISIONS.find((d) => d.id === divisionId)?.sex === 'female' ? t.womens : t.mens;
+      divisionTargets[divisionId] = (divisionTargets[divisionId] ?? 0) + want;
+      rosterTargets[t.promotionId] = (rosterTargets[t.promotionId] ?? 0) + want;
+    }
   }
 
   setWorld(db, {
@@ -512,6 +520,12 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
      * signed.
      */
     startedDay: day,
+    /*
+     * Spread the intake across pre-history rather than filling every open slot on day one, so the
+     * debutants who fill them arrive at every age from twenty-two up rather than all at thirty.
+     */
+    intakeRampUntil:
+      (options.ageForwardYears ?? 0) > 0 ? day + (options.ageForwardYears ?? 0) * 365 : undefined,
     divisionTargets,
     rosterTargets,
     seed,
