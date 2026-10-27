@@ -254,3 +254,75 @@ export function rivalryIgnition(p: Personality): number {
     1,
   );
 }
+
+// --- Drift --------------------------------------------------------------------------------------
+
+/** The moments in a career that change the person having it. */
+export type Milestone =
+  'wonTitle' | 'lostTitle' | 'knockedOut' | 'scoredKnockout' | 'winningRun' | 'losingRun';
+
+/**
+ * What each milestone does, **in mirrored pairs**.
+ *
+ * Every milestone has an opposite that happens just as often across the sport — usually to the
+ * other corner of the same fight — and moves the same axes by the same amount the other way. So a
+ * career can move a fighter, but the sport as a whole cannot drift: the first version had only the
+ * humbling half of most pairs, and over ten years of the 2026 seed the world's mean aggression fell
+ * 49.6 → 46.7 and ambition 51.4 → 47.5. `generations.test.ts` (long-sim) holds the mean of each drifting axis inside ±1.5.
+ */
+const DRIFT: Readonly<Record<Milestone, Partial<Personality>>> = {
+  // A belt makes people bigger and, for a while, a little less hungry; losing it, the reverse.
+  wonTitle: { ego: 3, ambition: -2 },
+  lostTitle: { ego: -3, ambition: 2 },
+  // Being put to sleep makes a fighter more careful; doing it to somebody, less.
+  knockedOut: { aggression: -2 },
+  scoredKnockout: { aggression: 2 },
+  // Three straight either way: the appetite grows, or it goes. Not the ego — runs are not
+  // symmetric in who is still around to have one (a losing run ends careers, a winning one does
+  // not), and ego moved by them climbed nearly two points across the sport in ten years.
+  winningRun: { ambition: 2 },
+  losingRun: { ambition: -2 },
+};
+
+/**
+ * The personality after a milestone. Doc 34 C3.
+ *
+ * Axes are "~stable" (doc 04) — stable, not frozen. These are small, a few points a milestone, so a
+ * career moves a fighter by a band or so rather than turning them into somebody else; and they are
+ * deterministic, because the same night should change the same person the same way.
+ */
+export function driftAfter(p: Personality, milestones: readonly Milestone[]): Personality {
+  if (milestones.length === 0) return p;
+  const out = { ...p };
+  for (const m of milestones) {
+    for (const [axis, delta] of Object.entries(DRIFT[m]) as [PersonalityAxis, number][]) {
+      out[axis] = clamp(out[axis] + delta, 1, 100);
+    }
+  }
+  return out;
+}
+
+/** How many straight results, either way, make a run worth changing somebody. */
+export const RUN_LENGTH = 3;
+
+/** Which milestones a result is, from one fighter's side of it. */
+export function milestonesOf(input: {
+  won: boolean;
+  /** Stopped by strikes. */
+  knockedOut: boolean;
+  /** Stopped the other corner by strikes. The mirror of `knockedOut`. */
+  scoredKnockout: boolean;
+  wonTitle: boolean;
+  lostTitle: boolean;
+  /** The streak after this fight: positive for wins, negative for losses. */
+  streak: number;
+}): Milestone[] {
+  const out: Milestone[] = [];
+  if (input.wonTitle) out.push('wonTitle');
+  if (input.lostTitle) out.push('lostTitle');
+  if (input.knockedOut) out.push('knockedOut');
+  if (input.scoredKnockout) out.push('scoredKnockout');
+  if (input.streak === RUN_LENGTH) out.push('winningRun');
+  if (input.streak === -RUN_LENGTH) out.push('losingRun');
+  return out;
+}

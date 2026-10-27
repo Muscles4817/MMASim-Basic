@@ -14,12 +14,17 @@
 
 import { describe, expect, it } from 'vitest';
 import { createNewGame, getWorld, setWorld } from '@mmasim/data';
-import { plannedBouts, type Fighter, type NewsItem, type Promotion } from '@mmasim/engine';
+import {
+  plannedBouts,
+  relationshipWith,
+  type Fighter,
+  type NewsItem,
+  type Promotion,
+} from '@mmasim/engine';
 import { advanceTo } from '../../packages/app/src/game/clock';
 import { readInbox } from '../../packages/app/src/game/inbox';
 import {
   MISSED_CARD_BUZZ,
-  MISSED_CARD_RESENTMENT,
   blockerFor,
   createPlan,
   fightNightOn,
@@ -121,8 +126,14 @@ describe('a card nobody ran', () => {
     const after = db.promotions.findById(promotion.id as string) as Promotion;
     expect(after.buzz).toBe(Math.max(1, promotion.buzz - MISSED_CARD_BUZZ));
 
+    // Remembered rather than added to a number the next settlement recomputes. Doc 34 C3.
     const fighter = db.fighters.findById(signedId) as Fighter;
-    expect(fighter.resentment).toBe(Math.min(100, before.resentment + MISSED_CARD_RESENTMENT));
+    expect(fighter.ledger?.slice(-1)[0]).toMatchObject({
+      kind: 'cardCancelled',
+      promotionId: promotion.id,
+    });
+    expect((before.ledger ?? []).length).toBeLessThan(fighter.ledger!.length);
+    expect(relationshipWith(fighter, promotion.id, plan.day + 1).score).toBeLessThan(0);
 
     const news = db.news.findAll() as NewsItem[];
     expect(news.some((n) => n.kind === 'cancellation' && n.headline.includes(name))).toBe(true);

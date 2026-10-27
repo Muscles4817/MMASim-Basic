@@ -32,6 +32,8 @@ import {
   type FighterHandling,
   type Promotion,
   type PromotionalAgreement,
+  leavingPromotion,
+  withLedgerEntry,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
@@ -201,6 +203,12 @@ export function PromoterRosterScreen() {
       promotionId: undefined,
       agreementId: undefined,
       handling: undefined,
+      // Remembered — the one thing a fighter carries out of the door (doc 34 C3).
+      ledger: withLedgerEntry(leavingPromotion(fighter.ledger, promotion.id), {
+        day: world.day,
+        promotionId: promotion.id,
+        kind: 'cut',
+      }),
     } as Fighter & { id: string });
     setConfirmingCut(undefined);
     commit();

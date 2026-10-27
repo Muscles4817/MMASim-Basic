@@ -18,7 +18,7 @@
  * fight.
  */
 
-import type { Fighter } from './fighter.js';
+import { fighterAge, type Fighter } from './fighter.js';
 import type { Personality } from './personality.js';
 
 export type DispositionId =
@@ -143,9 +143,13 @@ export function dispositionsOf(fighter: Fighter, limit = 3): Disposition[] {
 export type FighterWant =
   | 'titleShot'
   | 'worthyChallenger'
+  | 'superfight'
   | 'rankedOpponent'
+  | 'rematch'
   | 'activity'
   | 'money'
+  | 'moneyFight'
+  | 'oneLastRun'
   | 'anyWin'
   | 'stayBusy';
 
@@ -153,6 +157,8 @@ export interface WantRead {
   id: FighterWant;
   label: string;
   detail: string;
+  /** For a rematch: who with. */
+  opponentId?: Fighter['id'];
 }
 
 export function wantsOf(input: {
@@ -185,11 +191,56 @@ export function wantsOf(input: {
     };
   }
 
+  /*
+   * A rematch, after a loss they do not accept — close on the cards, and a fighter resilient and
+   * ambitious enough to want it back rather than to move on.
+   */
+  const last = fighter.record[fighter.record.length - 1];
+  if (
+    last?.outcome === 'loss' &&
+    (last.method === 'decisionSplit' || last.method === 'decisionMajority') &&
+    fighter.personality.resilience >= 55 &&
+    ambitious
+  ) {
+    return {
+      id: 'rematch',
+      label: 'The rematch',
+      detail: 'Lost a close one and does not accept it. Wants it run back.',
+      opponentId: last.opponentId,
+    };
+  }
+
   if (daysIdle > 240) {
     return {
       id: 'activity',
       label: 'To be booked',
       detail: `Nothing for ${Math.round(daysIdle / 30)} months. Every week off costs them.`,
+    };
+  }
+
+  // Late in a career, with the hunger still there: the big fights, before it is over.
+  if (
+    fighterAge(fighter, input.day) >= 34 &&
+    fighter.summary.wins + fighter.summary.losses >= 15 &&
+    fighter.personality.ambition >= 50
+  ) {
+    return {
+      id: 'oneLastRun',
+      label: 'One last run',
+      detail:
+        'Knows the window is closing. Wants meaningful fights now, not another year of maybes.',
+    };
+  }
+
+  /*
+   * A payday: somebody with a name and a reason to cash it — the bank is empty, or money is
+   * simply what they fight for.
+   */
+  if (fighter.starPower >= 45 && (fighter.bank < 0 || fighter.personality.loyalty < 35)) {
+    return {
+      id: 'moneyFight',
+      label: 'A money fight',
+      detail: 'Has a name worth cashing. Wants the fight that pays, more than the one that ranks.',
     };
   }
 
@@ -206,6 +257,15 @@ export function wantsOf(input: {
    * telling the promoter the best fighter in the division wanted to fight his way up it. What a
    * champion wants is a defence that means something, and the ambitious ones want it loudly.
    */
+  if (rank === 0 && ambitious && fighter.personality.ambition >= 70 && fighter.starPower >= 55) {
+    return {
+      id: 'superfight',
+      label: 'A superfight',
+      detail:
+        'Has the belt and the name, and wants the fight that is bigger than the division — another champion, or a move up.',
+    };
+  }
+
   if (rank === 0) {
     return {
       id: 'worthyChallenger',
@@ -229,4 +289,46 @@ export function wantsOf(input: {
     label: 'To stay busy',
     detail: 'No particular demands. Give them a date and they will take it.',
   };
+}
+
+/**
+ * Whether an offered fight gives a fighter what they want. Undefined when the want says nothing
+ * about this fight either way.
+ *
+ * `acceptanceOf` reads this, so a fighter who wants a title shot is keener on the title fight and
+ * cooler on anything else — which is what makes the want a thing to manage rather than a label.
+ */
+export function wantMet(
+  want: WantRead,
+  offer: {
+    opponent: Pick<Fighter, 'id' | 'starPower'>;
+    isTitleFight?: boolean;
+    /** The opponent's rank in this promotion's division, when they have one. */
+    opponentRank?: number;
+    /** Positive when the opponent is the better fighter. */
+    step: number;
+  },
+): boolean | undefined {
+  const { opponent, isTitleFight = false, opponentRank, step } = offer;
+  switch (want.id) {
+    case 'titleShot':
+    case 'worthyChallenger':
+      return isTitleFight;
+    case 'superfight':
+      return isTitleFight || opponent.starPower >= 60;
+    case 'rematch':
+      return opponent.id === want.opponentId;
+    case 'rankedOpponent':
+      return opponentRank !== undefined && opponentRank <= 15;
+    case 'moneyFight':
+      return opponent.starPower >= 45 || isTitleFight;
+    case 'oneLastRun':
+      return isTitleFight || opponentRank !== undefined || opponent.starPower >= 45;
+    case 'anyWin':
+      return step <= 2;
+    case 'activity':
+      return true;
+    default:
+      return undefined;
+  }
 }
