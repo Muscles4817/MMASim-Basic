@@ -95,6 +95,7 @@ export * from './business/events.js';
 export * from './business/eventPlans.js';
 export * from './business/boutAgreements.js';
 export * from './business/promotionCosts.js';
+export * from './business/investment.js';
 export * from './business/schedule.js';
 export * from './business/inbox.js';
 export * from './business/championships.js';

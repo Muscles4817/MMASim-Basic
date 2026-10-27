@@ -9,6 +9,7 @@ import type { GameDay } from '../core/clock.js';
 import type { CoachId, DivisionId, FighterId, GymId, PromotionId } from '../core/ids.js';
 import type { SponsorshipPolicy } from '../business/money.js';
 import type { MatchmakingStyleId } from '../business/matchmakingStyle.js';
+import type { Investments } from '../business/investment.js';
 import type { Personality } from './personality.js';
 
 /** Where a promotion sits in the market. Drives budget, reach and talent pull. */
@@ -90,6 +91,11 @@ export interface Promotion {
   narrativeControl: number;
   /** Signature ruleset differences, shown on the promotion screen. */
   notes?: string;
+  /**
+   * The departments this promotion funds, by level (doc 34 B5): a matchmaker, a scouting network,
+   * medical staff, marketing, a sports psychologist. Absent means none. A decision, so stored.
+   */
+  investments?: Investments;
 }
 
 export interface Gym {
