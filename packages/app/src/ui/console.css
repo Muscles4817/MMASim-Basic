@@ -295,6 +295,12 @@
   border-color: var(--info);
 }
 
+/* The slot the picker is filling, so the card column says which row the middle pane is about. */
+.slot--active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 @supports not (background: color-mix(in srgb, red 50%, blue)) {
   .slot--agreed {
     border-color: var(--positive);

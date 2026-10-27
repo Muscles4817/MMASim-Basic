@@ -370,6 +370,7 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
                   ctx={ctx}
                   slot={slot}
                   ordinal={slots.length > 1 ? i + 1 : undefined}
+                  active={editor.step !== 'closed' && editor.slotId === slot.id}
                   onOpen={() => openSlot(slot)}
                 />
               ))}
@@ -547,7 +548,8 @@ function MatchupCompare({
       <Card title={displayName(red)}>
         <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 0 }}>
           {recordString(red.summary)} · {describeRank(rank, champion)} ·{' '}
-          {abilityRead(red.attributes).label} · {arc.label}
+          {abilityRead(red.attributes).label}
+          {arc.label !== describeRank(rank, champion) && ` · ${arc.label}`}
         </p>
         <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 0 }}>
           Pick an opponent and the tale of the tape appears here.
@@ -584,12 +586,15 @@ function SlotRow({
   ctx,
   slot,
   ordinal,
+  active,
   onOpen,
 }: {
   ctx: PromoterContext;
   slot: PlanSlot;
   /** Which bout this is within its section, when the section holds more than one. */
   ordinal?: number;
+  /** The slot the picker beside it is filling. */
+  active?: boolean;
   onOpen(): void;
 }) {
   const bout = slot.bout;
@@ -611,7 +616,12 @@ function SlotRow({
           : 'draft';
 
   return (
-    <button type="button" className={`slot slot--${state}`} onClick={onOpen}>
+    <button
+      type="button"
+      className={`slot slot--${state}${active ? ' slot--active' : ''}`}
+      aria-current={active ? 'true' : undefined}
+      onClick={onOpen}
+    >
       {/* The section heading already says "Main card"; repeating it on every row inside it is
           noise. The ordinal is information, and the column keeps the rows aligned. */}
       <span className="slot__position">
