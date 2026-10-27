@@ -158,8 +158,8 @@ week, 4 fighters as people, 5 development over time.
 | B1 Economy and buzz             | 2     | B           | In progress       |     |
 | B2 Broadcaster and owner        | 2     | B           | Not started       |     |
 | B3 Prestige and tiers           | 2     | B           | Not started       |     |
-| A3 Fight-night show and recap   | 3     | A           | In progress       |     |
-| A4 Matchmaking UX               | 3     | A           | Not started       |     |
+| A3 Fight-night show and recap   | 3     | A           | In review         | #54 |
+| A4 Matchmaking UX               | 3     | A           | In progress       |     |
 | A5 Fight week                   | 3     | A           | Not started       |     |
 | A6 Onboarding and readability   | 1/3   | A           | Not started       |     |
 | C2 Star power surfaced          | 4     | C           | Changes requested | #51 |
@@ -202,3 +202,5 @@ week, 4 fighters as people, 5 development over time.
 | #52 report       | "Move up a weight" want folded into superfight; not derived from the weight cut                                                                                                         | C6                     |
 | C4 (in progress) | `BoutCounter` union (money / slot / rounds / opponent) on `CornerAnswer.counter`; replies arrive on `PlannedBout.replyDay` — A4 renders the counter labels                              | A4                     |
 | #50 + #49 merge  | Master red: `alerts.test.ts` relied on one depth fighter coincidentally becoming a #1 contender; C1's trait veto changed the world. Fixture must create its own digest-worthy situation | Lane A hotfix          |
+| #54 report       | A3 ships without post-fight callouts; follow-up PR reverts 62c20fa and wires `calloutFor` once C3 (#52) merges                                                                          | A3 follow-up           |
+| #54 report       | Recap has no sponsors line because settlement has none                                                                                                                                  | B1 / B2                |
