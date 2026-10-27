@@ -17,14 +17,13 @@ import {
   COST_PERIOD_DAYS,
   isActive,
   periodCosts,
-  plannedBouts,
   type Fighter,
   type Promotion,
   type PromotionalAgreement,
 } from '@mmasim/engine';
 import { getWorld, type GameDb } from '@mmasim/data';
 import { currentPurse } from './money';
-import { plansFor } from './plans';
+import { bookingsFor, plansFor } from './plans';
 
 export interface FinancialSnapshot {
   /** Cash on hand, thousands. */
@@ -139,19 +138,18 @@ export function describeRunway(snapshot: FinancialSnapshot): string {
   return 'Comfortable. The bank is not what limits you.';
 }
 
-/** Everybody on a planned card, so the roster screen can say who is already spoken for. */
+/**
+ * Everybody signed onto a live card, so the roster screen can say who is already spoken for.
+ *
+ * Delegates to `bookingsFor`, the one answer the dashboard, the inbox and the clock share. This
+ * used to count every bout in a slot — refusals included — so the roster called a fighter
+ * booked while the inbox warned that they could walk for want of a fight.
+ */
 export function bookedOnPlans(
   db: GameDb,
   promotionId: string | undefined,
   day: number,
 ): Set<string> {
-  const out = new Set<string>();
-  for (const plan of plansFor(db, promotionId)) {
-    if (plan.day < day) continue;
-    for (const bout of plannedBouts(plan)) {
-      out.add(bout.redId as string);
-      out.add(bout.blueId as string);
-    }
-  }
-  return out;
+  void day;
+  return new Set([...bookingsFor(db, promotionId)].filter(([, b]) => b.signed).map(([id]) => id));
 }

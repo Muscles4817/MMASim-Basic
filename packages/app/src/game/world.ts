@@ -2847,7 +2847,7 @@ function chaseOpponent(
  *
  * `finalise` already scans every promotion for exactly this reason, with the same comment.
  */
-function holdsABeltAnywhere(db: GameDb, fighter: Fighter): boolean {
+export function holdsABeltAnywhere(db: GameDb, fighter: Fighter): boolean {
   return (db.promotions.findAll() as unknown as Promotion[]).some(
     (p) => p.champions[fighter.divisionId] === fighter.id,
   );

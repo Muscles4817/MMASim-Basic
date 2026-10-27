@@ -22,6 +22,13 @@
  *  counter was paid, the main event signed — is resolved by the game, not left blocking the badge
  *  until the player dismisses something that is no longer true.
  *
+ *  **Two kinds of "already raised", on purpose.** `raise` (inbox.ts) is idempotent on an item's
+ *  id, which suits one-off events whose id already says what they are — an offer answered on a
+ *  given day. Alerts here are conditions that stay true for weeks and may be folded into a group
+ *  or a digest under some other id, so they are deduplicated on their *key* instead:
+ *  `raisedKeys` collects every key any item carries, whether as its own id (`alert:<key>`) or as
+ *  a line inside a group or digest. A key is never raised twice by either route.
+ *
  *  **A new save gets a grace period.** The roster a player inherits is somebody else's
  *  neglect: nobody can walk out over it for `GRACE_DAYS`, and nothing stops the clock until the
  *  thirty-day warnings for the end of that period are due.

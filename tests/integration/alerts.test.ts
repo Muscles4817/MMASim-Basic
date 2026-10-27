@@ -17,6 +17,7 @@ import {
   withSlot,
   type Fighter,
   type InboxItem,
+  type NewsItem,
   type Promotion,
   type PromotionalAgreement,
 } from '@mmasim/engine';
@@ -25,6 +26,7 @@ import { readInbox, recordOfferOutcome } from '../../packages/app/src/game/inbox
 import { attentionFor } from '../../packages/app/src/game/attention';
 import { GRACE_DAYS, graceEnds, raiseDecisions, walkDay } from '../../packages/app/src/game/alerts';
 import { bookingsFor, createPlan, savePlan } from '../../packages/app/src/game/plans';
+import { bookedOnPlans } from '../../packages/app/src/game/finances';
 import { agreed, filledPlan } from '../helpers/plans';
 import { sign } from '../../packages/app/src/game/contracts';
 
@@ -168,27 +170,133 @@ describe('a new save', () => {
     expect(readInbox(db).filter(isBlocking)).toEqual([]);
   });
 
-  it('cannot lose anybody to the walk-out rule inside the grace period', () => {
+  /*
+   * A controlled pair, because "nobody walked" proves nothing unless somebody would have.
+   * Shelved fighters are stars on two-year-old deals with no fights on their record: every one
+   * of them in breach, and with the most leverage the walk-out rule recognises.
+   */
+  it('is quiet about the inherited roster, not about the player’s own cards', () => {
     const { db, promotion, start } = asPromoter();
+    const plan = createPlan({ db, promotion, day: start + 20 });
+    const result = advanceTo(db, start + 2);
+    expect(result.waiting.some((i) => i.id === `alert:mainevent:${plan.id}:30`)).toBe(true);
+  });
 
-    // Twenty fighters on two-year-old deals with nothing fought: every one of them in breach.
-    const shelved = roster(db, promotion).slice(0, 20);
-    for (const fighter of shelved) {
-      sign(db, fighter, promotion, TERMS);
-      const signed = db.fighters.findById(fighter.id as string) as Fighter;
-      const agreement = agreementOf(db, signed)!;
-      db.agreements.upsert({ ...agreement, signedDay: start - 730 } as never);
-      db.fighters.upsert({ ...signed, record: [] } as never);
-    }
+  it('loses shelved stars without the grace period, and none with it', () => {
+    const walkedOver = (graceOver: boolean) => {
+      const { db, promotion, start } = asPromoter();
+      if (graceOver) setWorld(db, { startedDay: start - 400 });
+      const shelved = shelve(db, promotion, start, 200);
+      advanceThrough(db, start + GRACE_DAYS - 1);
+      return walkedOut(db, promotion, shelved);
+    };
 
-    advanceTo(db, start + GRACE_DAYS - 1);
-    for (const fighter of shelved) {
-      expect((db.fighters.findById(fighter.id as string) as Fighter).promotionId).toBe(
-        promotion.id,
-      );
-    }
+    expect(walkedOver(true), 'the control: without a grace period, somebody walks').toBeGreaterThan(
+      0,
+    );
+    expect(walkedOver(false)).toBe(0);
   });
 });
+
+describe('what holds a fighter', () => {
+  /*
+   * Only a signed bout. Pencilling the whole roster onto a card a year out must not stop anybody
+   * leaving, or the walk-out rule is a formality.
+   */
+  const holdOver = (status: 'draft' | 'agreed') => {
+    const { db, promotion, start } = asPromoter();
+    setWorld(db, { startedDay: start - 400 });
+    const shelved = shelve(db, promotion, start, 24);
+
+    let plan = createPlan({ db, promotion, day: start + 400, scale: 'flagship' });
+    const onCard: Fighter[] = [];
+    plan.slots.forEach((slot, i) => {
+      const [red, blue] = [shelved[i * 2], shelved[i * 2 + 1]];
+      if (!red || !blue) return;
+      onCard.push(red, blue);
+      plan = withSlot(plan, slot.id, {
+        redId: red.id,
+        blueId: blue.id,
+        divisionId: red.divisionId,
+        status,
+        rounds: 3,
+      });
+    });
+    savePlan(db, plan);
+
+    advanceThrough(db, start + 365);
+    return walkedOut(db, promotion, onCard);
+  };
+
+  it('is not a pencilled bout', () => {
+    expect(holdOver('draft')).toBeGreaterThan(0);
+  });
+
+  it('is a signed one', () => {
+    expect(holdOver('agreed')).toBe(0);
+  });
+
+  it('is the same answer on the roster as in the inbox', () => {
+    const { db, promotion, start } = asPromoter();
+    const plan = filledPlan({ db, promotion, day: start + 84, today: start });
+    const slot = plan.slots.find((s) => s.bout)!;
+    savePlan(db, withSlot(plan, slot.id, { ...slot.bout!, status: 'declined' }));
+    const roster = bookedOnPlans(db, promotion.id as string, start);
+    expect(roster.has(slot.bout!.redId as string)).toBe(false);
+    // Pencilled is not booked either: the roster and the walk-out warning agree.
+    const pencilled = plan.slots.find((s) => s.id !== slot.id && s.bout)!.bout!;
+    expect(roster.has(pencilled.redId as string)).toBe(false);
+  });
+});
+
+/** `n` of the roster as shelved stars: signed two years ago, nothing fought, and famous. */
+function shelve(
+  db: ReturnType<typeof game>,
+  promotion: Promotion,
+  start: number,
+  n: number,
+): Fighter[] {
+  const out: Fighter[] = [];
+  for (const fighter of roster(db, promotion).slice(0, n)) {
+    if (holdsBelt(promotion, fighter)) continue;
+    sign(db, fighter, promotion, TERMS);
+    const signed = db.fighters.findById(fighter.id as string) as Fighter;
+    db.agreements.upsert({ ...agreementOf(db, signed)!, signedDay: start - 730 } as never);
+    db.fighters.upsert({ ...signed, record: [], starPower: 100 } as never);
+    out.push(db.fighters.findById(fighter.id as string) as Fighter);
+  }
+  return out;
+}
+
+const holdsBelt = (promotion: Promotion, fighter: Fighter) =>
+  promotion.champions[fighter.divisionId] === fighter.id;
+
+/** Advance to `day`, answering every stop on the way, as a player who reads and moves on. */
+function advanceThrough(db: ReturnType<typeof game>, day: number) {
+  while (getWorld(db).day < day) {
+    const before = getWorld(db).day;
+    advanceTo(db, day);
+    for (const item of readInbox(db).filter(isBlocking)) {
+      db.inbox.upsert({ ...item, resolvedDay: getWorld(db).day, resolvedWith: 'ok' } as never);
+    }
+    if (getWorld(db).day === before) break;
+  }
+}
+
+/**
+ * How many of `fighters` walked out over the activity guarantee — read from the walk-out news
+ * rather than from who left, because a year also ends contracts and careers for other reasons.
+ */
+const walkedOut = (db: ReturnType<typeof game>, promotion: Promotion, fighters: Fighter[]) => {
+  const ids = new Set(fighters.map((f) => f.id as string));
+  // The raw table rather than `readNews`, which trims the minor items a walk-out is filed as.
+  return (db.news.findAll() as readonly NewsItem[]).filter(
+    (n) =>
+      n.promotionId === promotion.id &&
+      /walks out/.test(n.headline) &&
+      n.fighterIds.some((id) => ids.has(id)),
+  ).length;
+};
 
 describe('the dashboard', () => {
   it('measures a suspension against the bout, not against today', () => {
@@ -244,7 +352,15 @@ describe('decisions settle themselves', () => {
       ],
     };
     plan = savePlan(db, withSlot(plan, slot.id, bout));
-    recordOfferOutcome({ db, plan, slotId: slot.id, bout, accepted: false, answers: bout.answers });
+    recordOfferOutcome({
+      db,
+      plan,
+      cardName: 'Test card',
+      slotId: slot.id,
+      bout,
+      accepted: false,
+      answers: bout.answers,
+    });
     expect(readInbox(db).filter(isBlocking)).toHaveLength(1);
 
     savePlan(db, withSlot(plan, slot.id, { ...bout, status: 'agreed' }));

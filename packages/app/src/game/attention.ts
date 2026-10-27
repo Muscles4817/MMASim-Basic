@@ -40,7 +40,8 @@ import {
   type PromotionalAgreement,
 } from '@mmasim/engine';
 import { getWorld, type GameDb } from '@mmasim/data';
-import { bookingsFor, daysUnbookedBy, planName, plansFor } from './plans';
+import { bookingsFor, daysUnbookedBy, isSigned, planName, plansFor } from './plans';
+import { holdsABeltAnywhere } from './world';
 import { walkDay } from './alerts';
 import type { InboxLink } from '@mmasim/engine';
 
@@ -352,9 +353,9 @@ function rosterIssues(input: {
        * fourteen-day minimum lead.
        */
       const left = walkDay(db, fighter, agreement) - day;
-      const isChampion = promotion.champions[fighter.divisionId] === fighter.id;
 
-      if (left <= 60 && !booked.has(id) && !isChampion) {
+      // Signed, not pencilled: the same test the clock holds them on (`isSigned`).
+      if (left <= 60 && !isSigned(booked, id) && !holdsABeltAnywhere(db, fighter)) {
         owedSoon += 1;
         if (left <= 30) {
           items.push({

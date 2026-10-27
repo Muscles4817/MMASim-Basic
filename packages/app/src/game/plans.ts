@@ -84,7 +84,13 @@ import {
   type TitleKind,
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
-import { appendNews, headlineNames, nextEventNumber, runCardBout } from './world';
+import {
+  appendNews,
+  headlineNames,
+  holdsABeltAnywhere,
+  nextEventNumber,
+  runCardBout,
+} from './world';
 import { currentPurse } from './money';
 import { raise, recordOfferOutcome } from './inbox';
 import {
@@ -1719,29 +1725,47 @@ export { paperOdds };
 
 // --- What the promoter is told while time passes -------------------------------------------
 
+/** Where one of the player's fighters is on a live card. */
+export interface CardBooking {
+  plan: EventPlan;
+  slotId: string;
+  /**
+   * Whether both corners have signed. Only a signed bout is a *booking* in the sense that
+   * matters to the fighter: it is what holds them against the walk-out rule and what silences
+   * the warning about it. A pencilled or offered bout is a plan — a promoter could otherwise
+   * pencil the whole roster onto a card a year out and nobody could ever leave.
+   */
+  signed: boolean;
+}
+
 /**
- * Where each of the player's fighters is booked: the soonest live card and the slot on it.
+ * Where each of the player's fighters is on a live card: the soonest one, preferring a signed
+ * bout over a pencilled one. Declined bouts are not on the card at all.
  *
- * One answer for every alert to share. "Booked" used to be worked out separately in three
- * places, and the inbox's version did not exist at all — which is how a fighter already on a
- * card kept being reported as about to walk for want of one.
+ * The one source for "is this fighter booked". It used to be worked out in four places — the
+ * dashboard, the inbox (which did not exist, which is how a fighter on a card kept being warned
+ * about walking for want of one), the roster's `bookedOnPlans` (which counted refusals), and the
+ * clock — and they disagreed.
  */
-export function bookingsFor(
-  db: GameDb,
-  promotionId: string | undefined,
-): Map<string, { plan: EventPlan; slotId: string }> {
-  const out = new Map<string, { plan: EventPlan; slotId: string }>();
+export function bookingsFor(db: GameDb, promotionId: string | undefined): Map<string, CardBooking> {
+  const out = new Map<string, CardBooking>();
   for (const plan of plansFor(db, promotionId)) {
     for (const slot of plan.slots) {
       const bout = slot.bout;
       if (!bout || bout.status === 'declined') continue;
+      const signed = bout.status === 'agreed';
       for (const id of [bout.redId as string, bout.blueId as string]) {
-        if (!out.has(id)) out.set(id, { plan, slotId: slot.id });
+        const held = out.get(id);
+        if (!held || (signed && !held.signed)) out.set(id, { plan, slotId: slot.id, signed });
       }
     }
   }
   return out;
 }
+
+/** Signed onto a live card: held against the walk-out rule, and not warned about it. */
+export const isSigned = (bookings: ReadonlyMap<string, CardBooking>, id: string): boolean =>
+  bookings.get(id)?.signed === true;
 
 /**
  * Whether the situation an alert key describes is still true. `undefined` for keys this does
@@ -1751,7 +1775,7 @@ function alertStillTrue(
   db: GameDb,
   day: number,
   key: string,
-  booked: () => Map<string, { plan: EventPlan; slotId: string }>,
+  booked: () => Map<string, CardBooking>,
 ): boolean | undefined {
   const [kind, a, b, c] = key.split(':');
 
@@ -1765,7 +1789,9 @@ function alertStillTrue(
     }
     // The thirty-day warning is superseded by the seven-day one rather than left open beside it.
     const deadline = walkDay(db, fighter, agreement);
-    return !booked().has(a!) && deadline === Number(b) && stageFor(deadline - day) === Number(c);
+    return (
+      !isSigned(booked(), a!) && deadline === Number(b) && stageFor(deadline - day) === Number(c)
+    );
   }
 
   if (kind === 'mainevent') {
@@ -1776,7 +1802,6 @@ function alertStillTrue(
   if (kind === 'counter') {
     const plan = planById(db, a!);
     const bout = plan?.slots.find((s) => s.id === b)?.bout;
-    void c;
     return (
       plan !== undefined &&
       isLive(plan) &&
@@ -1790,10 +1815,17 @@ function alertStillTrue(
 
 /** Resolve every decision that is no longer true. Run after each day and after each card edit. */
 export function settleAlerts(db: GameDb, day: number): void {
-  let cache: Map<string, { plan: EventPlan; slotId: string }> | undefined;
+  let cache: Map<string, CardBooking> | undefined;
   const booked = () => (cache ??= bookingsFor(db, getWorld(db).playerPromotionId));
   settleDecisions(db, day, (key) => alertStillTrue(db, day, key, booked));
 }
+
+const raiseMainEvents = (db: GameDb, day: number, alerts: readonly Alert[]): number =>
+  raiseDecisions(db, day, alerts, {
+    kind: 'mainevent',
+    title: (n) => `${n} cards have no main event`,
+    body: 'Nothing is signed on top of them. The main event sells the night.',
+  });
 
 /**
  * Promoter-side situations, raised while time passes.
@@ -1813,14 +1845,6 @@ export function scanPromoterInbox(db: GameDb, day: number): number {
   if (!promotion) return 0;
 
   settleAlerts(db, day);
-
-  /*
-   * Nothing about the inherited roster stops the clock in the first weeks of a save. The quiet
-   * ends thirty days before the grace period does, so a fighter who can walk the day it lifts
-   * still gets the thirty-day warning — ending it at the grace period itself let those arrive
-   * already at "can walk now", having never been warned.
-   */
-  if (day < graceEnds(db) - STAGES[0]) return 0;
 
   const plans = plansFor(db, promotion.id as string).filter((p) => p.day >= day);
   const booked = bookingsFor(db, promotion.id as string);
@@ -1864,6 +1888,19 @@ export function scanPromoterInbox(db: GameDb, day: number): number {
     }
   }
 
+  /*
+   * Nothing about the inherited roster stops the clock in the first weeks of a save. The quiet
+   * ends thirty days before the grace period does, so a fighter who can walk the day it lifts
+   * still gets the thirty-day warning — ending it at the grace period itself let those arrive
+   * already at "can walk now", having never been warned.
+   *
+   * Only the roster is quiet. The cards above are the player's own, made in this save, and a
+   * card of theirs with no main event is theirs to hear about from the first day.
+   */
+  if (day < graceEnds(db) - STAGES[0]) {
+    return raiseMainEvents(db, day, mainEvents) + addToDigest(db, day, digest);
+  }
+
   const roster = (db.fighters.findAll() as Fighter[]).filter(
     (f) => f.promotionId === promotion.id && f.retiredDay === undefined,
   );
@@ -1881,8 +1918,8 @@ export function scanPromoterInbox(db: GameDb, day: number): number {
      * off the card is (`activityHold`), so even at seven days a new card fourteen days out is an
      * answer.
      */
-    const isChampion = promotion.champions[fighter.divisionId] === fighter.id;
-    if (!booked.has(id) && !isChampion) {
+    // A champion is never inactive by the promotion's choice; the rule exempts them, so do we.
+    if (!isSigned(booked, id) && !holdsABeltAnywhere(db, fighter)) {
       const deadline = walkDay(db, fighter, agreement);
       const left = deadline - day;
       const stage = stageFor(left);
@@ -1940,11 +1977,7 @@ export function scanPromoterInbox(db: GameDb, day: number): number {
   }
 
   return (
-    raiseDecisions(db, day, mainEvents, {
-      kind: 'mainevent',
-      title: (n) => `${n} cards have no main event`,
-      body: 'Nothing is signed on top of them. The main event sells the night.',
-    }) +
+    raiseMainEvents(db, day, mainEvents) +
     raiseDecisions(db, day, decisions, {
       kind: 'activity',
       title: (n) => `${n} fighters can walk over inactivity`,

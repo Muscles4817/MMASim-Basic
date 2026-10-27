@@ -188,7 +188,9 @@ function exclusionFor(db: GameDb, day: number): WorldExclusion {
      * (`walkDay` never falls inside the grace period, and a booked fighter is never warned
      * about), so the rule they warn about has to keep the same promise.
      */
-    const hold = new Set<string>(bookingsFor(db, promotionId).keys());
+    const hold = new Set<string>(
+      [...bookingsFor(db, promotionId)].filter(([, b]) => b.signed).map(([id]) => id),
+    );
     if (day < graceEnds(db)) {
       for (const f of db.fighters.findAll() as Fighter[]) {
         if (f.promotionId === promotionId) hold.add(f.id as string);
@@ -235,12 +237,6 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
   const promotionId = getWorld(db).playerPromotionId;
   const cardDay = nextCardDay(db, promotionId, start, requestedDay);
   const targetDay = cardDay ?? requestedDay;
-
-  // A save that never recorded when its career began starts the clock on it now, so the grace
-  // period has something to count from.
-  if (getWorld(db).playerRole === 'promoter' && getWorld(db).startedDay === undefined) {
-    setWorld(db, { startedDay: start });
-  }
 
   const exclusion = exclusionFor(db, start);
   let day = start;
