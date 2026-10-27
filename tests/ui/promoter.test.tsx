@@ -72,6 +72,20 @@ async function becomePromoter(user: ReturnType<typeof userEvent.setup>) {
 }
 
 /** Create a card from the calendar and land on it. */
+/**
+ * Let a week pass and come back to the card. Doc 34 C4: corners answer an offer over two to seven
+ * days, so the answers are only on the card once the clock has moved. An advance can stop early on
+ * a counter landing, so it is pressed until a week has really gone.
+ */
+async function waitAWeekForAnswers(user: ReturnType<typeof userEvent.setup>) {
+  const card = window.location.hash;
+  goTo('#/calendar');
+  for (let i = 0; i < 4; i++) {
+    await user.click(await screen.findByRole('button', { name: /^A week$/i }));
+  }
+  goTo(card);
+}
+
 async function planACard(user: ReturnType<typeof userEvent.setup>) {
   goTo('#/calendar');
   await user.click(await screen.findByRole('button', { name: /New card/i }));
@@ -269,6 +283,23 @@ describe('matchmaking', () => {
     expect(document.querySelectorAll('.candidate__why').length).toBeGreaterThan(0);
   });
 
+  it('says what each fighter draws, and what each pairing sells', async () => {
+    // The question on every row is not only who wins but what the promoter is selling.
+    const user = userEvent.setup();
+    await openMainEvent(user);
+    const candidates = await screen.findAllByRole('button', { name: /Unranked|#\d+/ });
+    expect(candidates[0]!.textContent).toMatch(/Draw:/);
+    await user.click(candidates[0]!);
+
+    await screen.findByRole('heading', { name: /Who fights/i });
+    const rows = [...document.querySelectorAll('.candidate')];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.textContent).toMatch(/Draw:/);
+      expect(row.textContent).toMatch(/Sells: \S/);
+    }
+  });
+
   it('lets the promoter say what the fight is for, and re-ranks on it', async () => {
     const user = userEvent.setup();
     await openMainEvent(user);
@@ -420,6 +451,7 @@ describe('sending the card out', () => {
     await user.click(await screen.findByRole('button', { name: /Fill them in/i }));
     await screen.findByRole('button', { name: /Send every pencilled fight/i });
     await user.click(screen.getByRole('button', { name: /Send every pencilled fight/i }));
+    await waitAWeekForAnswers(user);
 
     // Some say yes and some do not — the point is that the answer is theirs, so both outcomes
     // are a pass and an unchanged card is not.
@@ -447,6 +479,7 @@ describe('fight night', () => {
 
     await user.click(await screen.findByRole('button', { name: /Fill them in/i }));
     await user.click(await screen.findByRole('button', { name: /Send every pencilled fight/i }));
+    await waitAWeekForAnswers(user);
     await waitFor(() => expect(screen.queryAllByText(/Signed/i).length).toBeGreaterThan(0), {
       timeout: 10000,
     });

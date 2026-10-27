@@ -789,3 +789,22 @@
   color: var(--text-muted);
   font-size: var(--text-sm);
 }
+
+/* What a counter would take: each term on its own line, then the one button that agrees to all. */
+.terms {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.terms__title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.terms__list {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: var(--text-sm);
+}

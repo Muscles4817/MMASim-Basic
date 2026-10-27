@@ -22,7 +22,6 @@ import { useMemo, useState } from 'react';
 import {
   askingPrice,
   careerArc,
-  defaultTerms,
   displayName,
   getDivision,
   isActive,
@@ -32,6 +31,8 @@ import {
   type FighterHandling,
   type Promotion,
   type PromotionalAgreement,
+  leavingPromotion,
+  withLedgerEntry,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
@@ -40,7 +41,6 @@ import { Alert, Fact } from '../ui/signals';
 import { money } from '../ui/format';
 import { bookedOnPlans } from '../game/finances';
 import { daysUnbookedBy } from '../game/plans';
-import { sign } from '../game/contracts';
 import { PromoterSubNav } from './promoterNav';
 
 /** What is wrong with this fighter's situation, if anything. Drives the whole sort. */
@@ -60,7 +60,6 @@ export function PromoterRosterScreen() {
   const { navigate } = useRouter();
   const [confirmingCut, setConfirmingCut] = useState<string | undefined>();
   const [view, setView] = useState<View>('needing');
-  const [signed, setSigned] = useState<string | undefined>();
 
   const promotion = world.playerPromotionId
     ? (db.promotions.findById(world.playerPromotionId) as Promotion | undefined)
@@ -68,7 +67,7 @@ export function PromoterRosterScreen() {
 
   const booked = useMemo(
     () => bookedOnPlans(db, world.playerPromotionId),
-    [db, world.playerPromotionId, world.day, signed],
+    [db, world.playerPromotionId, world.day],
   );
 
   const roster = useMemo<Attention[]>(() => {
@@ -171,7 +170,7 @@ export function PromoterRosterScreen() {
       )
       .sort((a, b) => b.reputation - a.reputation)
       .slice(0, 25);
-  }, [db, promotion, world.day, signed]);
+  }, [db, promotion, world.day]);
 
   if (!promotion) {
     return (
@@ -201,37 +200,15 @@ export function PromoterRosterScreen() {
       promotionId: undefined,
       agreementId: undefined,
       handling: undefined,
+      // Remembered — the one thing a fighter carries out of the door (doc 34 C3).
+      ledger: withLedgerEntry(leavingPromotion(fighter.ledger, promotion.id), {
+        day: world.day,
+        promotionId: promotion.id,
+        kind: 'cut',
+      }),
     } as Fighter & { id: string });
     setConfirmingCut(undefined);
     commit();
-  };
-
-  /**
-   * Sign a free agent at the going rate.
-   *
-   * Deliberately not a negotiation screen. The price is what they are worth plus whatever their
-   * `purseDemand` adds, and the decision being made is *whether this person is worth a roster
-   * spot at that price* — not whether the player can haggle two thousand off it. Haggling
-   * belongs where it changes something, which is the bout offer.
-   */
-  const signFreeAgent = (fighter: Fighter) => {
-    const terms = defaultTerms(fighter, promotion);
-    const ask = askingPrice(fighter, promotion);
-    const result = sign(db, fighter, promotion, {
-      showPurse: terms.showPurse,
-      winBonus: terms.winBonus,
-      signingBonus: Math.round(ask * 0.25 * 10) / 10,
-      revenuePoints: 0,
-      fightsOwed: 4,
-      championshipExtension: 'standard',
-      matchingRights: false,
-      exclusive: true,
-      outsideBouts: 0,
-    });
-    if (result.ok) {
-      setSigned(fighter.id as string);
-      commit();
-    }
   };
 
   /*
@@ -325,13 +302,16 @@ export function PromoterRosterScreen() {
                     className="row"
                     style={{ gap: 'var(--space-2)', padding: '0 var(--space-3) var(--space-3)' }}
                   >
-                    {signed === (fighter.id as string) ? (
-                      <Chip tone="positive">Signed</Chip>
-                    ) : (
-                      <Button size="sm" onClick={() => signFreeAgent(fighter)}>
-                        Offer a deal
-                      </Button>
-                    )}
+                    {/*
+                      To the table, not a signature. Doc 34 C4: this used to sign on the spot, on
+                      terms the code chose; the deal is now talked through on their page.
+                    */}
+                    <Button
+                      size="sm"
+                      onClick={() => navigate({ name: 'fighter', id: fighter.id as string })}
+                    >
+                      Offer a deal
+                    </Button>
                   </div>
                 </div>
               );

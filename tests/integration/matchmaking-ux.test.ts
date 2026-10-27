@@ -12,9 +12,11 @@ import { type Fighter, type PlannedBout, type Promotion } from '@mmasim/engine';
 import {
   boutStatusLabel,
   counterLabel,
+  counterTerms,
   createPlan,
   promoterContext,
   suggestFills,
+  whatItSells,
 } from '../../packages/app/src/game/plans';
 
 const game = () => createNewGame({ adapter: undefined, era: '2026' });
@@ -111,5 +113,135 @@ describe('a counter reads as a price', () => {
       { fighterId: 'b' as never, verdict: 'declined', note: 'No.' },
     ]);
     expect(boutStatusLabel(flat)).toBe('Turned down');
+  });
+});
+
+describe('what a pairing sells', () => {
+  it('puts the belt first when this promotion’s champion is in it', () => {
+    const { db, plan, ctx } = setup();
+    const [divisionId, championId] = Object.entries(ctx.promotion.champions).find(
+      ([, id]) => id !== undefined,
+    )!;
+    const champion = db.fighters.findById(championId as string) as Fighter;
+    const challenger = (db.fighters.findAll() as Fighter[]).find(
+      (f) => f.divisionId === divisionId && f.id !== champion.id && f.retiredDay === undefined,
+    )!;
+    expect(whatItSells({ ctx, plan, a: challenger, b: champion })).toBe('A belt on the line');
+
+    // Not across divisions, where the belt cannot be on the line.
+    const elsewhere = (db.fighters.findAll() as Fighter[]).find(
+      (f) => f.divisionId !== divisionId && f.retiredDay === undefined,
+    )!;
+    expect(whatItSells({ ctx, plan, a: elsewhere, b: champion })).not.toBe('A belt on the line');
+  });
+});
+
+describe('a counter that is not money', () => {
+  type Answer = NonNullable<PlannedBout['answers']>[number];
+  const answer = (counter: Answer['counter'], extra: Partial<Answer> = {}): Answer => ({
+    fighterId: 'a' as never,
+    verdict: 'countered',
+    note: 'Not like this.',
+    counter,
+    ...extra,
+  });
+  const NAMES: Record<string, string> = { a: 'Ruiz', b: 'Okafor', c: 'Lindqvist' };
+  const names = (id: string) => NAMES[id] ?? id;
+
+  /** A card with the bout in its main event, and every other slot filled or left empty. */
+  function card(answers: PlannedBout['answers'], fillTheRest: boolean) {
+    const { plan } = setup();
+    const main = plan.slots.find((s) => s.position === 'mainEvent')!;
+    return {
+      ...plan,
+      slots: plan.slots.map((s, i) =>
+        s.id === main.id
+          ? {
+              ...s,
+              bout: {
+                redId: 'a' as never,
+                blueId: 'b' as never,
+                divisionId: 'lw' as never,
+                status: 'declined' as const,
+                rounds: 3 as const,
+                answers,
+              },
+            }
+          : fillTheRest
+            ? {
+                ...s,
+                bout: {
+                  redId: `x${i}` as never,
+                  blueId: `y${i}` as never,
+                  divisionId: 'lw' as never,
+                  status: 'agreed' as const,
+                  rounds: 3 as const,
+                },
+              }
+            : s,
+      ),
+      main: main.id,
+    };
+  }
+
+  it('gets its own words on the card', () => {
+    expect(counterLabel(answer({ kind: 'slot', position: 'coMain' }))).toBe('Wants the co-main');
+    expect(counterLabel(answer({ kind: 'slot', position: 'mainCard' }))).toBe(
+      'Wants the main card',
+    );
+    expect(counterLabel(answer({ kind: 'rounds', rounds: 5 }))).toBe('Wants five rounds');
+    expect(
+      counterLabel(answer({ kind: 'opponent', preferredId: 'c' as never, reason: 'Wants C.' })),
+    ).toBe('Wants another opponent');
+  });
+
+  it('says what agreeing would take, and can be agreed when all of it can be granted', () => {
+    const plan = card(
+      [
+        answer({ kind: 'rounds', rounds: 5 }),
+        answer(undefined, { fighterId: 'b' as never, askingPurse: 12 }),
+      ],
+      false,
+    );
+    const terms = counterTerms(plan, plan.main, names)!;
+    expect(terms.terms.map((t) => t.text)).toEqual([
+      'Make it five rounds',
+      expect.stringMatching(/^Pay Okafor .*12.* to show$/),
+    ]);
+    expect(terms.pay).toBe(12);
+    expect(terms.blocked).toBeUndefined();
+  });
+
+  it('says why a better slot cannot be given when the card has none free', () => {
+    const ask = [answer({ kind: 'slot', position: 'coMain' })];
+    const open = card(ask, false);
+    expect(open.slots.some((s) => s.position === 'coMain')).toBe(true);
+    expect(counterTerms(open, open.main, names)!.blocked).toBeUndefined();
+    const full = card(ask, true);
+    expect(counterTerms(full, full.main, names)!.blocked).toMatch(/^Nothing is free/);
+  });
+
+  it('treats a different opponent as a new fight, and names it', () => {
+    const plan = card(
+      [answer({ kind: 'opponent', preferredId: 'c' as never, reason: 'Wants C.' })],
+      false,
+    );
+    const terms = counterTerms(plan, plan.main, names)!;
+    expect(terms.terms[0]!.text).toBe('Ruiz wants Lindqvist instead');
+    expect(terms.instead).toEqual({ fighterId: 'a', preferredId: 'c' });
+    expect(terms.blocked).toMatch(/new fight/);
+  });
+
+  it('cannot be met when the other corner flatly declined', () => {
+    const plan = card(
+      [
+        answer(undefined, { askingPurse: 9 }),
+        { fighterId: 'b' as never, verdict: 'declined', note: 'No.' },
+      ],
+      false,
+    );
+    expect(counterTerms(plan, plan.main, names)!.blocked).toBe(
+      'Okafor said no outright, and no terms change that.',
+    );
   });
 });

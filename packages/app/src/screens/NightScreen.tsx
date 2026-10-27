@@ -172,15 +172,16 @@ export function NightRecap({ plan, onDone }: { plan: EventPlan; onDone(): void }
         {/*
           The split as the night was settled, not recomputed: the economy is being reworked, and
           a recap that re-derived its own figures would disagree with the books the day it lands.
-          There is no sponsorship line because the settlement has none.
+          The settlement carries sponsorship inside its broadcast figure, so the line says so; the
+          cost is what the two earned less what the night made.
         */}
         {outcome?.gate !== undefined && (
           <Ledger>
             <LedgerRow label="Gate" value={money(outcome.gate)} />
-            <LedgerRow label="Broadcast" value={money(outcome.broadcast ?? 0)} />
+            <LedgerRow label="Broadcast & sponsors" value={money(outcome.broadcast ?? 0)} />
             <LedgerRow
               label="Purses, bonuses and production"
-              value={money(-(outcome.costs ?? 0))}
+              value={money(outcome.profit - outcome.gate - (outcome.broadcast ?? 0))}
             />
             <LedgerRule />
             <LedgerRow

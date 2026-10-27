@@ -23,6 +23,8 @@ import type { TraitId } from './traits.js';
 import type { Injury } from '../health/injuries.js';
 import type { Physique } from '../progression/body.js';
 import type { FighterBackground } from '../progression/background.js';
+import type { LedgerEntry } from './relationship.js';
+import type { Negotiation } from '../business/negotiation.js';
 
 /** How a bout ended, from the winner's perspective. */
 export type FinishMethod =
@@ -328,6 +330,20 @@ export interface Fighter {
   managerId?: ManagerId;
   /** 1–100. How the media and fans rate them, which is not the same as how good they are. */
   reputation: number;
+
+  /**
+   * What happened between this fighter and the promotions they fought for — title shots given and
+   * skipped, mismatches, a card cancelled on them, being cut. History, so stored; what it *means*
+   * is read through the personality by `relationshipWith`. Capped at `LEDGER_CAP`. Doc 34 C3.
+   */
+  ledger?: readonly LedgerEntry[];
+
+  /**
+   * Contract talks with a promoter that have not ended in a signature: where they were left, so
+   * that walking out of the room does not start them again. Read through `resumeTalks`, which
+   * ignores them once `TALKS_COOLDOWN_DAYS` have passed; cleared by signing. Doc 34 C4.
+   */
+  talks?: Negotiation;
 
   /** Day they turned professional. */
   proDebutDay: GameDay;

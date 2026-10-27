@@ -61,13 +61,16 @@ import { Tip } from '../ui/tip';
 import { NightRecap, NightShow } from './NightScreen';
 import { TaleOfTheTape } from './FightScreen';
 import { money } from '../ui/format';
+import { DrawBadge } from '../ui/DrawBadge';
 import {
   FILL_SCOPES,
   acceptCounter,
   applySuggestion,
+  blockerFor,
   boutStatusLabel,
   cancelPlan,
   clearSlot,
+  counterTerms,
   defaultIntentFor,
   describeOdds,
   forecastPlan,
@@ -87,6 +90,7 @@ import {
   subjectsFor,
   suggestFills,
   titleOptionsFor,
+  whatItSells,
   type FillScope,
   type OpponentOption,
   type PromoterContext,
@@ -859,7 +863,13 @@ function SubjectPicker({
 
         <div>
           {subjects.map((option) => (
-            <SubjectRow key={option.fighter.id} ctx={ctx} option={option} onPick={onPick} />
+            <SubjectRow
+              key={option.fighter.id}
+              ctx={ctx}
+              market={plan.country}
+              option={option}
+              onPick={onPick}
+            />
           ))}
           {subjects.length === 0 && (
             <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
@@ -874,10 +884,13 @@ function SubjectPicker({
 
 function SubjectRow({
   ctx,
+  market,
   option,
   onPick,
 }: {
   ctx: PromoterContext;
+  /** The card's country, so a home fighter can say so. */
+  market: string;
   option: SubjectOption;
   onPick(fighter: Fighter): void;
 }) {
@@ -905,6 +918,7 @@ function SubjectRow({
         <Chip tone={arc.tone === 'good' ? 'positive' : arc.tone === 'bad' ? 'negative' : 'info'}>
           {arc.label}
         </Chip>
+        <DrawBadge fighter={fighter} day={ctx.day} market={market} detail />
         {blocker && <Chip tone="warning">{blocker}</Chip>}
       </span>
     </button>
@@ -1026,7 +1040,14 @@ function OpponentPicker({
             <div key={group} className="picker__group">
               <p className="picker__group-title">{GROUP_LABEL[group]}</p>
               {rows.slice(0, 6).map((option) => (
-                <OpponentRow key={option.fighter.id} option={option} onPick={onPick} />
+                <OpponentRow
+                  key={option.fighter.id}
+                  option={option}
+                  day={ctx.day}
+                  market={plan.country}
+                  sells={whatItSells({ ctx, plan, a: subject, b: option.fighter })}
+                  onPick={onPick}
+                />
               ))}
             </div>
           ))
@@ -1045,9 +1066,16 @@ function OpponentPicker({
  */
 function OpponentRow({
   option,
+  day,
+  market,
+  sells,
   onPick,
 }: {
   option: OpponentOption;
+  day: number;
+  market: string;
+  /** What this pairing sells, in a line: the question on every row is what am I selling. */
+  sells: string;
   onPick(fighter: Fighter): void;
 }) {
   const { fighter, rank, appraisal, acceptance, concern, blocker, cost, contractNote } = option;
@@ -1070,7 +1098,9 @@ function OpponentRow({
       </span>
       {contractNote && <span className="candidate__line">{contractNote}</span>}
       <span className="candidate__why">{appraisal.rationale}</span>
+      <span className="candidate__line">Sells: {sells}</span>
       <span className="candidate__chips">
+        <DrawBadge fighter={fighter} day={day} market={market} detail />
         <Chip tone={acceptance > 0.6 ? 'positive' : acceptance > 0.3 ? 'warning' : 'negative'}>
           {describeAcceptance(acceptance)}
         </Chip>
@@ -1249,14 +1279,19 @@ function BookedBout({
   const blue = ctx.db.fighters.findById(bout.blueId as string) as Fighter | undefined;
   if (!red || !blue) return null;
 
-  const counters = (bout.answers ?? []).filter((a) => a.verdict === 'countered');
-  const refusals = (bout.answers ?? []).filter((a) => a.verdict === 'declined');
-  const ask = counters.reduce((sum, c) => sum + (c.askingPurse ?? 0), 0);
-
   const nameOf = (id: string) => {
     const fighter = ctx.db.fighters.findById(id) as Fighter | undefined;
     return fighter ? displayName(fighter) : 'Somebody';
   };
+
+  // What the counters would take, said before the tap: the same rules `acceptCounter` applies.
+  const terms = counterTerms(plan, slot.id, nameOf);
+  const preferred = terms?.instead
+    ? (ctx.db.fighters.findById(terms.instead.preferredId) as Fighter | undefined)
+    : undefined;
+  const insteadBlocked = preferred
+    ? blockerFor({ ctx, fighter: preferred, plan, ignoreSlotId: slot.id })
+    : undefined;
 
   return (
     <Card
@@ -1304,19 +1339,58 @@ function BookedBout({
           )}
 
           {/*
-            Meeting the ask. The negotiation the mode never had: a fighter who wanted more money
-            used to be an unfillable slot, and now it is a price the player can decide is worth
-            paying. Somebody who flatly refused cannot be bought, which is what keeps a refusal
-            meaningful.
+            Meeting the ask. A fighter who wanted more used to be an unfillable slot; now each
+            thing they asked for is a line the player can agree to, and the button says what the
+            whole of it costs. Somebody who flatly refused cannot be bought, and a different
+            opponent is a new fight rather than a term — offered here as one, in a tap.
           */}
-          {counters.length > 0 && refusals.length === 0 && (
-            <Button
-              variant="primary"
-              block
-              onClick={() => onChange(acceptCounter({ ctx, plan, slotId: slot.id }))}
-            >
-              Pay {money(ask)} and close it
-            </Button>
+          {terms && (
+            <section className="terms" aria-label="What it would take">
+              <p className="terms__title">What it would take</p>
+              <ul className="terms__list">
+                {terms.terms.map((term) => (
+                  <li key={`${term.fighterId}:${term.kind}`}>{term.text}</li>
+                ))}
+              </ul>
+              {terms.blocked ? (
+                <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+                  {terms.blocked}
+                </p>
+              ) : (
+                <Button
+                  variant="primary"
+                  block
+                  onClick={() => onChange(acceptCounter({ ctx, plan, slotId: slot.id }))}
+                >
+                  {terms.pay > 0 ? `Agree, and pay ${money(terms.pay)}` : 'Agree the terms'}
+                </Button>
+              )}
+              {terms.instead && preferred && (
+                <Button
+                  block
+                  disabled={insteadBlocked !== undefined}
+                  title={insteadBlocked}
+                  onClick={() =>
+                    onChange(
+                      placeBout({
+                        plan,
+                        slotId: slot.id,
+                        redId: terms.instead!.fighterId,
+                        blueId: preferred.id as string,
+                        divisionId: bout.divisionId as string,
+                      }),
+                    )
+                  }
+                >
+                  {`Pencil in ${nameOf(terms.instead.fighterId)} vs ${displayName(preferred)}`}
+                </Button>
+              )}
+              {terms.instead && preferred && insteadBlocked && (
+                <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+                  {displayName(preferred)}: {insteadBlocked}
+                </p>
+              )}
+            </section>
           )}
 
           <Button block onClick={onRebook}>

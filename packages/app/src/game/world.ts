@@ -101,8 +101,14 @@ import {
   earnedNickname,
   nicknamesTaken,
   uniqueNickname,
+  driftAfter,
+  milestonesOf,
+  stayChance,
+  leavingPromotion,
+  withLedgerEntry,
   trimFeed,
   type BoutSeed,
+  type BonusAwards,
   type CardBout,
   type Championship,
   type VacancyReason,
@@ -135,6 +141,7 @@ import {
 import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
 import { settleFightInjuries } from './fightInjuries';
+import { afterTheBout } from './memory';
 import { money } from '../ui/format';
 
 type StoredNews = NewsItem & Entity;
@@ -975,39 +982,7 @@ function buildNight(ctx: {
   }
 
   // --- The bonuses, decided by what actually happened ---------------------------------------
-  const awards = awardBonuses(results, night.bonusPool);
-  const bonusRecipients = new Set<string>(awards.performanceOfTheNight.map((id) => id as string));
-  const fotn = card.find((b) => b.boutId === awards.fightOfTheNight);
-  if (fotn) {
-    bonusRecipients.add(fotn.redId as string);
-    bonusRecipients.add(fotn.blueId as string);
-  }
-
-  for (const id of bonusRecipients) {
-    const fighter = db.fighters.findById(id) as Fighter | undefined;
-    if (!fighter) continue;
-
-    /*
-     * The award goes on the record as well as into the bank, exactly as it does on the player's
-     * own cards. Without this the world's fighters would build standing purely on results while
-     * the player's benefited from bonuses too, and the rankings would quietly favour the player
-     * for reasons nobody could see.
-     */
-    const kind: 'performance' | 'fight' = awards.performanceOfTheNight.includes(fighter.id)
-      ? 'performance'
-      : 'fight';
-    const record = fighter.record.map((entry) =>
-      entry.day === day && entry.promotionId === promotion.id ? { ...entry, bonus: kind } : entry,
-    );
-
-    db.fighters.upsert({
-      ...fighter,
-      record,
-      bank: round1(fighter.bank + awards.perAward),
-      lifetimeGross: round1(fighter.lifetimeGross + awards.perAward),
-      lifetimeNet: round1(fighter.lifetimeNet + awards.perAward * 0.55),
-    } as Fighter & { id: string });
-  }
+  payBonuses(db, card, awardBonuses(results, night.bonusPool));
 
   db.events.upsert(night as FightNight & Entity);
 
@@ -1265,6 +1240,24 @@ export function runCardBout(ctx: {
   if (winner && nickname)
     developed[winner.id === red.id ? 'red' : 'blue'] = { ...winner, nickname };
 
+  // Drift, memory and voice: what the night leaves in the people on it. Doc 34 C3.
+  const remembered = afterTheBout({
+    db,
+    day,
+    promotion,
+    red: developed.red,
+    blue: developed.blue,
+    boutId,
+    winnerId: result.winnerId,
+    method: result.method,
+    isTitleFight,
+    championId: champion,
+    ranked: divisionRanked,
+    quiet: bulk,
+  });
+  developed.red = remembered.red;
+  developed.blue = remembered.blue;
+
   const item = bulk
     ? undefined
     : fightNews({
@@ -1298,6 +1291,8 @@ export function runCardBout(ctx: {
       }),
     );
   }
+
+  news.push(...remembered.news);
 
   if (winner && !bulk) {
     const streak = streakNews({
@@ -1421,6 +1416,20 @@ function runStatisticalCard(ctx: {
 
   const card = rng.fork('card').shuffle(pairs).slice(0, CARD_SIZE);
   const booked = new Set<string>();
+  /*
+   * Nicknames already worn, per division, built on first use and kept current as names are earned
+   * on this card — one roster scan per division per card, not one per earned name.
+   */
+  const takenByDivision = new Map<string, Set<string>>();
+  const takenIn = (divisionId: Fighter['divisionId']): Set<string> => {
+    const key = divisionId as string;
+    let taken = takenByDivision.get(key);
+    if (!taken) {
+      taken = nicknamesTaken(db.fighters.findAll() as Fighter[], divisionId);
+      takenByDivision.set(key, taken);
+    }
+    return taken;
+  };
 
   for (const [a, b] of card) {
     if (booked.has(a.id as string) || booked.has(b.id as string)) continue;
@@ -1489,13 +1498,42 @@ function runStatisticalCard(ctx: {
         bodyWear: clamp(stored.condition.bodyWear + (finishes ? 0.6 : 1.1), 0, 100),
       };
 
+      const summary = summariseRecord(record);
+      /*
+       * The same two things a full bout does to a person, at the same cost (doc 34 C3): a career's
+       * milestones move the personality, and a highlight finish can earn a name — unique in the
+       * division, like every other nickname.
+       */
+      const earned =
+        outcome === 'win'
+          ? earnedNickname(
+              stored,
+              record[record.length - 1]!,
+              boutRng.fork(`nickname:${fighter.id}`),
+            )
+          : undefined;
+      const nickname =
+        earned && uniqueNickname(earned, fighter.id as string, takenIn(stored.divisionId));
+      if (nickname) takenIn(stored.divisionId).add(nickname);
       const next: Fighter = {
         ...stored,
         record,
-        summary: summariseRecord(record),
+        summary,
         condition,
         // Standing moves with results, or nothing ever climbs out of the bottom of the sport.
         reputation: clamp(stored.reputation + (outcome === 'win' ? 1.6 : -0.8), 0, 100),
+        personality: driftAfter(
+          stored.personality,
+          milestonesOf({
+            won: outcome === 'win',
+            knockedOut: stopped,
+            scoredKnockout: outcome === 'win' && isKoMethod(method),
+            wonTitle: false,
+            lostTitle: false,
+            streak: summary.streak,
+          }),
+        ),
+        ...(nickname ? { nickname } : {}),
       };
 
       // No camp here either — `ageEveryone` trains everybody, including these two.
@@ -1601,6 +1639,16 @@ function releaseIfCut(
     ...fighter,
     promotionId: undefined,
     agreementId: undefined,
+    // Cut by the player's promotion: remembered, and the rest of the relationship forgotten.
+    ...(getWorld(db).playerPromotionId === promotion.id
+      ? {
+          ledger: withLedgerEntry(leavingPromotion(fighter.ledger, promotion.id), {
+            day,
+            promotionId: promotion.id,
+            kind: 'cut',
+          }),
+        }
+      : {}),
   } as Fighter & Entity);
 
   const skid = Math.max(0, -fighter.summary.streak);
@@ -1860,7 +1908,10 @@ function resolveFreeAgency(
     const next =
       stepUp.length > 0 && fRng.chance(0.7)
         ? fRng.pickWeighted(stepUp, (p) => room(p) * Math.max(1, p.prestige) ** 1.4)
-        : promotion && pool.includes(promotion) && fRng.chance(0.7)
+        : // Stays more readily where they were treated well, less where they were not (doc 34 C3).
+          promotion &&
+            pool.includes(promotion) &&
+            fRng.chance(stayChance(fighter, promotion.id, day))
           ? promotion
           : whereThereIsRoom();
 
@@ -1888,6 +1939,10 @@ function resolveFreeAgency(
       promotionId: next.id,
       agreementId: signed.id,
       resentment: 0,
+      // Leaving ends the working relationship; only a cut is carried out of the door (doc 34 C3).
+      ...(promotion && promotion.id !== next.id && fighter.ledger
+        ? { ledger: leavingPromotion(fighter.ledger, promotion.id) }
+        : {}),
     } as Fighter & { id: string });
 
     // Keep the divisional index current, so the rest of this quarter's free agents do not all
@@ -2515,6 +2570,46 @@ export function divisionHealth(db: GameDb, divisionId: DivisionId): number {
 }
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+/**
+ * Pay a night's Fight and Performance of the Night, and write each onto the record.
+ *
+ * One payment per fighter however many awards they took — the pool is split into per-recipient
+ * shares, and a fighter in the Fight of the Night who also won Performance is one recipient, not
+ * two — with the award on the record line for their bout on this card. Shared by the world's
+ * cards and the player's own (`confirmAwards`), so the two cannot pay differently.
+ *
+ * The award goes on the record as well as into the bank. Without it the world's fighters would
+ * build standing purely on results while the player's benefited from bonuses too, and the
+ * rankings would quietly favour one side for reasons nobody could see.
+ */
+export function payBonuses(db: GameDb, card: readonly CardBout[], awards: BonusAwards): void {
+  const recipients = new Set<string>(awards.performanceOfTheNight.map((id) => id as string));
+  const fotn = card.find((b) => b.boutId === awards.fightOfTheNight);
+  if (fotn) {
+    recipients.add(fotn.redId as string);
+    recipients.add(fotn.blueId as string);
+  }
+
+  for (const id of recipients) {
+    const fighter = db.fighters.findById(id) as Fighter | undefined;
+    const bout = card.find((b) => b.redId === id || b.blueId === id);
+    if (!fighter || !bout) continue;
+
+    const kind: 'performance' | 'fight' = awards.performanceOfTheNight.includes(fighter.id)
+      ? 'performance'
+      : 'fight';
+    db.fighters.upsert({
+      ...fighter,
+      record: fighter.record.map((entry) =>
+        entry.boutId === bout.boutId ? { ...entry, bonus: kind } : entry,
+      ),
+      bank: round1(fighter.bank + awards.perAward),
+      lifetimeGross: round1(fighter.lifetimeGross + awards.perAward),
+      lifetimeNet: round1(fighter.lifetimeNet + awards.perAward * 0.55),
+    } as Fighter & { id: string });
+  }
+}
 
 /**
  * What the promotion paid the card, so the night's profit is a real number.

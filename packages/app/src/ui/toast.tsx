@@ -10,7 +10,15 @@
  * carry anything the player must act on — that is the inbox's job.
  */
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ReactNode } from 'react';
 import './toast.css';
 
@@ -34,12 +42,26 @@ const TOAST_MS = 4500;
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const next = useRef(0);
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
+
+  // A provider unmounted mid-toast (a test ending, the app torn down) must not set state later.
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      for (const timer of pending) clearTimeout(timer);
+      pending.clear();
+    };
+  }, []);
 
   const toast = useCallback((message: string, tone: ToastTone = 'info') => {
     const id = (next.current += 1);
     // Three at most: past that they are a log, and the oldest have been read.
     setToasts((all) => [...all.slice(-2), { id, message, tone }]);
-    setTimeout(() => setToasts((all) => all.filter((t) => t.id !== id)), TOAST_MS);
+    const timer = setTimeout(() => {
+      timers.current.delete(timer);
+      setToasts((all) => all.filter((t) => t.id !== id));
+    }, TOAST_MS);
+    timers.current.add(timer);
   }, []);
 
   const value = useMemo(() => ({ toast }), [toast]);

@@ -35,7 +35,9 @@ export type NewsKind =
   | 'release'
   /** A card that did not happen. A promoter's own missed date is the case this exists for. */
   | 'cancellation'
-  | 'nickname';
+  | 'nickname'
+  /** Something a fighter said: a callout, a complaint. Doc 34 C3. */
+  | 'voice';
 
 /**
  * How loudly an item should be presented.
@@ -176,6 +178,11 @@ export function fightNews(input: FightNewsInput): NewsItem | undefined {
 
   if (isUpset) {
     const gap = winnerRank !== undefined && loserRank !== undefined ? winnerRank - loserRank : 99;
+    /*
+     * Whose rankings. "Number 6 beats number 2" named neither the weight nor the promotion, and a
+     * generated world has dozens of each — so the line said a ranking moved without saying which.
+     */
+    const table = `${input.promotionName ? `${input.promotionName} ` : ''}${getDivision(divisionId).name.toLowerCase()} rankings`;
     return {
       ...base,
       id: newsId(day, `upset_${boutId}`),
@@ -184,8 +191,8 @@ export function fightNews(input: FightNewsInput): NewsItem | undefined {
       headline: `${winnerName} upsets ${loserName}.`,
       detail:
         winnerRank === undefined
-          ? `An unranked fighter beats the number ${loserRank} ${how}. Somebody has some explaining to do.`
-          : `Number ${winnerRank} beats number ${loserRank} ${how}.`,
+          ? `An unranked fighter beats number ${loserRank} in the ${table} ${how}. Somebody has some explaining to do.`
+          : `Number ${winnerRank} beats number ${loserRank} in the ${table}, ${how}.`,
     };
   }
 
