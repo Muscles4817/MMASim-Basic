@@ -23,49 +23,140 @@
  */
 
 import { clamp } from '../core/math.js';
-import type { Rng } from '../core/rng.js';
+import { hashSeed, type Rng } from '../core/rng.js';
 import type { Sex } from '../domain/divisions.js';
 import { isFinish, isKoMethod, type Fighter, type FightRecordEntry } from '../domain/fighter.js';
 import type { AttributeKey, Attributes } from '../ratings/attributes.js';
 import type { FighterBackground } from './background.js';
 import type { Discipline } from './origin.js';
 
-/** Names for the thing a fighter is most obviously good at. */
+/**
+ * Names for the thing a fighter is most obviously good at.
+ *
+ * Every name appears in exactly one pool, because `nicknamePoolOf` finds a taken name's
+ * alternatives by looking it up — and the pools are long enough that a division can hand out a
+ * dozen from one theme before `uniqueNickname` runs out and leaves somebody without one.
+ */
 const BY_ATTRIBUTE: Readonly<Partial<Record<AttributeKey, readonly string[]>>> = {
-  power: ['Dynamite', 'The Hammer', 'Sledgehammer', 'Thunder', 'Lights Out', 'Heavy Hands', 'TNT'],
-  speed: ['Lightning', 'Quicksilver', 'Blur', 'Whiplash', 'The Hummingbird', 'Jet'],
-  kicking: ['The Axe', 'The Scythe', 'Roundhouse', 'Thunderfoot', 'The Whip'],
-  strikingOffence: ['Buzzsaw', 'The Metronome', 'Rapid Fire', 'The Jackhammer', 'Machine Gun'],
-  strikingDefence: ['The Ghost', 'Untouchable', 'The Matador', 'Slick', 'Smoke'],
-  wrestling: ['The Bulldozer', 'The Tractor', 'The Freight Train', 'The Plough'],
-  groundControl: ['The Blanket', 'The Anvil', 'Gravity', 'Heavy Top'],
-  submissions: ['The Python', 'The Anaconda', 'The Boa', 'The Strangler', 'The Octopus', 'Silk'],
-  scrambling: ['The Eel', 'Houdini', 'Slippery', 'The Cat'],
-  durability: ['Iron', 'Granite', 'Concrete', 'The Wall', 'Cast Iron', 'Teak'],
-  cardio: ['The Engine', 'Diesel', 'The Motor', 'Tireless', 'Perpetual Motion'],
-  strength: ['The Ox', 'The Bull', 'The Crusher', 'Vice Grip'],
-  fightIq: ['The Professor', 'The Architect', 'The Surgeon', 'The Scholar', 'Chess'],
-  composure: ['Ice Water', 'Cold Front', 'The Calm', 'Glacier', 'Zen'],
+  power: [
+    'Dynamite',
+    'The Hammer',
+    'Sledgehammer',
+    'Thunder',
+    'Lights Out',
+    'Heavy Hands',
+    'TNT',
+    'The Wrecking Ball',
+    'Haymaker',
+    'The Demolisher',
+    'Nitro',
+    'Boomstick',
+    'The Hatchet',
+  ],
+  speed: [
+    'Lightning',
+    'Quicksilver',
+    'Blur',
+    'Whiplash',
+    'The Hummingbird',
+    'Flash Point',
+    'Hot Wire',
+    'The Viper',
+    'Mercury',
+    'Short Fuse',
+  ],
+  kicking: [
+    'The Axe',
+    'The Scythe',
+    'Roundhouse',
+    'Thunderfoot',
+    'The Whip',
+    'Shin Bone',
+    'The Sickle',
+  ],
+  strikingOffence: [
+    'Buzzsaw',
+    'The Metronome',
+    'Rapid Fire',
+    'The Jackhammer',
+    'Machine Gun',
+    'The Drummer',
+    'Volume',
+    'The Typewriter',
+  ],
+  strikingDefence: [
+    'The Ghost',
+    'Untouchable',
+    'The Matador',
+    'Slick',
+    'Smoke',
+    'Shadow',
+    'Mirage',
+  ],
+  wrestling: [
+    'The Bulldozer',
+    'The Tractor',
+    'The Freight Train',
+    'The Plough',
+    'The Snowplough',
+    'Double Leg',
+    'The Mule',
+  ],
+  groundControl: ['The Blanket', 'The Anvil', 'Gravity', 'Heavy Top', 'The Weight', 'Quicksand'],
+  submissions: [
+    'The Python',
+    'The Anaconda',
+    'The Boa',
+    'The Strangler',
+    'The Octopus',
+    'Silk',
+    'The Spider Monkey',
+    'Lockjaw',
+    'The Pretzel',
+    'Tapout',
+  ],
+  scrambling: ['The Eel', 'Houdini', 'Slippery', 'The Cat', 'Rubber', 'The Ferret'],
+  durability: ['Iron', 'Granite', 'Concrete', 'The Wall', 'Cast Iron', 'Teak', 'Oak', 'The Anchor'],
+  cardio: [
+    'The Engine',
+    'Diesel',
+    'The Motor',
+    'Tireless',
+    'Perpetual Motion',
+    'Second Wind',
+    'Clockwork',
+  ],
+  strength: ['The Ox', 'The Bull', 'The Crusher', 'Vice Grip', 'The Forklift', 'Iron Grip'],
+  fightIq: [
+    'The Professor',
+    'The Architect',
+    'The Surgeon',
+    'The Scholar',
+    'Chess',
+    'The Accountant',
+  ],
+  composure: ['Ice Water', 'Cold Front', 'The Calm', 'Glacier', 'Zen', 'Stillwater'],
 };
 
 /** Names for where they came from. Only the more decorated rungs earn one. */
 const BY_DISCIPLINE: Readonly<Record<Discipline, readonly string[]>> = {
-  boxing: ['Golden Gloves', 'The Jab', 'Pug'],
-  kickboxing: ['Elbows', 'The Clinch', 'Muay Thai'],
-  karate: ['Sensei', 'Kata', 'Black Belt'],
-  wrestling: ['Singlet', 'The Grappler', 'Two Points'],
-  jiuJitsu: ['Black Belt', 'Gi', 'The Spiderweb'],
-  judo: ['The Judoka', 'Ippon', 'The Throw'],
-  sprints: ['Starting Gun', 'The Sprinter', 'Jet'],
-  throws: ['The Discus', 'Shot Put'],
-  contactSport: ['The Linebacker', 'The Prop', 'Tackle', 'The Tank'],
-  rowing: ['The Oar', 'Stroke'],
-  distanceRunning: ['The Marathon', 'Long Distance', 'Miles'],
+  boxing: ['Golden Gloves', 'The Jab', 'Pug', 'The Counterpuncher', 'The Ring General'],
+  kickboxing: ['Elbows', 'The Clinch', 'Muay Thai', 'Eight Limbs'],
+  karate: ['Sensei', 'Kata', 'The Black Belt', 'Dojo'],
+  wrestling: ['Singlet', 'The Grappler', 'Two Points', 'Headgear'],
+  jiuJitsu: ['Black Belt', 'Gi', 'The Spiderweb', 'Guard'],
+  judo: ['The Judoka', 'Ippon', 'The Throw', 'Uchi Mata'],
+  sprints: ['Starting Gun', 'The Sprinter', 'Jet', 'Photo Finish'],
+  throws: ['The Discus', 'Shot Put', 'The Hammer Thrower'],
+  contactSport: ['The Linebacker', 'The Prop', 'Tackle', 'Blitz'],
+  rowing: ['The Oar', 'Stroke', 'Coxswain'],
+  distanceRunning: ['The Marathon', 'Long Distance', 'Miles', 'Twenty-Six'],
 };
 
-const LONG = ['Wingspan', 'Long Arm', 'The Rangefinder'];
-const THICK = ['The Tank', 'The Fridge', 'Brick House', 'The Boulder'];
-const LEFTY = ['Lefty', 'The Southpaw'];
+const LONG = ['Wingspan', 'Long Arm', 'The Rangefinder', 'Telescope'];
+const THICK = ['The Tank', 'The Fridge', 'Brick House', 'The Boulder', 'The Vault'];
+const LEFTY = ['Lefty', 'The Southpaw', 'Wrong Way', 'Port Side'];
+const OLYMPIAN = ['The Olympian'];
 const HOME = [(c: string) => `The Pride of ${c}`, (c: string) => `The ${c} Kid`];
 
 export interface NicknameInput {
@@ -103,7 +194,7 @@ function themes(input: NicknameInput): { names: readonly string[]; weight: numbe
   const bg = input.background;
   if (bg && (bg.attainment === 'national' || bg.attainment === 'world')) {
     out.push({ names: BY_DISCIPLINE[bg.discipline], weight: bg.attainment === 'world' ? 24 : 12 });
-    if (bg.attainment === 'world') out.push({ names: ['The Olympian'], weight: 10 });
+    if (bg.attainment === 'world') out.push({ names: OLYMPIAN, weight: 10 });
   }
 
   if (input.reachInches - input.heightInches >= 4) out.push({ names: LONG, weight: 12 });
@@ -166,4 +257,99 @@ export function earnedNickname(
       ? BY_ATTRIBUTE.submissions!
       : BY_ATTRIBUTE.cardio!;
   return rng.pick(pool);
+}
+
+// --- One of each per division ----------------------------------------------------------------
+
+const POOLS: readonly (readonly string[])[] = [
+  ...Object.values(BY_ATTRIBUTE),
+  ...Object.values(BY_DISCIPLINE),
+  LONG,
+  THICK,
+  LEFTY,
+  OLYMPIAN,
+];
+
+/**
+ * The theme a nickname came from, so a taken name can be swapped for its nearest neighbour.
+ *
+ * A hometown name's alternatives are the other ways of saying *that* city — two fighters from Hat
+ * Yai in one division can be "The Pride of Hat Yai" and "The Hat Yai Kid", never two of either.
+ * A name in no pool (one the player typed, or a seeded fighter's real one) has no alternatives.
+ */
+export function nicknamePoolOf(name: string): readonly string[] {
+  const home = /^The Pride of (.+)$/.exec(name) ?? /^The (.+) Kid$/.exec(name);
+  if (home) return HOME.map((h) => h(home[1]!));
+  return POOLS.find((pool) => pool.includes(name)) ?? [name];
+}
+
+/**
+ * This name if nobody it would be confused with has it, else a free one from the same theme.
+ *
+ * Undefined when the theme is spent, which is the right answer: a fighter without a nickname is
+ * ordinary, and two well-known fighters in one division called "TNT" breaks the illusion. The walk
+ * starts at a point fixed by the fighter's id, so it is deterministic and does not hand every
+ * collision the same second choice.
+ */
+export function uniqueNickname(
+  name: string,
+  fighterId: string,
+  taken: ReadonlySet<string>,
+): string | undefined {
+  if (!taken.has(name)) return name;
+  const pool = nicknamePoolOf(name);
+  const start = hashSeed(fighterId) % pool.length;
+  for (let i = 0; i < pool.length; i++) {
+    const candidate = pool[(start + i) % pool.length]!;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return undefined;
+}
+
+/** Nicknames already worn by active fighters in a division. What `uniqueNickname` checks against. */
+export function nicknamesTaken(
+  fighters: readonly Pick<Fighter, 'nickname' | 'divisionId' | 'retiredDay'>[],
+  divisionId: Fighter['divisionId'],
+): Set<string> {
+  const out = new Set<string>();
+  for (const f of fighters) {
+    if (f.nickname && f.divisionId === divisionId && f.retiredDay === undefined)
+      out.add(f.nickname);
+  }
+  return out;
+}
+
+/**
+ * Make every active fighter's nickname unique within their division.
+ *
+ * Generation rolls each fighter alone, so it cannot know who else is in the room — this is the pass
+ * that does, run once over a roster as it is assembled. Order is deterministic: hand-authored
+ * fighters (no generated background) keep theirs first, because a real fighter's real nickname is a
+ * fact, then everybody else in id order. Stored rather than derived on read for the same reason the
+ * nickname itself is: an earned name is history, and the de-duplicated one has to be the one the
+ * news already printed.
+ */
+export function dedupeNicknames<F extends Fighter>(fighters: readonly F[]): F[] {
+  const order = fighters
+    .map((f, i) => ({ f, i }))
+    .filter(({ f }) => f.nickname && f.retiredDay === undefined)
+    .sort(
+      (a, b) =>
+        Number(a.f.background !== undefined) - Number(b.f.background !== undefined) ||
+        (a.f.id < b.f.id ? -1 : a.f.id > b.f.id ? 1 : 0),
+    );
+
+  const taken = new Map<string, Set<string>>();
+  const out = [...fighters];
+  for (const { f, i } of order) {
+    const division = f.divisionId as string;
+    const names = taken.get(division) ?? new Set<string>();
+    taken.set(division, names);
+    const name = uniqueNickname(f.nickname!, f.id as string, names);
+    if (name) names.add(name);
+    if (name === f.nickname) continue;
+    out[i] = { ...f, nickname: name };
+    if (!name) delete out[i]!.nickname;
+  }
+  return out;
 }
