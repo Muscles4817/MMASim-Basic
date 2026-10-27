@@ -90,6 +90,8 @@ import {
   retirementReason,
   signingNews,
   setChampion,
+  matchmakingWeights,
+  postureOf,
   hasDriftedOut,
   shouldRetire,
   MAX_CARDS_PER_YEAR,
@@ -141,6 +143,7 @@ import {
   MIN_DIVISION_DEPTH,
   MIN_WOMENS_DIVISION_DEPTH,
   getWorld,
+  setWorld,
   type Entity,
   type GameDb,
 } from '@mmasim/data';
@@ -148,6 +151,8 @@ import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
 import { settleFightInjuries } from './fightInjuries';
 import { afterTheBout } from './memory';
+import { rivalBidsFor } from './contracts';
+import { poachChampions } from './rivalMoves';
 import { money } from '../ui/format';
 
 type StoredNews = NewsItem & Entity;
@@ -464,6 +469,8 @@ export function advanceWorld(
       news.push(...replenish(db, day, rng, promotions, rosterSizes));
       // Deals run out across the roster too, so the market has other people in it.
       news.push(...resolveFreeAgency(db, day, rng, promotions, exceptId, rosterSizes));
+      // Rivals with money and intent try to buy champions out of their deals (doc 34 B4).
+      news.push(...poachChampions(db, day, rng.fork(`poach:${day}`), exceptId));
       reindex();
     }
 
@@ -494,6 +501,21 @@ export function advanceWorld(
       const phase = hashSeed(promotion.id as string) % Math.max(1, Math.ceil(interval));
       const cycle = (at: number) => Math.floor((at - phase) / interval);
       if (cycle(day) > cycle(day - 1)) dueToday.push(promotion);
+    }
+    /*
+     * And any rival that booked a card against the player's (doc 34 B4): it runs on that day,
+     * whatever its own calendar says — that is what booking against somebody means.
+     */
+    const rivalCards = getWorld(db).rivalCards;
+    if (rivalCards && rivalCards.length > 0) {
+      for (const card of rivalCards) {
+        if (card.day !== day || card.promotionId === exclusion.promotionId) continue;
+        const rival = promotions.find((p) => p.id === card.promotionId);
+        if (rival && !dueToday.includes(rival)) dueToday.push(rival);
+      }
+      if (rivalCards.some((c) => c.day <= day)) {
+        setWorld(db, { rivalCards: rivalCards.filter((c) => c.day > day) });
+      }
     }
 
     if (dueToday.length > 0) {
@@ -796,7 +818,30 @@ function buildNight(ctx: {
     });
     if (offers.length === 0) continue;
 
-    const opponent = rng.pick(offers).opponent;
+    /*
+     * Which of them, by what this promotion is in business for (doc 34 B4): an aggressor books
+     * the fight that sells, a moneyball outfit the one that sells for what it costs, a developer
+     * whatever the rankings and its protectiveness already offered. It was a uniform pick, so no
+     * promotion in the sport ever booked with money in mind.
+     */
+    const weights = matchmakingWeights(
+      postureOf(promotion),
+      offers.map((o) => ({
+        draw: drawWeight({
+          promotion,
+          red: subject,
+          blue: o.opponent,
+          heat: 0,
+          isRivalry: false,
+          isTitleFight: false,
+        }),
+        cost: marketValue(o.opponent, promotion),
+      })),
+    );
+    const opponent = rng.pickWeighted(
+      offers.map((o, i) => ({ o, w: weights[i]! })),
+      (x) => x.w,
+    ).o.opponent;
     if (used.has(opponent.id as string)) continue;
 
     used.add(subject.id as string);
@@ -1123,6 +1168,7 @@ export function runCardBout(ctx: {
    * and nothing the sport could say about a division's history.
    */
   let titleChangedHands = false;
+  let gotAway: NewsItem | undefined;
   if (isTitleFight) {
     const title = db.championships.findById(championshipId(promotion.id, red.divisionId)) as
       Championship | undefined;
@@ -1130,6 +1176,29 @@ export function runCardBout(ctx: {
     if (result.winnerId && champion !== (result.winnerId as string)) {
       db.promotions.upsert(setChampion(promotion, red.divisionId, result.winnerId) as never);
       titleChangedHands = true;
+      // The one that got away (doc 34 B4): a fighter the player cut, champion somewhere else.
+      const playerPromotionId = getWorld(db).playerPromotionId;
+      const newChampion = result.winnerId === red.id ? red : blue;
+      if (
+        playerPromotionId &&
+        promotion.id !== playerPromotionId &&
+        (newChampion.ledger ?? []).some(
+          (e) => e.kind === 'cut' && e.promotionId === playerPromotionId,
+        )
+      ) {
+        gotAway = {
+          id: newsId(day as never, `cutChampion:${newChampion.id}`),
+          day: day as never,
+          kind: 'rival',
+          weight: 'major',
+          headline: `The fighter you cut is a champion: ${displayName(newChampion)} wins the ${promotion.shortName} belt`,
+          detail: `${displayName(newChampion)} was released by your promotion. ${promotion.shortName} kept the faith.`,
+          fighterIds: [newChampion.id],
+          divisionId: red.divisionId,
+          promotionId: promotion.id,
+          involvesPlayer: true,
+        };
+      }
       if (title) {
         db.championships.upsert(
           crown({
@@ -1214,7 +1283,7 @@ export function runCardBout(ctx: {
         ),
       };
 
-  const news: NewsItem[] = [];
+  const news: NewsItem[] = gotAway ? [gotAway] : [];
   const winner =
     result.winnerId === red.id
       ? developed.red
@@ -1909,9 +1978,22 @@ function resolveFreeAgency(
     const whereThereIsRoom = () =>
       fRng.pickWeighted(pool, (p) => room(p) * Math.max(1, p.prestige) ** 0.6);
 
+    /*
+     * A rival's bid on one of the player's fighters, if they let it stand (doc 34 B4). The bids
+     * are the ones the contract tab showed on the deal's last day; matching one re-signs the
+     * fighter before it ever expires, so reaching here means nobody matched — and the best bid
+     * usually takes them.
+     */
+    const outbid =
+      promotion && agreement && promotion.id === world.playerPromotionId
+        ? rivalBidsFor(db, fighter, promotion, agreement.expiresDay - 1)[0]
+        : undefined;
+    const takesBid = outbid !== undefined && fRng.chance(0.8);
+
     const stepUp = promotion ? pool.filter((p) => p.prestige > promotion.prestige + 4) : [];
-    const next =
-      stepUp.length > 0 && fRng.chance(0.7)
+    const next = takesBid
+      ? outbid.promotion
+      : stepUp.length > 0 && fRng.chance(0.7)
         ? fRng.pickWeighted(stepUp, (p) => room(p) * Math.max(1, p.prestige) ** 1.4)
         : // Stays more readily where they were treated well, less where they were not (doc 34 C3).
           promotion &&
@@ -1924,20 +2006,36 @@ function resolveFreeAgency(
     const signed = createAgreement({
       fighter,
       promotion: next,
-      terms: {
-        showPurse: terms.showPurse,
-        winBonus: terms.winBonus,
-        signingBonus: 0,
-        revenuePoints: 0,
-        fightsOwed: fRng.int(3, 5),
-        championshipExtension:
-          next.tier === 'global' || next.tier === 'major' ? 'standard' : 'none',
-        matchingRights: fRng.chance(0.5),
-        exclusive: next.tier !== 'regional' && next.tier !== 'developmental',
-        outsideBouts: next.tier === 'regional' || next.tier === 'developmental' ? 2 : 0,
-      },
+      terms: takesBid
+        ? outbid.terms
+        : {
+            showPurse: terms.showPurse,
+            winBonus: terms.winBonus,
+            signingBonus: 0,
+            revenuePoints: 0,
+            fightsOwed: fRng.int(3, 5),
+            championshipExtension:
+              next.tier === 'global' || next.tier === 'major' ? 'standard' : 'none',
+            matchingRights: fRng.chance(0.5),
+            exclusive: next.tier !== 'regional' && next.tier !== 'developmental',
+            outsideBouts: next.tier === 'regional' || next.tier === 'developmental' ? 2 : 0,
+          },
       day,
     });
+    if (takesBid && promotion) {
+      news.push({
+        id: newsId(day as never, `outbid:${fighter.id}`),
+        day: day as never,
+        kind: 'rival',
+        weight: fighter.reputation >= 50 ? 'major' : 'normal',
+        headline: `${next.shortName} outbids ${promotion.shortName} for ${displayName(fighter)}`,
+        detail: `The bid was on the table for three months and nobody matched it.`,
+        fighterIds: [fighter.id],
+        divisionId: fighter.divisionId,
+        promotionId: next.id,
+        involvesPlayer: true,
+      });
+    }
     db.agreements.upsert(signed as PromotionalAgreement & Entity);
     db.fighters.upsert({
       ...fighter,

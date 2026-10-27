@@ -36,6 +36,7 @@ import {
   dedupeNicknames,
   asPromotionId,
   championshipId,
+  promotionCharacter,
   type Championship,
   type Coach,
   type Commentator,
@@ -394,6 +395,14 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
         revenueShareCapable: spec.tier === 'global' || spec.tier === 'major',
         divisions: divisions.map((d) => d.id),
         champions: {},
+        /*
+         * Who this promotion is (doc 33, doc 34 B4): posture, home market, how it books and how it
+         * treats the people it signs. Every one of these came from `template` too — the whole
+         * generated sport was the seed's leader at seventy different sizes — and they are the
+         * fields that make one employer different from another. Drawn from a stream of their own,
+         * so nothing else in generation moves.
+         */
+        ...promotionCharacter({ id, tier: spec.tier, prestige, seed }),
       });
 
       // Whatever is left over after the floors, spread across the weight classes they do run.

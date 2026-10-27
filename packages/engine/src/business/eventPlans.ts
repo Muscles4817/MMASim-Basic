@@ -179,6 +179,14 @@ export interface EventPlan {
    * place — derived after the fact it would take the number of the next live card.
    */
   cancelled?: { day: GameDay; reason: 'calledOff' | 'missed'; name: string };
+  /**
+   * A rival's card booked against this one in the same market (doc 34 B4), and the share of the
+   * gate it takes. Decided once, when the date becomes known (`rivalsConsidered`), and stored
+   * because it is a rival's decision rather than anything derivable.
+   */
+  rivalCard?: { promotionId: PromotionId; split: number };
+  /** Rivals have looked at this date and decided, whether or not one booked against it. */
+  rivalsConsidered?: boolean;
 }
 
 export interface PlanOutcome {

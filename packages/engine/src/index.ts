@@ -103,6 +103,7 @@ export * from './business/matchmakingIntent.js';
 export * from './business/fighterRead.js';
 export * from './business/starPower.js';
 export * from './business/negotiation.js';
+export * from './business/rivals.js';
 export * from './business/news.js';
 
 // Testing helpers (shared across the out-of-package test suites)

@@ -43,6 +43,7 @@ import {
   settleReplies,
 } from './plans';
 import { graceEnds } from './alerts';
+import { considerCounterProgramming } from './counterProgramming';
 
 /*
  * There is no step any more, and that is the change.
@@ -281,6 +282,8 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
     // happen. This is the one place that legitimately knows about both.
     // Bout offers answer on their own day (doc 34 C4), so a counter can stop the clock when it lands.
     settleReplies(db, onDay);
+    // Rivals hear about the player's dates a month out, and some book against them (doc 34 B4).
+    considerCounterProgramming(db, onDay);
     scanForInbox(db, onDay);
     scanPromoterInbox(db, onDay);
     return blocking(readInbox(db)).some((i) => !alreadyWaiting.has(i.id));

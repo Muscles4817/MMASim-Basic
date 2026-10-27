@@ -37,7 +37,9 @@ export type NewsKind =
   | 'cancellation'
   | 'nickname'
   /** Something a fighter said: a callout, a complaint. Doc 34 C3. */
-  | 'voice';
+  | 'voice'
+  /** A rival promotion's move: a card against yours, a bid, a poached champion. Doc 34 B4. */
+  | 'rival';
 
 /**
  * How loudly an item should be presented.

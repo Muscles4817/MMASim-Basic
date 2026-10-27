@@ -9,6 +9,7 @@ import type { GameDay } from '../core/clock.js';
 import type { CoachId, DivisionId, FighterId, GymId, PromotionId } from '../core/ids.js';
 import type { SponsorshipPolicy } from '../business/money.js';
 import type { MatchmakingStyleId } from '../business/matchmakingStyle.js';
+import type { PromotionPosture } from '../business/rivals.js';
 import type { Personality } from './personality.js';
 
 /** Where a promotion sits in the market. Drives budget, reach and talent pull. */
@@ -90,6 +91,12 @@ export interface Promotion {
   narrativeControl: number;
   /** Signature ruleset differences, shown on the promotion screen. */
   notes?: string;
+  /**
+   * How this promotion behaves toward the rest of the sport (doc 34 B4). Stored for a generated
+   * world, where it was drawn with the rest of the promotion's character; absent for the
+   * hand-authored eras, where `postureOf` reads it from the promotion's identity.
+   */
+  posture?: PromotionPosture;
 }
 
 export interface Gym {
