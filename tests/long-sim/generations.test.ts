@@ -82,7 +82,9 @@ describe('the sport replaces its own people', () => {
         const s = careerSummary(f);
         return s.wins + s.losses + s.draws >= 15;
       }).length;
-    expect(veterans(after)).toBeGreaterThan(veterans(before));
+    // At least a tenth more: a decade of fighting should leave the sport with more veterans, and
+    // the measured growth is half again. A drift that shortened careers would show up here first.
+    expect(veterans(after)).toBeGreaterThanOrEqual(Math.ceil(veterans(before) * 1.1));
   });
 
   it('actually generates people rather than waiting for a division to empty', () => {
