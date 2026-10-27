@@ -24,6 +24,7 @@ import type { Injury } from '../health/injuries.js';
 import type { Physique } from '../progression/body.js';
 import type { FighterBackground } from '../progression/background.js';
 import type { LedgerEntry } from './relationship.js';
+import type { Negotiation } from '../business/negotiation.js';
 
 /** How a bout ended, from the winner's perspective. */
 export type FinishMethod =
@@ -336,6 +337,13 @@ export interface Fighter {
    * is read through the personality by `relationshipWith`. Capped at `LEDGER_CAP`. Doc 34 C3.
    */
   ledger?: readonly LedgerEntry[];
+
+  /**
+   * Contract talks with a promoter that have not ended in a signature: where they were left, so
+   * that walking out of the room does not start them again. Read through `resumeTalks`, which
+   * ignores them once `TALKS_COOLDOWN_DAYS` have passed; cleared by signing. Doc 34 C4.
+   */
+  talks?: Negotiation;
 
   /** Day they turned professional. */
   proDebutDay: GameDay;

@@ -31,6 +31,10 @@ import {
   settleAdvice,
   tollAgreement,
   willRepresent,
+  canMatch,
+  resumeTalks,
+  type Negotiation,
+  type TableContext,
   type Fighter,
   type Gym,
   type Manager,
@@ -110,8 +114,7 @@ export function canSignWith(
 }
 
 export type SignResult =
-  | { ok: true; fighter: Fighter }
-  | { ok: false; reason: string; releasable: boolean };
+  { ok: true; fighter: Fighter } | { ok: false; reason: string; releasable: boolean };
 
 /**
  * Put a fighter under contract.
@@ -165,6 +168,8 @@ export function sign(
     // Signing bonus is cash on the day, which is the fringe's one real weapon.
     bank: Math.round((fighter.bank + terms.signingBonus) * 10) / 10,
     resentment: 0,
+    // Signed: whatever talks were standing are over (doc 34 C4).
+    talks: undefined,
   };
   db.fighters.upsert(updated as Fighter & { id: string });
   db.save();
@@ -357,14 +362,139 @@ export function offersOnTheTable(db: GameDb, fighter: Fighter): OfferShortlist {
             f.divisionId === fighter.divisionId &&
             f.retiredDay === undefined,
         )
-        .map((f) => marketValue(f, promotions.find((p) => p.id === promotionId)!));
-      const mine = marketValue(fighter, promotions.find((p) => p.id === promotionId)!);
+        .map((f) =>
+          marketValue(
+            f,
+            promotions.find((p) => p.id === promotionId)!,
+          ),
+        );
+      const mine = marketValue(
+        fighter,
+        promotions.find((p) => p.id === promotionId)!,
+      );
       const above = roster.filter((v) => v > mine).length;
       return roster.length === 0 ? undefined : above + 1;
     },
   });
 
   return shortlistOffers(offers);
+}
+
+// --- Promoter negotiation (doc 34 C4) ---------------------------------------------------------------
+
+/**
+ * The table a promoter sits at with this fighter: who represents them, whether this is a re-sign.
+ *
+ * The re-sign reads the relationship ledger through `reservation` — which was the item C3 left
+ * open: the world's free agency already weighed it, the player's own re-sign did not.
+ */
+export function tableFor(db: GameDb, fighter: Fighter, promotion: Promotion): TableContext {
+  return {
+    fighter,
+    promotion,
+    manager: managerOf(db, fighter),
+    day: getWorld(db).day,
+    incumbent: fighter.promotionId === promotion.id,
+  };
+}
+
+/**
+ * The talks standing with this fighter, if the promoter left any inside the cooldown. Doc 34 C4.
+ *
+ * Read from the fighter in the database rather than from whatever copy a screen holds, so a
+ * table opened twice reads one conversation.
+ */
+export function talksWith(
+  db: GameDb,
+  fighter: Fighter,
+  promotion: Promotion,
+): Negotiation | undefined {
+  const stored = (db.fighters.findById(fighter.id as string) as Fighter | undefined) ?? fighter;
+  return resumeTalks(stored, promotion.id, getWorld(db).day);
+}
+
+/**
+ * Store where the talking got to, so leaving the table does not reset it. A signature clears it
+ * (`sign`), so an agreed negotiation is never kept.
+ */
+export function recordTalks(db: GameDb, fighter: Fighter, talks: Negotiation): void {
+  if (talks.state === 'agreed') return;
+  const stored = (db.fighters.findById(fighter.id as string) as Fighter | undefined) ?? fighter;
+  db.fighters.upsert({ ...stored, talks } as Fighter & { id: string });
+  db.save();
+}
+
+/** Whether a promoter can open talks with this fighter now, and why not when they cannot. */
+export function canNegotiate(
+  db: GameDb,
+  fighter: Fighter,
+  promotion: Promotion,
+): { open: boolean; reason?: string; mode?: 'sign' | 'resign' } {
+  if (fighter.retiredDay !== undefined) return { open: false, reason: 'Retired.' };
+  const standing = contractStanding(db, fighter);
+  if (fighter.promotionId === promotion.id) return { open: true, mode: 'resign' };
+  if (!standing.agreement || standing.freeAgent || !fighter.promotionId) {
+    return { open: true, mode: 'sign' };
+  }
+  return {
+    open: false,
+    reason: `Under contract with ${standing.promotion?.shortName ?? 'another promotion'}. Wait for it to run out.`,
+  };
+}
+
+/** How long before a deal runs out a rival's bid lands, and the incumbent has to answer it. */
+export const BID_WINDOW_DAYS = 90;
+
+export interface RivalBid {
+  promotion: Promotion;
+  terms: OfferTerms;
+  /** Whether the incumbent can structurally put these terms together at all. */
+  matchable: boolean;
+  /** The last day it can be matched: the day the current deal runs out. */
+  expiresDay: number;
+}
+
+/**
+ * Who else wants one of your fighters as their deal runs down, and on what terms.
+ *
+ * The hook for doc 34 B4's rival promotions: today it is read straight off the free-agency market
+ * (`offersOnTheTable`), which already prices what each rival would pay. B4 can replace the source
+ * with promotions that bid on purpose and leave every caller as it is. Empty outside the last
+ * `BID_WINDOW_DAYS` of a written deal.
+ */
+export function rivalBidsFor(db: GameDb, fighter: Fighter, incumbent: Promotion): RivalBid[] {
+  const agreement = agreementOf(db, fighter);
+  const day = getWorld(db).day;
+  if (!agreement || fighter.promotionId !== incumbent.id) return [];
+  if (agreement.expiresDay - day > BID_WINDOW_DAYS || agreement.expiresDay <= day) return [];
+  return offersOnTheTable(db, fighter)
+    .offers.filter((o) => o.promotion.id !== incumbent.id)
+    .map((o) => ({
+      promotion: o.promotion,
+      terms: o.terms,
+      matchable: canMatch(incumbent, o.terms),
+      expiresDay: agreement.expiresDay,
+    }));
+}
+
+/**
+ * Match a rival's bid: re-sign on their terms, which a fighter cannot refuse when the incumbent
+ * holds the right — and which they happily take anyway, being the same money with no move.
+ */
+export function matchBid(
+  db: GameDb,
+  fighter: Fighter,
+  incumbent: Promotion,
+  bid: RivalBid,
+): SignResult {
+  if (!bid.matchable) {
+    return {
+      ok: false,
+      reason: `${incumbent.shortName} cannot put those terms together.`,
+      releasable: false,
+    };
+  }
+  return sign(db, fighter, incumbent, bid.terms);
 }
 
 // --- Managers -----------------------------------------------------------------------------------
@@ -542,9 +672,8 @@ export function formaliseExistingDeal(db: GameDb, fighter: Fighter): Fighter {
       signingBonus: 0,
       revenuePoints: 0,
       fightsOwed: 3,
-      championshipExtension: promotion.tier === 'global' || promotion.tier === 'major'
-        ? 'standard'
-        : 'none',
+      championshipExtension:
+        promotion.tier === 'global' || promotion.tier === 'major' ? 'standard' : 'none',
       matchingRights: false,
       exclusive: promotion.tier !== 'regional' && promotion.tier !== 'developmental',
       outsideBouts: promotion.tier === 'regional' || promotion.tier === 'developmental' ? 2 : 0,

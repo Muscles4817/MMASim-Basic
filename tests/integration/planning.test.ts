@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { createNewGame } from '@mmasim/data';
+import { createNewGame, setWorld } from '@mmasim/data';
 import {
   displayName,
   planProgress,
@@ -35,6 +35,7 @@ import {
   rollWithdrawals,
   runPlan,
   savePlan,
+  settleReplies,
   sendOffer,
   subjectsFor,
   suggestFills,
@@ -306,12 +307,21 @@ describe('offers', () => {
       divisionId: subject.divisionId as string,
     });
 
+    // Doc 34 C4: the corners take two to seven days to answer, and until then the offer is out.
     const result = sendOffer({ ctx, plan, slotId: 'main' })!;
-    expect(result.outcome.answers.length).toBeGreaterThan(0);
-    for (const answer of result.outcome.answers) {
-      expect(answer.note.length).toBeGreaterThan(0);
-    }
-    expect(['agreed', 'declined']).toContain(result.plan.slots[0]!.bout!.status);
+    const out = result.plan.slots[0]!.bout!;
+    expect(out.status).toBe('offered');
+    expect(result.outcome.replyDay! - ctx.day).toBeGreaterThanOrEqual(2);
+    expect(result.outcome.replyDay! - ctx.day).toBeLessThanOrEqual(7);
+
+    setWorld(db, { playerRole: 'promoter', playerPromotionId: promotion.id as string });
+    savePlan(db, result.plan);
+    expect(settleReplies(db, result.outcome.replyDay! - 1)).toBe(0);
+    expect(settleReplies(db, result.outcome.replyDay!)).toBe(1);
+    const answered = plansFor(db, promotion.id).find((p) => p.id === plan.id)!.slots[0]!.bout!;
+    expect(answered.answers!.length).toBeGreaterThan(0);
+    for (const answer of answered.answers!) expect(answer.note.length).toBeGreaterThan(0);
+    expect(['agreed', 'declined']).toContain(answered.status);
   });
 
   it('cannot be re-rolled by asking again', () => {
@@ -337,7 +347,9 @@ describe('offers', () => {
 
     const first = sendOffer({ ctx, plan, slotId: 'main' })!;
     const second = sendOffer({ ctx, plan, slotId: 'main' })!;
-    expect(second.outcome.accepted).toBe(first.outcome.accepted);
+    const answers = (r: typeof first) => r.plan.slots[0]!.bout!.pending;
+    expect(answers(second)).toEqual(answers(first));
+    expect(second.outcome.replyDay).toBe(first.outcome.replyDay);
   });
 
   it('produces refusals across a whole roster rather than agreeing to everything', () => {
@@ -359,7 +371,8 @@ describe('offers', () => {
         if (!result) continue;
         plan = result.plan;
         offers += 1;
-        if (!result.outcome.accepted) refusals += 1;
+        const answers = result.plan.slots.find((s) => s.id === slot.id)!.bout!.pending ?? [];
+        if (answers.some((a) => a.verdict !== 'accepted')) refusals += 1;
       }
     }
 
