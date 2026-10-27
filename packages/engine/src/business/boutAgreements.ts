@@ -21,15 +21,18 @@
 import { clamp, clamp01 } from '../core/math.js';
 import type { GameDay } from '../core/clock.js';
 import type { FighterId, PromotionId } from '../core/ids.js';
+import { hashSeed } from '../core/rng.js';
+import type { CardPosition } from './money.js';
 import type { Fighter } from '../domain/fighter.js';
 import type { Promotion } from '../domain/organisations.js';
 import { stepUpAcceptance } from '../domain/personality.js';
 import { traitAdd, traitMul } from '../domain/traits.js';
 import { overallRating } from '../ratings/attributes.js';
 import { connectionTo, priority, stableConflictCost, type Manager } from './managers.js';
-import { wantMet, wantsOf } from '../domain/disposition.js';
+import { wantMet, wantsOf, type WantRead } from '../domain/disposition.js';
 import { describeLedger, relationshipWith } from '../domain/relationship.js';
 import { voiceFor, wantVoice, type VoiceSituation } from '../domain/voice.js';
+import { isHoldingOut } from './negotiation.js';
 
 export type BoutAgreementStatus = 'offered' | 'signed' | 'refused';
 
@@ -67,6 +70,8 @@ export interface AcceptanceRead {
    * reads as a dice roll.
    */
   quote?: string;
+  /** True when the answer is no because they are holding out for a new deal. */
+  holdout?: boolean;
 }
 
 export function acceptanceOf(input: {
@@ -88,6 +93,20 @@ export function acceptanceOf(input: {
   opponentRank?: number;
 }): AcceptanceRead {
   const { fighter, opponent, promotion, manager, notice = 'full', isTitleFight, day } = input;
+
+  /*
+   * Holding out. Doc 34 C4: past a point, an underpaid fighter with the pride or the ambition to
+   * do it stops taking fights at all until the deal is redone — and no fight, title or not, moves
+   * them. Renegotiating is the only answer, which is the point.
+   */
+  if (isHoldingOut(fighter)) {
+    return {
+      chance: 0,
+      concern: 'Holding out — will not fight again until the deal is renegotiated',
+      quote: day !== undefined ? voiceFor(fighter, 'wantsMoney', day).text : undefined,
+      holdout: true,
+    };
+  }
 
   const concerns: { label: string; weight: number; situation?: VoiceSituation }[] = [];
 
@@ -318,4 +337,91 @@ export function describePullOut(reason: PullOutReason, fighter: Fighter): string
     case 'personal':
       return `${fighter.lastName} has withdrawn for personal reasons.`;
   }
+}
+
+// --- Answering over days, and what a counter asks for --------------------------------------------
+
+/**
+ * What a corner asks for instead of a yes. Doc 34 C4.
+ *
+ * Money was the only counter the game could make, so every reluctant fighter was a price. People
+ * hold out for other things, and a promoter can often give them something cheaper than cash: the
+ * slot ("put me on the main card"), the distance ("five rounds or nothing"), or a different
+ * opponent ("I want the champion, not him").
+ */
+export type BoutCounter =
+  | { kind: 'money'; askingPurse: number }
+  | { kind: 'slot'; position: CardPosition }
+  | { kind: 'rounds'; rounds: 5 }
+  | { kind: 'opponent'; preferredId: FighterId; reason: string };
+
+/**
+ * How many days a corner takes to answer: two to seven.
+ *
+ * A professional with a manager who prizes this promotion answers fast; one whose manager has
+ * thirty clients and other calls to take does not. Deterministic on the offer's key so re-reading
+ * an offer cannot move the day.
+ */
+export function replyDelayDays(
+  fighter: Pick<Fighter, 'personality'>,
+  manager: Manager | undefined,
+  promotionId: PromotionId,
+  key: string,
+): number {
+  const jitter = hashSeed(key) % 3;
+  const slow = fighter.personality.professionalism < 40 ? 2 : 0;
+  const busy = manager && connectionTo(manager, promotionId) < 40 ? 1 : 0;
+  return clamp(2 + jitter + slow + busy, 2, 7);
+}
+
+/**
+ * The counter a reluctant corner makes, shaped by who they are and what they want.
+ *
+ * Undefined means they are simply not interested. The order is the order a fighter would raise
+ * things in: who they are fighting first, then where on the card, then the distance, and money
+ * last — because money is what everybody asks for when nothing else is the problem.
+ */
+export function shapeBoutCounter(input: {
+  fighter: Fighter;
+  read: AcceptanceRead;
+  position: CardPosition;
+  rounds: 3 | 5;
+  /** What they want next, from `wantsOf`. */
+  want?: WantRead;
+  /** Who they would rather fight, when the want names somebody: the champion, a rematch. */
+  preferred?: Pick<Fighter, 'id' | 'firstName' | 'lastName'>;
+  /** The show purse they are on now, for a money counter. */
+  show: number;
+  /** Whether money can buy them at all. */
+  buyable: boolean;
+}): BoutCounter | undefined {
+  const { fighter, read, position, rounds, want, preferred, show, buyable } = input;
+  const p = fighter.personality;
+
+  if (preferred && want && (want.id === 'rematch' || want.id === 'titleShot')) {
+    return {
+      kind: 'opponent',
+      preferredId: preferred.id,
+      reason:
+        want.id === 'rematch'
+          ? `Wants ${preferred.firstName} ${preferred.lastName} again, not this.`
+          : `Wants ${preferred.firstName} ${preferred.lastName} and the belt, not this.`,
+    };
+  }
+  if (
+    fighter.starPower >= 50 &&
+    (position === 'prelim' || position === 'mainCard') &&
+    p.ego >= 55
+  ) {
+    return { kind: 'slot', position: position === 'prelim' ? 'mainCard' : 'coMain' };
+  }
+  if (rounds === 3 && (position === 'mainEvent' || position === 'coMain') && p.ambition >= 65) {
+    return { kind: 'rounds', rounds: 5 };
+  }
+  if (!buyable) return undefined;
+  // The ask scales with how reluctant they are: a near-yes is cheap to close.
+  return {
+    kind: 'money',
+    askingPurse: Math.round(show * (1.25 + (1 - read.chance) * 1.1) * 10) / 10,
+  };
 }
