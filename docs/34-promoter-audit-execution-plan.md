@@ -148,10 +148,10 @@ week, 4 fighters as people, 5 development over time.
 
 | Item                            | Phase | Lane        | Status      | PR  |
 | ------------------------------- | ----- | ----------- | ----------- | --- |
-| A1 Fight night unmissable       | 1     | A           | Not started |     |
-| A2 Alert hygiene                | 1     | A           | Not started |     |
-| B0 Generated names (content)    | 1     | B           | Not started |     |
-| C1 Identity on the page         | 4     | C           | Not started |     |
+| A1 Fight night unmissable       | 1     | A           | Done        | #47 |
+| A2 Alert hygiene                | 1     | A           | In progress |     |
+| B0 Generated names (content)    | 1     | B           | In review   | #48 |
+| C1 Identity on the page         | 4     | C           | In progress |     |
 | B1 Economy and buzz             | 2     | B           | Not started |     |
 | B2 Broadcaster and owner        | 2     | B           | Not started |     |
 | B3 Prestige and tiers           | 2     | B           | Not started |     |
