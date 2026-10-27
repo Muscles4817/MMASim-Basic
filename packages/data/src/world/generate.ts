@@ -402,7 +402,9 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
         promotionId: id,
         mens,
         womens:
-          womensDivisions === 0 ? 0 : Math.max(MIN_WOMENS_DIVISION_DEPTH, Math.round(mens * 0.55)),
+          womensDivisions === 0
+            ? 0
+            : Math.max(MIN_WOMENS_DIVISION_DEPTH, Math.round(mens * 0.55)),
         tier: spec.quality,
         spread: 11,
         divisions: divisions.map((d) => d.id),

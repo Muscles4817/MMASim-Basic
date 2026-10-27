@@ -149,7 +149,14 @@ export * from './depth.js';
 export * from './championships.js';
 export { PROMOTIONS_2026 } from './organisations-2026.js';
 export { buildFighters2026, DAY_2026 } from './world-2026.js';
-export { SEED_COACHES, SEED_COMMENTATORS, SEED_GYMS, SEED_JUDGES, SEED_PROMOTIONS, SEED_REFEREES };
+export {
+  SEED_COACHES,
+  SEED_COMMENTATORS,
+  SEED_GYMS,
+  SEED_JUDGES,
+  SEED_PROMOTIONS,
+  SEED_REFEREES,
+};
 export { SEED_MANAGERS } from './managers.js';
 
 /**

@@ -113,14 +113,18 @@ export function NewsFeed({
   );
 }
 
-function NewsRow({ item, onFighterClick }: { item: NewsItem; onFighterClick?(id: string): void }) {
+function NewsRow({
+  item,
+  onFighterClick,
+}: {
+  item: NewsItem;
+  onFighterClick?(id: string): void;
+}) {
   const primary = item.fighterIds[0];
   const clickable = primary !== undefined && onFighterClick !== undefined;
 
   return (
-    <li
-      className={`news__item news__item--${item.weight}${item.involvesPlayer ? ' news__item--you' : ''}`}
-    >
+    <li className={`news__item news__item--${item.weight}${item.involvesPlayer ? ' news__item--you' : ''}`}>
       {/* Icon, tier and a word: the kind is never carried by the glyph alone. */}
       <span className="news__icon" aria-hidden="true">
         {KIND_ICON[item.kind] ?? '·'}
