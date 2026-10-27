@@ -145,11 +145,6 @@ export function describeRunway(snapshot: FinancialSnapshot): string {
  * used to count every bout in a slot — refusals included — so the roster called a fighter
  * booked while the inbox warned that they could walk for want of a fight.
  */
-export function bookedOnPlans(
-  db: GameDb,
-  promotionId: string | undefined,
-  day: number,
-): Set<string> {
-  void day;
+export function bookedOnPlans(db: GameDb, promotionId: string | undefined): Set<string> {
   return new Set([...bookingsFor(db, promotionId)].filter(([, b]) => b.signed).map(([id]) => id));
 }

@@ -241,7 +241,7 @@ describe('what holds a fighter', () => {
     const plan = filledPlan({ db, promotion, day: start + 84, today: start });
     const slot = plan.slots.find((s) => s.bout)!;
     savePlan(db, withSlot(plan, slot.id, { ...slot.bout!, status: 'declined' }));
-    const roster = bookedOnPlans(db, promotion.id as string, start);
+    const roster = bookedOnPlans(db, promotion.id as string);
     expect(roster.has(slot.bout!.redId as string)).toBe(false);
     // Pencilled is not booked either: the roster and the walk-out warning agree.
     const pencilled = plan.slots.find((s) => s.id !== slot.id && s.bout)!.bout!;
