@@ -64,6 +64,7 @@ import {
   eventName,
   fightNews,
   generateFighter,
+  debutAge,
   offerOpponents,
   rankDivision,
   readinessDelay,
@@ -2285,7 +2286,15 @@ function replenish(
       depthHere.set(id, (depthHere.get(id) ?? 0) + 1);
     }
 
-    for (let i = active.length; i < target; i++) {
+    /*
+     * During a generated world's pre-history, a share of the gap each quarter rather than all of
+     * it, so debutants arrive spread across the years (doc 34 C5). Afterwards, the whole gap.
+     */
+    const rampUntil = getWorld(db).intakeRampUntil;
+    const quartersLeft =
+      rampUntil !== undefined && day < rampUntil ? Math.ceil((rampUntil - day) / QUARTER_DAYS) : 1;
+    const intake = Math.ceil(Math.max(0, target - active.length) / quartersLeft);
+    for (let i = active.length; i < active.length + intake; i++) {
       /*
        * Where a debutant starts.
        *
@@ -2332,6 +2341,7 @@ function replenish(
         day,
         promotionId: promotion?.id,
         tier: isProspect ? Math.round(genRng.normalClamped(78, 9, 62, 97)) : undefined,
+        age: debutAge(genRng),
       });
       /*
        * A gym, and with it a head coach.

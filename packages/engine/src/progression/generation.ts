@@ -694,6 +694,15 @@ export function arrivalFactor(key: AttributeKey, age: number, history?: ArrivalH
 }
 
 /**
+ * How old somebody is when they turn professional: around twenty-two, rarely under nineteen or
+ * over twenty-seven. Doc 34 C5: the intake used to debut everybody at 21–26 uniformly, which with
+ * a world that turns over slowly left almost nobody on the roster aged 23 or under.
+ */
+export function debutAge(rng: Rng): number {
+  return Math.round(rng.normalClamped(22.5, 2.2, 18, 30));
+}
+
+/**
  * Generate a debuting fighter.
  *
  * Current attributes are their ceiling scaled by how much of a career they have had. A
