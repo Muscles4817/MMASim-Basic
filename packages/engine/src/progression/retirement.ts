@@ -33,8 +33,17 @@ export const TRAUMA_CONCERN = 25;
  * The fight engine's damage already weighs a stoppage loss ×1.6; measured on a generated world
  * that still left fighters with four or more knockout losses at a median trauma of 13.7 of 100 —
  * the same chin as somebody who had never been stopped, for practical purposes.
+ *
+ * Applies to every fighter, the player's own included: `applyAftermath` charges it to whoever is
+ * stopped, and the world's statistical cards charge it the same way.
+ *
+ * 1.5, not the 3 first tried. Trauma is also mileage (`mileageYears`), so it ages a body and in
+ * turn how often it gets hurt: at 3, the pooled "mostly fit" seeds in `fight-injuries.test.ts`
+ * sat at 24.6% shelved against a bound of 25% (master 20.2%), and over twelve seeds 22.3% against
+ * master's 20.3%. At 1.5 the same twelve read 21.3% and the pooled three 21.6%, while knockout
+ * losses still separate the chins (`tests/long-sim/careers.test.ts`).
  */
-export const KO_LOSS_TRAUMA = 3;
+export const KO_LOSS_TRAUMA = 1.5;
 /** Where the sport stops calling it wear and starts calling it medical. */
 export const TRAUMA_MEDICAL = 55;
 /** Body wear at which the miles begin to weigh on the decision. */

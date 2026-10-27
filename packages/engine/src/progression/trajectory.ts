@@ -43,7 +43,9 @@ const BREAKOUT_RATE = 2;
 const STALL_RATE = 0.35;
 /**
  * An ordinary year, set so that the mean over all years is 1 and the trajectories add variation
- * without moving the population: 0.08 × 2 + 0.08 × 0.35 + 0.84 × 0.975 ≈ 1.0.
+ * without moving the population: 0.08 × 2 + 0.08 × 0.35 + 0.84 × 0.975 = 1.007, and the pace has
+ * a mean of exactly 1. Retune any of these four together, or the trajectories start moving the
+ * whole sport's development rate rather than only spreading it.
  */
 const STEADY_RATE = 0.975;
 

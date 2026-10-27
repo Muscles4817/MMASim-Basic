@@ -123,8 +123,8 @@ describe('the world gets hurt too', () => {
      *
      * Pooled over three seeds (doc 34 C5). One world of ~140 fighters is too small a sample for a
      * claim about the sport: on master, six seeds ranged from 17% to 26% shelved, so the single
-     * seed this used to run passed or failed on which fights happened to happen. Pooled, master
-     * sits at about 21% and C5 at about 22%. The bound is unchanged.
+     * seed this used to run passed or failed on which fights happened to happen. On these three,
+     * master reads 20.2% and C5 21.6% (over twelve seeds, 20.3% and 21.3%). The bound is unchanged.
      */
     let shelvedCount = 0;
     let rosterCount = 0;
