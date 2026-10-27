@@ -16,7 +16,9 @@ export * from './ratings/attributes.js';
 export * from './ratings/curve.js';
 export * from './ratings/derived.js';
 export * from './ratings/physicalScale.js';
+export * from './ratings/competitive.js';
 export * from './ratings/displayBand.js';
+export * from './ratings/functional.js';
 
 // Domain
 export * from './domain/fighter.js';
