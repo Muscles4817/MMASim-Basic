@@ -34,6 +34,7 @@ import {
   confirmAwards,
   nightResults,
   pencilCallout,
+  planName,
   type BoutResult,
   type Callout,
 } from '../game/plans';
@@ -70,7 +71,7 @@ export function NightShow({ plan, onDone }: { plan: EventPlan; onDone(): void })
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
       <Card raised>
-        <p className="section-title">{night?.name ?? plan.name}</p>
+        <p className="section-title">{planName(db, plan)}</p>
         <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
           {formatGameDay(plan.day)} · {night?.venue.name ?? plan.city}, {plan.city}
           {night?.attendance !== undefined && ` · ${night.attendance.toLocaleString()} in`}
@@ -163,7 +164,7 @@ export function NightRecap({ plan, onDone }: { plan: EventPlan; onDone(): void }
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
       <Card raised>
-        <p className="section-title">{night?.name ?? plan.name}</p>
+        <p className="section-title">{planName(db, plan)}</p>
         <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
           {formatGameDay(plan.day)} · {plan.city}, {plan.country}
         </p>
@@ -240,7 +241,7 @@ export function NightRecap({ plan, onDone }: { plan: EventPlan; onDone(): void }
                   commit();
                   setPencilled((s) => new Set(s).add(callout.winnerId));
                   toast(
-                    `Pencilled onto ${placed.plan.name}. Nobody has been offered it yet.`,
+                    `Pencilled onto ${planName(db, placed.plan)}. Nobody has been offered it yet.`,
                     'good',
                   );
                 }}

@@ -238,7 +238,7 @@ export function CalendarScreen() {
               onCreate={(input) => {
                 const plan = createPlan({ db, promotion, ...input });
                 commit();
-                toast(`${plan.name} is in the diary for ${formatGameDay(plan.day)}.`, 'good');
+                toast(`${planName(db, plan)} is in the diary for ${formatGameDay(plan.day)}.`, 'good');
                 setPlanning(false);
                 navigate({ name: 'plan', id: plan.id });
               }}

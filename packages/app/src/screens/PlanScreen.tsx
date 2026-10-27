@@ -301,9 +301,10 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
                   plan={plan}
                   onChange={update}
                   onCancel={() => {
+                    const name = planName(db, plan);
                     cancelPlan(db, plan.id);
                     commit();
-                    toast(`${plan.name} is cancelled. Everybody on it is free again.`);
+                    toast(`${name} is cancelled. Everybody on it is free again.`);
                     navigate({ name: 'calendar' });
                   }}
                 />
