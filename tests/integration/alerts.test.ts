@@ -78,7 +78,18 @@ const agreementOf = (db: ReturnType<typeof game>, f: Fighter) =>
 
 describe('the walk-out warning', () => {
   it('is raised once per fighter per stage, not every day', () => {
-    const { db, start } = asPromoter();
+    const { db, promotion, start } = asPromoter();
+
+    /*
+     * A digest-worthy situation set up on purpose: a deal running out a hundred days in, which
+     * is worth knowing at thirty days and at seven and is never a reason to stop the clock. This
+     * test used to lean on the world happening to produce one — a single #1 contender on a run —
+     * and a change to how generated fighters are made was enough to take it away.
+     */
+    const expiring = roster(db, promotion).find((f) => !holdsBelt(promotion, f))!;
+    sign(db, expiring, promotion, TERMS);
+    const deal = agreementOf(db, db.fighters.findById(expiring.id as string) as Fighter)!;
+    db.agreements.upsert({ ...deal, expiresDay: start + 100 } as never);
 
     /*
      * Two years in weekly hops. The scan runs on every simulated day inside each hop, so this is
@@ -111,6 +122,17 @@ describe('the walk-out warning', () => {
       expect(isBlocking(digest)).toBe(false);
       for (const entry of digest.entries ?? []) expect(entry.link, entry.title).toBeDefined();
     }
+
+    // The deal set up above landed there, once at each stage, and nowhere that blocks.
+    const lines = digests.flatMap((d) => d.entries ?? []).map((e) => e.key);
+    for (const stage of [30, 7]) {
+      const key = `expiring:${expiring.id}:${start + 100}:${stage}`;
+      expect(
+        lines.filter((k) => k === key),
+        key,
+      ).toHaveLength(1);
+    }
+    expect(readInbox(db).some((i) => isBlocking(i) && i.id.includes('expiring:'))).toBe(false);
   });
 
   it('stops the clock a handful of times a year, not every day', () => {
