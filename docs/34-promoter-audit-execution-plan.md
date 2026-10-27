@@ -7,12 +7,12 @@
 
 ## Decisions taken before starting
 
-| Question | Decision |
-| --- | --- |
-| Where PRs land | Straight to `master`, merged once CI is green **and** the reviewer passes it. Master deploys to Pages, so every merge is live. |
-| Old saves | May break. Bump the save version; an old save must fail with a clear message, never a crash. No migration code. |
-| Fail state | Owner sets yearly objectives. Confidence at zero → fired, offered a job at a weaker promotion, career continues. Cash at zero → bought out, lose top fighters, play on. |
-| Naming | Real promotions in the 2026 seed stay. Generated-world placeholders ("national 7", "NAT7 1") get believable generated names. |
+| Question       | Decision                                                                                                                                                                |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Where PRs land | Straight to `master`, merged once CI is green **and** the reviewer passes it. Master deploys to Pages, so every merge is live.                                          |
+| Old saves      | May break. Bump the save version; an old save must fail with a clear message, never a crash. No migration code.                                                         |
+| Fail state     | Owner sets yearly objectives. Confidence at zero → fired, offered a job at a weaker promotion, career continues. Cash at zero → bought out, lose top fighters, play on. |
+| Naming         | Real promotions in the 2026 seed stay. Generated-world placeholders ("national 7", "NAT7 1") get believable generated names.                                            |
 
 ## How the work runs
 
@@ -44,11 +44,11 @@
 
 ### File ownership (who may edit freely; others touch only with a small, called-out change)
 
-| Lane | Owns |
-| --- | --- |
-| A — Fight night, time, card UX | `app/src/game/{clock,plans,attention,inbox,calendar,night}.ts`, `screens/{PlanScreen,CalendarScreen,PromotionHubScreen,InboxScreen,FightScreen,MenuScreen}.tsx`, `App.tsx`, `ui/*` |
-| B — Economy, promotion, world | `engine/src/business/*` (except `boutAgreements`, `contracts`, `managers`, `freeAgency`), `app/src/game/{finances,money,world}.ts`, `data/src/seed/organisations*.ts`, `data/src/world/*` promotion parts, `screens/{StartPromoterScreen,ChampionsScreen,RankingsScreen}.tsx` |
-| C — Fighters as people | `engine/src/{progression,domain,health}/*`, `business/{boutAgreements,contracts,managers,freeAgency,fighterRead}.ts`, `app/src/game/{progression,career,careerAttention,rivalries,contracts,withdrawals,fightInjuries}.ts`, `screens/{FighterView,PromoterRosterScreen,ContractScreen}.tsx` |
+| Lane                           | Owns                                                                                                                                                                                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A — Fight night, time, card UX | `app/src/game/{clock,plans,attention,inbox,calendar,night}.ts`, `screens/{PlanScreen,CalendarScreen,PromotionHubScreen,InboxScreen,FightScreen,MenuScreen}.tsx`, `App.tsx`, `ui/*`                                                                                                          |
+| B — Economy, promotion, world  | `engine/src/business/*` (except `boutAgreements`, `contracts`, `managers`, `freeAgency`), `app/src/game/{finances,money,world}.ts`, `data/src/seed/organisations*.ts`, `data/src/world/*` promotion parts, `screens/{StartPromoterScreen,ChampionsScreen,RankingsScreen}.tsx`               |
+| C — Fighters as people         | `engine/src/{progression,domain,health}/*`, `business/{boutAgreements,contracts,managers,freeAgency,fighterRead}.ts`, `app/src/game/{progression,career,careerAttention,rivalries,contracts,withdrawals,fightInjuries}.ts`, `screens/{FighterView,PromoterRosterScreen,ContractScreen}.tsx` |
 
 ## Work items, in order per lane
 
@@ -146,25 +146,25 @@ week, 4 fighters as people, 5 development over time.
 
 ## Tracker
 
-| Item | Phase | Lane | Status | PR |
-| --- | --- | --- | --- | --- |
-| A1 Fight night unmissable | 1 | A | Not started | |
-| A2 Alert hygiene | 1 | A | Not started | |
-| B0 Generated names (content) | 1 | B | Not started | |
-| C1 Identity on the page | 4 | C | Not started | |
-| B1 Economy and buzz | 2 | B | Not started | |
-| B2 Broadcaster and owner | 2 | B | Not started | |
-| B3 Prestige and tiers | 2 | B | Not started | |
-| A3 Fight-night show and recap | 3 | A | Not started | |
-| A4 Matchmaking UX | 3 | A | Not started | |
-| A5 Fight week | 3 | A | Not started | |
-| A6 Onboarding and readability | 1/3 | A | Not started | |
-| C2 Star power surfaced | 4 | C | Not started | |
-| C3 Memory, wants and voice | 4 | C | Not started | |
-| C4 Negotiation | 4 | C | Not started | |
-| C5 Real careers over time | 5 | C | Not started | |
-| C6 Career events | 5 | C | Not started | |
-| B4 Rival promotions | 5 | B | Not started | |
-| B5 Investment and season | 5 | B | Not started | |
-| B6 History, scenarios, rankings | 5 | B | Not started | |
-| Content pass after each phase | all | Coordinator | Not started | |
+| Item                            | Phase | Lane        | Status      | PR  |
+| ------------------------------- | ----- | ----------- | ----------- | --- |
+| A1 Fight night unmissable       | 1     | A           | Not started |     |
+| A2 Alert hygiene                | 1     | A           | Not started |     |
+| B0 Generated names (content)    | 1     | B           | Not started |     |
+| C1 Identity on the page         | 4     | C           | Not started |     |
+| B1 Economy and buzz             | 2     | B           | Not started |     |
+| B2 Broadcaster and owner        | 2     | B           | Not started |     |
+| B3 Prestige and tiers           | 2     | B           | Not started |     |
+| A3 Fight-night show and recap   | 3     | A           | Not started |     |
+| A4 Matchmaking UX               | 3     | A           | Not started |     |
+| A5 Fight week                   | 3     | A           | Not started |     |
+| A6 Onboarding and readability   | 1/3   | A           | Not started |     |
+| C2 Star power surfaced          | 4     | C           | Not started |     |
+| C3 Memory, wants and voice      | 4     | C           | Not started |     |
+| C4 Negotiation                  | 4     | C           | Not started |     |
+| C5 Real careers over time       | 5     | C           | Not started |     |
+| C6 Career events                | 5     | C           | Not started |     |
+| B4 Rival promotions             | 5     | B           | Not started |     |
+| B5 Investment and season        | 5     | B           | Not started |     |
+| B6 History, scenarios, rankings | 5     | B           | Not started |     |
+| Content pass after each phase   | all   | Coordinator | Not started |     |
