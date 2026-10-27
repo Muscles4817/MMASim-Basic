@@ -15,7 +15,7 @@ import type { GameDay } from '../core/clock.js';
 import type { DivisionId, FighterId, PromotionId } from '../core/ids.js';
 import type { Fighter } from '../domain/fighter.js';
 import { isActive } from '../domain/fighter.js';
-import { standingScore } from './standing.js';
+import { standingScore, winningRun } from './standing.js';
 import type { Promotion, PromotionTier } from '../domain/organisations.js';
 
 export const TIER_ORDER: readonly PromotionTier[] = [
@@ -70,14 +70,17 @@ export function rankDivision(
    */
   const promotion = promotions?.find((p) => p.id === promotionId);
 
+  // How highly the sport rates each opponent, for weighing wins (doc 34 B6). Reputation rather
+  // than ability: rankings are what the sport believes, and a win counts for what it looked like.
+  const byId = new Map(fighters.map((f) => [f.id as string, f]));
+  const opponentQuality = (id: FighterId): number =>
+    (byId.get(id as string)?.reputation ?? 50) / 100;
+
   const score = (f: Fighter): number => {
     if (!promotion) {
       const streak = f.summary.streak;
       return (
-        f.reputation * 1.6 +
-        Math.max(0, streak) * 4 +
-        Math.min(0, streak) * 7 +
-        f.starPower * 0.25
+        f.reputation * 1.6 + Math.max(0, streak) * 4 + Math.min(0, streak) * 7 + f.starPower * 0.25
       );
     }
 
@@ -90,7 +93,7 @@ export function rankDivision(
       ? promotions?.find((p) => p.id === elsewhere.promotionId)
       : undefined;
 
-    return standingScore({ fighter: f, promotion, previous, day });
+    return standingScore({ fighter: f, promotion, previous, day, opponentQuality });
   };
 
   /**
@@ -114,7 +117,15 @@ export function rankDivision(
         f.id !== championId,
     )
     .map((fighter) => ({ fighter, score: score(fighter), position: 0 }))
-    .sort((a, b) => b.score - a.score);
+    /*
+     * A losing record is never ranked above a winning one (doc 34 B6). Scoring alone put a 4-7
+     * veteran at #2 on the strength of a reputation from years ago; whatever that reputation
+     * was, a contender has to be winning more than losing to be contending.
+     */
+    .sort(
+      (a, b) =>
+        Number(winningRecord(b.fighter)) - Number(winningRecord(a.fighter)) || b.score - a.score,
+    );
 
   const champion = championId ? fighters.find((f) => f.id === championId) : undefined;
 
@@ -125,6 +136,9 @@ export function rankDivision(
   contenders.forEach((c, i) => ranked.push({ ...c, position: i + 1 }));
   return ranked;
 }
+
+/** At least as many wins as losses, across the whole career. */
+const winningRecord = (f: Fighter): boolean => f.summary.wins >= f.summary.losses;
 
 /** Where a fighter sits, or undefined if they are unranked in this division. */
 export function rankOf(ranked: readonly RankedFighter[], id: FighterId): number | undefined {
@@ -172,7 +186,9 @@ export function titleShotEligibility(
       reason: `Ranked #${position}. Beat someone above you — the top three get the call.`,
     };
   }
-  if (fighter.summary.streak < 2) {
+  // Wins since the last loss: a draw pauses a run rather than ending it (doc 34 B6).
+  const run = winningRun(fighter);
+  if (run < 2) {
     return {
       eligible: false,
       reason: `Ranked #${position}, but you need at least two straight wins to be next in line.`,
@@ -181,7 +197,7 @@ export function titleShotEligibility(
 
   return {
     eligible: true,
-    reason: `Ranked #${position} on a ${fighter.summary.streak}-fight run. You are next in line.`,
+    reason: `Ranked #${position} on a ${run}-fight run. You are next in line.`,
   };
 }
 

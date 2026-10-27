@@ -8,6 +8,7 @@ import {
   overallRating,
   rankDivision,
   recordString,
+  scoutedAttributes,
   type Fighter,
   type Promotion,
   type RankedFighter,
@@ -44,6 +45,13 @@ import { Console } from '../ui/console';
  * their cheques" is a real question — it is just not the ladder that decides a player's next
  * fight, so it is not the default.
  */
+
+/**
+ * A fighter's overall as the outside world can know it: from the scouted estimates, never the
+ * true ratings. Sorting the ability column on the true overall leaked the hidden number one row
+ * at a time — two fighters in the same band, in a known order, is the number.
+ */
+const seenRating = (f: Fighter): number => overallRating(scoutedAttributes(f));
 
 /** The synthetic promotion filter for the cross-promotional view. */
 const P4P = '__p4p__';
@@ -91,8 +99,10 @@ export function RankingsScreen() {
       // sorted the same way. Deliberately not a `rankDivision` call, because that function is
       // about one promotion's ladder and this question is not.
       return all
-        .filter((f) => f.divisionId === division.id && isActive(f, world.day) && f.record.length > 0)
-        .map((fighter) => ({ fighter, position: 0, score: overallRating(fighter.attributes) }))
+        .filter(
+          (f) => f.divisionId === division.id && isActive(f, world.day) && f.record.length > 0,
+        )
+        .map((fighter) => ({ fighter, position: 0, score: seenRating(fighter) }))
         .sort((a, b) => b.score - a.score)
         .slice(0, SHOWN)
         .map((r, i) => ({ ...r, position: i + 1 }));
@@ -134,9 +144,7 @@ export function RankingsScreen() {
         <span className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           {/* The place, folded into the name for the phone composition — where the `#` column
               is hidden, and a rank with no number beside it is not a ranking. */}
-          <span className="faint rank-inline">
-            {!isP4P && r.position === 0 ? 'C' : r.position}
-          </span>
+          <span className="faint rank-inline">{!isP4P && r.position === 0 ? 'C' : r.position}</span>
           <span>{displayName(r.fighter)}</span>
           {/* Finding yourself in a list of twenty-five should not require reading it. */}
           {playerFighter?.id === r.fighter.id && <Chip tone="accent">You</Chip>}
@@ -173,9 +181,12 @@ export function RankingsScreen() {
     {
       id: 'ability',
       label: 'Ability',
-      title: 'What the fighter is, as against what the promotion believes — the two disagreeing is the point',
-      render: (r) => <span className="faint">{abilityRead(r.fighter.attributes).label}</span>,
-      sort: (a, b) => overallRating(a.fighter.attributes) - overallRating(b.fighter.attributes),
+      title:
+        'What the fighter is, as against what the promotion believes — the two disagreeing is the point',
+      render: (r) => (
+        <span className="faint">{abilityRead(scoutedAttributes(r.fighter)).label}</span>
+      ),
+      sort: (a, b) => seenRating(a.fighter) - seenRating(b.fighter),
       onPhone: 'trailing',
     },
   ];

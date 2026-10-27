@@ -261,7 +261,13 @@ const listOf = (items: readonly string[]): string =>
  */
 export function scoutingRead(fighter: Fighter, day: GameDay): ScoutingRead {
   const a = fighter.attributes;
-  const entries = (Object.keys(a) as AttributeKey[]).map((key) => call(a, key));
+  /*
+   * Strengths and holes as a scout would call them, from the estimates — not the true ratings.
+   * Reading them off the truth leaked the hidden numbers one ranking at a time: the order of a
+   * fighter's best three attributes is information no tape gives anybody.
+   */
+  const seen = scoutedAttributes(fighter);
+  const entries = (Object.keys(seen) as AttributeKey[]).map((key) => call(seen, key));
   const sorted = [...entries].sort((x, y) => y.value - x.value);
 
   const strengths = sorted.slice(0, 3);
