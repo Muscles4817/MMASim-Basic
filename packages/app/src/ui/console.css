@@ -46,6 +46,62 @@
   }
 }
 
+/* --- Three-pane card builder ----------------------------------------------------------------
+   The card, the picker and the comparison side by side on a wide screen; on anything narrower
+   the same panes stack with the picker first. The picker leads the source order and the grid
+   places it in the middle, so a phone and a screen reader meet it first either way. */
+
+.builder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'picker' 'compare' 'slots';
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.builder__picker {
+  grid-area: picker;
+  min-width: 0;
+  scroll-margin-top: calc(var(--header-height) + var(--space-4));
+}
+
+.builder__picker:focus {
+  outline: none;
+}
+
+.builder__compare,
+.builder__slots {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.builder__compare {
+  grid-area: compare;
+}
+
+.builder__slots {
+  grid-area: slots;
+}
+
+@media (min-width: 75rem) {
+  .builder {
+    grid-template-columns: minmax(16rem, 0.9fr) minmax(0, 1.3fr) minmax(16rem, 0.9fr);
+    grid-template-areas: 'slots picker compare';
+    gap: var(--space-5);
+  }
+
+  /* The picker and the comparison stay in view while the card scrolls beside them. */
+  .builder__picker,
+  .builder__compare {
+    position: sticky;
+    top: calc(var(--header-height) + var(--space-4));
+    max-height: calc(100dvh - var(--header-height) - var(--space-6, 2rem));
+    overflow-y: auto;
+  }
+}
+
 /* --- Attention feed -------------------------------------------------------------------------
    The mode's most important list. Every row answers "why am I being shown this" in its own
    second line, and carries a tone stripe so severity survives greyscale and a quick scan. */
@@ -237,6 +293,12 @@
 
 .slot--offered {
   border-color: var(--info);
+}
+
+/* The slot the picker is filling, so the card column says which row the middle pane is about. */
+.slot--active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 @supports not (background: color-mix(in srgb, red 50%, blue)) {
@@ -657,4 +719,23 @@
   .division-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* What a counter would take: each term on its own line, then the one button that agrees to all. */
+.terms {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.terms__title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.terms__list {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: var(--text-sm);
 }
