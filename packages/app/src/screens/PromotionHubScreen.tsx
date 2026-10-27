@@ -30,9 +30,12 @@ import {
   planProgress,
   rankDivision,
   recordString,
+  type EventPlan,
   type Fighter,
+  type FightNight,
   type Promotion,
 } from '@mmasim/engine';
+import type { GameDb } from '@mmasim/data';
 import { useGame } from '../state/GameProvider';
 import { routeOf, useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, ListItem } from '../ui';
@@ -43,7 +46,17 @@ import { formatGameDay } from '../shell/Shell';
 import { money } from '../ui/format';
 import { attentionFor } from '../game/attention';
 import { describeRunway, financialSnapshot } from '../game/finances';
-import { fightNightOn, forecastPlan, planName, plansFor, promoterContext } from '../game/plans';
+import {
+  allPlans,
+  fightNightOn,
+  forecastPlan,
+  nightResults,
+  planName,
+  plansFor,
+  promoterContext,
+} from '../game/plans';
+import { describeBuzz } from './NightScreen';
+import { readNews } from '../game/world';
 import { PromoterSubNav } from './promoterNav';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 
@@ -134,6 +147,7 @@ export function PromotionHubScreen() {
   const next = plans[0];
   // The same question the calendar and the clock ask, answered by the same helper.
   const tonight = fightNightOn(db, promotion.id as string, world.day) !== undefined;
+  const last = lastNight(db, promotion.id as string, world.day);
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
@@ -142,6 +156,10 @@ export function PromotionHubScreen() {
       <Console
         main={
           <>
+            {last && (
+              <LastNight plan={last} onOpen={() => navigate({ name: 'plan', id: last.id })} />
+            )}
+
             {/*
               The event pipeline, which is the answer to "what is coming". A promoter's job is a
               sequence of dates with holes in them, and the old "Nothing booked" card could only
@@ -332,8 +350,13 @@ export function PromotionHubScreen() {
             )}
 
             <Card title="The sport">
+              {/*
+                Newest first, through the same reader the career hub uses. This passed the raw
+                table, in insertion order, so the feed showed the oldest eight items and the
+                promoter's own nights — always the newest — never appeared.
+              */}
               <NewsFeed
-                items={db.news.findAll() as never}
+                items={readNews(db)}
                 limit={8}
                 onFighterClick={(id) => navigate({ name: 'fighter', id })}
                 emptyMessage="Nothing yet. Run a card, and the sport will get on with itself while you do."
@@ -429,5 +452,70 @@ export function PromotionHubScreen() {
         }
       />
     </div>
+  );
+}
+
+/** How long the last show stays at the top of the dashboard. */
+const LAST_NIGHT_DAYS = 21;
+
+/** The player's most recent card that ran, while it is still the news. */
+function lastNight(db: GameDb, promotionId: string, day: number): EventPlan | undefined {
+  return allPlans(db)
+    .filter(
+      (p) => p.promotionId === promotionId && p.status === 'run' && day - p.day <= LAST_NIGHT_DAYS,
+    )
+    .sort((a, b) => b.day - a.day)[0];
+}
+
+/**
+ * The last show, leading the dashboard for a few weeks after it.
+ *
+ * The night used to vanish the moment it ran: the dashboard moved straight on to the next date,
+ * and a promoter who wanted to see what their own card had done had to find it in the calendar.
+ */
+function LastNight({ plan, onOpen }: { plan: EventPlan; onOpen(): void }) {
+  const { db } = useGame();
+  const main = useMemo(() => nightResults(db, plan)[0], [db, plan]);
+  const night = plan.nightId
+    ? (db.events.findById(plan.nightId) as FightNight | undefined)
+    : undefined;
+  const loser = main?.winner && (main.winner.id === main.red?.id ? main.blue : main.red);
+  const outcome = plan.outcome;
+
+  return (
+    <Card raised title="Last time out">
+      <p style={{ fontSize: 'var(--text-xl)', fontWeight: 800, margin: 0 }}>
+        {night?.name ?? plan.name}
+      </p>
+      <p className="muted" style={{ fontSize: 'var(--text-sm)', marginTop: 0 }}>
+        {formatGameDay(plan.day)} · {plan.city}
+        {night?.attendance !== undefined && ` · ${night.attendance.toLocaleString()} in`}
+      </p>
+      {main?.winner && loser && (
+        <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
+          {displayName(main.winner)} beat {displayName(loser)} {main.how}
+          {main.title === 'won'
+            ? ' and took the belt'
+            : main.title === 'defended'
+              ? ' and kept the belt'
+              : ''}
+          .
+        </p>
+      )}
+      {outcome && (
+        <div className="facts">
+          <Fact
+            label="Result"
+            value={money(outcome.profit)}
+            tone={outcome.profit >= 0 ? 'good' : 'bad'}
+            emphasis="secondary"
+          />
+          <Fact label="Buzz" value={describeBuzz(outcome.buzzDelta)} emphasis="tertiary" />
+        </div>
+      )}
+      <Button block onClick={onOpen}>
+        {night?.awards?.pending ? 'Hand out the bonuses' : 'Open the recap'}
+      </Button>
+    </Card>
   );
 }
