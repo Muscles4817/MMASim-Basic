@@ -103,6 +103,9 @@ export * from './business/matchmakingIntent.js';
 export * from './business/fighterRead.js';
 export * from './business/starPower.js';
 export * from './business/negotiation.js';
+export * from './business/weighIn.js';
+export * from './domain/headSpace.js';
+export * from './health/medicalHistory.js';
 export * from './business/news.js';
 
 // Testing helpers (shared across the out-of-package test suites)

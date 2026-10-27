@@ -88,7 +88,9 @@ export type HeatSource =
   | 'refusedFight'
   | 'styleClash'
   | 'titleStakes'
-  | 'callout';
+  | 'callout'
+  /** A third meeting. Doc 34 C6: a trilogy is a story whether or not anybody talks. */
+  | 'trilogy';
 
 const HEAT_VALUE: Readonly<Record<HeatSource, number>> = {
   // The single biggest lever, and the one a fighter's personality controls.
@@ -100,6 +102,7 @@ const HEAT_VALUE: Readonly<Record<HeatSource, number>> = {
   styleClash: 6,
   titleStakes: 10,
   callout: 14,
+  trilogy: 18,
 };
 
 export interface StokeInput {

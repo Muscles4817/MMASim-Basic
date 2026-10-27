@@ -35,6 +35,7 @@ import {
   nightResults,
   pencilCallout,
   planName,
+  weighInLines,
   type BoutResult,
   type Callout,
 } from '../game/plans';
@@ -163,6 +164,7 @@ export function NightRecap({ plan, onDone }: { plan: EventPlan; onDone(): void }
   const callouts = useMemo(() => calloutsFor(db, plan), [db, plan]);
   const [pencilled, setPencilled] = useState<Set<string>>(new Set());
   const outcome = plan.outcome;
+  const weighIns = weighInLines(db, plan);
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
@@ -202,6 +204,17 @@ export function NightRecap({ plan, onDone }: { plan: EventPlan; onDone(): void }
           </Ledger>
         )}
       </Card>
+
+      {/* Doc 34 C6: a missed weight, and what was decided — including by default. */}
+      {weighIns.length > 0 && (
+        <Card title="Weigh-ins">
+          {weighIns.map((line) => (
+            <p key={line} className="prose" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+              {line}
+            </p>
+          ))}
+        </Card>
+      )}
 
       <Card flush title="Results">
         <div className="list">

@@ -39,13 +39,10 @@ import {
   daysSinceLastBout,
   setChampion,
   campPurchaseEffects,
-  cutSeverityOf,
-  bodyOf,
   simulateFight,
-  traitMul,
   weightMissForfeit,
   type PurchaseKey,
-  weightMissRiskMultiplier,
+  weightMissRisk,
   type Bout,
   type Commentator,
   type Fighter,
@@ -811,16 +808,9 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
    * nutritionist a payback period.
    */
   const weighInRng = createRng(`${world.seed}:weigh:${booking.bout.id}`);
-  const cutRisk = Math.min(
-    1,
-    Math.pow(cutSeverityOf(bodyOf(red), red.divisionId), 2.2) *
-      0.55 *
-      weightMissRiskMultiplier(red.personality) *
-      traitMul(red.traits, 'weightMissRisk') *
-      // The nutritionist pays for itself here, which is the payback period the forfeit above
-      // was written to create.
-      boughtEffects.cutPenalty,
-  );
+  // The nutritionist pays for itself here, which is the payback period the forfeit above was
+  // written to create. One formula for every weigh-in in the game (`weightMissRisk`).
+  const cutRisk = weightMissRisk(red, red.divisionId, boughtEffects.cutPenalty);
   const missedWeight = weighInRng.chance(cutRisk);
   const weighInNotes: string[] = [];
 
@@ -1076,8 +1066,7 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
   // no callers, and `NewsFeed` styled a "You" badge that could never fire — so the hub
   // reported on everybody in the sport except the person playing it.
   const boutPromotion = db.promotions.findById(booking.bout.promotionId as string) as
-    | Promotion
-    | undefined;
+    Promotion | undefined;
   const playerItem = fightNews({
     day,
     boutId: booking.bout.id,

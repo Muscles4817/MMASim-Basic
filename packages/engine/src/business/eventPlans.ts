@@ -17,6 +17,7 @@
  * `buildCard`. Everything before that is planning.
  */
 
+import type { WeighInChoice, WeighInResult } from './weighIn.js';
 import type { GameDay } from '../core/clock.js';
 import type { DivisionId, FighterId, PromotionId } from '../core/ids.js';
 import type { Broadcast } from './events.js';
@@ -125,6 +126,23 @@ export interface PlannedBout {
    */
   replyDay?: GameDay;
   pending?: readonly CornerAnswer[];
+  /**
+   * The scales, the day before the card. Doc 34 C6. Present once the weigh-in has been held;
+   * a miss waits on the promoter's `choice` until fight night, which falls back to a catchweight
+   * when the opponent will take one and a cancellation when not (`defaulted`).
+   */
+  weighIn?: PlannedWeighIn;
+}
+
+export interface PlannedWeighIn {
+  results: readonly WeighInResult[];
+  /** Whether the fighter who made weight will still fight at a catchweight. */
+  opponentAccepts: boolean;
+  choice?: WeighInChoice;
+  /** True when nobody chose and fight night decided. */
+  defaulted?: boolean;
+  /** The consequences — forfeit, catchweight, memory — have been applied. */
+  settled?: boolean;
 }
 
 export interface PlanSlot {

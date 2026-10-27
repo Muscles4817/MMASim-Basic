@@ -87,6 +87,11 @@ export function rollRunUp(db: GameDb, day: number): RunUpWithdrawal[] {
     for (const slot of plan.slots) {
       const bout = slot.bout;
       if (bout?.status !== 'agreed') continue;
+      /*
+       * Weighed in: past the point of falling out. Weigh-ins are read two days out (doc 34 C6), and
+       * a withdrawal after the scales would leave a catchweight decision pointing at an empty slot.
+       */
+      if (bout.weighIn) continue;
 
       for (const id of [bout.redId, bout.blueId]) {
         const fighter = db.fighters.findById(id as string) as Fighter | undefined;

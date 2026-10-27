@@ -353,3 +353,15 @@ export function dedupeNicknames<F extends Fighter>(fighters: readonly F[]): F[] 
   }
   return out;
 }
+
+/**
+ * The nickname a fighter keeps on arriving in a division: theirs, unless somebody there already
+ * answers to it. Doc 34 C6 — a fighter moving division must not bring a name that is taken; the
+ * one who was there first keeps it.
+ */
+export function nicknameOnArrival(
+  nickname: string | undefined,
+  taken: ReadonlySet<string>,
+): string | undefined {
+  return nickname !== undefined && taken.has(nickname) ? undefined : nickname;
+}

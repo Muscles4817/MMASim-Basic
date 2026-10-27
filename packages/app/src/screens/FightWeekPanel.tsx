@@ -16,6 +16,7 @@ import {
   recordString,
   type EventPlan,
   type Fighter,
+  type PlannedWeighIn,
   type PressChoice,
 } from '@mmasim/engine';
 import { Button, Card, Chip } from '../ui';
@@ -248,30 +249,8 @@ function PressConferenceCard({
 
 // --- The weigh-in (C6's, when it lands) ------------------------------------------------------------
 
-/**
- * One fighter's weigh-in: C6's agreed `WeighInResult`, field for field. Declared here only until
- * C6 lands, when this and `BoutWeighIn` become an import from the engine and nothing else changes.
- */
-export interface WeighInResult {
-  fighterId: string;
-  made: boolean;
-  /** The limit they had to make. */
-  limitLbs: number;
-  /** How far over, when they missed. */
-  overLbs?: number;
-  /** Missed by far more than a bad cut explains. */
-  egregious: boolean;
-  /** They give up part of their purse to the opponent. */
-  forfeit: boolean;
-}
-
-/** `PlannedBout.weighIn`, as C6 is adding it. */
-export interface BoutWeighIn {
-  results: readonly WeighInResult[];
-  /** Whether the opponent will still fight at a catchweight. */
-  opponentAccepts: boolean;
-  choice?: 'catchweight' | 'cancel';
-}
+/** `PlannedBout.weighIn`, as C6 added it. */
+type BoutWeighIn = PlannedWeighIn;
 
 /**
  * A missed weight on the day before the card: fight at a catchweight, with the purse penalty, or
@@ -302,7 +281,7 @@ export function WeighInPanel({
             {nameOf(r.fighterId)} missed the {r.limitLbs} lb limit
             {r.overLbs !== undefined ? ` by ${Math.round(r.overLbs * 10) / 10} lb` : ''}.
             {r.egregious && ' Not a bad cut — they barely tried.'}
-            {r.forfeit && ' They forfeit part of their purse to the opponent.'}
+            {r.forfeit > 0 && ` They forfeit ${money(r.forfeit)} of their purse to the opponent.`}
           </span>
         ))}
         {weighIn.choice ? (

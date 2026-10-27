@@ -29,6 +29,14 @@
 import {
   GROUP_ORDER,
   withLedgerEntry,
+  rollWeighIn,
+  opponentTakesCatchweight,
+  catchweightFor,
+  describeMiss,
+  voiceFor,
+  type WeighInChoice,
+  type WeighInResult,
+  type PlannedWeighIn,
   currentHeat,
   describeCounter,
   fightSells,
@@ -103,10 +111,10 @@ import {
   runCardBout,
 } from './world';
 import { rememberNight } from './broadcasts';
-import { getRivalry } from './rivalries';
+import { getRivalry, heatBetween } from './rivalries';
 import { currentPurse } from './money';
 import { money } from '../ui/format';
-import { raise, recordOfferOutcome } from './inbox';
+import { raise, recordOfferOutcome, resolveItem } from './inbox';
 import {
   addToDigest,
   graceEnds,
@@ -603,6 +611,7 @@ export function blockerFor(input: {
     const days = (fighter.readyOnDay ?? 0) - plan.day;
     return `Not medically cleared until ${days} days after this card.`;
   }
+  if ((fighter.restUntil ?? 0) > plan.day) return 'Taking time away to reset.';
 
   // On this card already, in another slot.
   for (const slot of plan.slots) {
@@ -1410,6 +1419,297 @@ export function settleReplies(db: GameDb, day: number): number {
   return settled;
 }
 
+// --- Weigh-ins (doc 34 C6) -------------------------------------------------------------------
+
+/** Weigh-ins are the day before the card, as the sport holds them. */
+export const WEIGH_IN_DAYS_BEFORE = 1;
+
+/**
+ * The clock-day the scales are read on: the end of the day before weigh-in day.
+ *
+ * The clock calls `rollWeighIns` at the *end* of each day and stops on the next, so rolling at the
+ * end of weigh-in day itself stopped the clock on fight night — with the decision and the card
+ * landing on the same morning, and a decision still open when the card ran (found when A5's
+ * fight-week stops met C6's weigh-ins). Rolled a day earlier, the clock stops *on* weigh-in day:
+ * the miss is known that morning and decided before the card, as it is in the sport.
+ */
+export const WEIGH_IN_ROLL_DAYS_BEFORE = WEIGH_IN_DAYS_BEFORE + 1;
+
+const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+const missesOf = (weighIn: PlannedWeighIn | undefined): WeighInResult[] =>
+  (weighIn?.results ?? []).filter((r) => !r.made);
+
+const nameOf = (db: GameDb, id: string): string => {
+  const f = db.fighters.findById(id) as Fighter | undefined;
+  return f ? displayName(f) : 'Somebody';
+};
+
+/**
+ * Hold the weigh-ins for every agreed bout on the player's cards that are this close. Doc 34 C6.
+ *
+ * Run by the clock each day and once more where it stops, so a jump straight to fight night still
+ * weighs everybody in. Idempotent: a bout that has been weighed is not weighed again. A bout
+ * already agreed at a catchweight has no limit to miss. Seeded on the plan, slot and fighter, so a
+ * reload cannot reroll the scale.
+ *
+ * A miss raises a decision in the inbox — go ahead at a catchweight, or pull the bout — and puts
+ * the opponent's reaction in the news. Returns how many bouts had a miss.
+ */
+export function rollWeighIns(db: GameDb, day: number): number {
+  const world = getWorld(db);
+  if (!world.playerPromotionId) return 0;
+  let missed = 0;
+  for (const plan of plansFor(db, world.playerPromotionId)) {
+    if (!isLive(plan) || plan.day - WEIGH_IN_ROLL_DAYS_BEFORE > day) continue;
+    let next = plan;
+    // Dated on weigh-in day, which is what the inbox and the feed should say, whichever day the
+    // clock happened to read the scales on.
+    const weighDay = plan.day - WEIGH_IN_DAYS_BEFORE;
+    for (const slot of plan.slots) {
+      const bout = slot.bout;
+      if (bout?.status !== 'agreed' || bout.weighIn || bout.catchweightLbs !== undefined) continue;
+      const corners = [bout.redId, bout.blueId].map(
+        (id) => db.fighters.findById(id as string) as Fighter | undefined,
+      );
+      if (!corners[0] || !corners[1]) continue;
+      const results = corners.map((fighter) =>
+        rollWeighIn({
+          fighter: fighter!,
+          divisionId: bout.divisionId,
+          showPurse: currentPurse(db, fighter!, slot.position)?.show ?? 0,
+          rng: createRng(`${world.seed}:weighin:${plan.id}:${slot.id}:${fighter!.id}`),
+        }),
+      );
+      const misses = results.filter((r) => !r.made);
+      // Somebody who made weight decides whether to fight somebody who did not. Both missing is
+      // a catchweight nobody can complain about.
+      const made = corners.find((f) => results.find((r) => r.fighterId === f!.id)?.made);
+      const opponentAccepts =
+        misses.length === 0 ||
+        !made ||
+        opponentTakesCatchweight({
+          opponent: made,
+          missed: misses[0]!,
+          rng: createRng(`${world.seed}:catchweight:${plan.id}:${slot.id}`),
+        });
+      next = withSlot(next, slot.id, { ...bout, weighIn: { results, opponentAccepts } });
+      if (misses.length === 0) continue;
+      missed += 1;
+      raiseWeighInDecision(db, next, slot.id, weighDay);
+      if (made) {
+        const said = voiceFor(made, 'opponentMissedWeight', weighDay as never).text;
+        appendNews(db, [
+          {
+            id: newsId(weighDay as never, `weighin:${plan.id}:${slot.id}`),
+            day: weighDay as never,
+            kind: 'voice',
+            weight: 'normal',
+            headline: `${displayName(made)} on the miss: “${said}”`,
+            detail: misses.map((m) => describeMiss(nameOf(db, m.fighterId as string), m)).join(' '),
+            fighterIds: [bout.redId, bout.blueId],
+            divisionId: bout.divisionId,
+            promotionId: plan.promotionId,
+          },
+        ]);
+      }
+    }
+    if (next !== plan) savePlan(db, next);
+  }
+  return missed;
+}
+
+function raiseWeighInDecision(db: GameDb, plan: EventPlan, slotId: string, day: number): void {
+  const bout = plan.slots.find((s) => s.id === slotId)?.bout;
+  if (!bout?.weighIn) return;
+  const misses = missesOf(bout.weighIn);
+  const lines = misses.map((m) => describeMiss(nameOf(db, m.fighterId as string), m));
+  const catchweight = catchweightFor(bout.weighIn.results);
+  raise(db, {
+    id: inboxId(day as never, `weighin:${plan.id}:${slotId}`),
+    day: day as never,
+    kind: 'card',
+    priority: 'decision',
+    title: `${lines[0]} Catchweight or cancel?`,
+    body: [
+      ...lines,
+      bout.weighIn.opponentAccepts
+        ? `The opponent will still fight at ${catchweight} lb, and takes the forfeit.`
+        : 'The opponent will not fight somebody that heavy. The bout can only be cancelled.',
+      'If you do not decide, fight night will: a catchweight if the opponent agrees, otherwise the bout is off.',
+    ].join(' '),
+    actions: [
+      ...(bout.weighIn.opponentAccepts
+        ? [
+            {
+              id: 'weighIn:catchweight',
+              label: `Go ahead at ${catchweight} lb`,
+              detail: 'The forfeit goes to the fighter who made weight.',
+            },
+          ]
+        : []),
+      { id: 'weighIn:cancel', label: 'Cancel the bout', detail: 'It comes off the card.' },
+    ],
+    link: { route: 'plan', id: plan.id, slot: slotId },
+    fighterId: misses[0]?.fighterId,
+    promotionId: plan.promotionId,
+  });
+}
+
+/**
+ * The promoter's call on a missed weight. Doc 34 C6.
+ *
+ * A catchweight is only possible when the opponent will take it. Cancelling takes the bout off
+ * the card now; the consequences of either land on fight night (`settleWeighIns`), or at once for
+ * a cancellation. Returns the updated plan, or undefined when there is nothing to decide.
+ */
+export function resolveMissedWeight(
+  db: GameDb,
+  planId: string,
+  slotId: string,
+  choice: WeighInChoice,
+): EventPlan | undefined {
+  const plan = allPlans(db).find((p) => p.id === planId);
+  const bout = plan?.slots.find((s) => s.id === slotId)?.bout;
+  if (!plan || !bout?.weighIn || bout.weighIn.settled || missesOf(bout.weighIn).length === 0) {
+    return undefined;
+  }
+  if (choice === 'catchweight' && !bout.weighIn.opponentAccepts) return undefined;
+  const decided: PlannedBout = {
+    ...bout,
+    status: choice === 'cancel' ? 'declined' : bout.status,
+    weighIn: { ...bout.weighIn, choice },
+  };
+  let next = withSlot(plan, slotId, decided);
+  if (choice === 'cancel') next = settleOne(db, next, slotId, getWorld(db).day, false);
+  return savePlan(db, next);
+}
+
+/** Answer the inbox decision, when it is a weigh-in. True when it was one. */
+export function answerWeighIn(db: GameDb, item: InboxItem, actionId: string): boolean {
+  if (!actionId.startsWith('weighIn:') || !item.link?.id || !item.link.slot) return false;
+  resolveMissedWeight(db, item.link.id, item.link.slot, actionId.slice(8) as WeighInChoice);
+  return true;
+}
+
+/**
+ * Fight night: every miss is decided, by the promoter or by default, and its consequences land.
+ *
+ * The default is a catchweight when the opponent agreed to one and a cancellation when not — and
+ * it is said out loud, in the news and on the recap, because a decision the game made on the
+ * player's behalf is one they have to be able to see.
+ */
+export function settleWeighIns(db: GameDb, plan: EventPlan, day: number): EventPlan {
+  let next = plan;
+  for (const slot of plan.slots) {
+    const bout = slot.bout;
+    if (!bout?.weighIn || bout.weighIn.settled || missesOf(bout.weighIn).length === 0) continue;
+    const defaulted = bout.weighIn.choice === undefined;
+    const choice: WeighInChoice =
+      bout.weighIn.choice ?? (bout.weighIn.opponentAccepts ? 'catchweight' : 'cancel');
+    next = withSlot(next, slot.id, {
+      ...bout,
+      status: choice === 'cancel' ? 'declined' : bout.status,
+      weighIn: { ...bout.weighIn, choice, defaulted },
+    });
+    next = settleOne(db, next, slot.id, day, defaulted);
+  }
+  return next;
+}
+
+/** Apply one decided miss: the forfeit and catchweight, the opponent's memory, the news. */
+function settleOne(
+  db: GameDb,
+  plan: EventPlan,
+  slotId: string,
+  day: number,
+  defaulted: boolean,
+): EventPlan {
+  const bout = plan.slots.find((s) => s.id === slotId)?.bout;
+  if (!bout?.weighIn?.choice) return plan;
+  const { results, choice } = bout.weighIn;
+  const misses = missesOf(bout.weighIn);
+  const madeIds = results.filter((r) => r.made).map((r) => r.fighterId as string);
+
+  if (choice === 'catchweight') {
+    // The forfeit crosses the cage: from whoever missed to whoever made it.
+    for (const miss of misses) {
+      const to = madeIds[0];
+      if (!to || miss.forfeit <= 0) continue;
+      const from = db.fighters.findById(miss.fighterId as string) as Fighter | undefined;
+      const recipient = db.fighters.findById(to) as Fighter | undefined;
+      if (!from || !recipient) continue;
+      db.fighters.upsert({ ...from, bank: round1(from.bank - miss.forfeit) } as never);
+      db.fighters.upsert({ ...recipient, bank: round1(recipient.bank + miss.forfeit) } as never);
+    }
+  }
+
+  // The fighter who made weight remembers whose card it was (doc 34 C3's ledger).
+  for (const id of madeIds) {
+    const fighter = db.fighters.findById(id) as Fighter | undefined;
+    if (!fighter) continue;
+    db.fighters.upsert({
+      ...fighter,
+      ledger: withLedgerEntry(fighter.ledger, {
+        day: day as never,
+        promotionId: plan.promotionId,
+        kind: choice === 'cancel' ? 'cardCancelled' : 'opponentMissedWeight',
+      }),
+    } as never);
+  }
+
+  // The decision is closed, whoever made it, so it stops asking.
+  for (const item of db.inbox.findAll() as InboxItem[]) {
+    if (item.id.endsWith(`weighin:${plan.id}:${slotId}`) && item.resolvedDay === undefined) {
+      resolveItem(db, item.id, `weighIn:${choice}`);
+    }
+  }
+
+  const who = misses.map((m) => nameOf(db, m.fighterId as string)).join(' and ');
+  const catchweight = catchweightFor(results);
+  const how = defaulted ? 'Nobody made the call, so fight night did: ' : 'The promotion decided: ';
+  appendNews(db, [
+    {
+      id: newsId(day as never, `weighin-settled:${plan.id}:${slotId}`),
+      day: day as never,
+      kind: choice === 'cancel' ? 'cancellation' : 'result',
+      weight: 'normal',
+      headline:
+        choice === 'cancel'
+          ? `${who} missed weight and the bout is off`
+          : `${who} missed weight; the bout goes ahead at ${catchweight} lb`,
+      detail: `${how}${choice === 'cancel' ? 'cancelled' : 'a catchweight, with the forfeit paid to the opponent'}.`,
+      fighterIds: [bout.redId, bout.blueId],
+      divisionId: bout.divisionId,
+      promotionId: plan.promotionId,
+    },
+  ]);
+
+  return withSlot(plan, slotId, {
+    ...bout,
+    catchweightLbs: choice === 'catchweight' ? catchweight : bout.catchweightLbs,
+    weighIn: { ...bout.weighIn, settled: true, defaulted },
+  });
+}
+
+/** One line per miss on a card, for the recap: who, by how much, and what was decided. */
+export function weighInLines(db: GameDb, plan: EventPlan): string[] {
+  return plan.slots.flatMap((slot) => {
+    const w = slot.bout?.weighIn;
+    if (!w || missesOf(w).length === 0) return [];
+    const missed = missesOf(w)
+      .map((m) => describeMiss(nameOf(db, m.fighterId as string), m))
+      .join(' ');
+    const decided =
+      w.choice === 'cancel'
+        ? 'The bout was cancelled'
+        : w.choice === 'catchweight'
+          ? `It went ahead at ${catchweightFor(w.results)} lb`
+          : 'Awaiting a decision';
+    return [`${missed} ${decided}${w.defaulted ? ' — by default, as nobody made the call' : ''}.`];
+  });
+}
+
 /**
  * Meet a counter-offer and close the fight.
  *
@@ -1834,8 +2134,8 @@ export function forecastPlan(input: { ctx: PromoterContext; plan: EventPlan }): 
       promotion: ctx.promotion,
       red,
       blue,
-      heat: 0,
-      isRivalry: false,
+      // What the two of them have between them sells (doc 34 C6).
+      ...heatBetween(ctx.db, red.id, blue.id, ctx.day),
       isTitleFight: slot.bout.titleKind !== undefined,
     });
     if (draw > headlineDraw) headlineDraw = draw;
@@ -1943,7 +2243,14 @@ export function replacementsFor(input: {
  * system decorative.
  */
 export function runPlan(input: { db: GameDb; plan: EventPlan }): NightOutcome | undefined {
-  const { db, plan } = input;
+  const { db } = input;
+  /*
+   * Every missed weight is decided before the card is built (doc 34 C6): by the promoter, or by
+   * default here. Weighed first, for a card the clock jumped straight onto.
+   */
+  if (isLive(input.plan)) rollWeighIns(db, input.plan.day);
+  const reread = allPlans(db).find((p) => p.id === input.plan.id) ?? input.plan;
+  const plan = isLive(reread) ? savePlan(db, settleWeighIns(db, reread, reread.day)) : reread;
   // Once. A card that has run is history, and running it again re-fought every bout on it and
   // paid the gate twice — the screen offered exactly that, because it still read "tonight".
   if (!isLive(plan)) return undefined;
@@ -1971,8 +2278,7 @@ export function runPlan(input: { db: GameDb; plan: EventPlan }): NightOutcome | 
               promotion,
               red,
               blue,
-              heat: 0,
-              isRivalry: false,
+              ...heatBetween(db, red.id, blue.id, plan.day),
               isTitleFight: bout.titleKind !== undefined,
             })
           : 0,
@@ -2100,8 +2406,7 @@ function runNight(input: {
           promotion: current,
           red: topRed,
           blue: topBlue,
-          heat: 0,
-          isRivalry: false,
+          ...heatBetween(db, topRed.id, topBlue.id, night.day),
           isTitleFight: top!.isTitleFight,
         })
       : 0;

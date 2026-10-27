@@ -29,7 +29,7 @@ import { stepUpAcceptance } from '../domain/personality.js';
 import { traitAdd, traitMul } from '../domain/traits.js';
 import { overallRating } from '../ratings/attributes.js';
 import { connectionTo, priority, stableConflictCost, type Manager } from './managers.js';
-import { wantMet, wantsOf, type WantRead } from '../domain/disposition.js';
+import { isAboveTheirWeight, wantMet, wantsOf, type WantRead } from '../domain/disposition.js';
 import { describeLedger, relationshipWith } from '../domain/relationship.js';
 import { voiceFor, wantVoice, type VoiceSituation } from '../domain/voice.js';
 import { isHoldingOut } from './negotiation.js';
@@ -246,7 +246,14 @@ export function acceptanceOf(input: {
         })
       : undefined;
   const met = want
-    ? wantMet(want, { opponent, isTitleFight, opponentRank: input.opponentRank, step })
+    ? wantMet(want, {
+        opponent,
+        isTitleFight,
+        opponentRank: input.opponentRank,
+        step,
+        // The heavier of the two corners' divisions is the weight the bout is fought at.
+        aboveTheirWeight: isAboveTheirWeight(fighter, opponent.divisionId),
+      })
     : undefined;
   const wantTerm = met === true ? WANT_MET : met === false ? WANT_UNMET : 1;
   if (met === false && want) {

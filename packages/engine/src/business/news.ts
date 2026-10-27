@@ -37,7 +37,11 @@ export type NewsKind =
   | 'cancellation'
   | 'nickname'
   /** Something a fighter said: a callout, a complaint. Doc 34 C3. */
-  | 'voice';
+  | 'voice'
+  /** A fighter changing weight class. Doc 34 C6. */
+  | 'divisionMove'
+  /** A retired fighter coming back. Doc 34 C6. */
+  | 'comeback';
 
 /**
  * How loudly an item should be presented.

@@ -33,6 +33,7 @@ import {
   type RankedFighter,
 } from '@mmasim/engine';
 import { getWorld, type GameDb } from '@mmasim/data';
+import { stokeBetween } from './rivalries';
 
 const remember = (fighter: Fighter, promotion: Promotion, day: number, kinds: LedgerKind[]) =>
   kinds.length === 0
@@ -162,6 +163,21 @@ export function afterTheBout(input: {
         divisionId: winner.divisionId,
         promotionId: promotion.id,
       });
+      // A callout is the cheapest heat in the sport, and now it raises some (doc 34 C6).
+      const target = callout.targetId
+        ? (db.fighters.findById(callout.targetId as string) as Fighter | undefined)
+        : undefined;
+      if (target) {
+        stokeBetween(db, {
+          a: winner,
+          b: target,
+          source: 'callout',
+          day,
+          instigator: winner,
+          beat: callout.text,
+          seed: `${getWorld(db).seed}:callout:${input.boutId}`,
+        });
+      }
     }
   }
 

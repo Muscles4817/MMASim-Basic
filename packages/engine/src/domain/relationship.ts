@@ -28,7 +28,10 @@ export type LedgerKind =
   | 'mismatch'
   | 'protected'
   | 'cardCancelled'
-  | 'cut';
+  | 'cut'
+  // Doc 34 C6.
+  | 'opponentMissedWeight'
+  | 'farewellGiven';
 
 export interface LedgerEntry {
   day: GameDay;
@@ -50,6 +53,8 @@ const META: Readonly<Record<LedgerKind, { base: number; label: string }>> = {
   protected: { base: 6, label: 'being brought along carefully' },
   cardCancelled: { base: -12, label: 'a camp wasted on a card that never happened' },
   cut: { base: -30, label: 'being cut' },
+  opponentMissedWeight: { base: -6, label: 'an opponent who missed weight on their card' },
+  farewellGiven: { base: 15, label: 'the farewell fight they were given' },
 };
 
 export const describeLedger = (kind: LedgerKind): string => META[kind].label;

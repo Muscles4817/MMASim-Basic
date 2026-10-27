@@ -75,23 +75,21 @@ describe('the weigh-in (the seam C6 plugs into)', () => {
         weighIn={{
           results: [
             {
-              fighterId: 'a',
+              fighterId: 'a' as never,
               made: false,
               limitLbs: 156,
               overLbs: 2.5,
               egregious: false,
-              forfeit: true,
+              forfeit: 4,
             },
-            { fighterId: 'b', made: true, limitLbs: 156, egregious: false, forfeit: false },
+            { fighterId: 'b' as never, made: true, limitLbs: 156, egregious: false, forfeit: 0 },
           ],
           opponentAccepts: true,
         }}
       />,
     );
     expect(
-      screen.getByText(
-        /Ruiz missed the 156 lb limit by 2.5 lb\. +They forfeit part of their purse/,
-      ),
+      screen.getByText(/Ruiz missed the 156 lb limit by 2.5 lb\. +They forfeit .* of their purse/),
     ).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Fight at a catchweight' }));
     expect(resolve).toHaveBeenCalledWith('catchweight');
@@ -105,12 +103,12 @@ describe('the weigh-in (the seam C6 plugs into)', () => {
         weighIn={{
           results: [
             {
-              fighterId: 'a',
+              fighterId: 'a' as never,
               made: false,
               limitLbs: 156,
               overLbs: 4,
               egregious: true,
-              forfeit: true,
+              forfeit: 6,
             },
           ],
           opponentAccepts: false,

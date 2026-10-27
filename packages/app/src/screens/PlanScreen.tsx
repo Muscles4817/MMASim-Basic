@@ -60,7 +60,7 @@ import { useToast } from '../ui/toast';
 import { Tip } from '../ui/tip';
 import { NightRecap, NightShow } from './NightScreen';
 import { TaleOfTheTape } from '../ui/TaleOfTheTape';
-import { FightWeekPanel } from './FightWeekPanel';
+import { FightWeekPanel, WeighInPanel } from './FightWeekPanel';
 import { money } from '../ui/format';
 import { DrawBadge } from '../ui/DrawBadge';
 import {
@@ -84,6 +84,7 @@ import {
   planById,
   promoterContext,
   rankOfFighter,
+  resolveMissedWeight,
   planName,
   runPlan,
   savePlan,
@@ -1314,6 +1315,18 @@ function BookedBout({
               </p>
             ))}
           </div>
+        )}
+
+        {/* The day-before weigh-in (doc 34 C6), in A5's panel. */}
+        {bout.weighIn && (
+          <WeighInPanel
+            weighIn={bout.weighIn}
+            nameOf={nameOf}
+            resolve={(choice) => {
+              const next = resolveMissedWeight(ctx.db, plan.id, slot.id, choice);
+              if (next) onChange(next);
+            }}
+          />
         )}
 
         <div className="stack" style={{ gap: 'var(--space-2)' }}>

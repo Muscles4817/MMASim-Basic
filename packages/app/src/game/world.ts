@@ -31,6 +31,14 @@ import {
   trajectoryOf,
   withTraitsStillTrue,
   settleWeight,
+  chooseDivisionMove,
+  comebackChance,
+  wantsFarewell,
+  FAREWELL_RETIRE_CHANCE,
+  voiceFor,
+  getDivision,
+  moveDivision,
+  nicknameOnArrival,
   AMBIENT_BLOCKS_PER_WEEK,
   campInjuryChance,
   canFightOn,
@@ -74,6 +82,7 @@ import {
   rankDivision,
   readinessDelay,
   newsId,
+  rivalryNews,
   nextContender,
   releaseRisk,
   chaseUplift,
@@ -148,6 +157,13 @@ import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
 import { settleFightInjuries } from './fightInjuries';
 import { afterTheBout } from './memory';
+import {
+  accrueHeatFromFight,
+  heatBetween,
+  meetings,
+  pruneColdRivalries,
+  stokeBetween,
+} from './rivalries';
 import { money } from '../ui/format';
 
 type StoredNews = NewsItem & Entity;
@@ -466,10 +482,20 @@ export function advanceWorld(
       // Before the intake, so a division that lost somebody this quarter refills in the same
       // quarter rather than a season later.
       news.push(...retireTheDrifted(db, day, rng.fork(`drift:${day}`), exceptId));
+      // And some who stopped come back (doc 34 C6), before the intake counts the gaps.
+      news.push(...comebacks(db, day, rng.fork(`comeback:${day}`), exceptId));
+      pruneColdRivalries(db, day);
       news.push(...replenish(db, day, rng, promotions, rosterSizes));
       // Deals run out across the roster too, so the market has other people in it.
       news.push(...resolveFreeAgency(db, day, rng, promotions, exceptId, rosterSizes));
       reindex();
+    }
+
+    // Once a year, the world's fighters decide whether they are in the right division (doc 34 C6).
+    if (Math.floor(day / 365) !== Math.floor((day - 1) / 365)) {
+      news.push(
+        ...moveDivisions(db, day, rng.fork(`moves:${day}`), exceptId, exclusion.activityHold),
+      );
     }
 
     /*
@@ -1264,6 +1290,45 @@ export function runCardBout(ctx: {
   developed.red = remembered.red;
   developed.blue = remembered.blue;
 
+  /*
+   * Heat (doc 34 C6). Only fighter mode's own bouts ever raised it, so the world produced no
+   * grudges and every promoter card drew as though nobody had history. A close or split decision,
+   * a title fight and a brutal finish raise it through `accrueHeatFromFight`; a third meeting is
+   * a trilogy whatever happened in it. Skipped on a bulk tick, which writes no stories.
+   */
+  if (!bulk) {
+    const seed = `${getWorld(db).seed}:heat:${boutId}`;
+    const was = heatBetween(db, red.id, blue.id, day).isRivalry;
+    accrueHeatFromFight(db, {
+      result,
+      red: developed.red,
+      blue: developed.blue,
+      day,
+      isTitleFight,
+      seed,
+    });
+    if (meetings(developed.red, blue.id) === 3) {
+      stokeBetween(db, {
+        a: developed.red,
+        b: developed.blue,
+        source: 'trilogy',
+        day,
+        beat: 'Three fights. A trilogy.',
+        seed: `${seed}:trilogy`,
+      });
+    }
+    if (!was && heatBetween(db, red.id, blue.id, day).isRivalry) {
+      news.push(
+        rivalryNews({
+          day: day as never,
+          fighterIds: [red.id, blue.id],
+          names: [displayName(red), displayName(blue)],
+          divisionId: red.divisionId,
+        }),
+      );
+    }
+  }
+
   const item = bulk
     ? undefined
     : fightNews({
@@ -1314,7 +1379,16 @@ export function runCardBout(ctx: {
   // Careers end, and they end after a fight, which is when a fighter actually decides.
   const retireRng = rng.fork('retire');
   for (const fighter of [developed.red, developed.blue]) {
-    const finalised = finalise(db, fighter, day, retireRng.fork(fighter.id as string), promotion);
+    // Whether they walked in asking for a farewell, read before the fight changed them.
+    const before = fighter.id === red.id ? red : blue;
+    const finalised = finalise(
+      db,
+      fighter,
+      day,
+      retireRng.fork(fighter.id as string),
+      promotion,
+      wantsFarewell(before, day as never),
+    );
     if (finalised.news && !bulk) news.push(finalised.news);
     db.fighters.upsert(finalised.fighter as Fighter & Entity);
 
@@ -1547,7 +1621,14 @@ function runStatisticalCard(ctx: {
       };
 
       // No camp here either — `ageEveryone` trains everybody, including these two.
-      const finalised = finalise(db, next, day, boutRng.fork(`retire:${fighter.id}`), promotion);
+      const finalised = finalise(
+        db,
+        next,
+        day,
+        boutRng.fork(`retire:${fighter.id}`),
+        promotion,
+        wantsFarewell(stored, day as never),
+      );
       const until =
         day + readinessDelay(finalised.fighter, outcome === 'loss' ? method : undefined);
       readyOn.set(fighter.id as string, until);
@@ -2088,11 +2169,20 @@ function finalise(
   fighter: Fighter,
   day: number,
   rng: Rng,
-  _promotion: Promotion,
+  promotion: Promotion,
+  /** They walked in asking for a farewell (doc 34 C6), read on the fighter before the bout. */
+  farewell = false,
 ): { fighter: Fighter; news?: NewsItem } {
-  if (!shouldRetire(fighter, day, rng)) return { fighter };
+  /*
+   * A fighter who asked for a farewell mostly goes after it, win or lose — that was the point of
+   * it — and remembers the promotion that gave it to them.
+   */
+  const retires = farewell ? rng.chance(FAREWELL_RETIRE_CHANCE) : shouldRetire(fighter, day, rng);
+  if (!retires) return { fighter };
 
-  const reason = retirementReason(fighter, day);
+  const reason = farewell
+    ? 'Bowed out with a farewell fight, on their own terms.'
+    : retirementReason(fighter, day);
 
   /*
    * Vacate every belt they hold, at every promotion.
@@ -2119,7 +2209,18 @@ function finalise(
   }
 
   return {
-    fighter: { ...fighter, retiredDay: day, notes: reason },
+    fighter: {
+      ...fighter,
+      retiredDay: day,
+      notes: reason,
+      ledger: farewell
+        ? withLedgerEntry(fighter.ledger, {
+            day: day as never,
+            promotionId: promotion.id,
+            kind: 'farewellGiven',
+          })
+        : fighter.ledger,
+    },
     news: retirementNews({
       day,
       fighterId: fighter.id,
@@ -3026,4 +3127,183 @@ export function holdsABeltAnywhere(db: GameDb, fighter: Fighter): boolean {
   return (db.promotions.findAll() as unknown as Promotion[]).some(
     (p) => p.champions[fighter.divisionId] === fighter.id,
   );
+}
+
+/**
+ * The world's fighters changing weight class. Doc 34 C6.
+ *
+ * Only the player's fighter could ever move. Now, once a year, everybody else asks the question
+ * the player asks — through `chooseDivisionMove`, which reads the cut and the field — and the move
+ * is the same one the player makes: `moveDivision`, one settle step for the body, and the rest as
+ * camps pass. A nickname somebody in the new division already answers to is left at the door.
+ *
+ * Two things it never touches on its own (#63 review). A fighter the promoter has signed onto a
+ * card (`hold`, the clock's signed-bookings hold) stays where the bout was made, or the card is
+ * left with a cross-division fight. And a fighter on the player's own roster *asks*: the move is
+ * an inbox decision, not something done to the promoter's roster with only a news line.
+ */
+export function moveDivisions(
+  db: GameDb,
+  day: number,
+  rng: Rng,
+  exceptId: FighterId | undefined,
+  hold?: ReadonlyMap<string, number>,
+): NewsItem[] {
+  const playerPromotionId = getWorld(db).playerPromotionId;
+  const all = db.fighters.findAll() as Fighter[];
+  const fighters = all.filter((f) => f.retiredDay === undefined && f.id !== exceptId);
+  /*
+   * Nicknames already worn, per division — C3's index (see `runCardBout`), built once per
+   * division on first use and kept current as fighters move, not rescanned per mover.
+   */
+  const takenByDivision = new Map<string, Set<string>>();
+  const takenIn = (divisionId: Fighter['divisionId']): Set<string> => {
+    let taken = takenByDivision.get(divisionId as string);
+    if (!taken) {
+      taken = nicknamesTaken(all, divisionId);
+      takenByDivision.set(divisionId as string, taken);
+    }
+    return taken;
+  };
+  const champions = new Set<string>();
+  const promotionsById = new Map<string, Promotion>();
+  for (const p of db.promotions.findAll() as unknown as Promotion[]) {
+    promotionsById.set(p.id as string, p);
+    for (const id of Object.values(p.champions)) if (id) champions.add(id as string);
+  }
+  const overall = new Map(fighters.map((f) => [f.id as string, overallRating(f.attributes)]));
+  const fields = new Map<string, number[]>();
+  for (const f of fighters) {
+    const list = fields.get(f.divisionId as string) ?? [];
+    list.push(overall.get(f.id as string)!);
+    fields.set(f.divisionId as string, list);
+  }
+
+  const news: NewsItem[] = [];
+  for (const fighter of fighters) {
+    const choice = chooseDivisionMove({
+      fighter,
+      day: day as never,
+      isChampion: champions.has(fighter.id as string),
+      fieldOf: (id) => fields.get(id as string) ?? [],
+      fighterOverall: overall.get(fighter.id as string)!,
+      age: fighterAge(fighter, day),
+      rng: rng.fork(fighter.id as string),
+    });
+    if (!choice) continue;
+    // A move their promotion has nowhere to book is not one they can make while under contract.
+    const promotion = fighter.promotionId
+      ? promotionsById.get(fighter.promotionId as string)
+      : undefined;
+    if (promotion && !promotion.divisions.includes(choice.target)) continue;
+    // Signed onto one of the player's cards: the bout was made at this weight.
+    if ((hold?.get(fighter.id as string) ?? -Infinity) >= day) continue;
+    const to = getDivision(choice.target);
+    const up = to.limitLbs > getDivision(fighter.divisionId).limitLbs;
+
+    if (playerPromotionId && fighter.promotionId === playerPromotionId) {
+      raise(db, {
+        id: inboxId(day as never, `move:${fighter.id}`),
+        day: day as never,
+        kind: 'roster',
+        priority: 'decision',
+        title: `${displayName(fighter)} wants to move ${up ? 'up' : 'down'} to ${to.name}`,
+        body:
+          choice.reason === 'cut'
+            ? 'The cut has become the hardest fight of every camp. Refuse, and they make the weight resenting it.'
+            : 'Outgunned where they are, and betting on a division where they are not. Refuse, and they stay unhappy about it.',
+        actions: [
+          { id: `move:allow:${choice.target as string}`, label: 'Allow the move' },
+          { id: 'move:refuse', label: 'Keep them here', isDismiss: true },
+        ],
+        link: { route: 'fighter', id: fighter.id as string },
+        fighterId: fighter.id,
+        divisionId: choice.target,
+        promotionId: playerPromotionId as never,
+      });
+      continue;
+    }
+
+    const moved = applyDivisionMove(db, fighter, choice.target, day, takenIn);
+    news.push({
+      id: newsId(day as never, `move:${fighter.id}`),
+      day: day as never,
+      kind: 'divisionMove',
+      weight: fighter.reputation >= 55 ? 'normal' : 'minor',
+      headline: `${displayName(fighter)} moves ${up ? 'up' : 'down'} to ${to.name}`,
+      detail:
+        choice.reason === 'cut'
+          ? 'The cut had become the hardest fight of every camp.'
+          : 'Outgunned where they were, and betting on a division where they are not.',
+      fighterIds: [moved.id],
+      divisionId: choice.target,
+      promotionId: fighter.promotionId,
+    });
+  }
+  return news;
+}
+
+/**
+ * Move one fighter: the division, one settle step for the body, and their nickname unless the new
+ * division already has it. `takenIn` is the caller's per-division index, kept current here.
+ */
+export function applyDivisionMove(
+  db: GameDb,
+  fighter: Fighter,
+  target: Fighter['divisionId'],
+  day: number,
+  takenIn: (divisionId: Fighter['divisionId']) => Set<string> = (d) =>
+    nicknamesTaken(db.fighters.findAll() as Fighter[], d),
+): Fighter {
+  const nickname = nicknameOnArrival(fighter.nickname, takenIn(target));
+  const moved = settleWeight({ ...moveDivision(fighter, target, day as never), nickname });
+  db.fighters.upsert(moved as Fighter & Entity);
+  if (fighter.nickname) takenIn(fighter.divisionId).delete(fighter.nickname);
+  if (nickname) takenIn(target).add(nickname);
+  return moved;
+}
+
+/**
+ * Retired fighters who come back, evaluated quarterly. Doc 34 C6.
+ *
+ * Through `comebackChance` — time off, the bank and ego. A fighter who returns comes back as a free
+ * agent (whatever deal they retired on is over), with the body they left with, and says so in
+ * their own words.
+ */
+export function comebacks(
+  db: GameDb,
+  day: number,
+  rng: Rng,
+  exceptId: FighterId | undefined,
+): NewsItem[] {
+  const news: NewsItem[] = [];
+  for (const fighter of db.fighters.findAll() as Fighter[]) {
+    if (fighter.retiredDay === undefined || fighter.id === exceptId) continue;
+    if (!rng.fork(fighter.id as string).chance(comebackChance(fighter, day as never))) continue;
+    // Their nickname, unless somebody active in the division has taken it since (doc 34 C6).
+    const taken = nicknamesTaken(db.fighters.findAll() as Fighter[], fighter.divisionId);
+    const back: Fighter = {
+      ...fighter,
+      nickname: nicknameOnArrival(fighter.nickname, taken),
+      retiredDay: undefined,
+      comebackDay: day as never,
+      notes: undefined,
+      promotionId: undefined,
+      agreementId: undefined,
+    };
+    db.fighters.upsert(back as Fighter & Entity);
+    news.push({
+      id: newsId(day as never, `comeback:${fighter.id}`),
+      day: day as never,
+      kind: 'comeback',
+      weight: fighter.reputation >= 50 ? 'major' : 'normal',
+      headline: `${displayName(fighter)} is coming out of retirement`,
+      detail: `“${voiceFor(fighter, 'comeback', day as never).text}”`,
+      fighterIds: [fighter.id],
+      divisionId: fighter.divisionId,
+      // Who they were with when they stopped, so that promotion's feed hears about it.
+      promotionId: fighter.promotionId,
+    });
+  }
+  return news;
 }
