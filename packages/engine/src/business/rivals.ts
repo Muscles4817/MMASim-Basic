@@ -257,13 +257,12 @@ export function promotionCharacter(input: {
 export const COUNTER_SPLIT_MIN = 0.2;
 export const COUNTER_SPLIT_MAX = 0.35;
 
-/** How close to your date a rival's card has to be to split the audience. */
-export const COUNTER_WINDOW_DAYS = 3;
-
 /**
  * The chance a rival books against a card it has heard about. Only a promotion in the same market
  * can split its audience; an aggressor does it on purpose, a moneyball outfit when it is cheap to,
- * a developer almost never. A rival far smaller than you is not going to pick that fight.
+ * a developer almost never. And only against a peer: the biggest promotion in the sport does not
+ * go to war with a regional show, and a regional show does not pick that fight with it either —
+ * the chance falls away as the two drift apart in standing, gone at three times the other's size.
  */
 export function counterProgrammingChance(
   rival: Promotion & { posture?: PromotionPosture },
@@ -272,9 +271,10 @@ export function counterProgrammingChance(
 ): number {
   if (rival.baseCountry !== market) return 0;
   if (rival.tier === 'developmental') return 0;
-  const base = { aggressor: 0.5, moneyball: 0.12, developer: 0.03 }[postureOf(rival)];
-  const nerve = clamp01((rival.prestige - target.prestige * 0.5) / Math.max(1, target.prestige));
-  return clamp01(base * (0.4 + nerve));
+  const base = { aggressor: 0.45, moneyball: 0.1, developer: 0.02 }[postureOf(rival)];
+  const gap = Math.abs(Math.log(Math.max(1, rival.prestige) / Math.max(1, target.prestige)));
+  const peers = clamp01(1 - gap / Math.log(3));
+  return clamp01(base * peers);
 }
 
 /** The share of the gate a rival's card takes, 20–35%, larger the bigger the rival is. */
