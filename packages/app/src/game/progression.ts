@@ -17,6 +17,8 @@ import {
   careerProgress,
   createRng,
   moveDivision,
+  nicknameOnArrival,
+  nicknamesTaken,
   overallRating,
   settleWeight,
   describeInjury,
@@ -539,7 +541,12 @@ export function joinGym(db: GameDb, fighter: Fighter, gym: Gym): Fighter {
  * six months later, not the same afternoon.
  */
 export function changeDivision(db: GameDb, fighter: Fighter, divisionId: DivisionId): Fighter {
-  const moved = settleWeight(moveDivision(fighter, divisionId, getWorld(db).day));
+  // A nickname somebody there already answers to stays behind (doc 34 C6).
+  const taken = nicknamesTaken(db.fighters.findAll() as Fighter[], divisionId);
+  const moved = settleWeight({
+    ...moveDivision(fighter, divisionId, getWorld(db).day),
+    nickname: nicknameOnArrival(fighter.nickname, taken),
+  });
   db.fighters.upsert(moved as Fighter & { id: string });
   return moved;
 }

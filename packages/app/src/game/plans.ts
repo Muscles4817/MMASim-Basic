@@ -110,6 +110,7 @@ import {
   runCardBout,
 } from './world';
 import { rememberNight } from './broadcasts';
+import { heatBetween } from './rivalries';
 import { currentPurse } from './money';
 import { raise, recordOfferOutcome, resolveItem } from './inbox';
 import {
@@ -532,6 +533,7 @@ export function blockerFor(input: {
     const days = (fighter.readyOnDay ?? 0) - plan.day;
     return `Not medically cleared until ${days} days after this card.`;
   }
+  if ((fighter.restUntil ?? 0) > plan.day) return 'Taking time away to reset.';
 
   // On this card already, in another slot.
   for (const slot of plan.slots) {
@@ -1767,8 +1769,8 @@ export function forecastPlan(input: { ctx: PromoterContext; plan: EventPlan }): 
       promotion: ctx.promotion,
       red,
       blue,
-      heat: 0,
-      isRivalry: false,
+      // What the two of them have between them sells (doc 34 C6).
+      ...heatBetween(ctx.db, red.id, blue.id, ctx.day),
       isTitleFight: slot.bout.titleKind !== undefined,
     });
     if (draw > headlineDraw) headlineDraw = draw;
@@ -1967,8 +1969,7 @@ export function runPlan(input: { db: GameDb; plan: EventPlan }): NightOutcome | 
               promotion,
               red,
               blue,
-              heat: 0,
-              isRivalry: false,
+              ...heatBetween(db, red.id, blue.id, plan.day),
               isTitleFight: bout.titleKind !== undefined,
             })
           : 0,
@@ -2096,8 +2097,7 @@ function runNight(input: {
           promotion: current,
           red: topRed,
           blue: topBlue,
-          heat: 0,
-          isRivalry: false,
+          ...heatBetween(db, topRed.id, topBlue.id, night.day),
           isTitleFight: top!.isTitleFight,
         })
       : 0;

@@ -68,6 +68,10 @@ import {
   WEAR_CONCERN,
   ELITE_LIFT,
   type BandContext,
+  headSpaceRead,
+  isConsideringRetirement,
+  medicalHistory,
+  wantsFarewell,
 } from '@mmasim/engine';
 import { getWorld, type GameDb } from '@mmasim/data';
 import { Button, Card, Chip, RatingRow } from '../ui';
@@ -169,6 +173,7 @@ export function FighterView({
   actions,
   negotiation,
   negotiationLabel = 'Talk terms',
+  onTimeOff,
   onOpponentClick,
 }: {
   db: GameDb;
@@ -194,6 +199,11 @@ export function FighterView({
   negotiation?: ReactNode;
   /** The header button's words for opening talks: "Offer a deal", "Re-sign". */
   negotiationLabel?: string;
+  /**
+   * Give this fighter time off for their head (doc 34 C6). Present only when the viewer can — a
+   * promoter looking at their own fighter. The caller owns the write.
+   */
+  onTimeOff?(): void;
   onOpponentClick?(id: string): void;
 }) {
   const [tab, setTab] = useState<TabId>('overview');
@@ -383,6 +393,16 @@ export function FighterView({
                 <Card title={words.condition}>
                   <ConditionBlock fighter={fighter} day={day} />
                 </Card>
+
+                <CareerMoment fighter={fighter} day={day} />
+
+                <HeadSpaceCard
+                  fighter={fighter}
+                  day={day}
+                  db={db}
+                  self={viewer === 'self'}
+                  onTimeOff={onTimeOff}
+                />
 
                 {activeInjuries(fighter.injuries ?? [], day).length > 0 && (
                   <Alert tone="warn" title="Currently injured">
@@ -1030,6 +1050,8 @@ function CareerTab({
               {ladder.titleShot.reason}
             </p>
           </Card>
+
+          <MedicalHistoryCard fighter={fighter} day={day} />
         </>
       }
     />
@@ -1260,5 +1282,129 @@ function ContractTab({
         </>
       }
     />
+  );
+}
+
+// --- Career events (doc 34 C6) -----------------------------------------------------------------
+
+/** Thinking about retirement, or asking for a farewell: in their words, when they are. */
+function CareerMoment({ fighter, day }: { fighter: Fighter; day: number }) {
+  if (!isConsideringRetirement(fighter, day as never)) return null;
+  const farewell = wantsFarewell(fighter, day as never);
+  return (
+    <Alert tone="info" title={farewell ? 'Wants a farewell fight' : 'Thinking about retirement'}>
+      “{voiceFor(fighter, farewell ? 'farewellFight' : 'consideringRetirement', day as never).text}”
+      {farewell
+        ? ' Give them a night worth ending on and they will most likely call it a career after it.'
+        : ' One more bad night could be the last.'}
+    </Alert>
+  );
+}
+
+/** Where their head is, the fight that put it there, and what the promotion can do about it. */
+function HeadSpaceCard({
+  fighter,
+  day,
+  db,
+  self,
+  onTimeOff,
+}: {
+  fighter: Fighter;
+  day: number;
+  db: GameDb;
+  self: boolean;
+  onTimeOff?(): void;
+}) {
+  const read = headSpaceRead(fighter, (id) => {
+    const other = db.fighters.findById(id as string) as Fighter | undefined;
+    return other ? displayName(other) : 'a former opponent';
+  });
+  if (read.level === 'settled') return null;
+  const resting = (fighter.restUntil ?? 0) > day;
+  return (
+    <Card title="Head space">
+      <div className="stack" style={{ gap: 'var(--space-2)' }}>
+        <p className="prose" style={{ margin: 0 }}>
+          <Chip tone={read.level === 'fragile' ? 'negative' : 'warning'}>
+            {read.level === 'fragile' ? 'Fragile' : 'Shaken'}
+          </Chip>{' '}
+          {read.sentence}
+        </p>
+        {resting && (
+          <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+            On a break for another {Math.ceil(((fighter.restUntil ?? day) - day) / 7)} weeks.
+          </p>
+        )}
+        {!self &&
+          read.options.map((option) => (
+            <div key={option.id}>
+              {option.id === 'timeOff' && onTimeOff ? (
+                <Button size="sm" disabled={resting} onClick={onTimeOff}>
+                  {option.label}
+                </Button>
+              ) : option.id === 'psychologist' ? (
+                <Button size="sm" disabled={!option.available}>
+                  {option.label}
+                </Button>
+              ) : (
+                <strong style={{ fontSize: 'var(--text-sm)' }}>{option.label}</strong>
+              )}
+              <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+                {option.detail}
+              </p>
+            </div>
+          ))}
+      </div>
+    </Card>
+  );
+}
+
+/** Layoffs and the injuries that keep coming back. Derived from the record of injuries. */
+function MedicalHistoryCard({ fighter, day }: { fighter: Fighter; day: number }) {
+  const history = medicalHistory(fighter, day as never);
+  if (history.entries.length === 0) return null;
+  return (
+    <Card title="Medical history">
+      <div className="stack" style={{ gap: 'var(--space-2)' }}>
+        {history.recurring.length > 0 && (
+          <Alert tone="warn" title="Recurring">
+            {history.recurring.map((r) => `${r.label} (${r.times} times)`).join(', ')}.
+          </Alert>
+        )}
+        <Ledger>
+          <LedgerRow label="Weeks lost to injury" value={history.weeksOut} />
+          <LedgerRow label="Longest layoff" value={`${history.longestLayoff} weeks`} />
+        </Ledger>
+        <ul
+          className="stack"
+          style={{ gap: 'var(--space-1)', margin: 0, paddingLeft: 0, listStyle: 'none' }}
+        >
+          {history.entries.slice(0, 8).map((entry) => (
+            <li key={entry.injury.id as string} style={{ fontSize: 'var(--text-sm)' }}>
+              <strong>{entry.label}</strong>
+              {` · ${entry.weeksOut} weeks out · ${
+                entry.injury.source === 'fight'
+                  ? 'in a fight'
+                  : entry.injury.source === 'camp'
+                    ? 'in camp'
+                    : 'cutting weight'
+              }`}
+              {entry.recurrence && (
+                <>
+                  {' '}
+                  <Chip tone="warning">Again</Chip>
+                </>
+              )}
+              {entry.active && (
+                <>
+                  {' '}
+                  <Chip tone="negative">Current</Chip>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </Card>
   );
 }

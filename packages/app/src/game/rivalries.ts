@@ -19,6 +19,7 @@ import {
   type Fighter,
   type FighterId,
   type FightResult,
+  type HeatSource,
   type Rivalry,
 } from '@mmasim/engine';
 import type { Entity, GameDb } from '@mmasim/data';
@@ -50,7 +51,8 @@ export function rivalriesFor(
 }
 
 export interface HeatFromFightInput {
-  result: FightResult;
+  /** The events are not read, so the world's reduced result will do. */
+  result: Omit<FightResult, 'events'>;
   red: Fighter;
   blue: Fighter;
   day: number;
@@ -85,8 +87,7 @@ export function accrueHeatFromFight(db: GameDb, input: HeatFromFightInput): stri
       result.damage.red.knockdownsSuffered + result.damage.blue.knockdownsSuffered >= 2,
   });
 
-  const loser =
-    result.winnerId === undefined ? undefined : result.winnerId === red.id ? blue : red;
+  const loser = result.winnerId === undefined ? undefined : result.winnerId === red.id ? blue : red;
 
   let rivalry = getRivalry(db, red.id, blue.id, day);
   const wasAlreadyRivalry = rivalry.isRivalry;
@@ -133,3 +134,50 @@ export function previousMeetings(
 
 /** Stable key for a pair, for anything that needs to group by matchup. */
 export const matchupKey = (a: FighterId, b: FighterId): string => pairKey(a, b).join('|');
+
+/**
+ * Raise the heat between two fighters from something one of them did or something that happened,
+ * and say whether it just became a grudge. Doc 34 C6 — the world's own bouts, trilogies and
+ * callouts, which until now raised no heat at all: only fighter mode's own bouts did.
+ */
+export function stokeBetween(
+  db: GameDb,
+  input: {
+    a: Fighter;
+    b: Fighter;
+    source: HeatSource;
+    day: number;
+    instigator?: Fighter;
+    beat?: string;
+    seed: string;
+  },
+): { rivalry: Rivalry; ignited: boolean } {
+  const before = getRivalry(db, input.a.id, input.b.id, input.day);
+  const rivalry = stokeHeat({
+    rivalry: before,
+    source: input.source,
+    day: input.day as never,
+    instigator: input.instigator,
+    beat: input.beat,
+    rng: createRng(input.seed),
+  });
+  db.rivalries.upsert({ ...rivalry, id: rivalry.id as string } as unknown as StoredRivalry);
+  return { rivalry, ignited: !before.isRivalry && rivalry.isRivalry };
+}
+
+/** The heat and grudge between two fighters today, for what a bout between them draws. */
+export function heatBetween(
+  db: GameDb,
+  a: FighterId,
+  b: FighterId,
+  day: number,
+): { heat: number; isRivalry: boolean } {
+  const existing = db.rivalries.findById(rivalryId(a, b) as string) as StoredRivalry | undefined;
+  return existing
+    ? { heat: currentHeat(existing, day as never), isRivalry: existing.isRivalry }
+    : { heat: 0, isRivalry: false };
+}
+
+/** How many times these two have fought, from either one's record. */
+export const meetings = (fighter: Fighter, opponentId: FighterId): number =>
+  fighter.record.filter((r) => r.opponentId === opponentId).length;

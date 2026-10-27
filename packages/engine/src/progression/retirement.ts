@@ -221,7 +221,10 @@ export function driftUrge(fighter: Fighter, onDay: GameDay): number {
    */
   if (fighter.record.length === 0) return 0;
 
-  const last = fighter.record.reduce((latest, bout) => Math.max(latest, bout.day), 0);
+  const last = fighter.record.reduce(
+    (latest, bout) => Math.max(latest, bout.day),
+    fighter.comebackDay ?? 0,
+  );
   const since = onDay - last;
   if (since <= DRIFT_GRACE_DAYS) return 0;
 
@@ -318,3 +321,61 @@ export function retirementReason(fighter: Fighter, onDay: GameDay): string {
       return 'Retired on their own terms.';
   }
 }
+
+// --- Considering it, the farewell, and coming back (doc 34 C6) -------------------------------
+
+/**
+ * Urge past which a fighter is openly thinking about stopping.
+ *
+ * `retirementUrge` was always meant to be readable before the decision ("the UI can show a fighter
+ * who is thinking about it before they actually go"), and nothing read it. This is the stage: a
+ * fighter past it says so, may ask for a farewell, and is one bad night from going.
+ */
+export const CONSIDERING_URGE = 0.45;
+
+export function isConsideringRetirement(fighter: Fighter, onDay: GameDay): boolean {
+  return fighter.retiredDay === undefined && retirementUrge(fighter, onDay) >= CONSIDERING_URGE;
+}
+
+/**
+ * Whether they want to go out with one more night rather than drift: thinking about it, with a
+ * name or a career long enough to have earned a send-off, and the ego to ask for one.
+ */
+export function wantsFarewell(fighter: Fighter, onDay: GameDay): boolean {
+  if (!isConsideringRetirement(fighter, onDay)) return false;
+  if (fighter.condition.headTrauma >= TRAUMA_MEDICAL) return false;
+  const bouts = fighter.summary.wins + fighter.summary.losses + fighter.summary.draws;
+  return (fighter.starPower >= 35 || bouts >= 18) && fighter.personality.ego >= 40;
+}
+
+/** The chance a fighter who asked for a farewell retires after it, win or lose. */
+export const FAREWELL_RETIRE_CHANCE = 0.85;
+
+/**
+ * The chance, this quarter, that a retired fighter comes back. Doc 34 C6.
+ *
+ * Retirement was permanent, and the sport's retirements are not: people come back, mostly within a
+ * year or two, mostly because the money ran out or the quiet did not suit them. Three drivers, as
+ * the brief has them:
+ *  - **time off**: nothing for the first three months, a peak around a year out, gone by four;
+ *  - **the bank**: broke is the commonest reason there is;
+ *  - **ego**: the ones who cannot stand being forgotten.
+ *
+ * Never for a body that was retired on medical grounds, or past the hard age.
+ */
+export function comebackChance(fighter: Fighter, onDay: GameDay): number {
+  if (fighter.retiredDay === undefined) return 0;
+  if (fighter.condition.headTrauma >= TRAUMA_MEDICAL) return 0;
+  const age = ageOn(fighter.birthDay, onDay);
+  if (age >= HARD_AGE - 4) return 0;
+  const off = onDay - fighter.retiredDay;
+  if (off < 90) return 0;
+  const window = off <= 365 ? remap(off, 90, 365, 0, 1) : clamp01(remap(off, 365, 1460, 1, 0));
+  const broke = fighter.bank < 0 ? 1.4 : fighter.bank < 15 ? 0.6 : 0;
+  const ego = clamp01((fighter.personality.ego - 45) / 50);
+  const young = clamp01(remap(age, 30, 40, 1, 0.3));
+  return clamp01(COMEBACK_PER_QUARTER * window * (0.4 + broke + ego) * young);
+}
+
+/** Calibrated against the comeback guardrail in `tests/long-sim/career-events.test.ts`. */
+const COMEBACK_PER_QUARTER = 0.05;

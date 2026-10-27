@@ -34,6 +34,7 @@ import {
 } from './body.js';
 import { PHYSICAL_SCALE_KEYS } from '../ratings/physicalScale.js';
 import type { Fighter } from '../domain/fighter.js';
+import type { Rng } from '../core/rng.js';
 import { weightMissRiskMultiplier } from '../domain/personality.js';
 import { traitMul } from '../domain/traits.js';
 import { toRating, type AttributeKey, type Attributes } from '../ratings/attributes.js';
@@ -375,4 +376,85 @@ export function cutSeverityOf(body: Body, divisionId: DivisionId): number {
   const removable = chain.walkingWeightLbs - chain.weighInFloorLbs;
   if (removable <= 0) return chain.walkingWeightLbs > limit ? 1 : 0;
   return clamp01((chain.walkingWeightLbs - limit) / removable);
+}
+
+// --- The world's own moves (doc 34 C6) --------------------------------------------------------
+
+/** Cut severity past which a fighter wants out of the division, upwards. */
+export const MOVE_UP_SEVERITY = 0.7;
+
+/** How long after one move before a fighter considers another. */
+export const MOVE_SETTLE_DAYS = 730;
+
+export interface DivisionMoveChoice {
+  target: DivisionId;
+  /** `cut`: the weight is killing them. `field`: the division is above them and the one below is not. */
+  reason: 'cut' | 'field';
+}
+
+/**
+ * Whether one of the world's fighters changes division this year, and to where. Doc 34 C6.
+ *
+ * Only the player could ever change division; the world's fighters stayed where generation put
+ * them for life, however hard the cut became or however far the division outgrew them. Two
+ * reasons, the two the sport actually moves for:
+ *
+ *  - **up, for the cut**: past `MOVE_UP_SEVERITY` the weight is the fight, and every year it gets
+ *    worse. Likelier the worse it is, and once a body is past its early thirties.
+ *  - **down, for the field**: well below the division's level, with a division below that is
+ *    makeable without much risk and where they would sit meaningfully better. Rarer — moving down
+ *    is a harder decision than moving up.
+ *
+ * Never a champion (the belt is the reason to stay) and never twice inside `MOVE_SETTLE_DAYS`.
+ * One division at a time. Pure: the caller passes the fields and the stream.
+ */
+export function chooseDivisionMove(input: {
+  fighter: Fighter;
+  day: GameDay;
+  isChampion: boolean;
+  /** Overall ratings of the active fighters in a division, the fighter excluded. */
+  fieldOf: (divisionId: DivisionId) => readonly number[];
+  fighterOverall: number;
+  age: number;
+  rng: Rng;
+}): DivisionMoveChoice | undefined {
+  const { fighter, day, isChampion, fieldOf, fighterOverall, age, rng } = input;
+  if (isChampion) return undefined;
+  if (
+    fighter.lastDivisionChangeDay !== undefined &&
+    day - fighter.lastDivisionChangeDay < MOVE_SETTLE_DAYS
+  ) {
+    return undefined;
+  }
+  const ladder = divisionsFor(fighter.sex);
+  const i = ladder.findIndex((d) => d.id === fighter.divisionId);
+  if (i < 0) return undefined;
+  const up = ladder[i + 1];
+  const down = ladder[i - 1];
+  const body = bodyOf(fighter);
+  const severity = cutSeverityOf(body, fighter.divisionId);
+
+  if (up && severity >= MOVE_UP_SEVERITY) {
+    const chance = Math.min(
+      0.6,
+      0.25 + (severity - MOVE_UP_SEVERITY) * 1.5 + (age >= 32 ? 0.1 : 0),
+    );
+    if (rng.chance(chance)) return { target: up.id, reason: 'cut' };
+    return undefined;
+  }
+
+  const mean = (xs: readonly number[]) =>
+    xs.length > 0 ? xs.reduce((a, b) => a + b, 0) / xs.length : fighterOverall;
+  const gapHere = fighterOverall - mean(fieldOf(fighter.divisionId));
+  if (
+    down &&
+    gapHere <= -6 &&
+    weighInFloorLbs(body) <= down.limitLbs &&
+    weightMissRisk(fighter, down.id) <= 0.15 &&
+    fighterOverall - mean(fieldOf(down.id)) >= gapHere + 3 &&
+    rng.chance(0.12)
+  ) {
+    return { target: down.id, reason: 'field' };
+  }
+  return undefined;
 }

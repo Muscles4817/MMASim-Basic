@@ -12,6 +12,7 @@
  * enough that consequences land in order, and **it stops when the player is needed**.
  */
 
+import { scanCareerEvents } from './careerEvents';
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
 import {
   INJURY_META,
@@ -284,6 +285,7 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
     settleReplies(db, onDay);
     // The scales the day before a card (doc 34 C6): a miss is a decision, so it can stop the clock.
     rollWeighIns(db, onDay);
+    scanCareerEvents(db, onDay);
     scanForInbox(db, onDay);
     scanPromoterInbox(db, onDay);
     return blocking(readInbox(db)).some((i) => !alreadyWaiting.has(i.id));

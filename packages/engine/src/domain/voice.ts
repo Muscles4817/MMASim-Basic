@@ -494,6 +494,10 @@ export function wantVoice(id: FighterWant): VoiceSituation | undefined {
       return 'wantsActivity';
     case 'money':
       return 'wantsMoney';
+    case 'moveUp':
+      return 'wantsMoveUp';
+    case 'farewell':
+      return 'farewellFight';
     default:
       return undefined;
   }

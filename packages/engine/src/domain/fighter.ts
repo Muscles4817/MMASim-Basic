@@ -290,6 +290,11 @@ export interface Fighter {
    * whichever loop happens to be running.
    */
   readyOnDay?: GameDay;
+  /**
+   * Time away the promotion gave them to reset their head (doc 34 C6, `TIME_OFF_DAYS`). Not
+   * bookable on a card before it. Stored because it is a decision somebody made.
+   */
+  restUntil?: GameDay;
 
   gymId?: GymId;
   headCoachId?: CoachId;
@@ -348,6 +353,12 @@ export interface Fighter {
   /** Day they turned professional. */
   proDebutDay: GameDay;
   retiredDay?: GameDay;
+  /**
+   * The day they last came out of retirement. History, so stored: the drift sweep reads idleness
+   * from it as well as from the last bout, or a fighter back after a year away would be swept
+   * straight out again before anybody had booked them. Doc 34 C6.
+   */
+  comebackDay?: GameDay;
 
   /** Rating justification for seeded fighters. Shown in the editor, not in the game. */
   notes?: string;

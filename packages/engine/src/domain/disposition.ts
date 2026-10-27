@@ -19,6 +19,25 @@
  */
 
 import { fighterAge, type Fighter } from './fighter.js';
+import { divisionsFor, getDivision, type Division } from './divisions.js';
+import { bodyOf } from '../progression/body.js';
+import { MOVE_UP_SEVERITY, cutSeverityOf } from '../progression/divisionMove.js';
+import { wantsFarewell } from '../progression/retirement.js';
+
+/** The next division up the ladder for this fighter's sex, if there is one. */
+export function heavierDivisionOf(
+  fighter: Pick<Fighter, 'sex' | 'divisionId'>,
+): Division | undefined {
+  const ladder = divisionsFor(fighter.sex);
+  const i = ladder.findIndex((d) => d.id === fighter.divisionId);
+  return i >= 0 ? ladder[i + 1] : undefined;
+}
+
+/** Whether a bout's division is above this fighter's own. */
+export const isAboveTheirWeight = (
+  fighter: Pick<Fighter, 'divisionId'>,
+  boutDivisionId: Fighter['divisionId'],
+): boolean => getDivision(boutDivisionId).limitLbs > getDivision(fighter.divisionId).limitLbs;
 import type { Personality } from './personality.js';
 
 export type DispositionId =
@@ -151,6 +170,8 @@ export type FighterWant =
   | 'moneyFight'
   | 'oneLastRun'
   | 'anyWin'
+  | 'moveUp'
+  | 'farewell'
   | 'stayBusy';
 
 export interface WantRead {
@@ -174,6 +195,20 @@ export function wantsOf(input: {
   const streak = fighter.summary.streak;
   const ambitious = fighter.personality.ambition >= 55;
 
+  /*
+   * Thinking about stopping, and wanting to go out on a night rather than a phone call that never
+   * comes. Doc 34 C6. First, because it outranks everything else they might want: there is one fight
+   * left in them and they want it to mean something.
+   */
+  if (wantsFarewell(fighter, input.day as never)) {
+    return {
+      id: 'farewell',
+      label: 'A farewell fight',
+      detail:
+        'Thinking about retirement. Wants one last big night — a name, a crowd — and then done.',
+    };
+  }
+
   if (rank !== undefined && rank > 0 && rank <= 3 && streak >= 2 && ambitious) {
     return {
       id: 'titleShot',
@@ -188,6 +223,22 @@ export function wantsOf(input: {
       label: 'More money',
       detail:
         'They believe the deal has stopped matching the fighter, and they are not quiet about it.',
+    };
+  }
+
+  /*
+   * Out of the division, upwards, because the cut is killing them. Doc 34 C6 (routed from C3):
+   * the want was in the brief and never derived. Read off the body — the same cut severity the
+   * weigh-in and the division-move appraisal read — and only when there is a division above.
+   */
+  if (
+    cutSeverityOf(bodyOf(fighter), fighter.divisionId) >= MOVE_UP_SEVERITY &&
+    heavierDivisionOf(fighter) !== undefined
+  ) {
+    return {
+      id: 'moveUp',
+      label: 'To move up a weight',
+      detail: 'The cut is getting harder every camp. They want to fight a division up.',
     };
   }
 
@@ -307,6 +358,8 @@ export function wantMet(
     opponentRank?: number;
     /** Positive when the opponent is the better fighter. */
     step: number;
+    /** True when the bout is above the fighter's own division. Read by the move-up want. */
+    aboveTheirWeight?: boolean;
   },
 ): boolean | undefined {
   const { opponent, isTitleFight = false, opponentRank, step } = offer;
@@ -328,6 +381,10 @@ export function wantMet(
       return step <= 2;
     case 'activity':
       return true;
+    case 'moveUp':
+      return offer.aboveTheirWeight;
+    case 'farewell':
+      return isTitleFight || opponentRank !== undefined || opponent.starPower >= 40;
     default:
       return undefined;
   }

@@ -21,6 +21,7 @@ import { FighterView, type FighterViewer } from './FighterView';
 import { ContractTable } from './ContractTable';
 import { canNegotiate } from '../game/contracts';
 import { bookedOnPlans } from '../game/finances';
+import { takeTimeOff } from '../game/careerEvents';
 
 export function FighterScreen({ id }: { id: string }) {
   const { db, world, playerFighter, commit } = useGame();
@@ -98,6 +99,15 @@ export function FighterScreen({ id }: { id: string }) {
         ) : undefined
       }
       negotiationLabel={talks?.mode === 'resign' ? 'Re-sign' : 'Offer a deal'}
+      // Time off for a fighter's head is a promoter's call about their own fighter (doc 34 C6).
+      onTimeOff={
+        isYours
+          ? () => {
+              takeTimeOff(db, fighter.id as string);
+              commit();
+            }
+          : undefined
+      }
       /* Only a promoter has cards to be booked on, so only a promoter asks. In fighter mode
          `playerPromotionId` is undefined and this was asked anyway, which left the availability
          chip on every fighter page in the mode answering a question nobody had put. */
