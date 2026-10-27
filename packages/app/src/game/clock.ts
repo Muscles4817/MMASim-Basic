@@ -43,6 +43,7 @@ import {
   settleReplies,
 } from './plans';
 import { graceEnds } from './alerts';
+import { scanFightWeek } from './fightWeek';
 
 /*
  * There is no step any more, and that is the change.
@@ -283,6 +284,8 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
     // happen. This is the one place that legitimately knows about both.
     // Bout offers answer on their own day (doc 34 C4), so a counter can stop the clock when it lands.
     settleReplies(db, onDay);
+    // Fight week (doc 34 A5): a signed fighter can fall out on any day of the run-up.
+    scanFightWeek(db, onDay);
     scanForInbox(db, onDay);
     scanPromoterInbox(db, onDay);
     return blocking(readInbox(db)).some((i) => !alreadyWaiting.has(i.id));
