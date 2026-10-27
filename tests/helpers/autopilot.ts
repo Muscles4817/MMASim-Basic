@@ -79,6 +79,15 @@ function advance(db: GameDb, target: number): void {
   }
 }
 
+/** Long enough for every corner to have answered an offer. */
+const REPLY_WAIT = 8;
+
+/** Move the clock on until the replies are in, and read the card back. */
+function awaitReplies(db: GameDb, plan: EventPlan, until: number): EventPlan {
+  advance(db, until);
+  return db.plans.findById(plan.id) as EventPlan;
+}
+
 /** One card, from an empty date to the night. */
 export function runOneCard(input: {
   db: GameDb;
@@ -100,6 +109,8 @@ export function runOneCard(input: {
     plan = applySuggestion(plan, suggestion);
   }
   plan = savePlan(db, sendAllDrafts({ ctx, plan: savePlan(db, plan) }).plan);
+  // Answers come back over a few days (doc 34's C4), so wait for them before deciding anything.
+  plan = awaitReplies(db, plan, day + REPLY_WAIT);
 
   if (policy === 'sloppy') {
     for (const slot of plan.slots) {
@@ -139,6 +150,7 @@ export function runOneCard(input: {
       plan = applySuggestion(plan, suggestion);
     }
     plan = savePlan(db, sendAllDrafts({ ctx, plan }).plan);
+    plan = awaitReplies(db, plan, day + 2 * REPLY_WAIT);
   }
 
   const forecast = forecastPlan({ ctx, plan }).projectedProfit;
