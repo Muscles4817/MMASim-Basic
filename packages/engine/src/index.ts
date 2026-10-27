@@ -93,6 +93,7 @@ export * from './business/eventPlans.js';
 export * from './business/boutAgreements.js';
 export * from './business/promotionCosts.js';
 export * from './business/schedule.js';
+export * from './business/markets.js';
 export * from './business/inbox.js';
 export * from './business/championships.js';
 export * from './business/matchmakingStyle.js';

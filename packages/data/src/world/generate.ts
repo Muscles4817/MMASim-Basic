@@ -138,6 +138,14 @@ interface TierSpec {
   /** Signed fighters per promotion. */
   roster: number;
   prestige: [number, number];
+  /**
+   * How much attention the tier starts with, low to high across its promotions.
+   *
+   * Every generated promotion used to inherit the seed leader's 88, so a town show nobody had
+   * heard of started with the attention of the biggest promotion in the sport, and since buzz
+   * multiplies the gate, every one of them sold out.
+   */
+  buzz: [number, number];
   /** Divisions this tier runs. The bottom of the sport does not have twelve weight classes. */
   divisions: number;
   /** Average quality of the fighters on it, before spread. The ladder, in one column. */
@@ -160,6 +168,7 @@ const PYRAMID: readonly TierSpec[] = [
     count: 1,
     roster: 400,
     prestige: [96, 96],
+    buzz: [78, 78],
     divisions: 12,
     quality: 64,
   },
@@ -169,6 +178,7 @@ const PYRAMID: readonly TierSpec[] = [
     count: 4,
     roster: 200,
     prestige: [62, 72],
+    buzz: [50, 62],
     divisions: 11,
     quality: 52,
   },
@@ -178,6 +188,7 @@ const PYRAMID: readonly TierSpec[] = [
     count: 15,
     roster: 100,
     prestige: [46, 58],
+    buzz: [30, 45],
     divisions: 9,
     quality: 45,
   },
@@ -187,6 +198,7 @@ const PYRAMID: readonly TierSpec[] = [
     count: 30,
     roster: 50,
     prestige: [30, 43],
+    buzz: [18, 30],
     divisions: 7,
     quality: 38,
   },
@@ -196,6 +208,7 @@ const PYRAMID: readonly TierSpec[] = [
     count: 0,
     roster: 8,
     prestige: [8, 26],
+    buzz: [6, 18],
     divisions: 5,
     quality: 30,
   },
@@ -357,8 +370,9 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
     for (let i = 0; i < count; i++) {
       const id = `p_${spec.label}_${i}`;
       const span = spec.prestige[1] - spec.prestige[0];
-      const prestige =
-        spec.prestige[0] + (count <= 1 ? span : Math.round((span * i) / (count - 1)));
+      const at = count <= 1 ? 1 : i / (count - 1);
+      const prestige = spec.prestige[0] + Math.round(span * at);
+      const buzz = Math.round(spec.buzz[0] + (spec.buzz[1] - spec.buzz[0]) * at);
 
       const budget = Math.round(shape.roster * prestige * 3);
       const divisions = divisionsFor(shape.roster, spec.divisions, i);
@@ -370,6 +384,7 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
         ...nameFor(spec.label),
         tier: spec.tier,
         prestige,
+        buzz,
         // Scaled to the operation, so `solvency` and `chargeCosts` see a plausible business.
         budget,
         /*

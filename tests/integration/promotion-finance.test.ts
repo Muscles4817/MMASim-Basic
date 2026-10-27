@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest';
 import { createNewGame } from '@mmasim/data';
 import {
+  BUZZ_BASELINE,
   MAX_BUZZ_SWING,
   settleNight,
   type EventRevenue,
@@ -35,8 +36,17 @@ const revenue = (profit: number): EventRevenue => ({
 });
 
 describe('settling a night', () => {
-  const promotion = () =>
-    (createNewGame({ adapter: undefined }).promotions.findAll() as unknown as Promotion[])[0]!;
+  /*
+   * Sitting at its tier's baseline, so these isolate the delivery comparison: a promotion above
+   * or below where its tier settles also drifts back towards it on every card (`BUZZ_REVERSION`),
+   * which is tested on its own in the engine.
+   */
+  const promotion = () => {
+    const p = (
+      createNewGame({ adapter: undefined }).promotions.findAll() as unknown as Promotion[]
+    )[0]!;
+    return { ...p, buzz: BUZZ_BASELINE[p.tier] };
+  };
 
   it('moves the budget by the profit', () => {
     const p = promotion();

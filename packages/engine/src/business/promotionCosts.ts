@@ -18,11 +18,64 @@
  * not using.
  */
 
-import { clamp } from '../core/math.js';
 import type { Promotion } from '../domain/organisations.js';
 
 /** Days one costing period covers. A fortnight, matching the world's simulation step. */
 export const COST_PERIOD_DAYS = 14;
+
+/**
+ * The size of the organisation a promotion runs, from a town show's two people and a phone (1)
+ * to the leader's building full of staff (5).
+ *
+ * What overheads are charged against. They used to be 0.15% of the bank balance a fortnight,
+ * which made the cost of existing a function of how much money a promotion had: a promotion that
+ * got rich paid more for the same offices, and one that went broke stopped paying for them
+ * altogether. Staff and premises do not shrink with the balance.
+ *
+ * Read off prestige for now, because a promotion's standing is what its organisation has been
+ * built to serve — and cut back when the money will not stretch to it. Investing in it as a decision of its own — a matchmaker, a medical team, a
+ * marketing department — is doc 34's B5.
+ */
+export type StaffLevel = 1 | 2 | 3 | 4 | 5;
+
+export function staffLevel(promotion: Promotion): StaffLevel {
+  const p = promotion.prestige;
+  const built: StaffLevel = p >= 85 ? 5 : p >= 60 ? 4 : p >= 44 ? 3 : p >= 28 ? 2 : 1;
+
+  /*
+   * Unless it cannot pay for it. A promotion that cannot cover its organisation for
+   * `STAFF_RUNWAY_YEARS` lays people off down to one it can — the response a real promotion has,
+   * and the only thing that stops a bad decade becoming a death spiral: with a fixed cost base, a
+   * promotion short of money cannot sign, a promotion that cannot sign runs weaker cards, and
+   * weaker cards make less money. Measured over a decade of the 2026 world, every promotion below
+   * the leader went to zero without it.
+   */
+  let level = built;
+  while (level > 1 && yearOf(STAFF_LEVEL_OVERHEADS[level]) * STAFF_RUNWAY_YEARS > promotion.budget) {
+    level = (level - 1) as StaffLevel;
+  }
+  return level;
+}
+
+/** Years of overheads a promotion keeps its organisation for. Below this, it downsizes. */
+export const STAFF_RUNWAY_YEARS = 2;
+
+const yearOf = (fortnight: number): number => (fortnight * 365) / COST_PERIOD_DAYS;
+
+/**
+ * A fortnight of overheads at each staff level, in thousands.
+ *
+ * A regional promotion (level 3) carries about £300k a year, which one card's profit — tens of
+ * thousands on a good regional night — cannot cover: the business has to run a schedule to stand
+ * still. The leader's is about £3.4m.
+ */
+export const STAFF_LEVEL_OVERHEADS: Readonly<Record<StaffLevel, number>> = {
+  1: 0.2,
+  2: 1,
+  3: 2.5,
+  4: 30,
+  5: 120,
+};
 
 export interface PromotionCosts {
   /** Staff, premises, the parts of a promotion that exist between cards. */
@@ -53,20 +106,13 @@ export function periodCosts(input: {
   const { promotion, rosterSize } = input;
 
   /*
-   * Scaled to the size of the operation, which `budget` is the model's measure of — every purse
-   * in the game derives from it, so it is what "how big is this promotion" means here.
-   *
-   * Sized against what promotions *measurably* net in the running world rather than against a
-   * forecast of an idealised card — the two diverge sharply, because the world's matchmaker
-   * picks from a spread of offers rather than always taking the biggest fight available. A first
-   * pass tuned against the forecast charged the leader 14,950k a year against a real card income
-   * nearer 8,600k, and bankrupted the entire sport inside six years.
-   *
-   * At this rate a promotion running a normal schedule clears its overheads with something left,
-   * and one that stops running cards is visibly bleeding within a year — which is the whole
-   * point, and the only thing that stops "do nothing" being correct under pressure.
+   * The organisation, not the bank balance — see `staffLevel`. Sized against what promotions
+   * measurably net in the running world rather than against a forecast of an idealised card,
+   * because the world's matchmaker picks from a spread of offers rather than always taking the
+   * biggest fight available: a promotion running a normal schedule roughly stands still, and one
+   * that stops running cards is visibly bleeding within a year.
    */
-  const overheads = Math.round(clamp(promotion.budget, 0, 1_000_000) * 0.0015);
+  const overheads = STAFF_LEVEL_OVERHEADS[staffLevel(promotion)];
 
   /*
    * Scaled by the promotion's own minimum purse, so upkeep is proportionate to the standard of
@@ -87,11 +133,10 @@ export function periodCosts(input: {
  * roster hits free agency — and inventing it silently as a negative number would produce
  * nonsense purses across the whole roster, since every purse derives from the budget.
  */
-export function chargeCosts(input: {
+export function chargeCosts(input: { promotion: Promotion; rosterSize: number; days: number }): {
   promotion: Promotion;
-  rosterSize: number;
-  days: number;
-}): { promotion: Promotion; charged: number } {
+  charged: number;
+} {
   const { promotion, rosterSize, days } = input;
   if (days <= 0) return { promotion, charged: 0 };
 

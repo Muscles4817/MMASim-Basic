@@ -38,6 +38,7 @@ import {
   depthMultiplier,
   drawWeight,
   eventRevenue,
+  BUZZ_BASELINE,
   expectedDemand,
   marketValue,
   settleNight,
@@ -222,7 +223,11 @@ describe('what counts as a good card', () => {
 // --- 3. Buzz has to be able to fall ------------------------------------------------------------
 
 describe('a promotion’s standing', () => {
-  const apex = () => promotions(game())[0]!;
+  // At its tier's baseline, so the delivery comparison is all that moves it. See the finance suite.
+  const apex = () => {
+    const p = promotions(game())[0]!;
+    return { ...p, buzz: BUZZ_BASELINE[p.tier] };
+  };
   const revenue = (profit: number) => ({
     gate: profit,
     broadcast: 0,

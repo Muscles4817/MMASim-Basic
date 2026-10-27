@@ -33,6 +33,7 @@ import {
   rollInjury,
   createRng,
   CARD_SIZE,
+  eventScale,
   TERM_DAYS,
   agreementStatus,
   awardBonuses,
@@ -46,6 +47,8 @@ import {
   describeVacancy,
   vacate,
   chargeCosts,
+  periodCosts,
+  COST_PERIOD_DAYS,
   DELIVERY_MEMORY,
   broadcastFor,
   buildCard,
@@ -57,6 +60,7 @@ import {
   planFor,
   pickTrainingFocus,
   defaultTerms,
+  reSignTerms,
   displayName,
   fighterAge,
   drawWeight,
@@ -94,6 +98,10 @@ import {
   type FinishMethod,
   daysBetweenCards,
   cardsStagedBefore,
+  currentHeat,
+  favouriteOf,
+  upsetsIn,
+  idleBuzz,
   hashSeed,
   simulateFight,
   streakNews,
@@ -134,6 +142,7 @@ import {
 } from '@mmasim/data';
 import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
+import { getRivalry } from './rivalries';
 import { settleFightInjuries } from './fightInjuries';
 import { money } from '../ui/format';
 
@@ -610,8 +619,14 @@ export function advanceWorld(
    *
    * Charged to every promotion including the player's: this is a rule of the sport rather than
    * a difficulty applied to whoever is playing.
+   *
+   * Not in pre-history. A bulk tick settles no nights — no gate, no broadcast, no profit — so
+   * charging it the overheads billed eight years of running costs against no income at all, and
+   * the generator's budgets were really "what is left after eight years of paying for nothing".
+   * Against overheads that are a staff level rather than a share of the balance, that bankrupted
+   * every local show in the sport before the player arrived.
    */
-  chargePromotions(db, reached - fromDay);
+  if (!bulk) chargePromotions(db, fromDay, reached);
 
   // And the deals of anybody the world forgot to book. See `enforceActivity`.
   news.push(
@@ -766,14 +781,23 @@ function buildNight(ctx: {
         promotion,
         red: first,
         blue: second,
-        heat: 0,
-        isRivalry: false,
+        ...rivalryTerms(db, first.id, second.id, day),
         isTitleFight: true,
       }),
     });
   }
 
-  for (let attempt = 0; attempt < CARD_SIZE * 2 && seeds.length < CARD_SIZE; attempt++) {
+  /*
+   * A promotion short of money runs a club show rather than a full card: six purses instead of
+   * nine, for a crowd that is barely smaller. What a promoter in trouble does, and the other half
+   * of the world's promotions facing the same economics as the player's.
+   */
+  const club = eventScale('club');
+  const cardSize = inDistress(promotion, roster.length)
+    ? club.mainCard + club.prelims
+    : CARD_SIZE;
+
+  for (let attempt = 0; attempt < cardSize * 2 && seeds.length < cardSize; attempt++) {
     const pool = roster.filter((f) => !used.has(f.id as string));
     if (pool.length < 2) break;
 
@@ -867,8 +891,7 @@ function buildNight(ctx: {
         promotion,
         red: subject,
         blue: opponent,
-        heat: 0,
-        isRivalry: false,
+        ...rivalryTerms(db, subject.id, opponent.id, day),
         isTitleFight,
       }),
     });
@@ -891,7 +914,46 @@ function buildNight(ctx: {
 
   if (seeds.length === 0) return undefined;
 
-  const card = buildCard(seeds);
+  let card = buildCard(seeds);
+
+  const headlineDraw = card[0] ? (seeds.find((s) => s.boutId === card[0]!.boutId)?.draw ?? 0) : 0;
+  const broadcast = broadcastFor(promotion, headlineDraw, rng.fork('broadcast'));
+
+  /*
+   * And a promotion does not stage a card it expects to lose badly on — a quarter of the purses
+   * or more — or, in trouble, one it expects to lose anything on. The world's matchmaker books by
+   * the rankings, not the ledger, so without this a promotion whose purses had outgrown its gate
+   * kept putting on losing nights until it had nothing left. The fighters wait, which costs
+   * goodwill and deals: the trade a promoter in that position actually makes.
+   *
+   * Before the bulk branch, so pre-history stages the same cards the running world would — a
+   * bulk tick that ran every card would be a different, busier sport than the one it hands over.
+   */
+  const tolerable = (bouts: readonly CardBout[]) => {
+    const purses = cardPurses(db, bouts);
+    const expected = eventRevenue({
+      promotion,
+      venue: venueFor(
+        promotion,
+        expectedDemand(promotion, headlineDraw, bouts.length),
+        rng.fork('venue'),
+      ),
+      broadcast,
+      headlineDraw,
+      bouts: bouts.length,
+      purses,
+      bonuses: bonusPoolFor(promotion),
+    });
+    const allowed = inDistress(promotion, ctx.roster.length) ? 0 : purses * LOSS_TOLERANCE;
+    return expected.profit >= -allowed;
+  };
+  if (!tolerable(card)) {
+    // Cut it to a club show — the headline stays, the bottom of the undercard goes — and stage
+    // that if it pays; otherwise nothing.
+    const trimmed = card.slice(0, club.mainCard + club.prelims);
+    if (trimmed.length === card.length || !tolerable(trimmed)) return undefined;
+    card = trimmed;
+  }
 
   /*
    * Everything from here to the bouts is the *night* rather than the fights, and a bulk tick has
@@ -917,9 +979,6 @@ function buildNight(ctx: {
     }
     return { fights: bulkFights, news: [] };
   }
-
-  const headlineDraw = card[0] ? (seeds.find((s) => s.boutId === card[0]!.boutId)?.draw ?? 0) : 0;
-  const broadcast = broadcastFor(promotion, headlineDraw, rng.fork('broadcast'));
 
   const night: FightNight = {
     id: eventId(promotion.id, day),
@@ -951,6 +1010,7 @@ function buildNight(ctx: {
   const news: NewsItem[] = [];
   const results: { boutId: string; result: ReducedFightResult }[] = [];
   let fights = 0;
+  const favourites = favouritesOn(db, card);
 
   for (const bout of card) {
     const outcome = runCardBout({
@@ -1038,6 +1098,8 @@ function buildNight(ctx: {
     }),
     results: results.map((r) => r.result),
     recentDelivery: current.recentDelivery,
+    titleFights: card.filter((b) => b.isTitleFight).length,
+    upsets: upsetsIn(favourites, results),
   });
   db.promotions.upsert(
     rememberDelivery(settled.promotion, settled.delivered) as Promotion & Entity,
@@ -1798,10 +1860,21 @@ function resolveFreeAgency(
      * you back is a different question, and it is the one `enforceActivity` and the purse
      * negotiation answer.
      */
+    /*
+     * Except when it cannot pay them. A promotion with less than `DISTRESS_RUNWAY_YEARS` of its overheads
+     * in the bank lets half its expiring deals walk, so a promotion in trouble carries a smaller roster
+     * — and a smaller upkeep bill — instead of re-signing everybody on the way to zero. Without
+     * it nothing in the sport reacted to running out of money, and a bad decade at the bottom
+     * became a death spiral.
+     */
+    const keeps =
+      promotion &&
+      (!inDistress(promotion, rosterSizes.get(promotion.id as string) ?? 0) ||
+        fRng.chance(DISTRESSED_RESIGN_SHARE));
     const pool = [
       ...new Set([
         ...(earned.length > 0 ? earned : affordable.length > 0 ? affordable : candidates),
-        ...(promotion ? [promotion] : []),
+        ...(keeps ? [promotion] : []),
       ]),
     ];
 
@@ -1859,7 +1932,17 @@ function resolveFreeAgency(
           ? promotion
           : whereThereIsRoom();
 
-    const terms = defaultTerms(fighter, next);
+    // Staying put after a winning deal is a raise on what they were on. See `reSignTerms`.
+    const staying = agreement && agreement.promotionId === next.id ? agreement : undefined;
+    const terms = reSignTerms(
+      defaultTerms(fighter, next),
+      staying,
+      staying
+        ? fighter.record.filter(
+            (e) => e.promotionId === next.id && e.day >= staying.signedDay && e.outcome === 'win',
+          ).length
+        : 0,
+    );
     const signed = createAgreement({
       fighter,
       promotion: next,
@@ -2468,6 +2551,40 @@ export const nextEventNumber = (db: GameDb, promotion: Promotion): number =>
   db.events.count({ where: { promotionId: promotion.id } }) +
   1;
 
+/**
+ * How much a pairing's history adds to its draw.
+ *
+ * Every card runner passed `heat: 0, isRivalry: false` to `drawWeight`, so a rematch nobody could
+ * stop talking about sold exactly as well as two strangers — the whole rivalry system stopped at
+ * the fighters and never reached the gate.
+ */
+export function rivalryTerms(
+  db: GameDb,
+  a: FighterId,
+  b: FighterId,
+  day: number,
+): { heat: number; isRivalry: boolean } {
+  const rivalry = getRivalry(db, a, b, day);
+  return { heat: currentHeat(rivalry, day), isRivalry: rivalry.isRivalry };
+}
+
+/**
+ * Who each bout's favourite is, read before anybody fights. See `favouriteOf`.
+ */
+export function favouritesOn(
+  db: GameDb,
+  bouts: readonly { boutId: string; redId: FighterId; blueId: FighterId }[],
+): Map<string, FighterId> {
+  const favourites = new Map<string, FighterId>();
+  for (const bout of bouts) {
+    const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
+    const blue = db.fighters.findById(bout.blueId as string) as Fighter | undefined;
+    const favourite = red && blue ? favouriteOf(red, blue, paperOdds(red, blue)) : undefined;
+    if (favourite) favourites.set(bout.boutId, favourite);
+  }
+  return favourites;
+}
+
 /** The surnames a card is billed under, the way the sport writes them: `Reyes vs Hill`. */
 export function headlineNames(
   db: GameDb,
@@ -2555,16 +2672,49 @@ function rememberDelivery(promotion: Promotion, delivered: number): Promotion {
  * promotion pays between cards is staff, premises and the administration of a roster, and those
  * scale with the size of the operation rather than with how busy it is.
  */
-function chargePromotions(db: GameDb, days: number): void {
+/** The loss, as a share of the purses, past which a promotion will not stage a card at all. */
+const LOSS_TOLERANCE = 0.25;
+
+/** The share of expiring deals a promotion in distress still renews. */
+const DISTRESSED_RESIGN_SHARE = 0.5;
+
+/**
+ * Years of running costs below which a promotion behaves like it is in trouble: club shows, no
+ * card it expects to lose money on, half its expiring deals let go.
+ */
+const DISTRESS_RUNWAY_YEARS = 3;
+
+function inDistress(promotion: Promotion, rosterSize: number): boolean {
+  const year = (periodCosts({ promotion, rosterSize }).total * 365) / COST_PERIOD_DAYS;
+  return promotion.budget < year * DISTRESS_RUNWAY_YEARS;
+}
+
+function chargePromotions(db: GameDb, fromDay: number, day: number): void {
+  const days = day - fromDay;
   if (days <= 0) return;
   const all = db.fighters.findAll() as Fighter[];
+
+  // When each promotion last put a card on, for the attention it loses by not doing so.
+  const lastCard = new Map<string, number>();
+  for (const night of db.events.findAll() as FightNight[]) {
+    const key = night.promotionId as string;
+    if (night.day <= day && night.day > (lastCard.get(key) ?? -Infinity)) {
+      lastCard.set(key, night.day);
+    }
+  }
+  const startedDay = getWorld(db).startedDay ?? fromDay;
 
   for (const promotion of db.promotions.findAll() as unknown as Promotion[]) {
     const rosterSize = all.filter(
       (f) => f.promotionId === promotion.id && f.retiredDay === undefined,
     ).length;
     const { promotion: charged } = chargeCosts({ promotion, rosterSize, days });
-    db.promotions.upsert(charged as Promotion & Entity);
+    // A save holds no nights from before it began, so the clock on being forgotten starts there.
+    const since = day - (lastCard.get(promotion.id as string) ?? startedDay);
+    db.promotions.upsert({
+      ...charged,
+      buzz: idleBuzz(charged.buzz, since, days),
+    } as Promotion & Entity);
   }
 }
 

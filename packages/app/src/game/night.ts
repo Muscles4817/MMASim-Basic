@@ -27,6 +27,7 @@ import {
   expectedDemand,
   venueFor,
   settleNight,
+  upsetsIn,
   offerOpponents,
   readinessDelay,
   simulateFight,
@@ -40,7 +41,7 @@ import {
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
 import { currentPurse } from './money';
-import { headlineNames, nextEventNumber } from './world';
+import { favouritesOn, headlineNames, nextEventNumber, rivalryTerms } from './world';
 import { settleFightInjuries } from './fightInjuries';
 import { money } from '../ui/format';
 
@@ -105,8 +106,7 @@ export function runSupportingCard(
     promotion,
     red: player,
     blue: opponent,
-    heat: 0,
-    isRivalry: false,
+    ...rivalryTerms(db, player.id, opponent.id, day),
     isTitleFight,
   });
 
@@ -158,8 +158,7 @@ export function runSupportingCard(
         promotion,
         red: subject,
         blue: other,
-        heat: 0,
-        isRivalry: false,
+        ...rivalryTerms(db, subject.id, other.id, day),
         isTitleFight: false,
       }),
     });
@@ -353,6 +352,10 @@ export function runSupportingCard(
     revenue,
     results: results.map((r) => r.result),
     recentDelivery: current.recentDelivery,
+    titleFights: card.filter((b) => b.isTitleFight).length,
+    // The player's bout has already been fought, so its favourite is read off the ratings it
+    // left behind; close enough for whether the room went wild.
+    upsets: upsetsIn(favouritesOn(db, card), results),
   });
   db.promotions.upsert({
     ...settled.promotion,

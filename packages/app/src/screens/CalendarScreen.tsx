@@ -20,7 +20,7 @@
 import { useMemo, useState } from 'react';
 import { toCalendar } from '@mmasim/engine';
 import type { EventScale, Promotion } from '@mmasim/engine';
-import { EVENT_SCALES, describeHealth } from '@mmasim/engine';
+import { EVENT_SCALES, describeHealth, marketsFor } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { routeOf, useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
@@ -31,7 +31,6 @@ import { buildCalendar, defaultFilter, nextStop, type CalendarEntry } from '../g
 import { ADVANCE_STEPS, advanceTo, type AdvanceResult } from '../game/clock';
 import {
   DEFAULT_LEAD_DAYS,
-  MARKETS,
   MINIMUM_LEAD_DAYS,
   createPlan,
   fightNightOn,
@@ -312,9 +311,8 @@ function PlanACard({
 }) {
   const earliest = today + MINIMUM_LEAD_DAYS;
   const [day, setDay] = useState(today + DEFAULT_LEAD_DAYS);
-  const [market, setMarket] = useState(
-    () => MARKETS.find((m) => m.country === promotion.baseCountry) ?? MARKETS[0]!,
-  );
+  const markets = useMemo(() => marketsFor(promotion), [promotion]);
+  const [market, setMarket] = useState(() => markets[0]!);
   const [scale, setScale] = useState<EventScale>('standard');
   const [name, setName] = useState('');
 
@@ -419,7 +417,7 @@ function PlanACard({
       <div>
         <p className="section-title">Market</p>
         <div className="stack" style={{ gap: 'var(--space-2)' }}>
-          {MARKETS.map((option) => (
+          {markets.map((option) => (
             <button
               key={option.city}
               type="button"
