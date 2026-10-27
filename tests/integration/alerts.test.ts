@@ -132,7 +132,16 @@ describe('the walk-out warning', () => {
         key,
       ).toHaveLength(1);
     }
-    expect(readInbox(db).some((i) => isBlocking(i) && i.id.includes('expiring:'))).toBe(false);
+    // On priority, not `isBlocking`: the loop above resolves every stop, so a contract raised as
+    // a decision would no longer be blocking by now and could not fail that check.
+    expect(
+      readInbox(db).some(
+        (i) =>
+          i.priority === 'decision' &&
+          (i.id.includes('expiring:') ||
+            (i.entries ?? []).some((e) => e.key.startsWith('expiring:'))),
+      ),
+    ).toBe(false);
   });
 
   it('stops the clock a handful of times a year, not every day', () => {
