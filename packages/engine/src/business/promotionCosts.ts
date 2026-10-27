@@ -69,20 +69,21 @@ export const yearOf = (perPeriod: number): number => (perPeriod * 365) / COST_PE
 /**
  * A fortnight of overheads at each staff level, in thousands.
  *
- * About £5k a year for a town show, £26k for a feeder, £65k for a regional promotion, £390k for a
+ * About £5k a year for a town show, £26k for a feeder, £91k for a regional promotion, £390k for a
  * major and £3.1m for the leader — the organisation between cards. What a card itself costs to
  * stage, the officials, medicals and crew, is charged per night instead (`showCost`), so a
  * promotion that runs cards pays for running them and one that does not still pays for existing.
  * One regional card's profit, tens of thousands, cannot carry a regional's year: it has to run a
  * schedule to stand still.
  *
- * The steps grow by about 2.5× to 6× a level. Level 4 was 30 — twelve times level 3 — which made a
- * promotion crossing into the majors take on overheads its cards could not yet pay for.
+ * Each level costs between about 3.5 and 8 times the one below. Level 4 was 30 — twelve times
+ * level 3 — which made a promotion crossing into the majors take on overheads its cards could not
+ * yet pay for.
  */
 export const STAFF_LEVEL_OVERHEADS: Readonly<Record<StaffLevel, number>> = {
   1: 0.2,
   2: 1,
-  3: 2.5,
+  3: 3.5,
   4: 15,
   5: 120,
 };

@@ -465,6 +465,7 @@ export function advanceWorld(
       news.push(...replenish(db, day, rng, promotions, rosterSizes));
       // Deals run out across the roster too, so the market has other people in it.
       news.push(...resolveFreeAgency(db, day, rng, promotions, exceptId, rosterSizes));
+      news.push(...fillHoles(db, day, rng, promotions));
       reindex();
     }
 
@@ -2438,6 +2439,86 @@ function retireTheDrifted(
   return news;
 }
 
+/** Fighters a weight class needs before a promotion can make even one fight in it. */
+const MIN_FIGHTS_DEEP = 2;
+
+/** A debutant at `division`'s weight, signed to `promotion` (or nobody), with a gym and a coach. */
+function signDebutant(
+  db: GameDb,
+  day: number,
+  rng: Rng,
+  division: (typeof DIVISIONS)[number],
+  promotion: Promotion | undefined,
+  i: number | string,
+  news: NewsItem[],
+): void {
+  /*
+   * Most people who turn professional are never going to be anything. A few are.
+   *
+   * `generateFighter` defaults to a tier drawn around 45, which produces a population whose
+   * ceilings sit comfortably below elite — so with the intake finally running, the sport
+   * still had nobody capable of *becoming* elite. Measured over ten years: population held at
+   * 627 while fighters rated 70 or better fell from 48 to 13, because the seeded elite aged
+   * out and the intake could not replace them at that level.
+   *
+   * The sport does not work by lifting everybody. It works by a small number of genuine
+   * prospects arriving each year among a great many who will spend a career on regional
+   * cards — so roughly one in twelve is drawn from a much higher band, and the rest are
+   * left exactly as they were.
+   */
+  const genRng = rng.fork(`gen:${day}:${division.id}:${i}`);
+  const isProspect = genRng.chance(0.085);
+
+  const born = generateFighter(genRng, {
+    id: `gen_${day}_${division.id}_${i}`,
+    divisionId: division.id,
+    sex: division.sex,
+    day,
+    promotionId: promotion?.id,
+    tier: isProspect ? Math.round(genRng.normalClamped(78, 9, 62, 97)) : undefined,
+  });
+  /*
+   * A gym, and with it a head coach.
+   *
+   * `replenish` created fighters with no `gymId` and no `headCoachId`, and nothing ever gave
+   * them one — so every fighter generated during a save trained at the no-gym default of
+   * quality 40 with no coach for their entire career. That is a development multiplier of
+   * about 0.4 against roughly 1.9 in a good room with the right specialist: a quarter speed,
+   * permanently.
+   *
+   * It is why the sport's elite kept emptying out even once the intake was running and the
+   * prospects were real. Measured after ten years: 327 generated fighters alive, the best of
+   * them carrying a potential of 88, and **not one had reached a rating of 70** — the best
+   * actual rating in the entire generated population was 67. They were not failing to arrive.
+   * They were arriving and then never being allowed to grow.
+   */
+  const rooms = db.gyms.findAll() as unknown as Gym[];
+  const room = rooms.length > 0 ? genRng.pick(rooms) : undefined;
+  const located: Fighter = room ? { ...born, gymId: room.id, headCoachId: room.headCoachId } : born;
+  // A debutant's nickname, kept only if nobody in the division already answers to it.
+  const unique =
+    located.nickname &&
+    uniqueNickname(
+      located.nickname,
+      located.id as string,
+      nicknamesTaken(db.fighters.findAll() as Fighter[], located.divisionId),
+    );
+  const placed: Fighter =
+    located.nickname === unique ? located : { ...located, nickname: unique || undefined };
+
+  db.fighters.upsert(placed as Fighter & Entity);
+  news.push(
+    debutNews({
+      day,
+      fighterId: placed.id,
+      name: displayName(born),
+      divisionId: division.id,
+      promotionId: promotion?.id,
+      promotionName: promotion?.shortName,
+    }),
+  );
+}
+
 /** Replace retirees so divisions do not quietly empty out over a long career. */
 function replenish(
   db: GameDb,
@@ -2452,14 +2533,8 @@ function replenish(
   for (const division of DIVISIONS) {
     const active = all.filter((f) => f.divisionId === division.id && f.retiredDay === undefined);
     const target = divisionTargetFor(getWorld(db), division.id as string, division.sex);
-
     // How deep each promotion is *in this division*, which is what a debutant fills a hole in.
-    const depthHere = new Map<string, number>();
-    for (const f of active) {
-      if (!f.promotionId) continue;
-      const id = f.promotionId as string;
-      depthHere.set(id, (depthHere.get(id) ?? 0) + 1);
-    }
+    const depthHere = depthByPromotion(active);
 
     for (let i = active.length; i < target; i++) {
       /*
@@ -2484,73 +2559,57 @@ function replenish(
           depthOf: (promotionId) => depthHere.get(promotionId) ?? 0,
         },
       );
-      /*
-       * Most people who turn professional are never going to be anything. A few are.
-       *
-       * `generateFighter` defaults to a tier drawn around 45, which produces a population whose
-       * ceilings sit comfortably below elite — so with the intake finally running, the sport
-       * still had nobody capable of *becoming* elite. Measured over ten years: population held at
-       * 627 while fighters rated 70 or better fell from 48 to 13, because the seeded elite aged
-       * out and the intake could not replace them at that level.
-       *
-       * The sport does not work by lifting everybody. It works by a small number of genuine
-       * prospects arriving each year among a great many who will spend a career on regional
-       * cards — so roughly one in twelve is drawn from a much higher band, and the rest are
-       * left exactly as they were.
-       */
-      const genRng = rng.fork(`gen:${day}:${division.id}:${i}`);
-      const isProspect = genRng.chance(0.085);
+      signDebutant(db, day, rng, division, promotion, i, news);
+    }
+  }
+  return news;
+}
 
-      const born = generateFighter(genRng, {
-        id: `gen_${day}_${division.id}_${i}`,
-        divisionId: division.id,
-        sex: division.sex,
-        day,
-        promotionId: promotion?.id,
-        tier: isProspect ? Math.round(genRng.normalClamped(78, 9, 62, 97)) : undefined,
-      });
-      /*
-       * A gym, and with it a head coach.
-       *
-       * `replenish` created fighters with no `gymId` and no `headCoachId`, and nothing ever gave
-       * them one — so every fighter generated during a save trained at the no-gym default of
-       * quality 40 with no coach for their entire career. That is a development multiplier of
-       * about 0.4 against roughly 1.9 in a good room with the right specialist: a quarter speed,
-       * permanently.
-       *
-       * It is why the sport's elite kept emptying out even once the intake was running and the
-       * prospects were real. Measured after ten years: 327 generated fighters alive, the best of
-       * them carrying a potential of 88, and **not one had reached a rating of 70** — the best
-       * actual rating in the entire generated population was 67. They were not failing to arrive.
-       * They were arriving and then never being allowed to grow.
-       */
-      const rooms = db.gyms.findAll() as unknown as Gym[];
-      const room = rooms.length > 0 ? genRng.pick(rooms) : undefined;
-      const located: Fighter = room
-        ? { ...born, gymId: room.id, headCoachId: room.headCoachId }
-        : born;
-      // A debutant's nickname, kept only if nobody in the division already answers to it.
-      const unique =
-        located.nickname &&
-        uniqueNickname(
-          located.nickname,
-          located.id as string,
-          nicknamesTaken(db.fighters.findAll() as Fighter[], located.divisionId),
-        );
-      const placed: Fighter =
-        located.nickname === unique ? located : { ...located, nickname: unique || undefined };
+/** How many of one weight class's active fighters each promotion holds. */
+function depthByPromotion(active: readonly Fighter[]): Map<string, number> {
+  const depth = new Map<string, number>();
+  for (const f of active) {
+    if (!f.promotionId) continue;
+    const id = f.promotionId as string;
+    depth.set(id, (depth.get(id) ?? 0) + 1);
+  }
+  return depth;
+}
 
-      db.fighters.upsert(placed as Fighter & Entity);
-      news.push(
-        debutNews({
+/**
+ * A weight class a promotion runs but can no longer make a fight in.
+ *
+ * The intake is sized to the sport's headcount at each weight, so a division that was full across
+ * the sport sent nobody to the one promotion where it had emptied: a town show whose flyweights had
+ * all moved up, retired or left in free agency kept running a weight class with one fighter in it,
+ * for good. A promotion in that position signs local debutants until it can make a fight again.
+ * Run after free agency, which is what most often empties a small promotion's weight class.
+ */
+function fillHoles(
+  db: GameDb,
+  day: number,
+  rng: Rng,
+  promotions: readonly Promotion[],
+): NewsItem[] {
+  const news: NewsItem[] = [];
+  const all = db.fighters.findAll() as Fighter[];
+  for (const division of DIVISIONS) {
+    const depthHere = depthByPromotion(
+      all.filter((f) => f.divisionId === division.id && f.retiredDay === undefined),
+    );
+    for (const promotion of promotions) {
+      if (!promotion.divisions.includes(division.id)) continue;
+      for (let n = depthHere.get(promotion.id as string) ?? 0; n < MIN_FIGHTS_DEEP; n++) {
+        signDebutant(
+          db,
           day,
-          fighterId: placed.id,
-          name: displayName(born),
-          divisionId: division.id,
-          promotionId: promotion?.id,
-          promotionName: promotion?.shortName,
-        }),
-      );
+          rng,
+          division,
+          promotion,
+          `hole:${promotion.id as string}:${n}`,
+          news,
+        );
+      }
     }
   }
   return news;

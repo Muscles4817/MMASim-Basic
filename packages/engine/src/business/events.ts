@@ -558,10 +558,11 @@ export function eventRevenue(input: {
 
 /*
  * Sponsorship per thousand people in the building, in thousands: a base, and a little more for a
- * promotion people have heard of. Was 18 + 0.12 per prestige point, sized when a regional show
- * drew twice the crowd it does now that buzz starts where the tier is.
+ * promotion people have heard of. The base was 18 when a regional show drew twice the crowd it
+ * does now that buzz starts where the tier is, and 16 while offers were answered on the spot; once
+ * corners took days to reply and a card waited for them, more of every card got signed.
  */
-const SPONSOR_PER_THOUSAND = 16;
+const SPONSOR_PER_THOUSAND = 12;
 const SPONSOR_PER_PRESTIGE = 0.12;
 
 /*

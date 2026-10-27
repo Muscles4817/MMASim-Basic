@@ -43,6 +43,9 @@ export interface CardLog {
   day: number;
   agreed: number;
   slots: number;
+  /** Fights that came back with a counter-offer, and how many of those the policy paid. */
+  countered: number;
+  paid: number;
   /** What the forecast said before the date, with the card as booked. */
   forecast: number;
   /** What the empty card forecast when it was created. */
@@ -111,22 +114,38 @@ export function runOneCard(input: {
   plan = savePlan(db, sendAllDrafts({ ctx, plan: savePlan(db, plan) }).plan);
   // Answers come back over a few days (doc 34's C4), so wait for them before deciding anything.
   plan = awaitReplies(db, plan, day + REPLY_WAIT);
+  const countered = plan.slots.filter((s) =>
+    s.bout?.answers?.some((a) => a.verdict === 'countered'),
+  ).length;
+  let paid = 0;
 
   if (policy === 'sloppy') {
     for (const slot of plan.slots) {
       if (slot.bout?.answers?.some((a) => a.verdict === 'countered')) {
         plan = savePlan(db, acceptCounter({ ctx, plan, slotId: slot.id }));
+        paid++;
       }
     }
   } else {
-    // Pay a counter only when the fight is worth its price: the card with it paid has to forecast
-    // better than the card without it. Paying repapers the contract, so a refused one is put back.
+    /*
+     * Pay a counter only when the fight is worth its price: the card with it paid has to forecast
+     * better than the card without it. Paying repapers the contract, so a refused one is put back.
+     *
+     * Against the card as signed, not as offered. A forecast counts every fight still out for an
+     * answer as if it will happen, and on a nine-fight card the ninth adds little to the gate, so
+     * against that card every counter looked like a loss and a sensible promoter turned all of them
+     * down — then refilled, had half the refills come back declined, and ran a four-fight card.
+     * What a fight is worth is what it adds to the fights actually agreed.
+     */
+    const signedOnly = (p: EventPlan): EventPlan =>
+      p.slots.reduce(
+        (card, s) =>
+          s.bout && s.bout.status !== 'agreed' ? withSlot(card, s.id, undefined) : card,
+        p,
+      );
     for (const slot of plan.slots) {
       if (!slot.bout?.answers?.some((a) => a.verdict === 'countered')) continue;
-      const without = forecastPlan({
-        ctx,
-        plan: withSlot(plan, slot.id, undefined),
-      }).projectedProfit;
+      const without = forecastPlan({ ctx, plan: signedOnly(plan) }).projectedProfit;
       const papers = new Map(
         slot.bout.answers.map((a) => {
           const fighter = db.fighters.findById(a.fighterId as string) as Fighter | undefined;
@@ -136,9 +155,10 @@ export function runOneCard(input: {
           ];
         }),
       );
-      const paid = acceptCounter({ ctx, plan, slotId: slot.id });
-      if (forecastPlan({ ctx, plan: paid }).projectedProfit > without) {
-        plan = savePlan(db, paid);
+      const paidPlan = acceptCounter({ ctx, plan, slotId: slot.id });
+      if (forecastPlan({ ctx, plan: signedOnly(paidPlan) }).projectedProfit > without) {
+        plan = savePlan(db, paidPlan);
+        paid++;
       } else {
         for (const agreement of papers.values()) if (agreement) db.agreements.upsert(agreement);
       }
@@ -165,6 +185,8 @@ export function runOneCard(input: {
     day: plan.day,
     agreed,
     slots: plan.slots.length,
+    countered,
+    paid,
     forecast,
     emptyForecast,
     profit: ran?.profit ?? 0,

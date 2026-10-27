@@ -80,7 +80,7 @@ describe('a year on autopilot', () => {
     /*
      * Paying every counter-offer and running whatever the matchmaker hands you should end the
      * first year between flat and a tenth down: a business being run badly, not one being run
-     * into the ground and not one that cannot be lost. Averaged over the three worlds; one world
+     * into the ground and not one that cannot be lost. Averaged over the six worlds; one world
      * on its own swings several points either way on who happened to counter.
      */
     const growth = mean(sloppy.map((r) => r.growth));
