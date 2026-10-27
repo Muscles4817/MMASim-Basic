@@ -110,7 +110,7 @@ function cardIssues(db: GameDb, plans: readonly EventPlan[], day: number): Atten
       title: 'Nothing on the calendar',
       detail:
         'You have no cards planned. Overheads are being paid either way, and a promotion that is not running shows is a promotion that is shrinking.',
-      action: { label: 'Plan a card', route: 'calendar' },
+      action: { label: 'Plan a card', route: 'calendar', id: 'new' },
     });
     return items;
   }

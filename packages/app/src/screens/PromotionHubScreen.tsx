@@ -56,6 +56,7 @@ import {
   promoterContext,
 } from '../game/plans';
 import { describeBuzz } from './NightScreen';
+import { FIRST_WEEK, dismiss, firstWeek, firstWeekOver } from '../game/onboarding';
 import { readNews } from '../game/world';
 import { PromoterSubNav } from './promoterNav';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
@@ -156,6 +157,8 @@ export function PromotionHubScreen() {
       <Console
         main={
           <>
+            {!firstWeekOver(db) && <FirstWeek />}
+
             {last && (
               <LastNight plan={last} onOpen={() => navigate({ name: 'plan', id: last.id })} />
             )}
@@ -168,7 +171,7 @@ export function PromotionHubScreen() {
             <Card
               title={tonight ? 'Fight night' : next ? 'Next event' : 'Nothing booked'}
               action={
-                <Button size="sm" onClick={() => navigate({ name: 'calendar' })}>
+                <Button size="sm" onClick={() => navigate({ name: 'calendar', newCard: true })}>
                   Plan a card
                 </Button>
               }
@@ -251,7 +254,11 @@ export function PromotionHubScreen() {
                     A date with nothing on it is the only thing a promoter cannot afford. Pick a
                     date months out, put your champion on it, and fill the rest as the year happens.
                   </p>
-                  <Button variant="primary" block onClick={() => navigate({ name: 'calendar' })}>
+                  <Button
+                    variant="primary"
+                    block
+                    onClick={() => navigate({ name: 'calendar', newCard: true })}
+                  >
                     Plan a card
                   </Button>
                 </div>
@@ -423,7 +430,8 @@ export function PromotionHubScreen() {
                           : undefined
                     }
                     primary={champion ? displayName(champion) : 'Vacant'}
-                    secondary={`${getDivision(divisionId).shortName}${
+                    // Spelled out: the column has the room, and "LHW" is a code to learn.
+                    secondary={`${getDivision(divisionId).name}${
                       contender ? ` · #1 ${displayName(contender)}` : ''
                     }`}
                     trailing={champion ? undefined : <Chip tone="warning">Vacant</Chip>}
@@ -514,6 +522,66 @@ function LastNight({ plan, onOpen }: { plan: EventPlan; onOpen(): void }) {
       <Button block onClick={onOpen}>
         {night?.awards?.pending ? 'Hand out the bonuses' : 'Open the recap'}
       </Button>
+    </Card>
+  );
+}
+
+/**
+ * The first week, as five steps that tick themselves off.
+ *
+ * Only the next step carries a button: a checklist with five calls to action is a menu, and the
+ * point is to teach the order the loop runs in. Leaves on its own once the first card has run,
+ * and can be put away before then.
+ */
+function FirstWeek() {
+  const { db, commit } = useGame();
+  const { navigate } = useRouter();
+  const steps = firstWeek(db);
+  const next = steps.find((s) => !s.done);
+
+  return (
+    <Card
+      raised
+      title="Your first week"
+      action={
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => {
+            dismiss(db, FIRST_WEEK);
+            commit();
+          }}
+        >
+          Hide this
+        </Button>
+      }
+    >
+      <ol className="checklist">
+        {steps.map((step) => (
+          <li
+            key={step.id}
+            className="checklist__step"
+            data-done={step.done ? 'true' : undefined}
+            aria-current={step === next ? 'step' : undefined}
+          >
+            <span className="checklist__mark" aria-hidden="true">
+              {step.done ? '✓' : '○'}
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span className="checklist__label">
+                {step.label}
+                <span className="visually-hidden">{step.done ? ' — done' : ''}</span>
+              </span>
+              {step === next && <span className="checklist__hint">{step.hint}</span>}
+            </span>
+            {step === next && (
+              <Button size="sm" variant="primary" onClick={() => navigate(routeOf(step.link))}>
+                Do it
+              </Button>
+            )}
+          </li>
+        ))}
+      </ol>
     </Card>
   );
 }
