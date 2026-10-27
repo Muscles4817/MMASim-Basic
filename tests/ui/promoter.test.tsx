@@ -119,7 +119,19 @@ describe('choosing to run a promotion', () => {
     const user = userEvent.setup();
     await becomePromoter(user);
     expect(await screen.findByRole('link', { name: /Championships/i })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Roster & contracts/i })).toBeTruthy();
+  });
+
+  it('does not repeat the tab bar in the chip row', async () => {
+    // The chip row named Dashboard, Events and Roster & contracts beside the tab bar's own
+    // Promotion, Calendar and Roster: the same places twice, under different names.
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    const row = await screen.findByRole('navigation', { name: /Promotion sections/i });
+    const chips = Array.from(row.querySelectorAll('a')).map((a) => a.textContent);
+    expect(chips).toEqual(['Dashboard', 'Championships']);
+    goTo('#/calendar');
+    await screen.findByTestId('clock');
+    expect(screen.queryByRole('navigation', { name: /Promotion sections/i })).toBeNull();
   });
 });
 
@@ -615,5 +627,49 @@ describe('the roster, from the promotion’s chair', () => {
     const release = (await screen.findAllByRole('button', { name: /^Release$/i }))[0]!;
     await user.click(release);
     expect(screen.getAllByRole('button', { name: /^Yes — release /i }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('the first week', () => {
+  it('leads the dashboard with the next step, and the step goes straight to the form', async () => {
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    expect(await screen.findByText(/Your first week/i)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /^Do it$/ }));
+    // "Plan a card" opens the new-card form, not the diary it sits in.
+    expect(await screen.findByRole('button', { name: /Put it in the diary/i })).toBeTruthy();
+  });
+
+  it('can be put away, and stays away', async () => {
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    await user.click(await screen.findByRole('button', { name: /^Hide this$/ }));
+    expect(screen.queryByText(/Your first week/i)).toBeNull();
+    goTo('#/calendar');
+    await screen.findByTestId('clock');
+    goTo('#/promotion');
+    await screen.findByText(/Needs you/i);
+    expect(screen.queryByText(/Your first week/i)).toBeNull();
+  });
+
+  it('has tips that leave when they are read', async () => {
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    goTo('#/calendar');
+    expect(await screen.findByText(/The clock stops for you/i)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /^Got it$/ }));
+    expect(screen.queryByText(/The clock stops for you/i)).toBeNull();
+  });
+
+  it('announces where an advance landed', async () => {
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    goTo('#/calendar');
+    await user.click(await screen.findByRole('button', { name: /^A week$/i }));
+    await waitFor(() =>
+      expect(document.querySelector('[aria-live="polite"].visually-hidden')?.textContent).toMatch(
+        /^Now /,
+      ),
+    );
   });
 });

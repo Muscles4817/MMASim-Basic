@@ -79,6 +79,7 @@ import {
   type Fighter,
   type FightNight,
   type FightResult,
+  type InboxItem,
   type IntentAppraisal,
   type Manager,
   type MatchIntentId,
@@ -2535,6 +2536,45 @@ function alertStillTrue(
   return undefined;
 }
 
+const walkTitle = (name: string, left: number): string =>
+  left <= 0 ? `${name} can walk now` : `${name} can walk in ${left} ${left === 1 ? 'day' : 'days'}`;
+
+const mainEventBody = (away: number): string =>
+  `${away <= 0 ? 'Tonight' : `${away} ${away === 1 ? 'day' : 'days'} out`}. The main event sells the night, and nothing is signed on top of it.`;
+
+/**
+ * An open decision as it reads today.
+ *
+ * A decision is raised once and then stays open until it is answered or settles, which can be a
+ * week — and its countdown was written on the day it was raised, so it went on saying "can walk
+ * in 7 days" after the seventh day had come and gone. The countdown is rebuilt from the key on
+ * every read instead; the key already holds the deadline. Answered items are history and keep
+ * the words they had.
+ */
+export function presentAlert(db: GameDb, item: InboxItem, day: number): InboxItem {
+  if (item.priority !== 'decision' || item.resolvedDay !== undefined) return item;
+
+  const retitle = (key: string, title: string): string => {
+    const [kind, a, b] = key.split(':');
+    if (kind === 'activity') {
+      const fighter = db.fighters.findById(a!) as Fighter | undefined;
+      return fighter ? walkTitle(displayName(fighter), Number(b) - day) : title;
+    }
+    return title;
+  };
+
+  const own = item.id.startsWith('alert:') ? item.id.slice('alert:'.length) : undefined;
+  const [kind, planId] = own?.split(':') ?? [];
+  const plan = kind === 'mainevent' ? planById(db, planId!) : undefined;
+
+  return {
+    ...item,
+    title: own ? retitle(own, item.title) : item.title,
+    body: plan ? mainEventBody(plan.day - day) : item.body,
+    entries: item.entries?.map((e) => ({ ...e, title: retitle(e.key, e.title) })),
+  };
+}
+
 /** Resolve every decision that is no longer true. Run after each day and after each card edit. */
 export function settleAlerts(db: GameDb, day: number): void {
   let cache: Map<string, CardBooking> | undefined;
@@ -2589,7 +2629,7 @@ export function scanPromoterInbox(db: GameDb, day: number): number {
         key: `mainevent:${plan.id}:${stage}`,
         kind: 'card',
         title: `${planName(db, plan)} still has no main event`,
-        body: `${away} days out. The main event sells the night, and nothing is signed on top of it.`,
+        body: mainEventBody(away),
         link: { route: 'plan', id: plan.id, slot: main?.id },
         promotionId: promotion.id,
       });
@@ -2649,10 +2689,7 @@ export function scanPromoterInbox(db: GameDb, day: number): number {
         const alert: Alert = {
           key: `activity:${id}:${deadline}:${stage}`,
           kind: 'roster',
-          title:
-            left <= 0
-              ? `${displayName(fighter)} can walk now`
-              : `${displayName(fighter)} can walk in ${left} days`,
+          title: walkTitle(displayName(fighter), left),
           body: `You owe them ${agreement.activityGuarantee} bouts a year and the last year has not delivered. Put them on a card or lose them for nothing.`,
           link: { route: 'fighter', id },
           fighterId: fighter.id,
