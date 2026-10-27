@@ -19,6 +19,8 @@ import type { DivisionId, PromotionId } from '../core/ids.js';
 import { type Sex } from '../domain/divisions.js';
 import type { Fighter } from '../domain/fighter.js';
 import { emptyRecordSummary, freshCondition } from '../domain/fighter.js';
+import type { Condition, RecordSummary } from '../domain/fighter.js';
+import { KO_LOSS_TRAUMA } from './retirement.js';
 import type { Personality } from '../domain/personality.js';
 import { PERSONALITY_AXES } from '../domain/personality.js';
 import {
@@ -237,10 +239,13 @@ export function athleticTier(rng: Rng, tier: number): number {
  * near-identical linear combinations of `explosiveness` and `frame` (rho = 0.85, doc 31 § 13.1), and
  * that is step 6's work, kept out of this change so the two can be measured independently.
  */
-export function generateNaturals(rng: Rng, tier: number): Naturals {
+export function generateNaturals(rng: Rng, tier: number, key?: string): Naturals {
   // Forked so that adding the second axis does not reshuffle every draw made after it, and so the
-  // athletic roll stays put if the learning side is ever retuned.
-  const athletic = naturalsCentre(athleticTier(rng.fork('athletic'), tier));
+  // athletic roll stays put if the learning side is ever retuned. Keyed by the fighter when there
+  // is one: see `ownFork` in `generateFighter`.
+  const athletic = naturalsCentre(
+    athleticTier(rng.fork(key === undefined ? 'athletic' : `athletic:${key}`), tier),
+  );
   const learning = naturalsCentre(tier);
   const body = (sd: number) => toRating(rng.normalClamped(athletic, sd, 12, 97));
 
@@ -599,6 +604,27 @@ export function withoutContradictions(
 }
 
 /**
+ * The fighter, without any trait their ratings have since come to contradict. Doc 34 C5.
+ *
+ * Generation refuses a contradicted trait, but ratings move for a whole career after it: a Cardio
+ * Machine at 34 whose engine has gone to Liability, or an Iron Chin worn down to nothing, kept the
+ * label for good. Measured on a generated world at the start date, 22 of 844 fighters carried a
+ * trait the same page contradicted. The trait goes and is not replaced: an innate label that time
+ * took away is not handed back as a different one. The same object when nothing changes.
+ */
+export function withTraitsStillTrue(fighter: Fighter): Fighter {
+  const context = {
+    divisionId: fighter.divisionId as string,
+    sex: fighter.sex,
+    eliteLift: ELITE_LIFT,
+  };
+  const kept = fighter.traits.filter(
+    (id) => !traitContradicts(TRAITS[id], fighter.attributes, context),
+  );
+  return kept.length === fighter.traits.length ? fighter : { ...fighter, traits: kept };
+}
+
+/**
  * How much of a given attribute's ceiling a fighter has already reached when they turn pro.
  *
  * One number per attribute, at 20 and at 30, because **"physical" is not one thing** and treating
@@ -694,6 +720,84 @@ export function arrivalFactor(key: AttributeKey, age: number, history?: ArrivalH
 }
 
 /**
+ * The share of a prior record's results that were knockouts (won or lost), for an average rating.
+ * About the sport's own rate: roughly three in ten professional MMA bouts end by KO/TKO.
+ */
+export const PRIOR_KO_SHARE = 0.3;
+/** The share of prior wins that were submissions, for average submission skill. */
+export const PRIOR_SUBMISSION_SHARE = 0.18;
+/** The share of prior losses that were by submission, for average scrambling. */
+export const PRIOR_SUBMITTED_SHARE = 0.2;
+/**
+ * The bounds on any of those shares once the rating moves it (one point of share per rating point
+ * from 50): nobody's record is all one method, and nobody's is entirely free of one.
+ */
+export const PRIOR_SHARE_MIN = 0.05;
+export const PRIOR_SHARE_MAX = 0.75;
+
+/**
+ * How a career before the simulation started broke down, from who the fighter is. Doc 34 C5.
+ *
+ * Generated records were wins and losses with nothing behind them — no knockouts either way — so
+ * a Glass Cannon could arrive with no knockout losses and a finisher with no finishes. The split
+ * is read off the ratings that decide it in the cage (power and submissions for how they win,
+ * durability for how they lose) and needs no random draw, so it moves nothing else in generation.
+ */
+export function priorSummary(wins: number, losses: number, a: Attributes): RecordSummary {
+  const share = (rating: number, base: number) =>
+    clamp(base + (rating - 50) / 100, PRIOR_SHARE_MIN, PRIOR_SHARE_MAX);
+  const koWins = Math.round(wins * share(a.power, PRIOR_KO_SHARE));
+  const submissionWins = Math.min(
+    wins - koWins,
+    Math.round(wins * share(a.submissions, PRIOR_SUBMISSION_SHARE)),
+  );
+  const koLosses = Math.round(losses * share(100 - a.durability, PRIOR_KO_SHARE));
+  const submissionLosses = Math.min(
+    losses - koLosses,
+    Math.round(losses * share(100 - a.scrambling, PRIOR_SUBMITTED_SHARE)),
+  );
+  return {
+    ...emptyRecordSummary(),
+    wins,
+    losses,
+    koWins,
+    submissionWins,
+    decisionWins: wins - koWins - submissionWins,
+    koLosses,
+    submissionLosses,
+    streak: 1,
+  };
+}
+
+/**
+ * What that career has already cost them. Doc 34 C5.
+ *
+ * Every generated fighter arrived with the condition of somebody who had never been hit: a
+ * 33-year-old with thirty fights behind them carried no head trauma and no wear, and since the
+ * health model accumulates from there, a fighter's chin was a function of how long they had been
+ * in *this* simulation rather than in the sport. Charged here at the rates the world itself
+ * charges a statistical bout (`runStatisticalCard`), knockout losses at the full knockout price.
+ */
+export function priorCondition(summary: RecordSummary, age: number): Condition {
+  const bouts = summary.wins + summary.losses + summary.draws;
+  const stopped = summary.koLosses;
+  return {
+    ...freshCondition(),
+    headTrauma: clamp(bouts * 0.5 + stopped * (1.9 + KO_LOSS_TRAUMA), 0, 100),
+    bodyWear: clamp(bouts * 0.9 + Math.max(0, age - 28) * 0.8, 0, 100),
+  };
+}
+
+/**
+ * How old somebody is when they turn professional: around twenty-two, rarely under nineteen or
+ * over twenty-seven. Doc 34 C5: the intake used to debut everybody at 21–26 uniformly, which with
+ * a world that turns over slowly left almost nobody on the roster aged 23 or under.
+ */
+export function debutAge(rng: Rng): number {
+  return Math.round(rng.normalClamped(22.5, 2.2, 18, 30));
+}
+
+/**
  * Generate a debuting fighter.
  *
  * Current attributes are their ceiling scaled by how much of a career they have had. A
@@ -703,6 +807,18 @@ export function arrivalFactor(key: AttributeKey, age: number, history?: ArrivalH
 export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
   const tier = options.tier ?? toRating(rng.normalClamped(45, 18, 5, 95));
   const age = options.age ?? rng.int(21, 26);
+
+  /*
+   * Every sub-stream keyed by the fighter. Doc 34 C5.
+   *
+   * `Rng.fork` derives from the stream's *seed*, not its position, so a caller that generated
+   * several fighters from one stream handed every one of them the same background, the same body
+   * search and the same athletic tier — identical twins under different names. The world's own
+   * generation happens to use a stream per fighter and escaped it; a test, a tool or a future
+   * caller would not. Keying the label by id makes each fork this fighter's own whatever stream it
+   * came from.
+   */
+  const ownFork = (label: string): Rng => rng.fork(`${label}:${options.id}`);
 
   /*
    * The body first, and the division second. Doc 31 § 12 step 2.
@@ -731,17 +847,17 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
    *
    * Forked because it draws a variable number of times, exactly like the body below it.
    */
-  const background = sampleBackground(rng.fork('background'), options.divisionId, age);
+  const background = sampleBackground(ownFork('background'), options.divisionId, age);
 
   const body = sampleBodyForDivision(
-    rng.fork('body'),
+    ownFork('body'),
     options.sex,
     options.divisionId,
     bodyPriorFor(background, options.divisionId),
   );
 
   const naturals = leanNaturals(
-    generateNaturals(rng, tier),
+    generateNaturals(rng, tier, options.id),
     naturalsLeanFor(background, options.divisionId, age),
   );
   const potential = ceilingsFromNaturals(naturals, body, rng);
@@ -762,7 +878,7 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
 
   const proBouts = Math.max(0, Math.round((age - 20) * rng.range(1.2, 2.8)));
   const losses = Math.round(proBouts * rng.range(0, 0.25));
-  const summary = { ...emptyRecordSummary(), wins: proBouts - losses, losses, streak: 1 };
+  const summary = priorSummary(proBouts - losses, losses, attributes);
 
   /*
    * Name and nationality together, because they were drawn independently and it showed.
@@ -797,7 +913,7 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     // move a decade of measured balance that has nothing to do with aptitudes.
     background,
     aptitudes: leanAptitudes(
-      generateAptitudes(rng.fork('aptitudes'), naturals.motorLearning),
+      generateAptitudes(ownFork('aptitudes'), naturals.motorLearning),
       aptitudeLeanFor(background, options.divisionId),
     ),
     potential,
@@ -810,7 +926,7 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
       { divisionId: options.divisionId as string, sex: options.sex, eliteLift: ELITE_LIFT },
     ),
 
-    condition: freshCondition(),
+    condition: priorCondition(summary, age),
     record: [],
     priorRecord: summary,
     // A copy, not the same reference: aliasing these two is a trap waiting for the first
