@@ -28,7 +28,9 @@ export type LedgerKind =
   | 'mismatch'
   | 'protected'
   | 'cardCancelled'
-  | 'cut';
+  | 'cut'
+  /** Their belt taken off them by the promotion. Doc 34 B6. */
+  | 'stripped';
 
 export interface LedgerEntry {
   day: GameDay;
@@ -50,6 +52,7 @@ const META: Readonly<Record<LedgerKind, { base: number; label: string }>> = {
   protected: { base: 6, label: 'being brought along carefully' },
   cardCancelled: { base: -12, label: 'a camp wasted on a card that never happened' },
   cut: { base: -30, label: 'being cut' },
+  stripped: { base: -35, label: 'having the belt taken off them' },
 };
 
 export const describeLedger = (kind: LedgerKind): string => META[kind].label;
@@ -92,7 +95,7 @@ export function withLedgerEntry(
 }
 
 /**
- * What a fighter keeps when they leave a promotion: only being cut. The rest was the working
+ * What a fighter keeps when they leave a promotion: being cut, or stripped. The rest was the working
  * relationship, and it ends with the job — but a promoter who cut somebody and comes back for
  * them later should find that remembered. Undefined when nothing is left, so a fighter with no
  * history carries no empty array in the save.
@@ -101,7 +104,9 @@ export function leavingPromotion(
   ledger: readonly LedgerEntry[] | undefined,
   promotionId: PromotionId,
 ): LedgerEntry[] | undefined {
-  const kept = (ledger ?? []).filter((e) => e.promotionId !== promotionId || e.kind === 'cut');
+  const kept = (ledger ?? []).filter(
+    (e) => e.promotionId !== promotionId || e.kind === 'cut' || e.kind === 'stripped',
+  );
   return kept.length > 0 ? kept : undefined;
 }
 

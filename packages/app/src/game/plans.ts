@@ -50,6 +50,7 @@ import {
   eventName,
   eventRevenue,
   expectedDemand,
+  divisionsFor,
   getDivision,
   groupFor,
   inboxId,
@@ -811,6 +812,15 @@ export interface TitleOption {
   available: boolean;
 }
 
+/** Two divisions next to each other on the scale, within the same sex. */
+function neighbouringDivisions(a: string, b: string): boolean {
+  const da = getDivision(a as never);
+  const dz = getDivision(b as never);
+  if (da.sex !== dz.sex) return false;
+  const order = divisionsFor(da.sex).map((d) => d.id as string);
+  return Math.abs(order.indexOf(a) - order.indexOf(b)) === 1;
+}
+
 /**
  * Which kind of championship bout, if any, this pairing could be.
  *
@@ -838,17 +848,33 @@ export function titleOptionsFor(input: {
 
   const options: TitleOption[] = [];
 
+  /*
+   * Champion against champion across a division (doc 34 B6): the red corner's belt is on the
+   * line, and the visitor — a champion in their own right, one division away — fights for a
+   * second. Only between two of this promotion's champions in neighbouring divisions; anything
+   * further apart is a superfight, which can be booked, but not for a belt.
+   */
+  const champChamp =
+    !sameDivision &&
+    champion?.id === red.id &&
+    championOfDivision(ctx, blue.divisionId as string)?.id === blue.id &&
+    neighbouringDivisions(red.divisionId as string, blue.divisionId as string);
+
   options.push({
     kind: 'undisputed',
-    label: 'For the title',
-    available: sameDivision && championInvolved,
-    reason: !sameDivision
-      ? 'Two different divisions. There is no belt this could be for.'
-      : !champion
-        ? 'The belt is vacant — this would be a vacant title fight.'
-        : championInvolved
-          ? `${displayName(champion)} defends.`
-          : `${displayName(champion)} holds the belt, and is not in this fight.`,
+    label: champChamp
+      ? `Champion vs champion, for the ${getDivision(red.divisionId).name} title`
+      : 'For the title',
+    available: (sameDivision && championInvolved) || champChamp,
+    reason: champChamp
+      ? `${displayName(red)} defends against the ${getDivision(blue.divisionId).name} champion. Win, and ${displayName(blue)} holds two belts.`
+      : !sameDivision
+        ? "Two different divisions. Only two champions a division apart can fight for a belt across them — the red corner's."
+        : !champion
+          ? 'The belt is vacant — this would be a vacant title fight.'
+          : championInvolved
+            ? `${displayName(champion)} defends.`
+            : `${displayName(champion)} holds the belt, and is not in this fight.`,
   });
 
   options.push({

@@ -13,7 +13,7 @@
  * visible in one glance rather than reconstructed.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   championshipId,
   describeReign,
@@ -23,6 +23,7 @@ import {
   recordString,
   titleShotEligibility,
   type Championship,
+  type DivisionId,
   type Fighter,
   type Promotion,
 } from '@mmasim/engine';
@@ -31,10 +32,12 @@ import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, ListItem } from '../ui';
 import { Alert } from '../ui/signals';
 import { bookedOnPlans } from '../game/finances';
+import { stripChampion, strippingReaction } from '../game/belts';
+import { useToast } from '../ui/toast';
 import { PromoterSubNav } from './promoterNav';
 
 export function ChampionsScreen() {
-  const { db, world } = useGame();
+  const { db, world, commit } = useGame();
   const { navigate } = useRouter();
 
   const promotion = world.playerPromotionId
@@ -159,6 +162,14 @@ export function ChampionsScreen() {
                         </Chip>
                       )}
                     </span>
+                    <StripTitle
+                      champion={champion}
+                      day={world.day}
+                      onStrip={() => {
+                        stripChampion(db, divisionId as DivisionId);
+                        commit();
+                      }}
+                    />
                   </div>
                 ) : (
                   <p className="prose" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
@@ -224,6 +235,67 @@ export function ChampionsScreen() {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Taking the belt off the champion. Two taps, and the first says what it will cost: how the
+ * audience will read it and what it does to the buzz — the champion's memory of it is a given.
+ */
+function StripTitle({
+  champion,
+  day,
+  onStrip,
+}: {
+  champion: Fighter;
+  day: number;
+  onStrip(): void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const toast = useToast();
+  const reaction = strippingReaction(champion, day);
+
+  if (!confirming) {
+    return (
+      <Button
+        size="sm"
+        variant="ghost"
+        style={{ marginTop: 'var(--space-2)' }}
+        onClick={() => setConfirming(true)}
+      >
+        Strip the title
+      </Button>
+    );
+  }
+
+  return (
+    <div className="stack" style={{ gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+      <p className="prose" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+        {reaction.verdict}{' '}
+        {reaction.buzzDelta < 0
+          ? `It will cost ${-reaction.buzzDelta} buzz.`
+          : 'It will cost nothing at the gate.'}{' '}
+        {displayName(champion)} will not forget it.
+      </p>
+      <span className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
+        <Button
+          size="sm"
+          variant="danger"
+          onClick={() => {
+            onStrip();
+            toast(
+              `${displayName(champion)} has been stripped. The belt is vacant.`,
+              reaction.justified ? 'info' : 'warn',
+            );
+          }}
+        >
+          Yes — strip {displayName(champion)}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+          Keep them as champion
+        </Button>
+      </span>
     </div>
   );
 }

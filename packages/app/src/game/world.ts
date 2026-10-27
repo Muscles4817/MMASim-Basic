@@ -41,6 +41,7 @@ import {
   championshipId,
   contenderQueue,
   crown,
+  currentReign,
   defend,
   lastContested,
   describeVacancy,
@@ -2130,13 +2131,30 @@ function vacateAbandonedBelts(db: GameDb, day: number): NewsItem[] {
        * find out what had happened. "The belt is vacant" is not a story; "he is out for a year
        * and they have stripped him" is.
        */
+      const title = db.championships.findById(championshipId(promotion.id, divisionId as never)) as
+        Championship | undefined;
+
+      /*
+       * A champion who won this belt from another division — champion against champion
+       * (doc 34 B6) — holds two, and is not "moved" out of the one they just won. They keep it
+       * while they keep contesting it: a year without defending it, and it goes, which is what
+       * happens to two-weight champions who cannot defend both.
+       */
+      const lastContested = title ? currentReign(title)?.lastContestedDay : undefined;
+      const holdingASecondBelt =
+        champion !== undefined &&
+        promotion.champions[champion.divisionId] === champion.id &&
+        lastContested !== undefined &&
+        day - lastContested <= 365;
+
       const reason: VacancyReason | undefined = !champion
         ? 'leftPromotion'
         : champion.retiredDay !== undefined
           ? 'retired'
           : champion.promotionId !== promotion.id
             ? 'leftPromotion'
-            : champion.divisionId !== (divisionId as unknown as typeof champion.divisionId)
+            : champion.divisionId !== (divisionId as unknown as typeof champion.divisionId) &&
+                !holdingASecondBelt
               ? 'movedDivision'
               : (champion.readyOnDay ?? 0) - day > 365
                 ? 'injured'
@@ -2146,8 +2164,6 @@ function vacateAbandonedBelts(db: GameDb, day: number): NewsItem[] {
 
       updated = setChampion(updated, divisionId as never, undefined);
 
-      const title = db.championships.findById(championshipId(promotion.id, divisionId as never)) as
-        Championship | undefined;
       if (title) {
         db.championships.upsert(vacate({ title, day, reason }) as Championship & Entity);
       }
