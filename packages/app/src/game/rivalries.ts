@@ -186,12 +186,23 @@ export const meetings = (fighter: Fighter, opponentId: FighterId): number =>
  * Drop pairings that have gone completely cold. Doc 34 C6: the world's bouts now raise heat, so
  * every pair that fights writes a rivalry row, and one nobody will ever read again — never a
  * grudge, and its heat decayed to nothing — only costs the save its bytes. A confirmed grudge is
- * kept whatever its heat, because it never fully cools.
+ * kept whatever its heat, because it never fully cools — until both of them have been retired
+ * for a year (#63 review: grudges alone grew by about 44 a year, roughly 223 KB by year ten). A
+ * comeback inside that year still finds the grudge waiting.
  */
+export const GRUDGE_OUTLIVES_RETIREMENT_DAYS = 365;
+
 export function pruneColdRivalries(db: GameDb, day: number): number {
   let removed = 0;
+  const longRetired = (id: string) => {
+    const f = db.fighters.findById(id) as Fighter | undefined;
+    return (
+      !f || (f.retiredDay !== undefined && day - f.retiredDay >= GRUDGE_OUTLIVES_RETIREMENT_DAYS)
+    );
+  };
   for (const r of db.rivalries.findAll() as StoredRivalry[]) {
-    if (r.isRivalry || currentHeat(r, day as never) >= 1) continue;
+    const over = r.fighterIds.every((id) => longRetired(id as string));
+    if (!over && (r.isRivalry || currentHeat(r, day as never) >= 1)) continue;
     db.rivalries.remove(r.id as string);
     removed += 1;
   }

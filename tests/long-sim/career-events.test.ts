@@ -52,6 +52,7 @@ describe('career events over six years', () => {
     const comebacks = all.filter((f) => f.comebackDay !== undefined && f.comebackDay >= start);
     const rate = comebacks.length / (retired.length + comebacks.length);
     expect(rate, 'comebacks against retirements').toBeGreaterThan(0.02);
-    expect(rate).toBeLessThan(0.25);
+    // Measured about 13%; the ceiling sits close enough above it to catch a retune (#63 review).
+    expect(rate).toBeLessThan(0.2);
   }, 900_000);
 });

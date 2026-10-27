@@ -16,10 +16,12 @@ import {
   voiceFor,
   wantsFarewell,
   type Fighter,
+  type InboxItem,
   type NewsItem,
 } from '@mmasim/engine';
 import { getWorld, type GameDb } from '@mmasim/data';
 import { raise } from './inbox';
+import { applyDivisionMove } from './world';
 
 /**
  * Time off for a fighter's head: not bookable for `TIME_OFF_DAYS`, and the reset it buys applied
@@ -96,4 +98,26 @@ export function scanCareerEvents(db: GameDb, day: number): void {
       promotionId: promotionId as never,
     });
   }
+}
+
+/**
+ * Answer a fighter's request to change division (doc 34 C6, #63 review): allowing it is the same
+ * move the world makes; refusing keeps them at the weight, and they resent it. True when the item
+ * was one.
+ */
+export function answerDivisionMove(db: GameDb, item: InboxItem, actionId: string): boolean {
+  if (!actionId.startsWith('move:') || !item.fighterId) return false;
+  const fighter = db.fighters.findById(item.fighterId as string) as Fighter | undefined;
+  if (!fighter || fighter.retiredDay !== undefined) return true;
+  if (actionId === 'move:refuse') {
+    db.fighters.upsert({ ...fighter, resentment: Math.min(100, fighter.resentment + 8) } as never);
+    db.save();
+    return true;
+  }
+  const target = actionId.slice('move:allow:'.length);
+  if (target && target !== fighter.divisionId) {
+    applyDivisionMove(db, fighter, target as Fighter['divisionId'], getWorld(db).day);
+    db.save();
+  }
+  return true;
 }

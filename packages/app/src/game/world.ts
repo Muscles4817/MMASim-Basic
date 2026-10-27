@@ -493,7 +493,9 @@ export function advanceWorld(
 
     // Once a year, the world's fighters decide whether they are in the right division (doc 34 C6).
     if (Math.floor(day / 365) !== Math.floor((day - 1) / 365)) {
-      news.push(...moveDivisions(db, day, rng.fork(`moves:${day}`), exceptId));
+      news.push(
+        ...moveDivisions(db, day, rng.fork(`moves:${day}`), exceptId, exclusion.activityHold),
+      );
     }
 
     /*
@@ -3134,16 +3136,35 @@ export function holdsABeltAnywhere(db: GameDb, fighter: Fighter): boolean {
  * the player asks — through `chooseDivisionMove`, which reads the cut and the field — and the move
  * is the same one the player makes: `moveDivision`, one settle step for the body, and the rest as
  * camps pass. A nickname somebody in the new division already answers to is left at the door.
+ *
+ * Two things it never touches on its own (#63 review). A fighter the promoter has signed onto a
+ * card (`hold`, the clock's signed-bookings hold) stays where the bout was made, or the card is
+ * left with a cross-division fight. And a fighter on the player's own roster *asks*: the move is
+ * an inbox decision, not something done to the promoter's roster with only a news line.
  */
 export function moveDivisions(
   db: GameDb,
   day: number,
   rng: Rng,
   exceptId: FighterId | undefined,
+  hold?: ReadonlyMap<string, number>,
 ): NewsItem[] {
-  const fighters = (db.fighters.findAll() as Fighter[]).filter(
-    (f) => f.retiredDay === undefined && f.id !== exceptId,
-  );
+  const playerPromotionId = getWorld(db).playerPromotionId;
+  const all = db.fighters.findAll() as Fighter[];
+  const fighters = all.filter((f) => f.retiredDay === undefined && f.id !== exceptId);
+  /*
+   * Nicknames already worn, per division — C3's index (see `runCardBout`), built once per
+   * division on first use and kept current as fighters move, not rescanned per mover.
+   */
+  const takenByDivision = new Map<string, Set<string>>();
+  const takenIn = (divisionId: Fighter['divisionId']): Set<string> => {
+    let taken = takenByDivision.get(divisionId as string);
+    if (!taken) {
+      taken = nicknamesTaken(all, divisionId);
+      takenByDivision.set(divisionId as string, taken);
+    }
+    return taken;
+  };
   const champions = new Set<string>();
   const promotionsById = new Map<string, Promotion>();
   for (const p of db.promotions.findAll() as unknown as Promotion[]) {
@@ -3175,31 +3196,71 @@ export function moveDivisions(
       ? promotionsById.get(fighter.promotionId as string)
       : undefined;
     if (promotion && !promotion.divisions.includes(choice.target)) continue;
-    const taken = nicknamesTaken(db.fighters.findAll() as Fighter[], choice.target);
-    const moved = settleWeight({
-      ...moveDivision(fighter, choice.target, day as never),
-      nickname: nicknameOnArrival(fighter.nickname, taken),
-    });
-    db.fighters.upsert(moved as Fighter & Entity);
+    // Signed onto one of the player's cards: the bout was made at this weight.
+    if ((hold?.get(fighter.id as string) ?? -Infinity) >= day) continue;
     const to = getDivision(choice.target);
+    const up = to.limitLbs > getDivision(fighter.divisionId).limitLbs;
+
+    if (playerPromotionId && fighter.promotionId === playerPromotionId) {
+      raise(db, {
+        id: inboxId(day as never, `move:${fighter.id}`),
+        day: day as never,
+        kind: 'roster',
+        priority: 'decision',
+        title: `${displayName(fighter)} wants to move ${up ? 'up' : 'down'} to ${to.name}`,
+        body:
+          choice.reason === 'cut'
+            ? 'The cut has become the hardest fight of every camp. Refuse, and they make the weight resenting it.'
+            : 'Outgunned where they are, and betting on a division where they are not. Refuse, and they stay unhappy about it.',
+        actions: [
+          { id: `move:allow:${choice.target as string}`, label: 'Allow the move' },
+          { id: 'move:refuse', label: 'Keep them here', isDismiss: true },
+        ],
+        link: { route: 'fighter', id: fighter.id as string },
+        fighterId: fighter.id,
+        divisionId: choice.target,
+        promotionId: playerPromotionId as never,
+      });
+      continue;
+    }
+
+    const moved = applyDivisionMove(db, fighter, choice.target, day, takenIn);
     news.push({
       id: newsId(day as never, `move:${fighter.id}`),
       day: day as never,
       kind: 'divisionMove',
       weight: fighter.reputation >= 55 ? 'normal' : 'minor',
-      headline: `${displayName(fighter)} moves ${
-        to.limitLbs > getDivision(fighter.divisionId).limitLbs ? 'up' : 'down'
-      } to ${to.name}`,
+      headline: `${displayName(fighter)} moves ${up ? 'up' : 'down'} to ${to.name}`,
       detail:
         choice.reason === 'cut'
           ? 'The cut had become the hardest fight of every camp.'
           : 'Outgunned where they were, and betting on a division where they are not.',
-      fighterIds: [fighter.id],
+      fighterIds: [moved.id],
       divisionId: choice.target,
       promotionId: fighter.promotionId,
     });
   }
   return news;
+}
+
+/**
+ * Move one fighter: the division, one settle step for the body, and their nickname unless the new
+ * division already has it. `takenIn` is the caller's per-division index, kept current here.
+ */
+export function applyDivisionMove(
+  db: GameDb,
+  fighter: Fighter,
+  target: Fighter['divisionId'],
+  day: number,
+  takenIn: (divisionId: Fighter['divisionId']) => Set<string> = (d) =>
+    nicknamesTaken(db.fighters.findAll() as Fighter[], d),
+): Fighter {
+  const nickname = nicknameOnArrival(fighter.nickname, takenIn(target));
+  const moved = settleWeight({ ...moveDivision(fighter, target, day as never), nickname });
+  db.fighters.upsert(moved as Fighter & Entity);
+  if (fighter.nickname) takenIn(fighter.divisionId).delete(fighter.nickname);
+  if (nickname) takenIn(target).add(nickname);
+  return moved;
 }
 
 /**

@@ -6,7 +6,11 @@ import { describe, expect, it } from 'vitest';
 import { createNewGame, getWorld, setWorld } from '@mmasim/data';
 import { createRng, type Fighter, type Promotion } from '@mmasim/engine';
 import { comebacks, moveDivisions } from '../../packages/app/src/game/world';
-import { scanCareerEvents, takeTimeOff } from '../../packages/app/src/game/careerEvents';
+import {
+  answerDivisionMove,
+  scanCareerEvents,
+  takeTimeOff,
+} from '../../packages/app/src/game/careerEvents';
 import { blockerFor, createPlan, promoterContext } from '../../packages/app/src/game/plans';
 import {
   heatBetween,
@@ -55,6 +59,68 @@ describe('division moves in the world', () => {
     expect(moved?.divisionId).toBe('mens-welterweight');
     expect(moved?.nickname).toBeUndefined();
     expect(moved?.divisionHistory).toContain('mens-welterweight');
+  });
+
+  /** An overweight lightweight who is no champion, signed where they are. */
+  function overweight(db: ReturnType<typeof world>['db'], active: Fighter[], promotionId?: string) {
+    const champions = new Set(
+      (db.promotions.findAll() as unknown as Promotion[]).flatMap((p) =>
+        Object.values(p.champions).map(String),
+      ),
+    );
+    const heavy = active.find(
+      (f) =>
+        f.divisionId === 'mens-middleweight' &&
+        !champions.has(f.id as string) &&
+        (promotionId === undefined || f.promotionId === promotionId),
+    )!;
+    db.fighters.upsert({
+      ...heavy,
+      ...(promotionId === undefined ? { promotionId: undefined, agreementId: undefined } : {}),
+      divisionId: 'mens-lightweight',
+      lastDivisionChangeDay: undefined,
+    } as never);
+    return heavy;
+  }
+
+  it('never moves a fighter signed onto one of the player’s cards', () => {
+    const { db, active, day } = world();
+    const heavy = overweight(db, active);
+    const hold = new Map([[heavy.id as string, Number.POSITIVE_INFINITY]]);
+    for (let year = 1; year <= 8; year++) {
+      moveDivisions(db, day + year * 365, createRng(`moves:${year}`), undefined, hold);
+    }
+    expect((db.fighters.findById(heavy.id as string) as Fighter).divisionId).toBe(
+      'mens-lightweight',
+    );
+  });
+
+  it('asks the promoter about one of theirs instead of moving them, and does what they say', () => {
+    const { db, promotion, active, day } = world();
+    const heavy = overweight(db, active, promotion.id as string);
+    let item: ReturnType<typeof db.inbox.findAll>[number] | undefined;
+    for (let year = 1; year <= 8 && !item; year++) {
+      moveDivisions(db, day + year * 365, createRng(`moves:${year}`), undefined);
+      item = db.inbox.findAll().find((i) => String(i.id).includes(`move:${heavy.id}`));
+    }
+    expect(item, 'never asked').toBeDefined();
+    expect(item!.priority).toBe('decision');
+    // Asking moved nobody.
+    expect((db.fighters.findById(heavy.id as string) as Fighter).divisionId).toBe(
+      'mens-lightweight',
+    );
+
+    const before = (db.fighters.findById(heavy.id as string) as Fighter).resentment;
+    answerDivisionMove(db, item as never, 'move:refuse');
+    const refused = db.fighters.findById(heavy.id as string) as Fighter;
+    expect(refused.divisionId).toBe('mens-lightweight');
+    expect(refused.resentment).toBeGreaterThan(before);
+
+    const allow = item!.actions!.find((a) => a.id.startsWith('move:allow:'))!;
+    answerDivisionMove(db, item as never, allow.id);
+    expect((db.fighters.findById(heavy.id as string) as Fighter).divisionId).toBe(
+      'mens-welterweight',
+    );
   });
 });
 
@@ -139,5 +205,19 @@ describe('heat between two fighters', () => {
     expect(pruneColdRivalries(db, day)).toBe(0);
     expect(pruneColdRivalries(db, day + 3 * 365)).toBeGreaterThan(0);
     expect(heatBetween(db, a!.id, b!.id, day).heat).toBe(0);
+  });
+
+  it('keeps a grudge until both of them have been retired for a year', () => {
+    const { db, active, day } = world();
+    const [a, b] = active;
+    const grudge = stokeBetween(db, { a: a!, b: b!, source: 'callout', day, seed: 'z' }).rivalry;
+    db.rivalries.upsert({ ...grudge, id: grudge.id as string, isRivalry: true } as never);
+    pruneColdRivalries(db, day + 3 * 365);
+    expect(heatBetween(db, a!.id, b!.id, day + 3 * 365).isRivalry).toBe(true);
+    for (const f of [a!, b!]) db.fighters.upsert({ ...f, retiredDay: day } as never);
+    pruneColdRivalries(db, day + 200);
+    expect(heatBetween(db, a!.id, b!.id, day + 200).isRivalry, 'within the year').toBe(true);
+    pruneColdRivalries(db, day + 400);
+    expect(heatBetween(db, a!.id, b!.id, day + 400).isRivalry).toBe(false);
   });
 });

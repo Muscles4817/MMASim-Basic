@@ -22,6 +22,7 @@ import { markItemRead, readInbox, resolveItem } from '../game/inbox';
 import { presentAlert } from '../game/plans';
 import { answerBoutOffer } from '../game/career';
 import { answerWeighIn } from '../game/plans';
+import { answerDivisionMove } from '../game/careerEvents';
 
 export function InboxScreen() {
   const { db, world, commit, playerFighter } = useGame();
@@ -59,6 +60,8 @@ export function InboxScreen() {
     }
     // A missed weight on one of the player's cards (doc 34 C6).
     answerWeighIn(db, item, actionId);
+    // A fighter on the roster asking to change division (doc 34 C6).
+    answerDivisionMove(db, item, actionId);
     resolveItem(db, item.id, actionId);
     commit();
   };
