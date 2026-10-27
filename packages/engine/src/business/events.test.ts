@@ -271,17 +271,19 @@ describe('what a night makes', () => {
 });
 
 describe('naming the night', () => {
-  it('numbers a pay-per-view and names a fight night after its main event', () => {
+  it('numbers a card, and adds the main event once there is one', () => {
     const promotion = makePromotion({ shortName: 'AFC' });
-    expect(eventName({ promotion, broadcast: 'ppv', number: 248 })).toBe('AFC 248');
+    expect(eventName({ promotion, number: 248 })).toBe('AFC 248');
+    expect(eventName({ promotion, number: 12, mainEventNames: ['Reyes', 'Blachowicz'] })).toBe(
+      'AFC 12: Reyes vs Blachowicz',
+    );
+  });
+
+  it('puts a promoter’s own title in place of the number', () => {
+    const promotion = makePromotion({ shortName: 'AFC' });
     expect(
-      eventName({
-        promotion,
-        broadcast: 'televised',
-        number: 12,
-        mainEventNames: ['Reyes', 'Blachowicz'],
-      }),
-    ).toBe('AFC Fight Night: Reyes vs Blachowicz');
+      eventName({ promotion, number: 3, title: 'Summer Slam', mainEventNames: ['Reyes', 'Hill'] }),
+    ).toBe('Summer Slam: Reyes vs Hill');
   });
 
   it('never puts a promotion with no platform on pay-per-view', () => {

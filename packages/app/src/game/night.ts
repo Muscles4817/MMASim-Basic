@@ -19,7 +19,6 @@ import {
   buildCard,
   createRng,
   planFor,
-  displayName,
   drawWeight,
   eventId,
   eventName,
@@ -41,6 +40,7 @@ import {
 } from '@mmasim/engine';
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
 import { currentPurse } from './money';
+import { headlineNames, nextEventNumber } from './world';
 import { settleFightInjuries } from './fightInjuries';
 import { money } from '../ui/format';
 
@@ -314,11 +314,11 @@ export function runSupportingCard(
     id: eventId(promotion.id, day),
     promotionId: promotion.id,
     day,
+    // Billed under whoever tops the card, which is not necessarily the player.
     name: eventName({
       promotion,
-      broadcast,
-      number: Math.floor(day / 14) + 1,
-      mainEventNames: [displayName(player), displayName(opponent)],
+      number: nextEventNumber(db, promotion),
+      mainEventNames: headlineNames(db, card[0]),
     }),
     venue,
     broadcast,

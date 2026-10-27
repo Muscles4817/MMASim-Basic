@@ -43,7 +43,7 @@ import { formatGameDay } from '../shell/Shell';
 import { money } from '../ui/format';
 import { attentionFor } from '../game/attention';
 import { describeRunway, financialSnapshot } from '../game/finances';
-import { forecastPlan, plansFor, promoterContext } from '../game/plans';
+import { fightNightOn, forecastPlan, planName, plansFor, promoterContext } from '../game/plans';
 import { PromoterSubNav } from './promoterNav';
 
 /** How many rows the dashboard shows before it stops being a dashboard. */
@@ -131,6 +131,8 @@ export function PromotionHubScreen() {
   }
 
   const next = plans[0];
+  // The same question the calendar and the clock ask, answered by the same helper.
+  const tonight = fightNightOn(db, promotion.id as string, world.day) !== undefined;
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
@@ -145,7 +147,7 @@ export function PromotionHubScreen() {
               ever describe the first one.
             */}
             <Card
-              title={next ? 'Next event' : 'Nothing booked'}
+              title={tonight ? 'Fight night' : next ? 'Next event' : 'Nothing booked'}
               action={
                 <Button size="sm" onClick={() => navigate({ name: 'calendar' })}>
                   Plan a card
@@ -156,10 +158,11 @@ export function PromotionHubScreen() {
                 <div className="stack" style={{ gap: 'var(--space-3)' }}>
                   <div>
                     <p style={{ fontSize: 'var(--text-xl)', fontWeight: 800, margin: 0 }}>
-                      {next.name}
+                      {planName(db, next)}
                     </p>
                     <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
-                      {formatGameDay(next.day)} · {next.city} · in {next.day - world.day} days
+                      {formatGameDay(next.day)} · {next.city} ·{' '}
+                      {tonight ? 'tonight' : `in ${next.day - world.day} days`}
                     </p>
                   </div>
 
@@ -216,15 +219,18 @@ export function PromotionHubScreen() {
                     block
                     onClick={() => navigate({ name: 'plan', id: next.id })}
                   >
-                    {planProgress(next).complete ? 'Open the card' : 'Continue booking'}
+                    {tonight
+                      ? `Run fight night: ${planName(db, next)}`
+                      : planProgress(next).complete
+                        ? 'Open the card'
+                        : 'Continue booking'}
                   </Button>
                 </div>
               ) : (
                 <div className="stack" style={{ gap: 'var(--space-3)' }}>
                   <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
                     A date with nothing on it is the only thing a promoter cannot afford. Pick a
-                    date months out, put your champion on it, and fill the rest as the year
-                    happens.
+                    date months out, put your champion on it, and fill the rest as the year happens.
                   </p>
                   <Button variant="primary" block onClick={() => navigate({ name: 'calendar' })}>
                     Plan a card
@@ -242,7 +248,7 @@ export function PromotionHubScreen() {
                     return (
                       <PipelineCard
                         key={plan.id}
-                        name={plan.name}
+                        name={planName(db, plan)}
                         when={formatGameDay(plan.day)}
                         meta={`${plan.city} · ${describeHealth(health)}`}
                         filled={progress.filled}

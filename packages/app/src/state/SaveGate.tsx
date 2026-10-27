@@ -19,6 +19,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
+  SaveTooNewError,
+  SaveTooOldError,
+  assertReadableSave,
   deleteSave,
   deleteSaveStorage,
   listSaves,
@@ -33,7 +36,7 @@ import {
   type WorldSize,
 } from '@mmasim/data';
 import { GameProvider } from './GameProvider';
-import { MenuScreen } from '../screens/MenuScreen';
+import { DeleteSave, MenuScreen } from '../screens/MenuScreen';
 import { generateWorld } from '../game/newWorld';
 import { Button } from '../ui';
 
@@ -130,6 +133,22 @@ export function SaveGate({ children }: { children: ReactNode }) {
         }
 
         /*
+         * A save from a format this build does not read, refused here rather than inside the
+         * provider's first render — where it would reach the error boundary, whose only offer is
+         * to wipe every save on the device.
+         */
+        try {
+          assertReadableSave(opened);
+        } catch (cause) {
+          setSession({
+            status: 'failed',
+            ...active,
+            error: cause instanceof Error ? cause : new Error(String(cause)),
+          });
+          return;
+        }
+
+        /*
          * A generated world that has not been built yet.
          *
          * Probed on the storage rather than trusted from the registry, because reopening a
@@ -188,7 +207,20 @@ export function SaveGate({ children }: { children: ReactNode }) {
     return () => void (current = false);
   }, [active]);
 
-  const open = useCallback((save: SaveSummary) => {
+  const open = useCallback((save: SaveSummary, landing: 'home' | 'new' = 'home') => {
+    /*
+     * Where the game opens, set before the router mounts and reads it.
+     *
+     * The menu is reached with an empty hash, and an empty hash parses as the new-career screen —
+     * so Continue on a promotion opened "New career / Who are you going to be?". Home is `hub`,
+     * which `App` already sends to the right dashboard for each role, and to the start screen
+     * for a save that has nobody in it yet.
+     */
+    try {
+      window.history.replaceState(null, '', landing === 'new' ? '#/start' : '#/hub');
+    } catch {
+      /* A refusal here costs the landing page, not the save. */
+    }
     const store = storage();
     if (store) {
       try {
@@ -218,7 +250,7 @@ export function SaveGate({ children }: { children: ReactNode }) {
     (era: EraId, name: string, size?: WorldSize) => {
       const nowIso = new Date().toISOString();
       const id = nextSaveId(saves, nowIso);
-      open({ id, name, era, size, createdAtIso: nowIso, lastPlayedIso: nowIso, day: 0 });
+      open({ id, name, era, size, createdAtIso: nowIso, lastPlayedIso: nowIso, day: 0 }, 'new');
     },
     [saves, open],
   );
@@ -257,7 +289,17 @@ export function SaveGate({ children }: { children: ReactNode }) {
   }
 
   if (session.status === 'failed') {
-    return <OpenFailed error={session.error} onBack={toMenu} />;
+    return (
+      <OpenFailed
+        error={session.error}
+        onBack={toMenu}
+        saveName={saves.find((s) => s.id === session.id)?.name ?? 'this save'}
+        onDelete={() => {
+          remove(session.id);
+          toMenu();
+        }}
+      />
+    );
   }
 
   /*
@@ -360,7 +402,57 @@ function Building({ size, done, label }: { size: WorldSize; done: number; label:
  * fine, and the player is told which of those they are looking at. This used to be a blank
  * page, because the failure arrived as a throw during a render.
  */
-function OpenFailed({ error, onBack }: { error: Error; onBack(): void }) {
+function OpenFailed({
+  error,
+  onBack,
+  onDelete,
+  saveName,
+}: {
+  error: Error;
+  onBack(): void;
+  onDelete(): void;
+  saveName: string;
+}) {
+  /*
+   * A save from another version is a different failure from storage refusing, and the old copy
+   * said the wrong thing about it ("usually a browser in private mode"). Say what is true, and
+   * offer the one useful thing: clearing the save that will never open in this build.
+   */
+  const wrongVersion = error instanceof SaveTooOldError || error instanceof SaveTooNewError;
+  if (wrongVersion) {
+    return (
+      <div
+        role="alert"
+        style={{
+          minHeight: '100dvh',
+          display: 'grid',
+          placeItems: 'center',
+          padding: 'var(--space-4)',
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ maxWidth: '32rem' }}>
+          <h1 style={{ marginBottom: 'var(--space-3)' }}>
+            {error instanceof SaveTooOldError
+              ? 'This save is from an older version'
+              : 'This save is from a newer version'}
+          </h1>
+          <p className="prose" style={{ marginBottom: 'var(--space-4)' }}>
+            {error.message}
+          </p>
+          <div className="row" style={{ gap: 'var(--space-2)', justifyContent: 'center' }}>
+            <Button variant="primary" onClick={onBack}>
+              Back to the menu
+            </Button>
+            {error instanceof SaveTooOldError && (
+              <DeleteSave name={saveName} onDelete={onDelete} label="Delete this save" />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       role="alert"

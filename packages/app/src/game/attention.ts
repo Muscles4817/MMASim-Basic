@@ -39,7 +39,7 @@ import {
   type PromotionalAgreement,
 } from '@mmasim/engine';
 import { getWorld, type GameDb } from '@mmasim/data';
-import { daysUnbookedBy, plansFor } from './plans';
+import { daysUnbookedBy, planName, plansFor } from './plans';
 
 export type AttentionKind =
   'card' | 'title' | 'activity' | 'contract' | 'morale' | 'medical' | 'opportunity' | 'money';
@@ -90,7 +90,7 @@ export function attentionFor(db: GameDb, promotion: Promotion | undefined): Atte
 
   const startedDay = world.startedDay ?? day;
 
-  items.push(...cardIssues(upcoming, day));
+  items.push(...cardIssues(db, upcoming, day));
   items.push(...titleIssues({ db, promotion, roster, upcoming, day, startedDay, booked }));
   items.push(...rosterIssues({ db, promotion, roster, day, startedDay, booked }));
 
@@ -99,7 +99,7 @@ export function attentionFor(db: GameDb, promotion: Promotion | undefined): Atte
 
 // --- Cards -------------------------------------------------------------------------------------
 
-function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
+function cardIssues(db: GameDb, plans: readonly EventPlan[], day: number): AttentionItem[] {
   const items: AttentionItem[] = [];
 
   if (plans.length === 0) {
@@ -121,6 +121,7 @@ function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
     const bouts = plannedBouts(plan);
     const main = plan.slots.find((s) => s.position === 'mainEvent')?.bout;
     const empty = plan.slots.length - bouts.length;
+    const name = planName(db, plan);
 
     // The closer the card, the louder the same problem gets. A card in ten weeks with no main
     // event is a plan; the same card in ten days is an emergency.
@@ -132,7 +133,7 @@ function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
         kind: 'card',
         tone: away <= 28 ? 'danger' : 'warn',
         urgency: Math.round(60 + 38 * pressure),
-        title: `${plan.name} has no main event`,
+        title: `${name} has no main event`,
         detail: `${away} days out and nothing is topping the card. The main event sells the night; everything else stops it being a discount.`,
         action: { label: 'Book it', route: 'plan', id: plan.id },
       });
@@ -144,7 +145,7 @@ function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
         kind: 'card',
         tone: away <= 21 ? 'warn' : 'info',
         urgency: Math.round(35 + 30 * pressure),
-        title: `${plan.name} is ${empty} fight${empty === 1 ? '' : 's'} short`,
+        title: `${name} is ${empty} fight${empty === 1 ? '' : 's'} short`,
         detail: `${away} days to fill them. A thin card is worth less at the gate, and short notice costs more in purses.`,
         action: { label: 'Fill the card', route: 'plan', id: plan.id },
       });
@@ -157,7 +158,7 @@ function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
         kind: 'card',
         tone: 'warn',
         urgency: 72,
-        title: `${declined} bout${declined === 1 ? '' : 's'} turned down on ${plan.name}`,
+        title: `${declined} bout${declined === 1 ? '' : 's'} turned down on ${name}`,
         detail:
           'Those slots are still holding fights nobody agreed to. Replace them or send a better offer.',
         action: { label: 'Fix the card', route: 'plan', id: plan.id },
