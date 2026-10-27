@@ -20,10 +20,10 @@ import type { GameDay } from '../core/clock.js';
 import {
   careerSummary,
   fighterAge,
-  isKoMethod,
   type Fighter,
   type FightRecordEntry,
 } from '../domain/fighter.js';
+import { starPerformanceValue } from './aftermath.js';
 
 // --- How much they sell ----------------------------------------------------------------------------
 
@@ -62,6 +62,9 @@ const DRAW_BANDS: readonly { klass: DrawClass; floor: number; label: string; blu
   },
 ];
 
+/** Where an audience starts to exist at all: the floor of the "Building a following" band. */
+const FOLLOWING_FLOOR = DRAW_BANDS.find((b) => b.klass === 'following')!.floor;
+
 // --- Which way it is going -------------------------------------------------------------------------
 
 export type StarTrendId = 'rising' | 'steady' | 'fading';
@@ -81,16 +84,25 @@ const TREND_WINDOW_DAYS = 540;
 const FORGOTTEN_AFTER_DAYS = 365;
 
 /**
- * What a result does to a following — the same weights `aftermath.ts` moves `starPower` by: a
- * finish 9, any other win 5, a loss −3. Read off the record rather than stored as a history, so
- * the trend is always the one the numbers underneath it actually took.
+ * Trend-only extras on top of what the aftermath moves star power by. A bonus and a title win are
+ * the nights a following grows fastest, and the trend should read them as such; star power itself
+ * gets them through the opponent's value and the card, so they are not added there.
+ */
+export const TREND_BONUS_EXTRA = 2;
+export const TREND_TITLE_EXTRA = 3;
+
+/**
+ * What a result does to a following: `starPerformanceValue` — the one function `aftermath.ts`
+ * moves `starPower` by — plus the trend-only extras for a winning bonus or title night. Read off
+ * the record rather than stored as a history, so the trend follows what actually happened.
  */
 export function starMomentum(entry: FightRecordEntry): number {
-  if (entry.outcome === 'win') {
-    const finish = isKoMethod(entry.method) || entry.method === 'submission';
-    return (finish ? 9 : 5) + (entry.bonus ? 2 : 0) + (entry.wasTitleFight ? 3 : 0);
-  }
-  return entry.outcome === 'loss' ? -3 : 0;
+  const won = entry.outcome === 'win';
+  const base = starPerformanceValue(won, entry.method);
+  if (!won) return base;
+  return (
+    base + (entry.bonus ? TREND_BONUS_EXTRA : 0) + (entry.wasTitleFight ? TREND_TITLE_EXTRA : 0)
+  );
 }
 
 export function starTrend(fighter: Pick<Fighter, 'record'>, day: GameDay): StarTrend {
@@ -181,6 +193,26 @@ const PERSONAS: Readonly<Record<PersonaId, Omit<Persona, 'id'>>> = {
 
 const persona = (id: PersonaId): Persona => ({ id, ...PERSONAS[id] });
 
+/** Where each persona starts. Axis values are the 1–100 personality scale. */
+export const PERSONA_THRESHOLDS = {
+  heelEgo: 65,
+  heelCharisma: 60,
+  heelAggression: 55,
+  /** Charisma that sells on its own: fan favourite if humble, showman if not. */
+  magnetic: 62,
+  humbleEgo: 55,
+  /** Charisma below which somebody says nothing anyone remembers. */
+  quiet: 40,
+  /** Charisma below which a grinder does not sell. */
+  plain: 50,
+  finisherWins: 4,
+  finishRate: 0.6,
+  grinderWins: 5,
+  decisionRate: 0.6,
+  warhorseAge: 34,
+  warhorseBouts: 20,
+} as const;
+
 /**
  * Who this fighter is to an audience.
  *
@@ -197,17 +229,24 @@ export function personaOf(
   const finishRate = s.wins > 0 ? (s.koWins + s.submissionWins) / s.wins : 0;
   const decisionRate = s.wins > 0 ? s.decisionWins / s.wins : 0;
 
+  const t = PERSONA_THRESHOLDS;
   if (
     fighter.traits.includes('trashTalker') ||
-    (p.ego >= 65 && p.charisma >= 60 && p.aggression >= 55)
+    (p.ego >= t.heelEgo && p.charisma >= t.heelCharisma && p.aggression >= t.heelAggression)
   ) {
     return persona('heel');
   }
-  if (p.charisma >= 62 && p.ego < 55) return persona('fanFavourite');
-  if (p.charisma < 40 && s.wins >= 4 && finishRate >= 0.6) return persona('quietKiller');
-  if (p.charisma >= 62) return persona('showman');
-  if (s.wins >= 5 && decisionRate >= 0.6 && p.charisma < 50) return persona('grinder');
-  if (fighterAge(fighter, day) >= 34 && bouts >= 20) return persona('warhorse');
+  if (p.charisma >= t.magnetic && p.ego < t.humbleEgo) return persona('fanFavourite');
+  if (p.charisma < t.quiet && s.wins >= t.finisherWins && finishRate >= t.finishRate) {
+    return persona('quietKiller');
+  }
+  if (p.charisma >= t.magnetic) return persona('showman');
+  if (s.wins >= t.grinderWins && decisionRate >= t.decisionRate && p.charisma < t.plain) {
+    return persona('grinder');
+  }
+  if (fighterAge(fighter, day) >= t.warhorseAge && bouts >= t.warhorseBouts) {
+    return persona('warhorse');
+  }
   return persona('professional');
 }
 
@@ -313,7 +352,10 @@ export function fightSells(input: {
 
   const finishers = [a, b].filter((f) => {
     const s = careerSummary(f);
-    return s.wins >= 4 && (s.koWins + s.submissionWins) / s.wins >= 0.6;
+    return (
+      s.wins >= PERSONA_THRESHOLDS.finisherWins &&
+      (s.koWins + s.submissionWins) / s.wins >= PERSONA_THRESHOLDS.finishRate
+    );
   }).length;
   if (finishers === 2) hooks.push('Two finishers — unlikely to go the distance');
 
@@ -330,7 +372,8 @@ export function fightSells(input: {
 
   const headline =
     hooks[0] ??
-    ((a.starPower + b.starPower) / 2 < 15
+    // Below the floor of the "Building a following" band, nobody on the poster sells anything.
+    ((a.starPower + b.starPower) / 2 < FOLLOWING_FLOOR
       ? 'Sells to the hardcore, and that is about it'
       : 'A fair fight between two people still making names');
   return { headline, hooks };

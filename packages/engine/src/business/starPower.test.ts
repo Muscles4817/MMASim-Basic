@@ -7,7 +7,16 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { drawRead, fightSells, personaOf, starMomentum, starTrend } from './starPower.js';
+import {
+  TREND_BONUS_EXTRA,
+  TREND_TITLE_EXTRA,
+  drawRead,
+  fightSells,
+  personaOf,
+  starMomentum,
+  starTrend,
+} from './starPower.js';
+import { starPerformanceValue } from './aftermath.js';
 import { makeFighter, TEST_DAY } from '../testing/fixtures.js';
 import type { Fighter, FightRecordEntry } from '../domain/fighter.js';
 import { emptyRecordSummary, summariseRecord } from '../domain/fighter.js';
@@ -75,10 +84,27 @@ describe('the trend', () => {
     expect(starTrend(f, DAY).id).toBe('steady');
   });
 
-  it('weighs a result the way the aftermath moves star power', () => {
-    expect(starMomentum(bout(1, 'win', 'ko'))).toBe(9);
-    expect(starMomentum(bout(1, 'win'))).toBe(5);
-    expect(starMomentum(bout(1, 'loss'))).toBe(-3);
+  it('weighs a result exactly as the aftermath moves star power, plus the named extras', () => {
+    // One function, shared: the trend cannot drift from the number it describes.
+    for (const outcome of ['win', 'loss', 'draw', 'noContest'] as const) {
+      for (const method of ['ko', 'submission', 'decisionUnanimous', 'draw'] as const) {
+        expect(starMomentum(bout(1, outcome, method))).toBe(
+          starPerformanceValue(outcome === 'win', method),
+        );
+      }
+    }
+    const titleBonus = {
+      ...bout(1, 'win', 'ko'),
+      wasTitleFight: true,
+      bonus: 'performance' as const,
+    };
+    expect(starMomentum(titleBonus)).toBe(
+      starPerformanceValue(true, 'ko') + TREND_TITLE_EXTRA + TREND_BONUS_EXTRA,
+    );
+    // Extras are for winning nights only.
+    expect(starMomentum({ ...bout(1, 'loss'), wasTitleFight: true })).toBe(
+      starPerformanceValue(false, 'decisionUnanimous'),
+    );
   });
 });
 

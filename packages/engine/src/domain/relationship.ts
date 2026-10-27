@@ -71,12 +71,38 @@ export function ledgerWeight(kind: LedgerKind, p: Personality): number {
   return base * ambitionScale * temper;
 }
 
-/** Add an event, keeping the newest `LEDGER_CAP`. Returns a new array. */
+/**
+ * How old an event can be before it is pruned: the age at which it weighs under 5% of what it did
+ * on the day (`0.5 ** (age / half-life) < 0.05`). Past that it changes no answer and only costs
+ * the save its bytes.
+ */
+export const LEDGER_FORGOTTEN_DAYS = Math.ceil(LEDGER_HALF_LIFE_DAYS * Math.log2(20));
+
+/**
+ * Add an event, dropping anything already forgotten as of its day and keeping the newest
+ * `LEDGER_CAP`. Returns a new array.
+ */
 export function withLedgerEntry(
   ledger: readonly LedgerEntry[] | undefined,
   entry: LedgerEntry,
 ): LedgerEntry[] {
-  return [...(ledger ?? []), entry].slice(-LEDGER_CAP);
+  return [...(ledger ?? []), entry]
+    .filter((e) => entry.day - e.day < LEDGER_FORGOTTEN_DAYS)
+    .slice(-LEDGER_CAP);
+}
+
+/**
+ * What a fighter keeps when they leave a promotion: only being cut. The rest was the working
+ * relationship, and it ends with the job — but a promoter who cut somebody and comes back for
+ * them later should find that remembered. Undefined when nothing is left, so a fighter with no
+ * history carries no empty array in the save.
+ */
+export function leavingPromotion(
+  ledger: readonly LedgerEntry[] | undefined,
+  promotionId: PromotionId,
+): LedgerEntry[] | undefined {
+  const kept = (ledger ?? []).filter((e) => e.promotionId !== promotionId || e.kind === 'cut');
+  return kept.length > 0 ? kept : undefined;
 }
 
 export interface RelationshipRead {
