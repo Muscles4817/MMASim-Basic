@@ -44,7 +44,6 @@ import {
   type CardPosition,
   type EventPlan,
   type Fighter,
-  type FightNight,
   type MatchIntentId,
   type OpponentGroup,
   type PlanSlot,
@@ -58,6 +57,8 @@ import { Button, Card, Chip, Empty, Segmented } from '../ui';
 import { Alert, Fact, KeyStat } from '../ui/signals';
 import { Console, Ledger, LedgerRow, LedgerRule } from '../ui/console';
 import { formatGameDay } from '../shell/Shell';
+import { useToast } from '../ui/toast';
+import { NightRecap, NightShow } from './NightScreen';
 import { money } from '../ui/format';
 import {
   FILL_SCOPES,
@@ -69,7 +70,6 @@ import {
   describeOdds,
   forecastPlan,
   issuesFor,
-  nightResults,
   opponentsFor,
   placeBout,
   planById,
@@ -129,6 +129,8 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [settings, setSettings] = useState(false);
+  const [showing, setShowing] = useState(false);
+  const toast = useToast();
 
   const plan = useMemo(() => planById(db, id), [db, id, version, world.day]);
   const ctx = useMemo(
@@ -171,7 +173,12 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
    * month later cannot disagree.
    */
   if (plan.status === 'run') {
-    return <CardResults plan={plan} onDone={() => navigate({ name: 'promotion' })} />;
+    // The show plays once, straight after the run; coming back to the card later opens the recap.
+    return showing ? (
+      <NightShow plan={plan} onDone={() => setShowing(false)} />
+    ) : (
+      <NightRecap plan={plan} onDone={() => navigate({ name: 'promotion' })} />
+    );
   }
   if (plan.status === 'cancelled') {
     return <CardCancelled plan={plan} onDone={() => navigate({ name: 'promotion' })} />;
@@ -207,7 +214,7 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
     }
     // The plan is re-read on the next render with `status: 'run'`, which is what swaps this
     // screen for the results.
-    runPlan({ db, plan });
+    if (runPlan({ db, plan })) setShowing(true);
     commit();
     setVersion((v) => v + 1);
   };
@@ -295,8 +302,10 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
                   plan={plan}
                   onChange={update}
                   onCancel={() => {
+                    const name = planName(db, plan);
                     cancelPlan(db, plan.id);
                     commit();
+                    toast(`${name} is cancelled. Everybody on it is free again.`);
                     navigate({ name: 'calendar' });
                   }}
                 />
@@ -422,6 +431,12 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
                       onClick={() => {
                         const result = sendAllDrafts({ ctx, plan });
                         update(result.plan);
+                        const signed = result.outcomes.filter((o) => o.accepted).length;
+                        const refused = result.outcomes.length - signed;
+                        toast(
+                          `${result.outcomes.length} ${result.outcomes.length === 1 ? 'offer' : 'offers'} sent: ${signed} signed${refused > 0 ? `, ${refused} not` : ''}.`,
+                          refused > 0 ? 'warn' : 'good',
+                        );
                       }}
                     >
                       Send every pencilled fight
@@ -438,6 +453,9 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
                     let next = plan;
                     for (const suggestion of picked) next = applySuggestion(next, suggestion);
                     update(next);
+                    toast(
+                      `${picked.length} ${picked.length === 1 ? 'fight' : 'fights'} pencilled in. Nobody has been offered anything yet.`,
+                    );
                     setSuggestions((current) =>
                       current.filter((s) => !picked.some((p) => p.slotId === s.slotId)),
                     );
@@ -1349,70 +1367,6 @@ function CardSettings({
 // --- After the night ------------------------------------------------------------------------------------
 
 /**
- * A card that has run: what it made and who won, read-only.
- *
- * Built from the save rather than from the result of the click that ran it, so the screen the
- * player lands on the moment the night finishes and the one they reopen from the calendar a month
- * later are the same screen. It used to list the bouts and not one result — "What happened"
- * above nine pairings with no winner on any of them.
- */
-function CardResults({ plan, onDone }: { plan: EventPlan; onDone(): void }) {
-  const { db } = useGame();
-  const results = useMemo(() => nightResults(db, plan), [db, plan]);
-  const night = plan.nightId
-    ? (db.events.findById(plan.nightId) as FightNight | undefined)
-    : undefined;
-  const outcome = plan.outcome;
-
-  return (
-    <div className="stack" style={{ gap: 'var(--space-4)' }}>
-      <Card raised>
-        <p className="section-title">{night?.name ?? planName(db, plan)}</p>
-        <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
-          {formatGameDay(plan.day)} · {plan.city}, {plan.country}
-        </p>
-        {outcome && (
-          <KeyStat
-            value={money(outcome.profit)}
-            label={outcome.profit >= 0 ? 'The night made money' : 'The night lost money'}
-            tone={outcome.profit >= 0 ? 'good' : 'bad'}
-            detail={`${night?.attendance !== undefined ? `${night.attendance.toLocaleString()} in the building. ` : ''}${describeBuzz(outcome.buzzDelta)}`}
-          />
-        )}
-      </Card>
-
-      <Card flush title="Results">
-        <div className="list">
-          {results.map(({ bout, red, blue, winner, how }) => {
-            const loser = winner && (winner.id === red?.id ? blue : red);
-            return (
-              <div key={bout.boutId} className="list__item" style={{ cursor: 'default' }}>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span className="list__primary" style={{ display: 'block' }}>
-                    {winner && loser
-                      ? `${displayName(winner)} def. ${displayName(loser)}`
-                      : `${red ? displayName(red) : 'Unknown'} vs ${blue ? displayName(blue) : 'Unknown'}`}
-                  </span>
-                  <span className="list__secondary" style={{ display: 'block' }}>
-                    {POSITION_LABEL[bout.position]}
-                    {how && ` · ${how}`}
-                  </span>
-                </span>
-                {bout.isTitleFight && <Chip tone="accent">Title fight</Chip>}
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
-      <Button variant="primary" block onClick={onDone}>
-        Back to the promotion
-      </Button>
-    </div>
-  );
-}
-
-/**
  * A card that will never run, and why.
  *
  * Kept visible rather than turned into "That card is gone": a missed date is the most expensive
@@ -1466,10 +1420,3 @@ function CardCancelled({ plan, onDone }: { plan: EventPlan; onDone(): void }) {
     </div>
   );
 }
-
-const describeBuzz = (delta: number): string =>
-  delta > 0.5
-    ? 'People are talking about it.'
-    : delta < -0.5
-      ? 'It did not land.'
-      : 'About what people expected of you.';

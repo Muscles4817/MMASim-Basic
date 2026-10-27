@@ -127,6 +127,16 @@ describe('the clock actually moves', () => {
       { timeout: 6000 },
     );
   });
+
+  it('says what the days did to the promoter, before what they did to the sport', async () => {
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    goTo('#/calendar');
+
+    await user.click(await screen.findByRole('button', { name: /A week/i }));
+    expect(await screen.findByText(/^The last \d+ days, for you$/i)).toBeTruthy();
+    expect(screen.getByText(/^Cash (up|down) /)).toBeTruthy();
+  });
 });
 
 describe('whose diary it is', () => {

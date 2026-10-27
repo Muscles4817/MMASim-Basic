@@ -84,6 +84,14 @@ export interface FightNight {
    * existed has none.
    */
   attendance?: number;
+  /**
+   * Fight and Performance of the Night, as given out.
+   *
+   * On the night itself rather than only in the purses they paid, so a card read back later can
+   * say who earned them. `pending` while a promoter has not yet confirmed the matchmaker's
+   * suggestion — the pool is held until they do, or until the clock next moves.
+   */
+  awards?: BonusAwards & { pending?: boolean };
 }
 
 export const eventId = (promotionId: PromotionId, day: GameDay): EventId =>
