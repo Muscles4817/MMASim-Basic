@@ -257,6 +257,9 @@ const PEAK_AGE: Readonly<Record<AgeCurve, number>> = {
   lateBloomer: 33,
 };
 
+/** The age at which this curve peaks, for a read that has to say whether somebody is past it. */
+export const peakAgeOf = (curve: AgeCurve): number => PEAK_AGE[curve];
+
 /**
  * The two ends of each attribute's learning curve: what it is worth at twenty, and where it
  * bottoms out at the far end of a career.
