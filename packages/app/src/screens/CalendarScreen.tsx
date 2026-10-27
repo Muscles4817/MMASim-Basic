@@ -22,9 +22,10 @@ import { toCalendar } from '@mmasim/engine';
 import type { EventScale, Promotion } from '@mmasim/engine';
 import { EVENT_SCALES, describeHealth } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
-import { useRouter } from '../state/router';
+import { routeOf, useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
 import { Alert } from '../ui/signals';
+import { fromNow } from '../ui/format';
 import { formatGameDay } from '../shell/Shell';
 import { buildCalendar, defaultFilter, nextStop, type CalendarEntry } from '../game/calendar';
 import { ADVANCE_STEPS, advanceTo, type AdvanceResult } from '../game/clock';
@@ -133,7 +134,7 @@ export function CalendarScreen() {
             >
               {upNext === undefined
                 ? 'Nothing in the diary'
-                : `Go to ${describeNext(entries, upNext)} — ${formatGameDay(upNext)}`}
+                : `Skip to ${formatGameDay(upNext)}: ${describeNext(entries, upNext)}`}
             </Button>
           )}
 
@@ -258,20 +259,13 @@ export function CalendarScreen() {
                 key={`${entry.day}-${entry.kind}-${i}`}
                 type="button"
                 className="list__item"
-                onClick={() =>
-                  entry.link &&
-                  navigate(
-                    entry.link.id
-                      ? ({ name: entry.link.route, id: entry.link.id } as never)
-                      : ({ name: entry.link.route } as never),
-                  )
-                }
+                onClick={() => entry.link && navigate(routeOf(entry.link))}
               >
                 {/* The date leads, because this is a calendar. Every other screen leads with a
                     name. */}
                 <span className="cal__when">
                   <span className="cal__date">{formatGameDay(entry.day)}</span>
-                  <span className="cal__away">{describeGap(entry.day - world.day)}</span>
+                  <span className="cal__away">{fromNow(entry.day - world.day)}</span>
                 </span>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span className="list__primary" style={{ display: 'block' }}>
@@ -494,29 +488,15 @@ function PlanACard({
 }
 
 /**
- * What the "go to next" button is actually going to.
+ * What the "skip to next" button is actually going to.
  *
- * Titles go in as written, with one exception: a title that opens on one of the calendar's own
- * sentence words ("Your contract expires", "Camp began") has that first letter lowered to sit
- * inside the button's sentence. Lowercasing the whole title, as this used to, also lowercased
- * every proper name in it — "Go to quentin preston's contract expires".
+ * The date leads and the title follows a colon, as written. The button used to fold the title
+ * into its own sentence — "Go to Quentin Preston's contract expires" — which needed the title
+ * lowercased to fit and still did not read as English; the first attempt lowercased every name
+ * in it as well.
  */
 function describeNext(entries: readonly CalendarEntry[], day: number): string {
-  const entry = entries.find((e) => e.day === day && e.ownership === 'yours');
-  if (!entry) return 'the next thing';
-  return /^(Your|You|Camp|Medically)\b/.test(entry.title)
-    ? entry.title[0]!.toLowerCase() + entry.title.slice(1)
-    : entry.title;
-}
-
-/** How far away, in the words a person uses. Never "in 37 days". */
-function describeGap(days: number): string {
-  if (days <= 0) return 'today';
-  if (days === 1) return 'tomorrow';
-  if (days < 7) return `${days} days`;
-  if (days < 14) return 'next week';
-  if (days < 31) return `${Math.round(days / 7)} weeks`;
-  return `${Math.round(days / 30)} months`;
+  return entries.find((e) => e.day === day && e.ownership === 'yours')?.title ?? 'the next thing';
 }
 
 /**
@@ -545,7 +525,7 @@ const toneFor = (entry: CalendarEntry): 'accent' | 'info' | 'warning' | 'neutral
   if (entry.kind === 'plan') {
     return entry.health === 'ready'
       ? 'positive'
-      : entry.health === 'atRisk' || entry.health === 'empty'
+      : entry.health === 'atRisk' || entry.health === 'turnedDown' || entry.health === 'empty'
         ? 'warning'
         : 'accent';
   }

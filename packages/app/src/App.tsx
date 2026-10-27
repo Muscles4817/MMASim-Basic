@@ -200,7 +200,7 @@ export function App() {
           <Shell title={planTitle(route.id) ?? 'Card'} showBack wide>
             {/* Keyed so moving between two cards remounts rather than carrying the previous
                 card's open matchmaking panel into the new one. */}
-            <PlanScreen key={route.id} id={route.id} />
+            <PlanScreen key={`${route.id}:${route.slot ?? ''}`} id={route.id} slot={route.slot} />
           </Shell>
         );
       case 'champions':

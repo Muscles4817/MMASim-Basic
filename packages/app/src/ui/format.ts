@@ -45,3 +45,18 @@ export function spendLine(input: { cost: number; balance: number }): string {
   }
   return `${money(cost)} of your ${money(balance)}, leaving ${money(left)}.`;
 }
+
+/**
+ * How far away a day is, in the words a person uses. Never "in 37 days", and never "1 months":
+ * anything from a month to six weeks is "a month", because rounding 31–44 days to one month
+ * was right and pluralising it was not.
+ */
+export function fromNow(days: number): string {
+  if (days <= 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  if (days < 7) return `${days} days`;
+  if (days < 14) return 'next week';
+  if (days < 31) return `${Math.round(days / 7)} weeks`;
+  if (days < 45) return 'a month';
+  return `${Math.round(days / 30)} months`;
+}

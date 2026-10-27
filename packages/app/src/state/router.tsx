@@ -85,8 +85,11 @@ export type Route =
    * Carries an id because a promoter has several cards open at once — an April flagship and a
    * June club show are both being filled through the spring, and a single "the card" route
    * could only ever mean the next one.
+   *
+   * `slot` opens that slot's matchmaking panel on arrival, so an alert about one bout lands on
+   * the bout rather than on the top of a twelve-row card.
    */
-  | { name: 'plan'; id: string }
+  | { name: 'plan'; id: string; slot?: string }
   | { name: 'promoterRoster' }
   /** Belts, contenders and the divisions behind them. */
   | { name: 'champions' }
@@ -140,7 +143,8 @@ function parse(hash: string): Route {
     case 'card':
       return { name: 'card' };
     case 'plan':
-      return param ? { name: 'plan', id: param } : { name: 'calendar' };
+      if (!param) return { name: 'calendar' };
+      return rest ? { name: 'plan', id: param, slot: rest } : { name: 'plan', id: param };
     case 'champions':
       return { name: 'champions' };
     case 'stable':
@@ -174,7 +178,7 @@ export function toHash(route: Route): string {
     case 'fight':
       return `#/fight/${route.boutId}`;
     case 'plan':
-      return `#/plan/${route.id}`;
+      return route.slot ? `#/plan/${route.id}/${route.slot}` : `#/plan/${route.id}`;
     case 'editorFighter':
       return `#/editor/${route.id}`;
     case 'editorList':
@@ -187,6 +191,23 @@ export function toHash(route: Route): string {
     default:
       return `#/${route.name}`;
   }
+}
+
+/**
+ * The route a stored link points at.
+ *
+ * Inbox items and dashboard rows carry a link as data — a route name and its params — because
+ * they are written by the simulation, which knows nothing about screens. Every screen that
+ * follows one used to rebuild the route by hand and drop whatever it did not know about, which
+ * is how a link to one slot on a card became a link to the card.
+ */
+export function routeOf(link: { route: string; id?: string; slot?: string }): Route {
+  if (link.route === 'plan' && link.id) {
+    return link.slot
+      ? { name: 'plan', id: link.id, slot: link.slot }
+      : { name: 'plan', id: link.id };
+  }
+  return (link.id ? { name: link.route, id: link.id } : { name: link.route }) as Route;
 }
 
 interface RouterValue {
@@ -242,7 +263,10 @@ export function RouterProvider({ children }: { children: ReactNode }) {
     window.scrollTo({ top: 0 });
   }, []);
 
-  const value = useMemo(() => ({ route, navigate, replace, back }), [route, navigate, replace, back]);
+  const value = useMemo(
+    () => ({ route, navigate, replace, back }),
+    [route, navigate, replace, back],
+  );
   return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>;
 }
 

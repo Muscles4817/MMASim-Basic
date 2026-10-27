@@ -37,14 +37,7 @@ export type InboxPriority =
   | 'routine';
 
 export type InboxKind =
-  | 'offer'
-  | 'contract'
-  | 'medical'
-  | 'roster'
-  | 'card'
-  | 'result'
-  | 'money'
-  | 'career';
+  'offer' | 'contract' | 'medical' | 'roster' | 'card' | 'result' | 'money' | 'career';
 
 /** One action a decision offers. The handler lives in the app; this is the label and the id. */
 export interface InboxAction {
@@ -67,7 +60,16 @@ export interface InboxItem {
   /** Present when this is a decision. */
   actions?: readonly InboxAction[];
   /** Where tapping the item goes, when it is not a decision. A route name plus params. */
-  link?: { route: string; id?: string };
+  link?: InboxLink;
+  /**
+   * Several subjects folded into one item: a weekly digest, or a group of fighters who crossed
+   * the same warning on the same day. Each line keeps its own link, so folding things together
+   * costs the player a row in the list rather than the way to each subject.
+   *
+   * `key` is the subject-and-stage identity the raiser deduplicates on, so a subject already
+   * carried by one item is never raised again in another.
+   */
+  entries?: readonly InboxEntry[];
 
   fighterId?: FighterId;
   /**
@@ -85,6 +87,25 @@ export interface InboxItem {
   /** Set when a decision has been answered, with which action. */
   resolvedDay?: GameDay;
   resolvedWith?: string;
+}
+
+/**
+ * Where an item points.
+ *
+ * `slot` exists because "take me there" landing at the top of a twelve-slot card, or on the
+ * roster list for a problem about one fighter, is a pointer to a haystack.
+ */
+export interface InboxLink {
+  route: string;
+  id?: string;
+  /** A slot on a card, when `route` is `plan`. */
+  slot?: string;
+}
+
+export interface InboxEntry {
+  key: string;
+  title: string;
+  link?: InboxLink;
 }
 
 /**

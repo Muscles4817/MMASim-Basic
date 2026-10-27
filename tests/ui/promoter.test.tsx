@@ -220,6 +220,20 @@ describe('matchmaking', () => {
     expect(await screen.findByRole('heading', { name: /who do you want\?/i })).toBeTruthy();
   });
 
+  it('opens the slot a link points at, rather than the top of the card', async () => {
+    // Inbox and dashboard rows about one bout used to land at the top of a twelve-row card.
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    await planACard(user);
+    await screen.findByText(/Sells the night/i);
+    const card = window.location.hash;
+
+    goTo('#/promotion');
+    await screen.findByText(/Needs you/i);
+    goTo(`${card}/main`);
+    expect(await screen.findByRole('heading', { name: /who do you want\?/i })).toBeTruthy();
+  });
+
   it('groups the opponents by what kind of fight it would be', async () => {
     // Not an alphabetical roster with a search box: a promoter is choosing between kinds of
     // fight before they are choosing between names.
