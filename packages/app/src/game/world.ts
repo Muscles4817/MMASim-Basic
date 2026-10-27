@@ -1173,7 +1173,6 @@ export function runCardBout(ctx: {
    * and nothing the sport could say about a division's history.
    */
   let titleChangedHands = false;
-  let gotAway: NewsItem | undefined;
   if (isTitleFight) {
     const title = db.championships.findById(championshipId(promotion.id, red.divisionId)) as
       Championship | undefined;
@@ -1181,29 +1180,6 @@ export function runCardBout(ctx: {
     if (result.winnerId && champion !== (result.winnerId as string)) {
       db.promotions.upsert(setChampion(promotion, red.divisionId, result.winnerId) as never);
       titleChangedHands = true;
-      // The one that got away (doc 34 B4): a fighter the player cut, champion somewhere else.
-      const playerPromotionId = getWorld(db).playerPromotionId;
-      const newChampion = result.winnerId === red.id ? red : blue;
-      if (
-        playerPromotionId &&
-        promotion.id !== playerPromotionId &&
-        (newChampion.ledger ?? []).some(
-          (e) => e.kind === 'cut' && e.promotionId === playerPromotionId,
-        )
-      ) {
-        gotAway = {
-          id: newsId(day as never, `cutChampion:${newChampion.id}`),
-          day: day as never,
-          kind: 'rival',
-          weight: 'major',
-          headline: `The fighter you cut is a champion: ${displayName(newChampion)} wins the ${promotion.shortName} belt`,
-          detail: `${displayName(newChampion)} was released by your promotion. ${promotion.shortName} kept the faith.`,
-          fighterIds: [newChampion.id],
-          divisionId: red.divisionId,
-          promotionId: promotion.id,
-          involvesPlayer: true,
-        };
-      }
       if (title) {
         db.championships.upsert(
           crown({
@@ -1288,7 +1264,7 @@ export function runCardBout(ctx: {
         ),
       };
 
-  const news: NewsItem[] = gotAway ? [gotAway] : [];
+  const news: NewsItem[] = [];
   const winner =
     result.winnerId === red.id
       ? developed.red
