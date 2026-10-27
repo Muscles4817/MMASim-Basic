@@ -40,6 +40,7 @@ import {
   careerArc,
   conditionRead,
   deriveRatings,
+  drawRead,
   describeFairness,
   describeHeat,
   describeInjury,
@@ -77,6 +78,7 @@ import { currentPurse, promotionOf } from '../game/money';
 import { GROUP_LABELS } from '../game/labels';
 import { daysUnbookedBy } from '../game/plans';
 import { IdentityStrip } from './FighterIdentity';
+import { DrawBadge } from '../ui/DrawBadge';
 import './FighterView.css';
 
 /** Who is looking. Decides the vocabulary, the disclosure and the lead tab — never the facts. */
@@ -372,6 +374,8 @@ export function FighterView({
             }
             side={
               <>
+                <DrawCard fighter={fighter} day={day} db={db} self={viewer === 'self'} />
+
                 <SituationCard
                   title={words.situation}
                   fighter={fighter}
@@ -633,6 +637,54 @@ function FormCard({ fighter, title }: { fighter: Fighter; title: string }) {
         ))}
       </p>
       <RecordSummaryBar summary={summariseRecord(recent)} />
+    </Card>
+  );
+}
+
+// --- Draw --------------------------------------------------------------------------------------
+
+/**
+ * What they sell, which until now no screen said. Doc 34 C2.
+ *
+ * A class, a direction, a persona and a home market — never the star-power number, for the same
+ * reason the ability band refuses the overall. The market is the promotion's own country, because
+ * that is where this fighter's cards are mostly going to be sold.
+ */
+function DrawCard({
+  fighter,
+  day,
+  db,
+  self,
+}: {
+  fighter: Fighter;
+  day: number;
+  db: GameDb;
+  self: boolean;
+}) {
+  const market = promotionOf(db, fighter)?.baseCountry;
+  const read = drawRead(fighter, day, market);
+  return (
+    <Card title={self ? 'Your draw' : 'Draw'}>
+      <div className="stack" style={{ gap: 'var(--space-3)' }}>
+        <DrawBadge fighter={fighter} day={day} read={read} />
+        <p className="prose" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
+          {read.blurb} {read.trend.detail}
+        </p>
+        <div>
+          <strong>{read.persona.label}</strong>
+          <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+            {read.persona.blurb}
+          </p>
+        </div>
+        <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+          Sells best in {read.homeMarket}
+          {read.atHome
+            ? ' — which is where this promotion runs its cards. Sponsors pay more at home.'
+            : market
+              ? `. This promotion runs its cards in ${market}.`
+              : '.'}
+        </p>
+      </div>
     </Card>
   );
 }
