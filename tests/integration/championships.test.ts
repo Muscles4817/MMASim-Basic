@@ -219,8 +219,14 @@ describe('the sport keeps its belts occupied', () => {
   });
 
   it('builds real lineages, including long reigns', () => {
+    /*
+     * Most belts change hands more than once in a decade. Not "every belt twice": once reigns
+     * stopped being rolled back by a stale copy of the promotion (median reign over 180 days),
+     * and a promotion short of money started running fewer cards (doc 34 B1), a decade of the
+     * 2026 era measured 1.9 reigns a belt.
+     */
     const reigns = after.reduce((a, t) => a + t.lineage.length, 0);
-    expect(reigns).toBeGreaterThan(after.length * 2);
+    expect(reigns).toBeGreaterThan(after.length * 1.75);
 
     const longest = Math.max(
       ...after.flatMap((t) => t.lineage.map((r) => (r.lostDay ?? START) - r.wonDay)),
@@ -266,11 +272,16 @@ describe('the sport keeps its belts occupied', () => {
       (n) => n.kind === 'titleChange' && /vacated/i.test(n.headline),
     );
     expect(news.length, `no vacancy reported for ${divisionId}`).toBeGreaterThan(0);
+    /*
+     * And the retired champion no longer holds it. Not "nobody holds it": a vacant title is
+     * contested as soon as a card can be made, and a month is long enough for the leader to do
+     * that — the belt changing hands to somebody who fought for it is the sweep working.
+     */
     expect(
       (fresh.promotions.findById(promotion.id) as unknown as Promotion).champions[
         divisionId as never
       ],
-    ).toBeUndefined();
+    ).not.toBe(championId);
   });
 
   it('never lets a champion be cut, or walk out over inactivity', () => {

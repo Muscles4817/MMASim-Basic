@@ -28,7 +28,7 @@ import { clamp } from '../core/math.js';
 import { createRng } from '../core/rng.js';
 import type { Promotion, PromotionTier } from '../domain/organisations.js';
 import { CARD_SIZE } from './events.js';
-import { periodCosts, COST_PERIOD_DAYS } from './promotionCosts.js';
+import { annualCosts } from './promotionCosts.js';
 
 /**
  * Cards a promotion of this tier stages in a year when its roster is no constraint.
@@ -93,9 +93,9 @@ const TIER_BOUTS_PER_FIGHTER: Readonly<Record<PromotionTier, number>> = {
  * above — how busy the sport is at all.
  */
 function solvency(promotion: Promotion, rosterSize: number): number {
-  const annualCosts = (periodCosts({ promotion, rosterSize }).total * 365) / COST_PERIOD_DAYS;
-  if (annualCosts <= 0) return 1;
-  return clamp(0.45 + (promotion.budget / annualCosts) * 0.9, 0.45, 1);
+  const yearOfCosts = annualCosts({ promotion, rosterSize });
+  if (yearOfCosts <= 0) return 1;
+  return clamp(0.45 + (promotion.budget / yearOfCosts) * 0.9, 0.45, 1);
 }
 
 /**

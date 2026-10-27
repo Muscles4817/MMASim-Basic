@@ -51,6 +51,8 @@ import {
   expectedDemand,
   getDivision,
   groupFor,
+  homeMarket,
+  marketOf,
   inboxId,
   isActive,
   newsId,
@@ -64,10 +66,12 @@ import {
   roundsFor,
   scoreForIntent,
   settleNight,
+  upsetsIn,
   slotsFor,
   venueFor,
   withSlot,
   DELIVERY_MEMORY,
+  MAX_BUZZ_SWING,
   type BoutSeed,
   type CardBout,
   type Championship,
@@ -96,10 +100,12 @@ import {
 import { getWorld, type Entity, type GameDb } from '@mmasim/data';
 import {
   appendNews,
+  favouritesOn,
   headlineNames,
   holdsABeltAnywhere,
   nextEventNumber,
   payBonuses,
+  rivalryTerms,
   runCardBout,
 } from './world';
 import { rememberNight } from './broadcasts';
@@ -310,8 +316,12 @@ export function nextCardDay(
  * show that simply does not take place is the most visible failure a promotion has. The buzz
  * figure is a flat hit rather than a share of what the night would have made, because the
  * audience does not know what it would have made — only that it was told to turn up.
+ *
+ * As much as the worst card a promotion can put on (`MAX_BUZZ_SWING`): not turning up is at least
+ * as bad as turning up with nothing. Was 8 when buzz sat near 90 everywhere; against a regional
+ * show's 30–45 that was a fifth of its attention for one missed date.
  */
-export const MISSED_CARD_BUZZ = 8;
+export const MISSED_CARD_BUZZ = MAX_BUZZ_SWING;
 
 /**
  * Cancel every card of the player's whose date has passed unrun, and charge for it.
@@ -446,8 +456,8 @@ export function createPlan(input: {
     promotionId: promotion.id,
     day,
     ...(title ? { name: title } : {}),
-    city: input.city ?? defaultMarket(promotion).city,
-    country: input.country ?? defaultMarket(promotion).country,
+    city: input.city ?? homeMarket(promotion).city,
+    country: input.country ?? homeMarket(promotion).country,
     scale,
     broadcast: broadcastFor(promotion),
     status: 'planning',
@@ -460,44 +470,6 @@ export function createPlan(input: {
 /** Broadcast follows the promotion's platform, which is not yet a player decision. */
 export const broadcastFor = (promotion: Promotion): FightNight['broadcast'] =>
   promotion.tier === 'global' ? 'ppv' : promotion.tier === 'major' ? 'televised' : 'streamed';
-
-const defaultMarket = (promotion: Promotion): { city: string; country: string } => {
-  const home = MARKETS.find((m) => m.country === promotion.baseCountry);
-  return home ?? MARKETS[0]!;
-};
-
-/**
- * Where a card can be staged.
- *
- * Markets rather than buildings: the room is chosen on the night by `venueFor`, which sizes it
- * to the crowd the card will actually draw — booking an arena for a show that sells four
- * thousand seats is a decision no promoter makes and the model already knows it. What the
- * player is choosing here is the *audience*, which is a real decision because a local fighter
- * draws at home and nowhere else.
- */
-export const MARKETS: readonly { city: string; country: string; note: string }[] = [
-  {
-    city: 'Las Vegas',
-    country: 'USA',
-    note: 'The sport’s shop window. Expensive, and everybody watches.',
-  },
-  {
-    city: 'Sacramento',
-    country: 'USA',
-    note: 'A working fight town. Cheap to run, reliably full.',
-  },
-  { city: 'Manchester', country: 'UK', note: 'Loud, loyal, and it turns out for its own.' },
-  {
-    city: 'Tokyo',
-    country: 'Japan',
-    note: 'Enormous when it lands. Indifferent when it does not.',
-  },
-  {
-    city: 'Rotterdam',
-    country: 'Netherlands',
-    note: 'A small room and a hard crowd. Where reputations start.',
-  },
-];
 
 // --- Reading the world around a plan --------------------------------------------------------------
 
@@ -1449,9 +1421,18 @@ export function acceptCounter(input: {
     const agreement = ctx.db.agreements.findById(fighter.agreementId as string) as
       PromotionalAgreement | undefined;
     if (!agreement) continue;
+    /*
+     * The ask is for this slot — the card position and any champion's premium are already in it —
+     * and the agreement holds the main-card rate those multiply. Writing the ask straight in
+     * applied them twice: a main-event counter repapered the contract at 2.5× the ask, the next
+     * main event multiplied that by 2.5 again, and an autopilot that paid every counter took a
+     * regional card's purses from £265k to £2m inside a year.
+     */
+    const atSlot = currentPurse(ctx.db, fighter, slot.position)?.show ?? 0;
+    const repapered = atSlot > 0 ? (agreement.showPurse * askingPurse) / atSlot : askingPurse;
     ctx.db.agreements.upsert({
       ...agreement,
-      showPurse: Math.max(agreement.showPurse, askingPurse),
+      showPurse: Math.max(agreement.showPurse, Math.round(repapered * 10) / 10),
     } as PromotionalAgreement & Entity);
   }
 
@@ -1673,13 +1654,15 @@ export function suggestFills(input: {
   plan: EventPlan;
   scope: FillScope;
   intent?: MatchIntentId;
+  /** Fighters not to suggest: who already said no to this card. */
+  exclude?: ReadonlySet<string>;
 }): Suggestion[] {
-  const { ctx, plan, scope, intent } = input;
+  const { ctx, plan, scope, intent, exclude } = input;
   const out: Suggestion[] = [];
 
   // Names already used, including by earlier suggestions in this same pass — otherwise the
   // matchmaker cheerfully books one fighter into four slots.
-  const taken = new Set<string>();
+  const taken = new Set<string>(exclude);
   for (const bout of plannedBouts(plan)) {
     taken.add(bout.redId as string);
     taken.add(bout.blueId as string);
@@ -1834,8 +1817,7 @@ export function forecastPlan(input: { ctx: PromoterContext; plan: EventPlan }): 
       promotion: ctx.promotion,
       red,
       blue,
-      heat: 0,
-      isRivalry: false,
+      ...rivalryTerms(ctx.db, red.id, blue.id, plan.day),
       isTitleFight: slot.bout.titleKind !== undefined,
     });
     if (draw > headlineDraw) headlineDraw = draw;
@@ -1847,6 +1829,7 @@ export function forecastPlan(input: { ctx: PromoterContext; plan: EventPlan }): 
     ctx.promotion,
     expectedAttendance,
     createRng(`${getWorld(ctx.db).seed}:venue:${plan.id}`),
+    marketOf(plan.city, plan.country),
   );
 
   const revenue = eventRevenue({
@@ -1854,7 +1837,8 @@ export function forecastPlan(input: { ctx: PromoterContext; plan: EventPlan }): 
     venue,
     broadcast: plan.broadcast,
     headlineDraw,
-    bouts: Math.max(1, bouts.length),
+    // An empty card is an empty card: no crowd, no broadcast fee, and the room still to pay for.
+    bouts: bouts.length,
     purses: Math.round(purses),
     bonuses: bonusPool,
   });
@@ -1971,8 +1955,7 @@ export function runPlan(input: { db: GameDb; plan: EventPlan }): NightOutcome | 
               promotion,
               red,
               blue,
-              heat: 0,
-              isRivalry: false,
+              ...rivalryTerms(db, red.id, blue.id, plan.day),
               isTitleFight: bout.titleKind !== undefined,
             })
           : 0,
@@ -1996,9 +1979,12 @@ export function runPlan(input: { db: GameDb; plan: EventPlan }): NightOutcome | 
       mainEventNames: headlineNames(db, card[0]),
     }),
     venue: {
-      ...venueFor(promotion, attendanceEstimate, rng.fork('venue')),
-      city: plan.city,
-      country: plan.country,
+      ...venueFor(
+        promotion,
+        attendanceEstimate,
+        rng.fork('venue'),
+        marketOf(plan.city, plan.country),
+      ),
       ...(plan.venueName ? { name: plan.venueName } : {}),
     },
     broadcast: plan.broadcast,
@@ -2047,6 +2033,7 @@ function runNight(input: {
   const results: { boutId: string; result: ReturnType<typeof runCardBout> }[] = [];
   const news: NewsItem[] = [];
   let purses = 0;
+  const favourites = favouritesOn(db, night.bouts);
 
   // Prelims first, main event last: a promoter watching their own show wants the night to build
   // the way a night builds, and there is no player bout here to follow instead.
@@ -2100,8 +2087,7 @@ function runNight(input: {
           promotion: current,
           red: topRed,
           blue: topBlue,
-          heat: 0,
-          isRivalry: false,
+          ...rivalryTerms(db, topRed.id, topBlue.id, night.day),
           isTitleFight: top!.isTitleFight,
         })
       : 0;
@@ -2121,6 +2107,11 @@ function runNight(input: {
     revenue,
     results: results.map((r) => r.result!.result),
     recentDelivery: current.recentDelivery,
+    titleFights: night.bouts.filter((b) => b.isTitleFight).length,
+    upsets: upsetsIn(
+      favourites,
+      results.map((r) => ({ boutId: r.boutId, result: r.result!.result })),
+    ),
   });
 
   db.promotions.upsert({

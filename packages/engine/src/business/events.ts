@@ -27,8 +27,10 @@ import type { DivisionId, EventId, FighterId, PromotionId } from '../core/ids.js
 import { asId } from '../core/ids.js';
 import type { Rng } from '../core/rng.js';
 import type { ReducedFightResult } from '../fight/types.js';
-import type { Promotion } from '../domain/organisations.js';
+import type { Promotion, PromotionTier } from '../domain/organisations.js';
+import { isKoMethod } from '../domain/fighter.js';
 import type { CardPosition } from './money.js';
+import { homeMarket, marketOf, type Market } from './markets.js';
 
 /** How the night reaches an audience, which decides the revenue model entirely. */
 export type Broadcast = 'ppv' | 'televised' | 'streamed';
@@ -251,10 +253,10 @@ export function performanceScore(result: ReducedFightResult): number {
  * against a £12k show purse it was a rounding adjustment, not the mechanism by which the
  * bottom of a roster survives.
  *
- * At 0.0048 the top promotion pays £50.5k an award — four times a debutant's show money, and
- * the number the real sport uses. The floor matters as much as the rate: it is what keeps a
- * bonus worth chasing at the bottom of the sport, where a percentage of a small budget
- * rounds to nothing. At 8 the smallest promotion still pays a full show purse.
+ * It then became 0.48% of the budget, which tied a night's bonuses to the bank balance; it now
+ * follows prestige (see the constants below), with the leader's award around £35k — several
+ * times a debutant's show money — and a floor of half a minimum purse an award, which is what
+ * keeps a bonus worth chasing at the bottom of the sport.
  *
  * The other half of why this matters is that it makes an *exciting loss* worth something. In
  * a game that otherwise pays only the raised hand, that is what stops the correct strategy
@@ -262,8 +264,21 @@ export function performanceScore(result: ReducedFightResult): number {
  * the two only work together.
  */
 export function bonusPoolFor(promotion: Promotion): number {
-  return Math.max(8, Math.round(promotion.budget * 0.0048));
+  return Math.max(
+    Math.round(promotion.minimumPurse * 2),
+    Math.round(BONUS_POOL_SCALE * promotion.prestige ** BONUS_POOL_EXPONENT),
+  );
 }
+
+/*
+ * The pool follows the promotion's standing, not its bank balance: it was 0.48% of the budget,
+ * so a promotion that had a good year paid bigger bonuses on the same card, and the same
+ * promotion paid less as it went broke. Sized so the leader's award is still about £35k and a
+ * regional's a few thousand, with the floor at half a minimum purse an award so a bonus is still
+ * worth chasing at the bottom.
+ */
+const BONUS_POOL_SCALE = 0.00001;
+const BONUS_POOL_EXPONENT = 3.6;
 
 export function awardBonuses(
   results: readonly { boutId: string; result: ReducedFightResult }[],
@@ -303,8 +318,36 @@ export interface EventRevenue {
 
 /** Ticket price a promotion can command, in whole currency units rather than thousands. */
 export function ticketPrice(promotion: Promotion, headlineDraw: number): number {
-  return Math.round(18 + promotion.prestige * 0.9 + clamp(headlineDraw, 0, 400) * 0.35);
+  return Math.round(
+    TICKET_BASE +
+      promotion.prestige ** 2 * TICKET_PER_PRESTIGE_SQUARED +
+      clamp(headlineDraw, 0, 400) * TICKET_PER_DRAW,
+  );
 }
+
+/*
+ * The ticket, in pounds. A regional card headlined by a decent fight sells at about £50 and the
+ * leader's marquee nights at well over £100.
+ *
+ * Was 18 + 0.9 per prestige point + 0.35 per point of draw, which priced a regional show at nearly
+ * £100 a seat. Against a crowd that the old flat buzz of 88 inflated as well, one three-fight
+ * regional card in front of 4,461 people cleared £481k — a year's overheads in a night.
+ *
+ * Then 18 + 0.3 per point of draw, until matchmaking that sells fights (doc 34 A4) put more draw
+ * on every card and a promotion's bank came down to a couple of years of costs: an autopilot
+ * paying every counter grew a regional by a fifth in a year, and one running sensible cards by
+ * three-quarters.
+ */
+const TICKET_BASE = 18;
+/*
+ * Convex in prestige: the gap between a town show and a regional is a few pounds, the gap between
+ * a regional and the leader is the difference between a night out and an event. Linear, a price
+ * low enough at the bottom was too low at the top, where a sold-out arena is the business.
+ */
+const TICKET_PER_PRESTIGE_SQUARED = 0.006;
+const TICKET_PER_DRAW = 0.3;
+/** How much of a market's cost premium its ticket prices carry: Las Vegas sells at about 1.26×. */
+const TICKET_MARKET_SHARE = 0.25;
 
 /**
  * How much of a card's demand comes from its depth rather than its headline.
@@ -320,12 +363,66 @@ export function ticketPrice(promotion: Promotion, headlineDraw: number): number 
  * is nine fights long rather than six; they refuse to buy one because it is three. So this
  * runs from a real penalty at two bouts up to 1.0, and is flat past a full card — the fifth
  * bout matters and the ninth does not.
+ *
+ * The penalty at the thin end was 0.72 for two bouts, which with nine purses' worth of costs
+ * gone meant a card with two of its nine fights signed made more money than the full one. Under half
+ * the crowd for a two-fight card is what that card is worth.
  */
 export function depthMultiplier(bouts: number): number {
   if (bouts <= 0) return 0;
-  // Saturating by design: ~0.72 at two bouts, ~0.93 at five, 1.0 from eight.
-  return clamp(0.6 + 0.4 * (1 - Math.exp(-(bouts - 1) / 2.6)), 0.6, 1);
+  // Saturating by design: ~0.47 at two bouts, ~0.85 at five, ~0.97 from nine.
+  return clamp(0.2 + 0.8 * (1 - Math.exp(-(bouts - 1) / 2.4)), 0.2, 1);
 }
+
+/**
+ * How much more demand a marketing spend buys, as a fraction: 0.2 is a fifth more people.
+ *
+ * The hook fight-week marketing spends into (doc 34, A5). Diminishing: the first money reaches
+ * the people who would come if they knew, and every pound after it is spent persuading people
+ * who would rather not. Scaled to the promotion, because the same £10k is a campaign for a town
+ * show and a rounding error for the leader.
+ */
+export function marketingUplift(promotion: Promotion, spend: number): number {
+  if (spend <= 0) return 0;
+  const reach = MARKETING_REACH_BASE + promotion.prestige * MARKETING_REACH_PER_PRESTIGE;
+  return MAX_MARKETING_UPLIFT * (1 - Math.exp(-spend / reach));
+}
+
+/** The most marketing can add to a card's demand, however much is spent. */
+export const MAX_MARKETING_UPLIFT = 0.35;
+/** Thousands it takes to reach about 63% of that, for a promotion of no standing. */
+const MARKETING_REACH_BASE = 5;
+const MARKETING_REACH_PER_PRESTIGE = 0.6;
+
+/** What staging a night costs before anybody is paid to fight on it, in thousands. */
+export function showCost(promotion: Promotion, market: Market): number {
+  return Math.round(promotion.prestige * SHOW_COST_PER_PRESTIGE * Math.sqrt(market.costFactor));
+}
+
+/** About £23k a night for a regional show in a small market, £44k for the leader at home. */
+const SHOW_COST_PER_PRESTIGE = 0.45;
+
+/** Production, per this many seats in the building: lighting, staging, the crew to run them. */
+const SEATS_PER_PRODUCTION_UNIT = 150;
+
+/**
+ * Production a broadcast needs before a seat is counted, in thousands. A pay-per-view is a
+ * television event; a stream is a few cameras and a commentary desk.
+ */
+const PRODUCTION_BASE: Readonly<Record<Broadcast, number>> = {
+  ppv: 300,
+  televised: 90,
+  streamed: 10,
+};
+
+/**
+ * Hiring the room, per seat, in thousands, before the market's cost factor.
+ *
+ * The venue was free. Production scaled with capacity but nobody paid for the building, so the
+ * only fixed cost of putting on a card was the cameras — which is how an empty card forecast a
+ * profit of £53k.
+ */
+export const VENUE_HIRE_PER_SEAT = 0.006;
 
 /**
  * What the night made.
@@ -351,8 +448,13 @@ export function eventRevenue(input: {
   /** Thousands. */
   purses: number;
   bonuses: number;
+  /** Thousands spent selling the card. Costs what it costs; buys `marketingUplift` in demand. */
+  marketing?: number;
 }): EventRevenue {
   const { promotion, venue, broadcast, headlineDraw, bouts, purses, bonuses } = input;
+  const marketing = Math.max(0, input.marketing ?? 0);
+  // What the city charges, read off the room the card is in.
+  const market = marketOf(venue.city, venue.country);
 
   /*
    * Demand is what the main event sells, discounted if the card beneath it is thin.
@@ -362,13 +464,17 @@ export function eventRevenue(input: {
    * building while the same card with a nobody on top does not.
    */
   const demand = Math.round(
-    headlineDraw * 62 * depthMultiplier(bouts) * (0.5 + promotion.buzz / 100),
+    expectedDemand(promotion, headlineDraw, bouts) * (1 + marketingUplift(promotion, marketing)),
   );
   const attendance = Math.min(venue.capacity, demand);
   // `ticketPrice` is declared to take the *headline* draw and was being handed the card total,
   // which sails past its internal clamp of 400 for every real card — so the price a promotion
   // charged was a constant regardless of who was on top of the bill.
-  const gate = Math.round((attendance * ticketPrice(promotion, headlineDraw)) / 1000);
+  // A big city's prices are its tickets' prices too — a little of the premium, not all of it.
+  const gate = Math.round(
+    (attendance * ticketPrice(promotion, headlineDraw) * market.costFactor ** TICKET_MARKET_SHARE) /
+      1000,
+  );
 
   /*
    * Broadcast, and it has to be the dominant line at the top of the sport.
@@ -383,12 +489,20 @@ export function eventRevenue(input: {
    * television deal has to hurt, and taking away 21% of revenue is a bad quarter rather than an
    * existential threat.
    */
-  const broadcastRevenue =
-    broadcast === 'ppv'
-      ? Math.round(headlineDraw * 20 * (promotion.prestige / 100) ** 2)
-      : broadcast === 'televised'
-        ? Math.round(promotion.prestige * 12)
-        : Math.round(promotion.prestige * 2);
+  /*
+   * Discounted for a thin card like the gate is, and nothing at all for an empty one: a
+   * broadcaster pays for a night of fights, and a stream of an empty cage is not one. A flat fee
+   * whatever was on the card was the other half of an empty card forecasting a profit.
+   */
+  const depth = depthMultiplier(bouts);
+  const broadcastRevenue = Math.round(
+    depth *
+      (broadcast === 'ppv'
+        ? headlineDraw * PPV_PER_DRAW * (promotion.prestige / 100) ** 2
+        : broadcast === 'televised'
+          ? promotion.prestige * TV_FEE_PER_PRESTIGE
+          : promotion.prestige * STREAM_FEE_PER_PRESTIGE),
+  );
 
   /*
    * Production scales with the venue *and* with what is being made.
@@ -398,9 +512,20 @@ export function eventRevenue(input: {
    * loss. A stream is not a pay-per-view broadcast with fewer cameras; it is a fundamentally
    * cheaper product, and the cost base has to say so or the bottom of the sport cannot exist.
    */
+  // A crew costs more in a big city, but it travels: production takes the square root of the
+  // market's premium, where the building itself (below) takes all of it.
   const production = Math.round(
-    venue.capacity / 150 + (broadcast === 'ppv' ? 300 : broadcast === 'televised' ? 90 : 25),
+    (venue.capacity / SEATS_PER_PRODUCTION_UNIT + PRODUCTION_BASE[broadcast]) *
+      Math.sqrt(market.costFactor),
   );
+  // The building itself, at the city's prices.
+  const venueHire = Math.round(venue.capacity * VENUE_HIRE_PER_SEAT * market.costFactor);
+  /*
+   * And the night: officials, the commission, medicals, insurance, the people who run it. Paid
+   * for any card, full or empty, which is what makes a card with two fights on it a loss rather
+   * than a cheap way to bank a gate.
+   */
+  const staging = showCost(promotion, market);
   /*
    * Sponsorship, which the model simply did not have.
    *
@@ -429,9 +554,11 @@ export function eventRevenue(input: {
    * started with. A cage wrap sells for broadly similar money whoever is putting the show on;
    * what differs is how many people are in the building.
    */
-  const sponsorship = Math.round((attendance / 1000) * (18 + promotion.prestige * 0.12));
+  const sponsorship = Math.round(
+    (attendance / 1000) * (SPONSOR_PER_THOUSAND + promotion.prestige * SPONSOR_PER_PRESTIGE),
+  );
 
-  const costs = Math.round(purses + bonuses + production);
+  const costs = Math.round(purses + bonuses + production + venueHire + staging + marketing);
 
   return {
     gate,
@@ -442,10 +569,30 @@ export function eventRevenue(input: {
   };
 }
 
+/*
+ * Sponsorship per thousand people in the building, in thousands: a base, and a little more for a
+ * promotion people have heard of. The base was 18 when a regional show drew twice the crowd it
+ * does now that buzz starts where the tier is, and 16 while offers were answered on the spot; once
+ * corners took days to reply and a card waited for them, more of every card got signed.
+ */
+const SPONSOR_PER_THOUSAND = 11;
+const SPONSOR_PER_PRESTIGE = 0.12;
+
+/*
+ * Pay-per-view per point of headline draw, and a television fee per prestige point. Were 20 and
+ * 12: with the leader's tickets and crowd as they were, a generated world's leader banked well
+ * over a million a card and grew half again in a year.
+ */
+const PPV_PER_DRAW = 15;
+const TV_FEE_PER_PRESTIGE = 10;
+
+/** A stream's rights fee per prestige point, in thousands. Was 2, on a card that did not have to exist. */
+const STREAM_FEE_PER_PRESTIGE = 2;
+
 /** Revenue points pay out on the *event*, which is why a promotion needs a platform. */
 export function revenueShareFor(points: number, revenue: EventRevenue): number {
   if (points <= 0) return 0;
-  return Math.round(((revenue.gate + revenue.broadcast) * (points / 100)) * 10) / 10;
+  return Math.round((revenue.gate + revenue.broadcast) * (points / 100) * 10) / 10;
 }
 
 // --- Naming ------------------------------------------------------------------------------------
@@ -598,8 +745,70 @@ export function deliveryScore(result: ReducedFightResult): number {
   return finishValue + jeopardy + contestValue;
 }
 
-/** How far buzz can move on a single night, in points. Attention is sticky. */
-export const MAX_BUZZ_SWING = 3;
+/**
+ * How far buzz can move on a single night, in points, all causes together. Attention is sticky.
+ *
+ * Was 3, and buzz moved on one thing — whether the card beat the promotion's own recent form —
+ * so every promotion in a generated world sat between 88 and 91 for ever. Title fights, finishes
+ * and upsets are the nights people talk about, and they move it now as well.
+ */
+export const MAX_BUZZ_SWING = 6;
+
+/** The most the delivery comparison alone can move buzz. */
+const DELIVERY_BUZZ_SWING = 3;
+
+/** A title fight on the card, and each one after the first. */
+const TITLE_FIGHT_BUZZ = 0.8;
+const EXTRA_TITLE_FIGHT_BUZZ = 0.3;
+/** Each knockout or submission, up to a cap: a card of finishes is a highlight reel. */
+const FINISH_BUZZ = 0.2;
+const MAX_FINISH_BUZZ = 1;
+/** Each upset, up to a cap. Nothing gets a promotion talked about like the favourite losing. */
+const UPSET_BUZZ = 0.5;
+const MAX_UPSET_BUZZ = 1.5;
+
+/**
+ * Where a tier's attention settles: the level a promotion of this size holds by running cards
+ * that are about what it usually runs.
+ */
+export const BUZZ_BASELINE: Readonly<Record<PromotionTier, number>> = {
+  global: 68,
+  major: 48,
+  regional: 32,
+  developmental: 16,
+};
+
+/**
+ * How far each card pulls buzz back towards its tier's baseline.
+ *
+ * Without it the spectacle terms ratchet: they only ever add, so a promotion running title fights
+ * and finishes climbs to 100 and stays there — the failure the relative delivery baseline was
+ * written to remove. A breakout night still lifts a promotion for months; it just does not lift
+ * it for ever.
+ */
+const BUZZ_REVERSION = 0.15;
+
+/**
+ * Attention lost per fortnight without a card. A promotion nobody has seen in two months is a
+ * promotion people have started to forget.
+ */
+export const IDLE_BUZZ_DECAY = 1;
+
+/** How long a promotion can go between cards before it starts to be forgotten. */
+export const IDLE_GRACE_DAYS = 42;
+
+/** The floor attention decays to. Somebody always remembers. */
+export const MIN_BUZZ = 5;
+
+/**
+ * Buzz after a span with no card, or the same buzz if a card has been run recently enough.
+ * Pure, so the world tick and a forecast can both ask it.
+ */
+export function idleBuzz(buzz: number, daysSinceLastCard: number, days: number): number {
+  const idle = Math.min(days, daysSinceLastCard - IDLE_GRACE_DAYS);
+  if (idle <= 0 || buzz <= MIN_BUZZ) return buzz;
+  return Math.max(MIN_BUZZ, Math.round((buzz - (idle / 14) * IDLE_BUZZ_DECAY) * 10) / 10);
+}
 
 export function settleNight(input: {
   promotion: Promotion;
@@ -612,8 +821,12 @@ export function settleNight(input: {
    * Empty for a promotion with no history, which is then judged against par.
    */
   recentDelivery?: readonly number[];
+  /** Title bouts on the card. */
+  titleFights?: number;
+  /** Bouts the favourite lost (`upsetsIn`). */
+  upsets?: number;
 }): NightSettlement {
-  const { promotion, revenue, results, recentDelivery = [] } = input;
+  const { promotion, revenue, results, recentDelivery = [], titleFights = 0, upsets = 0 } = input;
 
   const delivered =
     results.length === 0
@@ -646,8 +859,19 @@ export function settleNight(input: {
    */
   const missRatio = (delivered - baseline) / Math.max(1, baseline);
   const stickiness = 0.6 + (promotion.prestige / 100) * 0.8;
+  const delivery = clamp(missRatio / stickiness, -1, 1) * DELIVERY_BUZZ_SWING;
+
+  // What gets talked about whatever the promotion usually does — damped by size like delivery is.
+  const finishes = results.filter((r) => isKoMethod(r.method) || r.method === 'submission').length;
+  const spectacle =
+    ((titleFights > 0 ? TITLE_FIGHT_BUZZ + (titleFights - 1) * EXTRA_TITLE_FIGHT_BUZZ : 0) +
+      Math.min(MAX_FINISH_BUZZ, finishes * FINISH_BUZZ) +
+      Math.min(MAX_UPSET_BUZZ, upsets * UPSET_BUZZ)) /
+    stickiness;
+
+  const reversion = (BUZZ_BASELINE[promotion.tier] - promotion.buzz) * BUZZ_REVERSION;
   const buzzDelta =
-    Math.round(clamp(missRatio / stickiness, -1, 1) * MAX_BUZZ_SWING * 10) / 10;
+    Math.round(clamp(delivery + spectacle + reversion, -MAX_BUZZ_SWING, MAX_BUZZ_SWING) * 10) / 10;
 
   return {
     revenue,
@@ -665,6 +889,36 @@ export function settleNight(input: {
   };
 }
 
+/**
+ * The fighter the money was on, if anybody's was: paper odds of two to one or better.
+ *
+ * Read before the bouts are fought, because the fight changes the ratings it is judged on.
+ */
+export function favouriteOf(
+  red: { id: FighterId },
+  blue: { id: FighterId },
+  redOdds: number,
+): FighterId | undefined {
+  if (redOdds >= UPSET_ODDS) return red.id;
+  if (redOdds <= 1 - UPSET_ODDS) return blue.id;
+  return undefined;
+}
+
+const UPSET_ODDS = 2 / 3;
+
+/** How many of these results went against the favourite. */
+export function upsetsIn(
+  favourites: ReadonlyMap<string, FighterId>,
+  results: readonly { boutId: string; result: { winnerId?: FighterId } }[],
+): number {
+  return results.filter(({ boutId, result }) => {
+    const favourite = favourites.get(boutId);
+    return (
+      favourite !== undefined && result.winnerId !== undefined && result.winnerId !== favourite
+    );
+  }).length;
+}
+
 // --- Venues ------------------------------------------------------------------------------------
 
 /**
@@ -676,12 +930,14 @@ export function settleNight(input: {
  * arena overheads to put four hundred people in the building, and it is the largest single
  * reason the bottom two promotions went insolvent inside eight simulated years.
  */
-export const VENUES: readonly Venue[] = [
-  { name: 'The Warehouse', city: 'Rotterdam', country: 'Netherlands', capacity: 3000 },
-  { name: 'Civic Centre', city: 'Sacramento', country: 'USA', capacity: 6000 },
-  { name: 'Riverside Hall', city: 'Manchester', country: 'UK', capacity: 12000 },
-  { name: 'Metro Dome', city: 'Tokyo', country: 'Japan', capacity: 15000 },
-  { name: 'The Arena', city: 'Las Vegas', country: 'USA', capacity: 18000 },
+export const VENUES: readonly Omit<Venue, 'city' | 'country'>[] = [
+  { name: 'Social Club', capacity: 1500 },
+  { name: 'The Warehouse', capacity: 3000 },
+  { name: 'Exhibition Hall', capacity: 4500 },
+  { name: 'Civic Centre', capacity: 6000 },
+  { name: 'Convention Hall', capacity: 12000 },
+  { name: 'Metro Arena', capacity: 15000 },
+  { name: 'The Arena', capacity: 18000 },
 ];
 
 /**
@@ -695,7 +951,18 @@ export const VENUES: readonly Venue[] = [
  * Picks the smallest venue that comfortably holds the expected crowd, so a promotion grows
  * into bigger buildings as its draw grows rather than being handed one at random.
  */
-export function venueFor(promotion: Promotion, expectedDemand: number, rng: Rng): Venue {
+export function venueFor(
+  promotion: Promotion,
+  expectedDemand: number,
+  rng: Rng,
+  /**
+   * The city the card is in. Defaults to the promotion's home market.
+   *
+   * The buildings used to come with their cities attached — five rooms in five countries — so a
+   * promotion based in the American Midwest ran its cards in Rotterdam and Tokyo by turns.
+   */
+  market: Market = homeMarket(promotion),
+): Venue {
   // A little headroom, so a good night is not capped by the room rather than by the draw.
   const wanted = expectedDemand * 1.15;
 
@@ -710,7 +977,8 @@ export function venueFor(promotion: Promotion, expectedDemand: number, rng: Rng)
    * die roll over rooms.
    */
   void rng;
-  return VENUES.find((v) => v.capacity >= wanted) ?? VENUES[VENUES.length - 1]!;
+  const room = VENUES.find((v) => v.capacity >= wanted) ?? VENUES[VENUES.length - 1]!;
+  return { ...room, city: market.city, country: market.country };
 }
 
 /**

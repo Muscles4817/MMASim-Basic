@@ -17,7 +17,7 @@
  * name, and none takes a name or short name from either hand-authored era.
  */
 
-import { createRng, type Rng } from '@mmasim/engine';
+import { createRng, hashSeed, type Rng } from '@mmasim/engine';
 import { PROMOTIONS_2026 } from '../seed/organisations-2026.js';
 import { SEED_PROMOTIONS } from '../seed/organisations.js';
 
@@ -28,6 +28,11 @@ export interface PromotionIdentity {
   name: string;
   /** Initials, the way the sport abbreviates itself: what a card is numbered under. */
   shortName: string;
+  /**
+   * Where its cards are staged: the town a local show is named after, the hub of the region a
+   * regional show is named for, a big city for the brands at the top.
+   */
+  homeCity: string;
 }
 
 /** The second half of a name, and what it abbreviates to. */
@@ -43,6 +48,84 @@ export interface Form {
 }
 
 const t = (text: string, abbr: string): Tail => ({ text, abbr });
+
+/** A regional brand that names its shows by territory: "Warpath North". */
+const CIRCUIT_BRANDS = [
+  'Iron Cage',
+  'Warpath',
+  'Redline',
+  'Ironside',
+  'Bloodline',
+  'Wildfire',
+  'Renegade',
+];
+
+/** A feeder that names itself for what it does rather than where it is. */
+const DEVELOPMENT_BRANDS = [
+  'Rising Star',
+  'Next Level',
+  'Hard Knocks',
+  'New Blood',
+  'Breakout',
+  'Ground Zero',
+];
+
+/** The city a region's promotion stages its cards in. */
+const REGION_HUB: Readonly<Record<string, string>> = {
+  'Pacific Northwest': 'Seattle',
+  'Gulf Coast': 'Houston',
+  'Great Lakes': 'Chicago',
+  'Rocky Mountain': 'Denver',
+  'Lone Star': 'Dallas',
+  Midwest: 'Kansas City',
+  Southwest: 'Phoenix',
+  Northeast: 'Boston',
+  'Atlantic Coast': 'Norfolk',
+  Heartland: 'Omaha',
+  Bluegrass: 'Louisville',
+  'Golden State': 'Sacramento',
+  'Empire State': 'Albany',
+  Keystone: 'Pittsburgh',
+  'Sunshine State': 'Tampa',
+  'Mid-Atlantic': 'Baltimore',
+  'Great Plains': 'Wichita',
+  Desert: 'Albuquerque',
+  Bayou: 'New Orleans',
+  Appalachian: 'Knoxville',
+  'Big Sky': 'Billings',
+  'Tri-State': 'Cincinnati',
+  Cascade: 'Portland',
+  Ozark: 'Springfield',
+  'New England': 'Providence',
+  'Mountain West': 'Salt Lake City',
+  Carolina: 'Charlotte',
+};
+
+/** And a circuit brand's territory. */
+const COMPASS_HUB: Readonly<Record<string, string>> = {
+  North: 'Minneapolis',
+  South: 'Atlanta',
+  East: 'Philadelphia',
+  West: 'Los Angeles',
+};
+
+/** Where a placeless brand lives: the big rooms, and the mid-sized ones below them. */
+const BIG_CITIES = ['New York', 'Los Angeles', 'Chicago', 'Miami', 'Houston', 'Atlanta'];
+const MID_CITIES = ['Sacramento', 'Kansas City', 'Nashville', 'Denver', 'Phoenix', 'Columbus'];
+
+/** Picks from a list by the name, so it costs the random stream nothing. */
+const byName = (name: string, cities: readonly string[]): string =>
+  cities[hashSeed(name) % cities.length]!;
+
+function homeCityFor(rung: PyramidRung, head: string, name: string): string {
+  if (rung === 'apex') return 'Las Vegas';
+  if (rung === 'major') return byName(name, BIG_CITIES);
+  if (rung === 'national') {
+    return REGION_HUB[head] ?? COMPASS_HUB[name.split(' ').pop()!] ?? byName(name, MID_CITIES);
+  }
+  if (DEVELOPMENT_BRANDS.includes(head)) return byName(name, MID_CITIES);
+  return head;
+}
 
 const CHAMPIONSHIP_TAILS: readonly Tail[] = [
   t('Fighting Championship', 'FC'),
@@ -129,7 +212,7 @@ export const FORMS: Readonly<Record<PyramidRung, readonly Form[]>> = {
     },
     // A regional brand with a territory, the way a circuit names its second and third shows.
     {
-      heads: ['Iron Cage', 'Warpath', 'Redline', 'Ironside', 'Bloodline', 'Wildfire', 'Renegade'],
+      heads: CIRCUIT_BRANDS,
       tails: [t('North', 'N'), t('South', 'S'), t('East', 'E'), t('West', 'W')],
     },
   ],
@@ -189,7 +272,7 @@ export const FORMS: Readonly<Record<PyramidRung, readonly Form[]>> = {
     },
     // Development brands: shows that exist to send people up the ladder, and say so.
     {
-      heads: ['Rising Star', 'Next Level', 'Hard Knocks', 'New Blood', 'Breakout', 'Ground Zero'],
+      heads: DEVELOPMENT_BRANDS,
       tails: [t('Fight Series', 'FS'), t('Fighting Championship', 'FC'), t('Combat', 'C')],
     },
   ],
@@ -423,7 +506,7 @@ const initials = (words: string): string =>
 function candidate(
   rng: Rng,
   rung: PyramidRung,
-): PromotionIdentity & { head: string; ending: string } {
+): Omit<PromotionIdentity, 'homeCity'> & { head: string; ending: string } {
   const forms = FORMS[rung];
   const form = rng.pickWeighted(forms, (f) => f.heads.length * f.tails.length);
   const head = rng.pick(form.heads);
@@ -527,7 +610,7 @@ export function createPromotionNamer(seed: string): (rung: PyramidRung) => Promo
       shortNames.add(identity.shortName);
       heads.add(head);
       if (isPlace) for (const w of words) placeWords.add(w);
-      return identity;
+      return { ...identity, homeCity: homeCityFor(rung, head, identity.name) };
     }
     throw new Error(`Ran out of ${rung} promotion names for seed ${seed}`);
   };

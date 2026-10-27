@@ -21,6 +21,13 @@ export interface Promotion {
   tier: PromotionTier;
   /** Home market, e.g. `USA`, `Japan`. Affects gate, travel and talent access. */
   baseCountry: string;
+  /**
+   * The city its cards are staged in unless the promoter takes one elsewhere.
+   *
+   * Absent on a promotion that has never said, which is then based in its country's capital
+   * market (`homeMarket`). Authored world state, like `baseCountry`.
+   */
+  homeCity?: string;
   /** 1–100. Brand strength: what a fight is worth simply for happening here. */
   prestige: number;
   /** Cash on hand, in thousands. */

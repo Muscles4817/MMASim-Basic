@@ -163,6 +163,40 @@ export function defaultTerms(fighter: Fighter, promotion: Promotion): PurseTerms
   return { showPurse: round1(value * showShare), winBonus: round1(value * (1 - showShare)) };
 }
 
+/** A raise for each win on the deal that is ending, when a fighter re-signs where they are. */
+export const RESIGN_RAISE_PER_WIN = 0.1;
+/** The most a re-signing raise can be, however many wins are behind it. */
+export const MAX_RESIGN_RAISE = 0.5;
+
+/**
+ * The terms a fighter re-signs on with the promotion they are already fighting for.
+ *
+ * Re-signing used to reprice from scratch at market value, so a fighter who had won four on the
+ * deal re-signed at whatever `marketValue` now said — usually more, sometimes less, and never by
+ * reference to what they had been paid. A fighter who has been winning for you asks for a raise on
+ * their current money, and the raise is the cost of having built them: 10% a win, up to half
+ * again. Market value is the floor, so a fighter whose stock has risen faster than that is
+ * still paid what they are worth.
+ */
+export function reSignTerms(
+  market: PurseTerms,
+  previous: PurseTerms | undefined,
+  winsOnDeal: number,
+): PurseTerms {
+  if (!previous || winsOnDeal <= 0) return market;
+  const raise = 1 + Math.min(MAX_RESIGN_RAISE, winsOnDeal * RESIGN_RAISE_PER_WIN);
+  // Raised on what they were on, but never past half again what they are worth: a raise on a
+  // raise on a raise compounds, and three winning deals would otherwise triple a purse that the
+  // market had not moved.
+  const ceiling = 1 + MAX_RESIGN_RAISE;
+  const raised = (was: number, worth: number) =>
+    Math.max(worth, Math.min(round1(was * raise), round1(worth * ceiling)));
+  return {
+    showPurse: raised(previous.showPurse, market.showPurse),
+    winBonus: raised(previous.winBonus, market.winBonus),
+  };
+}
+
 /**
  * What a fighter asks for, against what they are worth.
  *

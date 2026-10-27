@@ -204,10 +204,13 @@ function exclusionFor(db: GameDb, day: number): WorldExclusion {
         if (f.promotionId === promotionId) hold.set(f.id as string, grace);
       }
     }
+    const booked = new Set<string>();
     for (const [id, booking] of bookingsFor(db, promotionId)) {
-      if (booking.signed) hold.set(id, Number.POSITIVE_INFINITY);
+      if (!booking.signed) continue;
+      hold.set(id, Number.POSITIVE_INFINITY);
+      booked.add(id);
     }
-    return { promotionId, activityHold: hold };
+    return { promotionId, activityHold: hold, booked };
   }
   return {
     fighterId: world.playerFighterId as FighterId | undefined,

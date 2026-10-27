@@ -37,6 +37,7 @@ import {
   rollInjury,
   createRng,
   CARD_SIZE,
+  eventScale,
   TERM_DAYS,
   agreementStatus,
   awardBonuses,
@@ -50,6 +51,7 @@ import {
   describeVacancy,
   vacate,
   chargeCosts,
+  annualCosts,
   DELIVERY_MEMORY,
   broadcastFor,
   buildCard,
@@ -61,6 +63,7 @@ import {
   planFor,
   pickTrainingFocus,
   defaultTerms,
+  reSignTerms,
   displayName,
   fighterAge,
   drawWeight,
@@ -100,6 +103,10 @@ import {
   type FinishMethod,
   daysBetweenCards,
   cardsStagedBefore,
+  currentHeat,
+  favouriteOf,
+  upsetsIn,
+  idleBuzz,
   hashSeed,
   simulateFight,
   streakNews,
@@ -146,6 +153,7 @@ import {
 } from '@mmasim/data';
 import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
+import { getRivalry } from './rivalries';
 import { settleFightInjuries } from './fightInjuries';
 import { afterTheBout } from './memory';
 import { money } from '../ui/format';
@@ -339,6 +347,11 @@ export interface WorldExclusion {
    */
   activityHold?: ReadonlyMap<string, number>;
   /**
+   * Fighters signed onto the player's cards, who free agency leaves where they are until the bout
+   * is fought. Answered by the clock, like `activityHold`.
+   */
+  booked?: ReadonlySet<string>;
+  /**
    * How the world resolves its own bouts. Defaults to `simulateFight`.
    *
    * Doc 27 § 5's Reduced level, passed in rather than switched on inside, because *which* fights
@@ -468,7 +481,10 @@ export function advanceWorld(
       news.push(...retireTheDrifted(db, day, rng.fork(`drift:${day}`), exceptId));
       news.push(...replenish(db, day, rng, promotions, rosterSizes));
       // Deals run out across the roster too, so the market has other people in it.
-      news.push(...resolveFreeAgency(db, day, rng, promotions, exceptId, rosterSizes));
+      news.push(
+        ...resolveFreeAgency(db, day, rng, promotions, exceptId, rosterSizes, exclusion.booked),
+      );
+      news.push(...fillHoles(db, day, rng, promotions));
       reindex();
     }
 
@@ -578,7 +594,10 @@ export function advanceWorld(
           db,
           day,
           rng: rng.fork(`night:${promotion.id}:${day}`),
-          promotion,
+          // Fresh, so a belt won earlier in this advance is not booked as vacant again. See
+          // `runCardBout`.
+          promotion:
+            (db.promotions.findById(promotion.id as string) as Promotion | undefined) ?? promotion,
           available,
           readyOn,
           lastSeen,
@@ -628,8 +647,14 @@ export function advanceWorld(
    *
    * Charged to every promotion including the player's: this is a rule of the sport rather than
    * a difficulty applied to whoever is playing.
+   *
+   * Not in pre-history. A bulk tick settles no nights — no gate, no broadcast, no profit — so
+   * charging it the overheads billed eight years of running costs against no income at all, and
+   * the generator's budgets were really "what is left after eight years of paying for nothing".
+   * Against overheads that are a staff level rather than a share of the balance, that bankrupted
+   * every local show in the sport before the player arrived.
    */
-  chargePromotions(db, reached - fromDay);
+  if (!bulk) chargePromotions(db, fromDay, reached);
 
   // And the deals of anybody the world forgot to book. See `enforceActivity`.
   news.push(
@@ -784,14 +809,21 @@ function buildNight(ctx: {
         promotion,
         red: first,
         blue: second,
-        heat: 0,
-        isRivalry: false,
+        ...rivalryTerms(db, first.id, second.id, day),
         isTitleFight: true,
       }),
     });
   }
 
-  for (let attempt = 0; attempt < CARD_SIZE * 2 && seeds.length < CARD_SIZE; attempt++) {
+  /*
+   * A promotion short of money runs a club show rather than a full card: six purses instead of
+   * nine, for a crowd that is barely smaller. What a promoter in trouble does, and the other half
+   * of the world's promotions facing the same economics as the player's.
+   */
+  const club = eventScale('club');
+  const cardSize = inDistress(promotion, roster.length) ? club.mainCard + club.prelims : CARD_SIZE;
+
+  for (let attempt = 0; attempt < cardSize * 2 && seeds.length < cardSize; attempt++) {
     const pool = roster.filter((f) => !used.has(f.id as string));
     if (pool.length < 2) break;
 
@@ -885,8 +917,7 @@ function buildNight(ctx: {
         promotion,
         red: subject,
         blue: opponent,
-        heat: 0,
-        isRivalry: false,
+        ...rivalryTerms(db, subject.id, opponent.id, day),
         isTitleFight,
       }),
     });
@@ -909,7 +940,64 @@ function buildNight(ctx: {
 
   if (seeds.length === 0) return undefined;
 
-  const card = buildCard(seeds);
+  let card = buildCard(seeds);
+
+  const headlineDraw = card[0] ? (seeds.find((s) => s.boutId === card[0]!.boutId)?.draw ?? 0) : 0;
+  const broadcast = broadcastFor(promotion, headlineDraw, rng.fork('broadcast'));
+
+  /*
+   * And a promotion does not stage a card it expects to lose badly on — a quarter of the purses
+   * or more — or, in trouble, one it expects to lose anything on. The world's matchmaker books by
+   * the rankings, not the ledger, so without this a promotion whose purses had outgrown its gate
+   * kept putting on losing nights until it had nothing left. The fighters wait, which costs
+   * goodwill and deals: the trade a promoter in that position actually makes.
+   *
+   * Before the bulk branch, so pre-history stages the same cards the running world would — a
+   * bulk tick that ran every card would be a different, busier sport than the one it hands over.
+   */
+  const tolerable = (bouts: readonly CardBout[]) => {
+    const purses = cardPurses(db, bouts);
+    const expected = eventRevenue({
+      promotion,
+      venue: venueFor(
+        promotion,
+        expectedDemand(promotion, headlineDraw, bouts.length),
+        rng.fork('venue'),
+      ),
+      broadcast,
+      headlineDraw,
+      bouts: bouts.length,
+      purses,
+      bonuses: bonusPoolFor(promotion),
+    });
+    /*
+     * Except at the bottom of the sport, which runs at a loss by nature: a town show is a
+     * promoter with a phone book, its fighters need the fights, and a card it cannot quite pay
+     * for still goes ahead. Applied there, this emptied the smallest local shows in pre-history —
+     * no card was ever worth staging, so nobody fought, and every deal walked out on inactivity.
+     *
+     * Why that matters past the town shows themselves: the developmental tier is where the sport's
+     * fighters get their first bouts, records and reputations, and every tier above signs from it.
+     * A bottom of the pyramid that stopped fighting whenever a card did not pay left the feeders
+     * with nobody ready to move up, and the generator's depth checks failing. So a developmental
+     * card is never called off for the money alone. It is called off when the promotion is in
+     * distress (less than `DISTRESS_RUNWAY_YEARS` of costs left): a floor under the sport's
+     * activity, not a licence to lose money for ever.
+     */
+    const allowed = inDistress(promotion, ctx.roster.length)
+      ? 0
+      : promotion.tier === 'developmental'
+        ? Infinity
+        : purses * LOSS_TOLERANCE;
+    return expected.profit >= -allowed;
+  };
+  if (!tolerable(card)) {
+    // Cut it to a club show — the headline stays, the bottom of the undercard goes — and stage
+    // that if it pays; otherwise nothing.
+    const trimmed = card.slice(0, club.mainCard + club.prelims);
+    if (trimmed.length === card.length || !tolerable(trimmed)) return undefined;
+    card = trimmed;
+  }
 
   /*
    * Everything from here to the bouts is the *night* rather than the fights, and a bulk tick has
@@ -935,9 +1023,6 @@ function buildNight(ctx: {
     }
     return { fights: bulkFights, news: [] };
   }
-
-  const headlineDraw = card[0] ? (seeds.find((s) => s.boutId === card[0]!.boutId)?.draw ?? 0) : 0;
-  const broadcast = broadcastFor(promotion, headlineDraw, rng.fork('broadcast'));
 
   const night: FightNight = {
     id: eventId(promotion.id, day),
@@ -969,6 +1054,7 @@ function buildNight(ctx: {
   const news: NewsItem[] = [];
   const results: { boutId: string; result: ReducedFightResult }[] = [];
   let fights = 0;
+  const favourites = favouritesOn(db, card);
 
   for (const bout of card) {
     const outcome = runCardBout({
@@ -1024,6 +1110,8 @@ function buildNight(ctx: {
     }),
     results: results.map((r) => r.result),
     recentDelivery: current.recentDelivery,
+    titleFights: card.filter((b) => b.isTitleFight).length,
+    upsets: upsetsIn(favourites, results),
   });
   db.promotions.upsert(
     rememberDelivery(settled.promotion, settled.delivered) as Promotion & Entity,
@@ -1061,7 +1149,19 @@ export function runCardBout(ctx: {
   resolve?: BoutResolver;
   detail?: WorldDetail;
 }): { news: NewsItem[]; result: ReducedFightResult } | undefined {
-  const { db, day, rng, promotion, bout, readyOn, lastSeen } = ctx;
+  const { db, day, rng, bout, readyOn, lastSeen } = ctx;
+  /*
+   * The promotion as it stands now, not as the caller captured it (doc 34 B6).
+   *
+   * `advanceWorld` reads every promotion once at the start of a call and hands that object down,
+   * so by the second title fight of an advance the champions map it carries was out of date: a
+   * belt won on day 3 still read as vacant on day 20, another "vacant" title fight was booked,
+   * and its winner was crowned over a champion who never fought — measured, a median reign of a
+   * month. Two title fights on one card had the same problem within the night: the second
+   * `setChampion` wrote the stale map back over the first.
+   */
+  const promotion =
+    (db.promotions.findById(ctx.promotion.id as string) as Promotion | undefined) ?? ctx.promotion;
   const bulk = ctx.detail === 'bulk';
 
   const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
@@ -1689,6 +1789,7 @@ function resolveFreeAgency(
   promotions: readonly Promotion[],
   exceptId: FighterId | undefined,
   rosterSizes: ReadonlyMap<string, number>,
+  booked?: ReadonlySet<string>,
 ): NewsItem[] {
   const world = getWorld(db);
   const news: NewsItem[] = [];
@@ -1759,6 +1860,13 @@ function resolveFreeAgency(
      */
     if (fighter.id === exceptId) continue;
     if (fighter.retiredDay !== undefined) continue;
+    /*
+     * Nor a fighter who has signed for a bout on the player's card. They are held to it until it
+     * is fought: a contract that ran out a fortnight before the night let the leader sign the
+     * player's main eventer, who then fought on the regional card at the leader's purse — a
+     * £40k card became a £160k loss with nothing on the screen to say why.
+     */
+    if (booked?.has(fighter.id as string)) continue;
 
     const agreement = fighter.agreementId
       ? (db.agreements.findById(fighter.agreementId as string) as
@@ -1861,10 +1969,21 @@ function resolveFreeAgency(
      * you back is a different question, and it is the one `enforceActivity` and the purse
      * negotiation answer.
      */
+    /*
+     * Except when it cannot pay them. A promotion with less than `DISTRESS_RUNWAY_YEARS` of its overheads
+     * in the bank lets half its expiring deals walk, so a promotion in trouble carries a smaller roster
+     * — and a smaller upkeep bill — instead of re-signing everybody on the way to zero. Without
+     * it nothing in the sport reacted to running out of money, and a bad decade at the bottom
+     * became a death spiral.
+     */
+    const keeps =
+      promotion &&
+      (!inDistress(promotion, rosterSizes.get(promotion.id as string) ?? 0) ||
+        fRng.chance(DISTRESSED_RESIGN_SHARE));
     const pool = [
       ...new Set([
         ...(earned.length > 0 ? earned : affordable.length > 0 ? affordable : candidates),
-        ...(promotion ? [promotion] : []),
+        ...(keeps ? [promotion] : []),
       ]),
     ];
 
@@ -1925,7 +2044,17 @@ function resolveFreeAgency(
           ? promotion
           : whereThereIsRoom();
 
-    const terms = defaultTerms(fighter, next);
+    // Staying put after a winning deal is a raise on what they were on. See `reSignTerms`.
+    const staying = agreement && agreement.promotionId === next.id ? agreement : undefined;
+    const terms = reSignTerms(
+      defaultTerms(fighter, next),
+      staying,
+      staying
+        ? fighter.record.filter(
+            (e) => e.promotionId === next.id && e.day >= staying.signedDay && e.outcome === 'win',
+          ).length
+        : 0,
+    );
     const signed = createAgreement({
       fighter,
       promotion: next,
@@ -2338,6 +2467,87 @@ function retireTheDrifted(
   return news;
 }
 
+/** Fighters a weight class needs before a promotion can make even one fight in it. */
+const MIN_FIGHTS_DEEP = 2;
+
+/** A debutant at `division`'s weight, signed to `promotion` (or nobody), with a gym and a coach. */
+function signDebutant(
+  db: GameDb,
+  day: number,
+  rng: Rng,
+  division: (typeof DIVISIONS)[number],
+  promotion: Promotion | undefined,
+  i: number | string,
+  news: NewsItem[],
+): void {
+  /*
+   * Most people who turn professional are never going to be anything. A few are.
+   *
+   * `generateFighter` defaults to a tier drawn around 45, which produces a population whose
+   * ceilings sit comfortably below elite — so with the intake finally running, the sport
+   * still had nobody capable of *becoming* elite. Measured over ten years: population held at
+   * 627 while fighters rated 70 or better fell from 48 to 13, because the seeded elite aged
+   * out and the intake could not replace them at that level.
+   *
+   * The sport does not work by lifting everybody. It works by a small number of genuine
+   * prospects arriving each year among a great many who will spend a career on regional
+   * cards — so roughly one in twelve is drawn from a much higher band, and the rest are
+   * left exactly as they were.
+   */
+  const genRng = rng.fork(`gen:${day}:${division.id}:${i}`);
+  const isProspect = genRng.chance(0.085);
+
+  const born = generateFighter(genRng, {
+    id: `gen_${day}_${division.id}_${i}`,
+    divisionId: division.id,
+    sex: division.sex,
+    day,
+    promotionId: promotion?.id,
+    tier: isProspect ? Math.round(genRng.normalClamped(78, 9, 62, 97)) : undefined,
+    age: debutAge(genRng),
+  });
+  /*
+   * A gym, and with it a head coach.
+   *
+   * `replenish` created fighters with no `gymId` and no `headCoachId`, and nothing ever gave
+   * them one — so every fighter generated during a save trained at the no-gym default of
+   * quality 40 with no coach for their entire career. That is a development multiplier of
+   * about 0.4 against roughly 1.9 in a good room with the right specialist: a quarter speed,
+   * permanently.
+   *
+   * It is why the sport's elite kept emptying out even once the intake was running and the
+   * prospects were real. Measured after ten years: 327 generated fighters alive, the best of
+   * them carrying a potential of 88, and **not one had reached a rating of 70** — the best
+   * actual rating in the entire generated population was 67. They were not failing to arrive.
+   * They were arriving and then never being allowed to grow.
+   */
+  const rooms = db.gyms.findAll() as unknown as Gym[];
+  const room = rooms.length > 0 ? genRng.pick(rooms) : undefined;
+  const located: Fighter = room ? { ...born, gymId: room.id, headCoachId: room.headCoachId } : born;
+  // A debutant's nickname, kept only if nobody in the division already answers to it.
+  const unique =
+    located.nickname &&
+    uniqueNickname(
+      located.nickname,
+      located.id as string,
+      nicknamesTaken(db.fighters.findAll() as Fighter[], located.divisionId),
+    );
+  const placed: Fighter =
+    located.nickname === unique ? located : { ...located, nickname: unique || undefined };
+
+  db.fighters.upsert(placed as Fighter & Entity);
+  news.push(
+    debutNews({
+      day,
+      fighterId: placed.id,
+      name: displayName(born),
+      divisionId: division.id,
+      promotionId: promotion?.id,
+      promotionName: promotion?.shortName,
+    }),
+  );
+}
+
 /** Replace retirees so divisions do not quietly empty out over a long career. */
 function replenish(
   db: GameDb,
@@ -2352,14 +2562,8 @@ function replenish(
   for (const division of DIVISIONS) {
     const active = all.filter((f) => f.divisionId === division.id && f.retiredDay === undefined);
     const target = divisionTargetFor(getWorld(db), division.id as string, division.sex);
-
     // How deep each promotion is *in this division*, which is what a debutant fills a hole in.
-    const depthHere = new Map<string, number>();
-    for (const f of active) {
-      if (!f.promotionId) continue;
-      const id = f.promotionId as string;
-      depthHere.set(id, (depthHere.get(id) ?? 0) + 1);
-    }
+    const depthHere = depthByPromotion(active);
 
     /*
      * During a generated world's pre-history, a share of the gap each quarter rather than all of
@@ -2392,74 +2596,83 @@ function replenish(
           depthOf: (promotionId) => depthHere.get(promotionId) ?? 0,
         },
       );
-      /*
-       * Most people who turn professional are never going to be anything. A few are.
-       *
-       * `generateFighter` defaults to a tier drawn around 45, which produces a population whose
-       * ceilings sit comfortably below elite — so with the intake finally running, the sport
-       * still had nobody capable of *becoming* elite. Measured over ten years: population held at
-       * 627 while fighters rated 70 or better fell from 48 to 13, because the seeded elite aged
-       * out and the intake could not replace them at that level.
-       *
-       * The sport does not work by lifting everybody. It works by a small number of genuine
-       * prospects arriving each year among a great many who will spend a career on regional
-       * cards — so roughly one in twelve is drawn from a much higher band, and the rest are
-       * left exactly as they were.
-       */
-      const genRng = rng.fork(`gen:${day}:${division.id}:${i}`);
-      const isProspect = genRng.chance(0.085);
+      signDebutant(db, day, rng, division, promotion, i, news);
+    }
+  }
+  return news;
+}
 
-      const born = generateFighter(genRng, {
-        id: `gen_${day}_${division.id}_${i}`,
-        divisionId: division.id,
-        sex: division.sex,
-        day,
-        promotionId: promotion?.id,
-        tier: isProspect ? Math.round(genRng.normalClamped(78, 9, 62, 97)) : undefined,
-        age: debutAge(genRng),
-      });
-      /*
-       * A gym, and with it a head coach.
-       *
-       * `replenish` created fighters with no `gymId` and no `headCoachId`, and nothing ever gave
-       * them one — so every fighter generated during a save trained at the no-gym default of
-       * quality 40 with no coach for their entire career. That is a development multiplier of
-       * about 0.4 against roughly 1.9 in a good room with the right specialist: a quarter speed,
-       * permanently.
-       *
-       * It is why the sport's elite kept emptying out even once the intake was running and the
-       * prospects were real. Measured after ten years: 327 generated fighters alive, the best of
-       * them carrying a potential of 88, and **not one had reached a rating of 70** — the best
-       * actual rating in the entire generated population was 67. They were not failing to arrive.
-       * They were arriving and then never being allowed to grow.
-       */
-      const rooms = db.gyms.findAll() as unknown as Gym[];
-      const room = rooms.length > 0 ? genRng.pick(rooms) : undefined;
-      const located: Fighter = room
-        ? { ...born, gymId: room.id, headCoachId: room.headCoachId }
-        : born;
-      // A debutant's nickname, kept only if nobody in the division already answers to it.
-      const unique =
-        located.nickname &&
-        uniqueNickname(
-          located.nickname,
-          located.id as string,
-          nicknamesTaken(db.fighters.findAll() as Fighter[], located.divisionId),
-        );
-      const placed: Fighter =
-        located.nickname === unique ? located : { ...located, nickname: unique || undefined };
+/** How many of one weight class's active fighters each promotion holds. */
+function depthByPromotion(active: readonly Fighter[]): Map<string, number> {
+  const depth = new Map<string, number>();
+  for (const f of active) {
+    if (!f.promotionId) continue;
+    const id = f.promotionId as string;
+    depth.set(id, (depth.get(id) ?? 0) + 1);
+  }
+  return depth;
+}
 
-      db.fighters.upsert(placed as Fighter & Entity);
-      news.push(
-        debutNews({
-          day,
-          fighterId: placed.id,
-          name: displayName(born),
+/**
+ * A weight class a promotion runs but can no longer make a fight in.
+ *
+ * The intake is sized to the sport's headcount at each weight, so a division that was full across
+ * the sport sent nobody to the one promotion where it had emptied: a town show whose flyweights had
+ * all moved up, retired or left in free agency kept running a weight class with one fighter in it,
+ * for good. A promotion in that position signs local debutants until it can make a fight again.
+ * Run after free agency, which is what most often empties a small promotion's weight class.
+ */
+export function fillHoles(
+  db: GameDb,
+  day: number,
+  rng: Rng,
+  promotions: readonly Promotion[],
+): NewsItem[] {
+  const news: NewsItem[] = [];
+  const all = db.fighters.findAll() as Fighter[];
+  const player = getWorld(db).playerPromotionId;
+  for (const division of DIVISIONS) {
+    const depthHere = depthByPromotion(
+      all.filter((f) => f.divisionId === division.id && f.retiredDay === undefined),
+    );
+    for (const promotion of promotions) {
+      if (!promotion.divisions.includes(division.id)) continue;
+      const depth = depthHere.get(promotion.id as string) ?? 0;
+      if (depth >= MIN_FIGHTS_DEEP) continue;
+      /*
+       * Never onto the player's roster. Who a promoter signs is theirs to decide, so their empty
+       * weight class is a suggestion in the inbox rather than a debutant they did not choose.
+       */
+      if (promotion.id === player) {
+        raise(db, {
+          id: inboxId(day as never, `thin:${division.id as string}`),
+          day: day as never,
+          kind: 'roster',
+          priority: 'notable',
+          title:
+            depth === 0
+              ? `Nobody left at ${division.shortName}`
+              : `One fighter left at ${division.shortName}`,
+          body:
+            `You run ${division.name} and cannot make a fight in it. Sign somebody, or the ` +
+            `division sits empty on every card you plan.`,
+          promotionId: promotion.id,
           divisionId: division.id,
-          promotionId: promotion?.id,
-          promotionName: promotion?.shortName,
-        }),
-      );
+          link: { route: 'promoterRoster' },
+        });
+        continue;
+      }
+      for (let n = depth; n < MIN_FIGHTS_DEEP; n++) {
+        signDebutant(
+          db,
+          day,
+          rng,
+          division,
+          promotion,
+          `hole:${promotion.id as string}:${n}`,
+          news,
+        );
+      }
     }
   }
   return news;
@@ -2556,6 +2769,40 @@ export const nextEventNumber = (db: GameDb, promotion: Promotion): number =>
   cardsStagedBefore(promotion.id as string, getWorld(db).seed) +
   db.events.count({ where: { promotionId: promotion.id } }) +
   1;
+
+/**
+ * How much a pairing's history adds to its draw.
+ *
+ * Every card runner passed `heat: 0, isRivalry: false` to `drawWeight`, so a rematch nobody could
+ * stop talking about sold exactly as well as two strangers — the whole rivalry system stopped at
+ * the fighters and never reached the gate.
+ */
+export function rivalryTerms(
+  db: GameDb,
+  a: FighterId,
+  b: FighterId,
+  day: number,
+): { heat: number; isRivalry: boolean } {
+  const rivalry = getRivalry(db, a, b, day);
+  return { heat: currentHeat(rivalry, day), isRivalry: rivalry.isRivalry };
+}
+
+/**
+ * Who each bout's favourite is, read before anybody fights. See `favouriteOf`.
+ */
+export function favouritesOn(
+  db: GameDb,
+  bouts: readonly { boutId: string; redId: FighterId; blueId: FighterId }[],
+): Map<string, FighterId> {
+  const favourites = new Map<string, FighterId>();
+  for (const bout of bouts) {
+    const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
+    const blue = db.fighters.findById(bout.blueId as string) as Fighter | undefined;
+    const favourite = red && blue ? favouriteOf(red, blue, paperOdds(red, blue)) : undefined;
+    if (favourite) favourites.set(bout.boutId, favourite);
+  }
+  return favourites;
+}
 
 /** The surnames a card is billed under, the way the sport writes them: `Reyes vs Hill`. */
 export function headlineNames(
@@ -2684,16 +2931,50 @@ function rememberDelivery(promotion: Promotion, delivered: number): Promotion {
  * promotion pays between cards is staff, premises and the administration of a roster, and those
  * scale with the size of the operation rather than with how busy it is.
  */
-function chargePromotions(db: GameDb, days: number): void {
+/** The loss, as a share of the purses, past which a promotion will not stage a card at all. */
+const LOSS_TOLERANCE = 0.25;
+
+/** The share of expiring deals a promotion in distress still renews. */
+const DISTRESSED_RESIGN_SHARE = 0.5;
+
+/**
+ * Years of running costs below which a promotion behaves like it is in trouble: club shows, no
+ * card it expects to lose money on, half its expiring deals let go. A year: a generated promotion
+ * starts with one and a half to three (`startingBudget` in the generator), so the three this was
+ * when every treasury held decades put the whole sport in distress on the first day.
+ */
+const DISTRESS_RUNWAY_YEARS = 1;
+
+function inDistress(promotion: Promotion, rosterSize: number): boolean {
+  return promotion.budget < annualCosts({ promotion, rosterSize }) * DISTRESS_RUNWAY_YEARS;
+}
+
+function chargePromotions(db: GameDb, fromDay: number, day: number): void {
+  const days = day - fromDay;
   if (days <= 0) return;
   const all = db.fighters.findAll() as Fighter[];
+
+  // When each promotion last put a card on, for the attention it loses by not doing so.
+  const lastCard = new Map<string, number>();
+  for (const night of db.events.findAll() as FightNight[]) {
+    const key = night.promotionId as string;
+    if (night.day <= day && night.day > (lastCard.get(key) ?? -Infinity)) {
+      lastCard.set(key, night.day);
+    }
+  }
+  const startedDay = getWorld(db).startedDay ?? fromDay;
 
   for (const promotion of db.promotions.findAll() as unknown as Promotion[]) {
     const rosterSize = all.filter(
       (f) => f.promotionId === promotion.id && f.retiredDay === undefined,
     ).length;
     const { promotion: charged } = chargeCosts({ promotion, rosterSize, days });
-    db.promotions.upsert(charged as Promotion & Entity);
+    // A save holds no nights from before it began, so the clock on being forgotten starts there.
+    const since = day - (lastCard.get(promotion.id as string) ?? startedDay);
+    db.promotions.upsert({
+      ...charged,
+      buzz: idleBuzz(charged.buzz, since, days),
+    } as Promotion & Entity);
   }
 }
 
