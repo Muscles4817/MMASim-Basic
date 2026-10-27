@@ -125,9 +125,7 @@ describe('a card nobody ran', () => {
     expect(fighter.resentment).toBe(Math.min(100, before.resentment + MISSED_CARD_RESENTMENT));
 
     const news = db.news.findAll() as NewsItem[];
-    expect(news.some((n) => n.kind === 'cancellation' && n.headline.includes(name))).toBe(
-      true,
-    );
+    expect(news.some((n) => n.kind === 'cancellation' && n.headline.includes(name))).toBe(true);
     expect(name).not.toMatch(/undefined/);
     expect(readInbox(db).some((i) => i.link?.id === plan.id && /cancelled/i.test(i.title))).toBe(
       true,

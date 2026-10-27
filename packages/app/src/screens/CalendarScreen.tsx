@@ -151,7 +151,8 @@ export function CalendarScreen() {
           </div>
           {tonight && (
             <p className="faint prose" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
-              Moving the clock on without running {planName(db, tonight)} cancels it, and that costs you.
+              Moving the clock on without running {planName(db, tonight)} cancels it, and that costs
+              you.
             </p>
           )}
         </div>

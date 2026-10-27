@@ -2413,7 +2413,7 @@ function ageEveryone(
  * jumped by two.
  */
 export const nextEventNumber = (db: GameDb, promotion: Promotion): number =>
-  cardsStagedBefore(promotion, getWorld(db).seed) +
+  cardsStagedBefore(promotion.id as string, getWorld(db).seed) +
   db.events.count({ where: { promotionId: promotion.id } }) +
   1;
 

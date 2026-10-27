@@ -55,7 +55,10 @@ describe('generated promotion names', () => {
   it('does not rename the top of the sport when the base gets bigger', () => {
     const small = createPromotionNamer('s');
     const big = createPromotionNamer('s');
-    // Interleaved differently: the majors must not depend on how many local shows came first.
+    // Each rung draws from its own stream, so the majors do not depend on how many local shows
+    // were named before them. Only the draws are independent: the used-name sets are shared, so a
+    // clash can still change a later name — which is why `generate.ts` names the rungs top-down,
+    // and a bigger base can never rename the top of the sport.
     const a = [small('local'), small('major')];
     const b = [big('local'), big('local'), big('local'), big('major')];
     expect(a[1]).toEqual(b[3]);

@@ -120,18 +120,31 @@ export function cardsPerYear(promotion: Promotion, rosterSize: number): number {
  */
 export const MAX_CARDS_PER_YEAR = Math.max(...Object.values(TIER_AMBITION));
 
+/** Years a promotion had been running before the records begin: a range, picked per promotion. */
+const PRE_RECORD_YEARS: readonly [number, number] = [3, 9];
+
+/**
+ * Cards a year it ran in that time: a range, picked per promotion.
+ *
+ * Deliberately not the tier's schedule. A promotion's tier moves once prestige can move it, and a
+ * past derived from today's tier would renumber every card it has ever announced — backwards, for
+ * a promotion that falls.
+ */
+const PRE_RECORD_CARDS_PER_YEAR: readonly [number, number] = [6, 18];
+
 /**
  * Cards a promotion had already staged before the records begin.
  *
  * The world keeps a promotion's nights only from the day the player arrives — pre-history is
  * simulated in bulk and stores none — so counting stored nights alone numbered an eight-year-old
- * promotion's next show `1`. This is the past the save does not hold: three to nine years of its
- * tier's schedule, varied per promotion and derived from its id and the world's seed, so it is the
- * same number every time it is asked and never needs storing.
+ * promotion's next show `1`. This is the past the save does not hold, derived from nothing but the
+ * world's seed and the promotion's id, so it is the same number every time it is asked, never
+ * moves, and never needs storing.
  */
-export function cardsStagedBefore(promotion: Promotion, worldSeed = ''): number {
-  const years = createRng(`history:${worldSeed}:${promotion.id}`).range(3, 9);
-  return Math.max(1, Math.round(years * TIER_AMBITION[promotion.tier] * 0.75));
+export function cardsStagedBefore(promotionId: string, worldSeed: string): number {
+  const rng = createRng(`history:${worldSeed}:${promotionId}`);
+  const years = rng.range(...PRE_RECORD_YEARS);
+  return Math.max(1, Math.round(years * rng.range(...PRE_RECORD_CARDS_PER_YEAR)));
 }
 
 /** Days between this promotion's cards. `Infinity` when it cannot stage any. */

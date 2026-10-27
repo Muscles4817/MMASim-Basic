@@ -5,7 +5,6 @@
 import { describe, expect, it } from 'vitest';
 import { makePromotion } from '../testing/fixtures.js';
 import { CARD_SIZE } from './events.js';
-import { asPromotionId } from '../core/ids.js';
 import {
   MAX_CARDS_PER_YEAR,
   cardsPerYear,
@@ -88,11 +87,16 @@ describe('money is a schedule constraint', () => {
 });
 
 describe('a promotion has a past', () => {
-  it('arrives with cards behind it, more at the top of the sport, the same every time', () => {
-    const apex = of('global', { id: asPromotionId('p_x') });
-    const local = of('developmental', { id: asPromotionId('p_x') });
-    expect(cardsStagedBefore(apex)).toBe(cardsStagedBefore({ ...apex }));
-    expect(cardsStagedBefore(apex)).toBeGreaterThan(cardsStagedBefore(local));
-    expect(cardsStagedBefore(local)).toBeGreaterThan(0);
+  it('arrives with cards behind it, the same number every time it is asked', () => {
+    expect(cardsStagedBefore('p_x', 'seed')).toBe(cardsStagedBefore('p_x', 'seed'));
+    expect(cardsStagedBefore('p_x', 'seed')).toBeGreaterThanOrEqual(3 * 6);
+    expect(cardsStagedBefore('p_x', 'seed')).toBeLessThanOrEqual(9 * 18);
+  });
+
+  it('differs between promotions and between worlds', () => {
+    const counts = new Set(
+      ['a', 'b', 'c', 'd'].flatMap((id) => ['s1', 's2'].map((s) => cardsStagedBefore(id, s))),
+    );
+    expect(counts.size).toBeGreaterThan(4);
   });
 });
