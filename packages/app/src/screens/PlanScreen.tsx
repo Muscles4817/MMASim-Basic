@@ -25,7 +25,7 @@
  * button only appears when the date arrives.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   EVENT_SCALES,
   GROUP_LABEL,
@@ -49,7 +49,6 @@ import {
   type PlanSlot,
   type Promotion,
   type TitleKind,
-  describeCounter,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
@@ -59,24 +58,31 @@ import { Console, Ledger, LedgerRow, LedgerRule } from '../ui/console';
 import { formatGameDay } from '../shell/Shell';
 import { useToast } from '../ui/toast';
 import { NightRecap, NightShow } from './NightScreen';
+import { TaleOfTheTape } from '../ui/TaleOfTheTape';
 import { FightWeekPanel } from './FightWeekPanel';
 import { money } from '../ui/format';
+import { DrawBadge } from '../ui/DrawBadge';
 import {
   FILL_SCOPES,
   acceptCounter,
   applySuggestion,
   MISSED_CARD_BUZZ,
+  blockerFor,
+  boutStatusLabel,
   cancelPlan,
   cancellationCost,
   clearSlot,
+  counterTerms,
   defaultIntentFor,
   describeOdds,
   forecastPlan,
   issuesFor,
   opponentsFor,
+  paperOdds,
   placeBout,
   planById,
   promoterContext,
+  rankOfFighter,
   planName,
   runPlan,
   savePlan,
@@ -85,6 +91,7 @@ import {
   subjectsFor,
   suggestFills,
   titleOptionsFor,
+  whatItSells,
   type CancellationCost,
   type FillScope,
   type OpponentOption,
@@ -132,6 +139,23 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
   const [settings, setSettings] = useState(false);
   const [showing, setShowing] = useState(false);
   const toast = useToast();
+
+  /*
+   * Each matchmaking step brings itself into view and takes focus. The picker used to open
+   * wherever the slot was — often a screen above or below where the player had just tapped — and
+   * a keyboard or screen-reader user was left on a button that no longer existed. Keyed on the
+   * step and the slot, so re-rendering the same step does not yank the page around.
+   */
+  const panelRef = useRef<HTMLDivElement>(null);
+  const stepKey = editor.step === 'closed' ? 'closed' : `${editor.step}:${editor.slotId}`;
+  useEffect(() => {
+    if (stepKey === 'closed') return;
+    const el = panelRef.current;
+    if (!el) return;
+    const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+    el.scrollIntoView?.({ block: 'start', behavior: reduced ? 'auto' : 'smooth' });
+    el.focus({ preventScroll: true });
+  }, [stepKey]);
 
   const plan = useMemo(() => planById(db, id), [db, id, version, world.day]);
   const ctx = useMemo(
@@ -213,248 +237,325 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
     setVersion((v) => v + 1);
   };
 
-  return (
-    <div className="stack" style={{ gap: 'var(--space-4)' }}>
+  /*
+   * The card board and the standing context, built once and placed by the layout below. The
+   * board is the same element whether the picker is open or not, so nothing is rendered twice.
+   */
+  const board = (
+    <>
       {/*
-        The matchmaking flow sits above the card rather than below it.
-        
-        Tapping a slot opens a panel, and a panel that opens under a twelve-row board is a panel
-        the player has to go looking for — worst on a desktop, where the board is a full column
-        tall before the picker even starts.
+        On the night, the night is the screen. The run button used to sit in the side
+        column under the forecast — below the fold on a phone, under twelve slot rows.
       */}
-      {editor.step !== 'closed' && (
-        <SlotEditorPanel
-          ctx={ctx}
-          plan={plan}
-          editor={editor}
-          onEditor={setEditor}
-          onChange={update}
-        />
+      {isFightNight && (
+        <Card raised title="Fight night">
+          <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
+            {progress.agreed === 0
+              ? 'Nothing on this card was ever agreed. There is no show to run, and moving the clock on cancels it.'
+              : `${progress.agreed} ${progress.agreed === 1 ? 'fight is' : 'fights are'} signed. Anything still on offer does not happen. Moving the clock on without running it cancels the card.`}
+          </p>
+          <Button
+            variant="primary"
+            block
+            aria-disabled={progress.agreed === 0}
+            onClick={() => progress.agreed > 0 && runIt()}
+          >
+            Run fight night: {planName(db, plan)}
+          </Button>
+        </Card>
       )}
 
-      <Console
-        main={
-          <>
-            {/*
-              On the night, the night is the screen. The run button used to sit in the side
-              column under the forecast — below the fold on a phone, under twelve slot rows.
-            */}
-            {isFightNight && (
-              <Card raised title="Fight night">
-                <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
-                  {progress.agreed === 0
-                    ? 'Nothing on this card was ever agreed. There is no show to run, and moving the clock on cancels it.'
-                    : `${progress.agreed} ${progress.agreed === 1 ? 'fight is' : 'fights are'} signed. Anything still on offer does not happen. Moving the clock on without running it cancels the card.`}
-                </p>
-                <Button
-                  variant="primary"
-                  block
-                  aria-disabled={progress.agreed === 0}
-                  onClick={() => progress.agreed > 0 && runIt()}
+      <Card raised>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <p className="section-title" style={{ margin: 0 }}>
+            {planName(db, plan)}
+          </p>
+          <Button size="sm" variant="ghost" onClick={() => setSettings((s) => !s)}>
+            {settings ? 'Done' : 'Card settings'}
+          </Button>
+        </div>
+        <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+          {formatGameDay(plan.day)} · {plan.city}, {plan.country} · {eventScale(plan.scale).label}
+          {isFightNight ? ' · tonight' : ` · in ${away} days`}
+        </p>
+
+        <div className="facts" style={{ marginTop: 'var(--space-3)' }}>
+          <Fact
+            label="Agreed"
+            value={`${progress.agreed} / ${progress.slots}`}
+            tone={progress.complete ? 'good' : 'warn'}
+            emphasis="secondary"
+          />
+          <Fact
+            label="Main event"
+            value={progress.hasMainEvent ? 'Set' : 'Empty'}
+            tone={progress.hasMainEvent ? 'good' : 'bad'}
+            emphasis="secondary"
+          />
+          <Fact label="Offers out" value={progress.offered} emphasis="tertiary" />
+        </div>
+
+        {settings && (
+          <CardSettings
+            plan={plan}
+            onChange={update}
+            cost={cancellationCost(plan, world.day)}
+            onCancel={() => {
+              const name = planName(db, plan);
+              const cost = cancelPlan(db, plan.id);
+              commit();
+              toast(
+                `${name} is cancelled${cost && cost.buzz > 0 ? `, for ${cost.buzz} buzz` : ''}. Everybody on it is free again.`,
+                cost && cost.buzz > 0 ? 'warn' : 'info',
+              );
+              navigate({ name: 'calendar' });
+            }}
+          />
+        )}
+      </Card>
+
+      <FightWeekPanel
+        ctx={ctx}
+        plan={plan}
+        onChange={update}
+        onPress={() => {
+          commit();
+          setVersion((v) => v + 1);
+        }}
+      />
+
+      {issues.length > 0 && !isFightNight && (
+        <Alert
+          tone={issues[0]!.urgency >= 90 ? 'danger' : issues[0]!.urgency >= 60 ? 'warn' : 'info'}
+          title={issues[0]!.message}
+        >
+          {issues.length > 1 && (
+            <span className="stack" style={{ gap: 'var(--space-1)' }}>
+              {issues.slice(1, 4).map((issue) => (
+                <span
+                  key={issue.kind + issue.message}
+                  className="prose"
+                  style={{ display: 'block', fontSize: 'var(--text-sm)' }}
                 >
-                  Run fight night: {planName(db, plan)}
-                </Button>
-              </Card>
-            )}
+                  {issue.message}
+                </span>
+              ))}
+            </span>
+          )}
+        </Alert>
+      )}
 
-            <Card raised>
-              <div
-                className="row"
-                style={{ justifyContent: 'space-between', alignItems: 'baseline' }}
-              >
-                <p className="section-title" style={{ margin: 0 }}>
-                  {planName(db, plan)}
-                </p>
-                <Button size="sm" variant="ghost" onClick={() => setSettings((s) => !s)}>
-                  {settings ? 'Done' : 'Card settings'}
-                </Button>
-              </div>
-              <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
-                {formatGameDay(plan.day)} · {plan.city}, {plan.country} ·{' '}
-                {eventScale(plan.scale).label}
-                {isFightNight ? ' · tonight' : ` · in ${away} days`}
+      {/* The card itself. Sections in the order a promoter fills them, holes included. */}
+      {(['mainEvent', 'coMain', 'mainCard', 'prelim'] as const).map((position) => {
+        const slots = plan.slots.filter((s) => s.position === position);
+        if (slots.length === 0) return null;
+
+        return (
+          <Card key={position} title={POSITION_LABEL[position]}>
+            <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginTop: 0 }}>
+              {SECTION_PURPOSE[position]}
+            </p>
+            <div className="slots">
+              {slots.map((slot, i) => (
+                <SlotRow
+                  key={slot.id}
+                  ctx={ctx}
+                  slot={slot}
+                  ordinal={slots.length > 1 ? i + 1 : undefined}
+                  active={editor.step !== 'closed' && editor.slotId === slot.id}
+                  onOpen={() => openSlot(slot)}
+                />
+              ))}
+            </div>
+          </Card>
+        );
+      })}
+    </>
+  );
+
+  const context = (
+    <>
+      {/*
+        The night as a business proposition, updated as the card fills. A promoter deciding
+        whether they can afford a main event needs the number beside the decision, not two
+        screens away.
+      */}
+      {forecast && (
+        <Card title="What this night is worth">
+          <KeyStat
+            value={forecast.expectedAttendance.toLocaleString()}
+            label="Expected attendance"
+            detail={`${forecast.bouts} fights announced`}
+            tone={forecast.expectedAttendance < 2000 ? 'bad' : undefined}
+          />
+          <Ledger>
+            <LedgerRow label="Purses committed" value={money(forecast.purses)} />
+            <LedgerRow label="Bonus pool" value={money(forecast.bonusPool)} />
+            <LedgerRule />
+            <LedgerRow
+              label="Projected result"
+              value={money(forecast.projectedProfit)}
+              tone={forecast.projectedProfit >= 0 ? 'good' : 'bad'}
+            />
+          </Ledger>
+        </Card>
+      )}
+
+      {!isFightNight && (
+        <>
+          {/*
+            Gated on drafts, not on "filled but not agreed".
+            
+            A card where two bouts were turned down has more filled slots than agreed ones
+            and nothing left to send — the arithmetic version offered a button above the
+            sentence "0 bouts are pencilled in".
+          */}
+          {pencilled > 0 && (
+            <Card title="Send the offers">
+              <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
+                {pencilled} {pencilled === 1 ? 'bout is' : 'bouts are'} pencilled in and nobody has
+                been asked yet. Both corners have to agree, and anybody who turns it down leaves a
+                hole.
               </p>
-
-              <div className="facts" style={{ marginTop: 'var(--space-3)' }}>
-                <Fact
-                  label="Agreed"
-                  value={`${progress.agreed} / ${progress.slots}`}
-                  tone={progress.complete ? 'good' : 'warn'}
-                  emphasis="secondary"
-                />
-                <Fact
-                  label="Main event"
-                  value={progress.hasMainEvent ? 'Set' : 'Empty'}
-                  tone={progress.hasMainEvent ? 'good' : 'bad'}
-                  emphasis="secondary"
-                />
-                <Fact label="Offers out" value={progress.offered} emphasis="tertiary" />
-              </div>
-
-              {settings && (
-                <CardSettings
-                  plan={plan}
-                  onChange={update}
-                  cost={cancellationCost(plan, world.day)}
-                  onCancel={() => {
-                    const name = planName(db, plan);
-                    const cost = cancelPlan(db, plan.id);
-                    commit();
-                    toast(
-                      `${name} is cancelled${cost && cost.buzz > 0 ? `, for ${cost.buzz} buzz` : ''}. Everybody on it is free again.`,
-                      cost && cost.buzz > 0 ? 'warn' : 'info',
-                    );
-                    navigate({ name: 'calendar' });
-                  }}
-                />
-              )}
+              <Button
+                variant="primary"
+                block
+                onClick={() => {
+                  const result = sendAllDrafts({ ctx, plan });
+                  update(result.plan);
+                  const signed = result.outcomes.filter((o) => o.accepted).length;
+                  const refused = result.outcomes.length - signed;
+                  toast(
+                    `${result.outcomes.length} ${result.outcomes.length === 1 ? 'offer' : 'offers'} sent: ${signed} signed${refused > 0 ? `, ${refused} not` : ''}.`,
+                    refused > 0 ? 'warn' : 'good',
+                  );
+                }}
+              >
+                Send every pencilled fight
+              </Button>
             </Card>
+          )}
 
-            <FightWeekPanel
+          <AutofillPanel
+            ctx={ctx}
+            plan={plan}
+            suggestions={suggestions}
+            onSuggest={setSuggestions}
+            onApply={(picked) => {
+              let next = plan;
+              for (const suggestion of picked) next = applySuggestion(next, suggestion);
+              update(next);
+              toast(
+                `${picked.length} ${picked.length === 1 ? 'fight' : 'fights'} pencilled in. Nobody has been offered anything yet.`,
+              );
+              setSuggestions((current) =>
+                current.filter((s) => !picked.some((p) => p.slotId === s.slotId)),
+              );
+            }}
+          />
+        </>
+      )}
+    </>
+  );
+
+  return (
+    <div className="stack" style={{ gap: 'var(--space-4)' }}>
+      {editor.step === 'closed' ? (
+        <Console main={board} side={context} />
+      ) : (
+        /*
+         * Matchmaking as three panes on a desktop: the card on the left, the picker in the
+         * middle, and the comparison on the right — what the player is choosing between, beside
+         * the choice. On a phone the same three stack with the picker first, which is why it
+         * comes first in the source: the grid places the panes, the reading order stays put.
+         */
+        <div className="builder">
+          <div className="builder__picker" ref={panelRef} tabIndex={-1}>
+            <SlotEditorPanel
               ctx={ctx}
               plan={plan}
+              editor={editor}
+              onEditor={setEditor}
               onChange={update}
-              onPress={() => {
-                commit();
-                setVersion((v) => v + 1);
-              }}
             />
-
-            {issues.length > 0 && !isFightNight && (
-              <Alert
-                tone={
-                  issues[0]!.urgency >= 90 ? 'danger' : issues[0]!.urgency >= 60 ? 'warn' : 'info'
-                }
-                title={issues[0]!.message}
-              >
-                {issues.length > 1 && (
-                  <span className="stack" style={{ gap: 'var(--space-1)' }}>
-                    {issues.slice(1, 4).map((issue) => (
-                      <span
-                        key={issue.kind + issue.message}
-                        className="prose"
-                        style={{ display: 'block', fontSize: 'var(--text-sm)' }}
-                      >
-                        {issue.message}
-                      </span>
-                    ))}
-                  </span>
-                )}
-              </Alert>
-            )}
-
-            {/* The card itself. Sections in the order a promoter fills them, holes included. */}
-            {(['mainEvent', 'coMain', 'mainCard', 'prelim'] as const).map((position) => {
-              const slots = plan.slots.filter((s) => s.position === position);
-              if (slots.length === 0) return null;
-
-              return (
-                <Card key={position} title={POSITION_LABEL[position]}>
-                  <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginTop: 0 }}>
-                    {SECTION_PURPOSE[position]}
-                  </p>
-                  <div className="slots">
-                    {slots.map((slot, i) => (
-                      <SlotRow
-                        key={slot.id}
-                        ctx={ctx}
-                        slot={slot}
-                        ordinal={slots.length > 1 ? i + 1 : undefined}
-                        onOpen={() => openSlot(slot)}
-                      />
-                    ))}
-                  </div>
-                </Card>
-              );
-            })}
-          </>
-        }
-        side={
-          <>
-            {/*
-              The night as a business proposition, updated as the card fills. A promoter deciding
-              whether they can afford a main event needs the number beside the decision, not two
-              screens away.
-            */}
-            {forecast && (
-              <Card title="What this night is worth">
-                <KeyStat
-                  value={forecast.expectedAttendance.toLocaleString()}
-                  label="Expected attendance"
-                  detail={`${forecast.bouts} fights announced`}
-                  tone={forecast.expectedAttendance < 2000 ? 'bad' : undefined}
-                />
-                <Ledger>
-                  <LedgerRow label="Purses committed" value={money(forecast.purses)} />
-                  <LedgerRow label="Bonus pool" value={money(forecast.bonusPool)} />
-                  <LedgerRule />
-                  <LedgerRow
-                    label="Projected result"
-                    value={money(forecast.projectedProfit)}
-                    tone={forecast.projectedProfit >= 0 ? 'good' : 'bad'}
-                  />
-                </Ledger>
-              </Card>
-            )}
-
-            {!isFightNight && (
-              <>
-                {/*
-                  Gated on drafts, not on "filled but not agreed".
-                  
-                  A card where two bouts were turned down has more filled slots than agreed ones
-                  and nothing left to send — the arithmetic version offered a button above the
-                  sentence "0 bouts are pencilled in".
-                */}
-                {pencilled > 0 && (
-                  <Card title="Send the offers">
-                    <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
-                      {pencilled} {pencilled === 1 ? 'bout is' : 'bouts are'} pencilled in and
-                      nobody has been asked yet. Both corners have to agree, and anybody who turns
-                      it down leaves a hole.
-                    </p>
-                    <Button
-                      variant="primary"
-                      block
-                      onClick={() => {
-                        const result = sendAllDrafts({ ctx, plan });
-                        update(result.plan);
-                        const signed = result.outcomes.filter((o) => o.accepted).length;
-                        const refused = result.outcomes.length - signed;
-                        toast(
-                          `${result.outcomes.length} ${result.outcomes.length === 1 ? 'offer' : 'offers'} sent: ${signed} signed${refused > 0 ? `, ${refused} not` : ''}.`,
-                          refused > 0 ? 'warn' : 'good',
-                        );
-                      }}
-                    >
-                      Send every pencilled fight
-                    </Button>
-                  </Card>
-                )}
-
-                <AutofillPanel
-                  ctx={ctx}
-                  plan={plan}
-                  suggestions={suggestions}
-                  onSuggest={setSuggestions}
-                  onApply={(picked) => {
-                    let next = plan;
-                    for (const suggestion of picked) next = applySuggestion(next, suggestion);
-                    update(next);
-                    toast(
-                      `${picked.length} ${picked.length === 1 ? 'fight' : 'fights'} pencilled in. Nobody has been offered anything yet.`,
-                    );
-                    setSuggestions((current) =>
-                      current.filter((s) => !picked.some((p) => p.slotId === s.slotId)),
-                    );
-                  }}
-                />
-              </>
-            )}
-          </>
-        }
-      />
+          </div>
+          <div className="builder__compare">
+            <MatchupCompare ctx={ctx} plan={plan} editor={editor} />
+            {context}
+          </div>
+          <div className="builder__slots">{board}</div>
+        </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * The third pane: what the player is choosing between.
+ *
+ * Nothing until there is somebody to compare. With one fighter picked, who they are and what
+ * they need; with a pair, the tale of the tape and how the fight reads on paper — the comparison
+ * a matchmaker makes in their head, put beside the choice instead of a screen away.
+ */
+function MatchupCompare({
+  ctx,
+  plan,
+  editor,
+}: {
+  ctx: PromoterContext;
+  plan: EventPlan;
+  editor: SlotEditor;
+}) {
+  if (editor.step === 'closed') return null;
+  const slot = plan.slots.find((s) => s.id === editor.slotId);
+  if (!slot) return null;
+  const find = (id: string | undefined) =>
+    id ? (ctx.db.fighters.findById(id) as Fighter | undefined) : undefined;
+
+  const red =
+    editor.step === 'review'
+      ? find(slot.bout?.redId as string | undefined)
+      : find('subjectId' in editor ? editor.subjectId : undefined);
+  const blue =
+    editor.step === 'review'
+      ? find(slot.bout?.blueId as string | undefined)
+      : find(editor.step === 'confirm' ? editor.opponentId : undefined);
+
+  if (red && blue) {
+    return (
+      <Card title="Tale of the tape">
+        <TaleOfTheTape red={red} blue={blue} day={ctx.day} />
+        <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 0 }}>
+          On paper: {describeOdds(paperOdds(red, blue)).toLowerCase()}.
+        </p>
+      </Card>
+    );
+  }
+
+  if (red) {
+    const rank = rankOfFighter(ctx, red);
+    const champion = ctx.promotion.champions[red.divisionId] === red.id;
+    const arc = careerArc({ fighter: red, day: ctx.day, rank, isChampion: champion });
+    return (
+      <Card title={displayName(red)}>
+        <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 0 }}>
+          {recordString(red.summary)} · {describeRank(rank, champion)} ·{' '}
+          {abilityRead(red.attributes).label}
+          {arc.label !== describeRank(rank, champion) && ` · ${arc.label}`}
+        </p>
+        <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 0 }}>
+          Pick an opponent and the tale of the tape appears here.
+        </p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title={POSITION_LABEL[slot.position]}>
+      <p className="faint prose" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+        {SECTION_PURPOSE[slot.position]}
+      </p>
+    </Card>
   );
 }
 
@@ -477,12 +578,15 @@ function SlotRow({
   ctx,
   slot,
   ordinal,
+  active,
   onOpen,
 }: {
   ctx: PromoterContext;
   slot: PlanSlot;
   /** Which bout this is within its section, when the section holds more than one. */
   ordinal?: number;
+  /** The slot the picker beside it is filling. */
+  active?: boolean;
   onOpen(): void;
 }) {
   const bout = slot.bout;
@@ -504,7 +608,12 @@ function SlotRow({
           : 'draft';
 
   return (
-    <button type="button" className={`slot slot--${state}`} onClick={onOpen}>
+    <button
+      type="button"
+      className={`slot slot--${state}${active ? ' slot--active' : ''}`}
+      aria-current={active ? 'true' : undefined}
+      onClick={onOpen}
+    >
       {/* The section heading already says "Main card"; repeating it on every row inside it is
           noise. The ordinal is information, and the column keeps the rows aligned. */}
       <span className="slot__position">
@@ -526,19 +635,15 @@ function SlotRow({
                   bout.status === 'agreed'
                     ? 'positive'
                     : bout.status === 'declined'
-                      ? 'negative'
+                      ? boutStatusLabel(bout).startsWith('Wants')
+                        ? 'warning'
+                        : 'negative'
                       : bout.status === 'offered'
                         ? 'info'
                         : 'neutral'
                 }
               >
-                {bout.status === 'agreed'
-                  ? 'Signed'
-                  : bout.status === 'declined'
-                    ? 'Turned down'
-                    : bout.status === 'offered'
-                      ? 'Offered'
-                      : 'Pencilled in'}
+                {boutStatusLabel(bout)}
               </Chip>
               {bout.titleKind && (
                 <Chip tone="accent">
@@ -736,7 +841,13 @@ function SubjectPicker({
 
         <div>
           {subjects.map((option) => (
-            <SubjectRow key={option.fighter.id} ctx={ctx} option={option} onPick={onPick} />
+            <SubjectRow
+              key={option.fighter.id}
+              ctx={ctx}
+              market={plan.country}
+              option={option}
+              onPick={onPick}
+            />
           ))}
           {subjects.length === 0 && (
             <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
@@ -751,10 +862,13 @@ function SubjectPicker({
 
 function SubjectRow({
   ctx,
+  market,
   option,
   onPick,
 }: {
   ctx: PromoterContext;
+  /** The card's country, so a home fighter can say so. */
+  market: string;
   option: SubjectOption;
   onPick(fighter: Fighter): void;
 }) {
@@ -782,6 +896,7 @@ function SubjectRow({
         <Chip tone={arc.tone === 'good' ? 'positive' : arc.tone === 'bad' ? 'negative' : 'info'}>
           {arc.label}
         </Chip>
+        <DrawBadge fighter={fighter} day={ctx.day} market={market} detail />
         {blocker && <Chip tone="warning">{blocker}</Chip>}
       </span>
     </button>
@@ -903,7 +1018,14 @@ function OpponentPicker({
             <div key={group} className="picker__group">
               <p className="picker__group-title">{GROUP_LABEL[group]}</p>
               {rows.slice(0, 6).map((option) => (
-                <OpponentRow key={option.fighter.id} option={option} onPick={onPick} />
+                <OpponentRow
+                  key={option.fighter.id}
+                  option={option}
+                  day={ctx.day}
+                  market={plan.country}
+                  sells={whatItSells({ ctx, plan, a: subject, b: option.fighter })}
+                  onPick={onPick}
+                />
               ))}
             </div>
           ))
@@ -922,9 +1044,16 @@ function OpponentPicker({
  */
 function OpponentRow({
   option,
+  day,
+  market,
+  sells,
   onPick,
 }: {
   option: OpponentOption;
+  day: number;
+  market: string;
+  /** What this pairing sells, in a line: the question on every row is what am I selling. */
+  sells: string;
   onPick(fighter: Fighter): void;
 }) {
   const { fighter, rank, appraisal, acceptance, concern, blocker, cost, contractNote } = option;
@@ -947,7 +1076,9 @@ function OpponentRow({
       </span>
       {contractNote && <span className="candidate__line">{contractNote}</span>}
       <span className="candidate__why">{appraisal.rationale}</span>
+      <span className="candidate__line">Sells: {sells}</span>
       <span className="candidate__chips">
+        <DrawBadge fighter={fighter} day={day} market={market} detail />
         <Chip tone={acceptance > 0.6 ? 'positive' : acceptance > 0.3 ? 'warning' : 'negative'}>
           {describeAcceptance(acceptance)}
         </Chip>
@@ -996,7 +1127,14 @@ function ConfirmBout({
     () => titleOptionsFor({ ctx, red, blue, plan }),
     [ctx, red, blue, plan],
   );
-  const [titleKind, setTitleKind] = useState<TitleKind | undefined>();
+  /*
+   * With the champion in it, the belt is on the line unless the promoter says otherwise. Making
+   * them remember to designate it meant champions turning up in three-round bouts that risked
+   * the belt's standing for nothing.
+   */
+  const [titleKind, setTitleKind] = useState<TitleKind | undefined>(
+    () => titleOptions.find((o) => o.kind === 'undisputed' && o.available)?.kind,
+  );
 
   const place = () =>
     placeBout({
@@ -1111,20 +1249,19 @@ function BookedBout({
   const blue = ctx.db.fighters.findById(bout.blueId as string) as Fighter | undefined;
   if (!red || !blue) return null;
 
-  const counters = (bout.answers ?? []).filter((a) => a.verdict === 'countered');
-  const refusals = (bout.answers ?? []).filter((a) => a.verdict === 'declined');
-  const ask = counters.reduce((sum, c) => sum + (c.askingPurse ?? 0), 0);
-  // Doc 34 C4 (minimal; A4 does the full treatment): a counter can ask for something other than
-  // money, and a different opponent cannot be granted from here — that is a re-booking.
-  const asks = counters.flatMap((c) =>
-    c.counter && c.counter.kind !== 'money' ? [c.counter] : [],
-  );
-  const wantsAnotherOpponent = asks.some((c) => c.kind === 'opponent');
-
   const nameOf = (id: string) => {
     const fighter = ctx.db.fighters.findById(id) as Fighter | undefined;
     return fighter ? displayName(fighter) : 'Somebody';
   };
+
+  // What the counters would take, said before the tap: the same rules `acceptCounter` applies.
+  const terms = counterTerms(plan, slot.id, nameOf);
+  const preferred = terms?.instead
+    ? (ctx.db.fighters.findById(terms.instead.preferredId) as Fighter | undefined)
+    : undefined;
+  const insteadBlocked = preferred
+    ? blockerFor({ ctx, fighter: preferred, plan, ignoreSlotId: slot.id })
+    : undefined;
 
   return (
     <Card
@@ -1172,21 +1309,58 @@ function BookedBout({
           )}
 
           {/*
-            Meeting the ask. The negotiation the mode never had: a fighter who wanted more money
-            used to be an unfillable slot, and now it is a price the player can decide is worth
-            paying. Somebody who flatly refused cannot be bought, which is what keeps a refusal
-            meaningful.
+            Meeting the ask. A fighter who wanted more used to be an unfillable slot; now each
+            thing they asked for is a line the player can agree to, and the button says what the
+            whole of it costs. Somebody who flatly refused cannot be bought, and a different
+            opponent is a new fight rather than a term — offered here as one, in a tap.
           */}
-          {counters.length > 0 && refusals.length === 0 && !wantsAnotherOpponent && (
-            <Button
-              variant="primary"
-              block
-              onClick={() => onChange(acceptCounter({ ctx, plan, slotId: slot.id }))}
-            >
-              {asks.length > 0
-                ? `Accept: ${asks.map(describeCounter).join(' ')}${ask > 0 ? ` Pay ${money(ask)}.` : ''}`
-                : `Pay ${money(ask)} and close it`}
-            </Button>
+          {terms && (
+            <section className="terms" aria-label="What it would take">
+              <p className="terms__title">What it would take</p>
+              <ul className="terms__list">
+                {terms.terms.map((term) => (
+                  <li key={`${term.fighterId}:${term.kind}`}>{term.text}</li>
+                ))}
+              </ul>
+              {terms.blocked ? (
+                <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+                  {terms.blocked}
+                </p>
+              ) : (
+                <Button
+                  variant="primary"
+                  block
+                  onClick={() => onChange(acceptCounter({ ctx, plan, slotId: slot.id }))}
+                >
+                  {terms.pay > 0 ? `Agree, and pay ${money(terms.pay)}` : 'Agree the terms'}
+                </Button>
+              )}
+              {terms.instead && preferred && (
+                <Button
+                  block
+                  disabled={insteadBlocked !== undefined}
+                  title={insteadBlocked}
+                  onClick={() =>
+                    onChange(
+                      placeBout({
+                        plan,
+                        slotId: slot.id,
+                        redId: terms.instead!.fighterId,
+                        blueId: preferred.id as string,
+                        divisionId: bout.divisionId as string,
+                      }),
+                    )
+                  }
+                >
+                  {`Pencil in ${nameOf(terms.instead.fighterId)} vs ${displayName(preferred)}`}
+                </Button>
+              )}
+              {terms.instead && preferred && insteadBlocked && (
+                <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+                  {displayName(preferred)}: {insteadBlocked}
+                </p>
+              )}
+            </section>
           )}
 
           <Button block onClick={onRebook}>

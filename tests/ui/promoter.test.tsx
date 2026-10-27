@@ -282,6 +282,23 @@ describe('matchmaking', () => {
     expect(document.querySelectorAll('.candidate__why').length).toBeGreaterThan(0);
   });
 
+  it('says what each fighter draws, and what each pairing sells', async () => {
+    // The question on every row is not only who wins but what the promoter is selling.
+    const user = userEvent.setup();
+    await openMainEvent(user);
+    const candidates = await screen.findAllByRole('button', { name: /Unranked|#\d+/ });
+    expect(candidates[0]!.textContent).toMatch(/Draw:/);
+    await user.click(candidates[0]!);
+
+    await screen.findByRole('heading', { name: /Who fights/i });
+    const rows = [...document.querySelectorAll('.candidate')];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(row.textContent).toMatch(/Draw:/);
+      expect(row.textContent).toMatch(/Sells: \S/);
+    }
+  });
+
   it('lets the promoter say what the fight is for, and re-ranks on it', async () => {
     const user = userEvent.setup();
     await openMainEvent(user);
@@ -325,6 +342,37 @@ describe('matchmaking', () => {
 
     expect(await screen.findByText(/Is this for a belt\?/i)).toBeTruthy();
     expect(screen.getByText(/For the title/i)).toBeTruthy();
+  });
+
+  it('brings each step into view and puts focus on it', async () => {
+    const user = userEvent.setup();
+    await openMainEvent(user);
+    await screen.findByRole('heading', { name: /who do you want\?/i });
+    expect(document.activeElement?.classList.contains('builder__picker')).toBe(true);
+  });
+
+  it('shows the tale of the tape once a pair is picked', async () => {
+    const user = userEvent.setup();
+    await openMainEvent(user);
+    const candidates = await screen.findAllByRole('button', { name: /Unranked|#\d+/ });
+    await user.click(candidates[0]!);
+    await screen.findByRole('heading', { name: /Who fights/i });
+    await user.click(document.querySelectorAll('.candidate')[0] as HTMLElement);
+
+    expect(await screen.findByRole('heading', { name: /Tale of the tape/i })).toBeTruthy();
+    expect(screen.getByText(/^On paper:/)).toBeTruthy();
+  });
+
+  it('puts the belt on the line by default when the champion is in it', async () => {
+    const user = userEvent.setup();
+    await openMainEvent(user);
+    const champion = (await screen.findAllByRole('button', { name: /Champion/ }))[0]!;
+    await user.click(champion);
+    await screen.findByRole('heading', { name: /Who fights/i });
+    await user.click(document.querySelectorAll('.candidate')[0] as HTMLElement);
+    await user.click(await screen.findByRole('button', { name: /Pencil it in/i }));
+
+    expect((await screen.findAllByText(/^Title fight$/)).length).toBeGreaterThan(0);
   });
 
   it('marks a pencilled fight as unsigned until both corners agree', async () => {

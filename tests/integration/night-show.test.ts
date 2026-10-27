@@ -225,6 +225,52 @@ describe('the callouts', () => {
       expect([bout.redId, bout.blueId]).toContain(done.c.targetId);
     }
   });
+
+  it('are left out, not invented, when the feed has no line for the bout', () => {
+    const { db, plan } = ranCard();
+    runPlan({ db, plan });
+    const ran = planById(db, plan.id)!;
+    const before = calloutsFor(db, ran);
+    expect(before.length).toBeGreaterThan(0);
+
+    // The first callout's news item is gone (pruned, or never written on a bulk night).
+    const gone = readNews(db).find((n) => n.detail === before[0]!.line)!;
+    db.news.remove(gone.id as string);
+    const after = calloutsFor(db, ran);
+    expect(after.map((c) => c.line)).not.toContain(before[0]!.line);
+    expect(after.every((c) => c.targetId !== c.winnerId)).toBe(true);
+  });
+
+  it('go on for the belt when they are aimed at the champion', () => {
+    const { db, promotion, plan } = ranCard();
+    setWorld(db, { day: plan.day });
+    const [divisionId, championId] = Object.entries(promotion.champions).find(
+      ([, id]) => id !== undefined,
+    )!;
+    const champion = db.fighters.findById(championId as string) as Fighter;
+    // A contender in the same division, on this roster, who could fight for it.
+    const winner = (db.fighters.findAll() as Fighter[]).find(
+      (f) =>
+        f.divisionId === divisionId &&
+        f.id !== champion.id &&
+        f.promotionId === promotion.id &&
+        f.retiredDay === undefined,
+    )!;
+    createPlan({ db, promotion, day: plan.day + 120 });
+
+    const placed = pencilCallout(db, {
+      winnerId: winner.id as string,
+      targetId: champion.id as string,
+      divisionId,
+      line: 'Give me the belt.',
+      forTheBelt: true,
+    });
+    expect('plan' in placed).toBe(true);
+    if ('plan' in placed) {
+      const bout = placed.plan.slots.find((s) => s.id === placed.slotId)!.bout!;
+      expect(bout.titleKind).toBe('undisputed');
+    }
+  });
 });
 
 describe('the week in review', () => {
