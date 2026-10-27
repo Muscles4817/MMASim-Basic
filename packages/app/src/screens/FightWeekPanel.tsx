@@ -249,21 +249,25 @@ function PressConferenceCard({
 // --- The weigh-in (C6's, when it lands) ------------------------------------------------------------
 
 /**
- * One fighter's weigh-in, as C6's `WeighInResult` carries it. Declared here structurally so the
- * panel can be built and tested before the engine type exists; it is replaced by an import then.
+ * One fighter's weigh-in: C6's agreed `WeighInResult`, field for field. Declared here only until
+ * C6 lands, when this and `BoutWeighIn` become an import from the engine and nothing else changes.
  */
-export interface WeighInView {
+export interface WeighInResult {
   fighterId: string;
-  /** Pounds on the scale. */
-  weighed: number;
-  /** The limit they had to make. */
-  limit: number;
   made: boolean;
+  /** The limit they had to make. */
+  limitLbs: number;
+  /** How far over, when they missed. */
+  overLbs?: number;
+  /** Missed by far more than a bad cut explains. */
+  egregious: boolean;
+  /** They give up part of their purse to the opponent. */
+  forfeit: boolean;
 }
 
 /** `PlannedBout.weighIn`, as C6 is adding it. */
 export interface BoutWeighIn {
-  results: readonly WeighInView[];
+  results: readonly WeighInResult[];
   /** Whether the opponent will still fight at a catchweight. */
   opponentAccepts: boolean;
   choice?: 'catchweight' | 'cancel';
@@ -295,8 +299,10 @@ export function WeighInPanel({
             className="prose"
             style={{ display: 'block', fontSize: 'var(--text-sm)' }}
           >
-            {nameOf(r.fighterId)} weighed {r.weighed} lb,{' '}
-            {Math.round((r.weighed - r.limit) * 10) / 10} over the {r.limit} lb limit.
+            {nameOf(r.fighterId)} missed the {r.limitLbs} lb limit
+            {r.overLbs !== undefined ? ` by ${Math.round(r.overLbs * 10) / 10} lb` : ''}.
+            {r.egregious && ' Not a bad cut — they barely tried.'}
+            {r.forfeit && ' They forfeit part of their purse to the opponent.'}
           </span>
         ))}
         {weighIn.choice ? (
