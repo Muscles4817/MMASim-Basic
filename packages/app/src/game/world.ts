@@ -65,6 +65,7 @@ import {
   fightNews,
   generateFighter,
   debutAge,
+  KO_LOSS_TRAUMA,
   offerOpponents,
   rankDivision,
   readinessDelay,
@@ -1481,7 +1482,11 @@ function runStatisticalCard(ctx: {
       const stopped = outcome === 'loss' && isKoMethod(method);
       const condition = {
         ...stored.condition,
-        headTrauma: clamp(stored.condition.headTrauma + (stopped ? 2.4 : 0.5), 0, 100),
+        headTrauma: clamp(
+          stored.condition.headTrauma + (stopped ? 2.4 + KO_LOSS_TRAUMA : 0.5),
+          0,
+          100,
+        ),
         bodyWear: clamp(stored.condition.bodyWear + (finishes ? 0.6 : 1.1), 0, 100),
       };
 

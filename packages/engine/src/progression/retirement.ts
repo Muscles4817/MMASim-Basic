@@ -24,6 +24,17 @@ import type { Fighter } from '../domain/fighter.js';
  * got two different accounts of the same fighter. See docs/27 §13.
  */
 export const TRAUMA_CONCERN = 25;
+
+/**
+ * Head trauma a knockout loss adds on top of the damage the fight itself did. Doc 34 C5.
+ *
+ * Being put out is not just the sum of the punches: the brain that went off is the one that has to
+ * come back, and every commission's mandatory suspension after a knockout says the sport knows it.
+ * The fight engine's damage already weighs a stoppage loss ×1.6; measured on a generated world
+ * that still left fighters with four or more knockout losses at a median trauma of 13.7 of 100 —
+ * the same chin as somebody who had never been stopped, for practical purposes.
+ */
+export const KO_LOSS_TRAUMA = 3;
 /** Where the sport stops calling it wear and starts calling it medical. */
 export const TRAUMA_MEDICAL = 55;
 /** Body wear at which the miles begin to weigh on the decision. */

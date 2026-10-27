@@ -19,6 +19,8 @@ import type { DivisionId, PromotionId } from '../core/ids.js';
 import { type Sex } from '../domain/divisions.js';
 import type { Fighter } from '../domain/fighter.js';
 import { emptyRecordSummary, freshCondition } from '../domain/fighter.js';
+import type { Condition, RecordSummary } from '../domain/fighter.js';
+import { KO_LOSS_TRAUMA } from './retirement.js';
 import type { Personality } from '../domain/personality.js';
 import { PERSONALITY_AXES } from '../domain/personality.js';
 import {
@@ -694,6 +696,55 @@ export function arrivalFactor(key: AttributeKey, age: number, history?: ArrivalH
 }
 
 /**
+ * How a career before the simulation started broke down, from who the fighter is. Doc 34 C5.
+ *
+ * Generated records were wins and losses with nothing behind them — no knockouts either way — so
+ * a Glass Cannon could arrive with no knockout losses and a finisher with no finishes. The split
+ * is read off the ratings that decide it in the cage (power and submissions for how they win,
+ * durability for how they lose) and needs no random draw, so it moves nothing else in generation.
+ */
+export function priorSummary(wins: number, losses: number, a: Attributes): RecordSummary {
+  const share = (rating: number, base: number) => clamp(base + (rating - 50) / 100, 0.05, 0.75);
+  const koWins = Math.round(wins * share(a.power, 0.3));
+  const submissionWins = Math.min(wins - koWins, Math.round(wins * share(a.submissions, 0.18)));
+  const koLosses = Math.round(losses * share(100 - a.durability, 0.3));
+  const submissionLosses = Math.min(
+    losses - koLosses,
+    Math.round(losses * share(100 - a.scrambling, 0.2)),
+  );
+  return {
+    ...emptyRecordSummary(),
+    wins,
+    losses,
+    koWins,
+    submissionWins,
+    decisionWins: wins - koWins - submissionWins,
+    koLosses,
+    submissionLosses,
+    streak: 1,
+  };
+}
+
+/**
+ * What that career has already cost them. Doc 34 C5.
+ *
+ * Every generated fighter arrived with the condition of somebody who had never been hit: a
+ * 33-year-old with thirty fights behind them carried no head trauma and no wear, and since the
+ * health model accumulates from there, a fighter's chin was a function of how long they had been
+ * in *this* simulation rather than in the sport. Charged here at the rates the world itself
+ * charges a statistical bout (`runStatisticalCard`), knockout losses at the full knockout price.
+ */
+export function priorCondition(summary: RecordSummary, age: number): Condition {
+  const bouts = summary.wins + summary.losses + summary.draws;
+  const stopped = summary.koLosses;
+  return {
+    ...freshCondition(),
+    headTrauma: clamp(bouts * 0.5 + stopped * (1.9 + KO_LOSS_TRAUMA), 0, 100),
+    bodyWear: clamp(bouts * 0.9 + Math.max(0, age - 28) * 0.8, 0, 100),
+  };
+}
+
+/**
  * How old somebody is when they turn professional: around twenty-two, rarely under nineteen or
  * over twenty-seven. Doc 34 C5: the intake used to debut everybody at 21–26 uniformly, which with
  * a world that turns over slowly left almost nobody on the roster aged 23 or under.
@@ -771,7 +822,7 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
 
   const proBouts = Math.max(0, Math.round((age - 20) * rng.range(1.2, 2.8)));
   const losses = Math.round(proBouts * rng.range(0, 0.25));
-  const summary = { ...emptyRecordSummary(), wins: proBouts - losses, losses, streak: 1 };
+  const summary = priorSummary(proBouts - losses, losses, attributes);
 
   /*
    * Name and nationality together, because they were drawn independently and it showed.
@@ -819,7 +870,7 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
       { divisionId: options.divisionId as string, sex: options.sex, eliteLift: ELITE_LIFT },
     ),
 
-    condition: freshCondition(),
+    condition: priorCondition(summary, age),
     record: [],
     priorRecord: summary,
     // A copy, not the same reference: aliasing these two is a trap waiting for the first
