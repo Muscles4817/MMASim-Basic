@@ -16,6 +16,7 @@ import { createPlan, plansFor } from '../../packages/app/src/game/plans';
 import { considerCounterProgramming } from '../../packages/app/src/game/counterProgramming';
 import { rivalBidsFor, sign } from '../../packages/app/src/game/contracts';
 import { answerPoach, poachChampions } from '../../packages/app/src/game/rivalMoves';
+import { runCardBout } from '../../packages/app/src/game/world';
 
 /** The 2026 world, playing as the named promotion. */
 function as(shortName: string) {
@@ -96,5 +97,48 @@ describe('poaching champions', () => {
     expect(postureOf(db.promotions.findById(moved.promotionId as string) as Promotion)).toBe(
       'aggressor',
     );
+  });
+});
+
+describe('the one that got away', () => {
+  it('is news when a fighter you cut wins a belt somewhere else', () => {
+    const { db, mine, promotions, day } = as('LFA');
+    const ufc = promotions.find((p) => p.shortName === 'UFC')!;
+    const [divisionId, championId] = Object.entries(ufc.champions).find(([, id]) => id)!;
+    const challenger = (db.fighters.findAll() as Fighter[]).find(
+      (f) => f.promotionId === ufc.id && f.divisionId === divisionId && f.id !== championId,
+    )!;
+    db.fighters.upsert({
+      ...challenger,
+      ledger: [{ day: day - 400, promotionId: mine.id, kind: 'cut' }],
+    } as never);
+
+    let headline: string | undefined;
+    for (let i = 0; i < 40 && !headline; i++) {
+      const current = db.promotions.findById(ufc.id as string) as Promotion;
+      const champ = current.champions[divisionId as never];
+      if (champ === challenger.id) break;
+      const out = runCardBout({
+        db,
+        day: day + i * 120,
+        rng: createRng(`gotaway:${i}`),
+        promotion: current,
+        bout: {
+          boutId: `gotaway:${i}`,
+          redId: champ as never,
+          blueId: challenger.id,
+          divisionId: divisionId as never,
+          position: 'mainEvent',
+          order: 0,
+          rounds: 5,
+          isTitleFight: true,
+        },
+        readyOn: new Map(),
+        lastSeen: new Map(),
+      });
+      headline = out?.news.find((n) => n.headline.startsWith('The fighter you cut'))?.headline;
+    }
+    expect(headline, 'the challenger never won the belt in forty tries').toBeDefined();
+    expect(headline).toMatch(/UFC belt/);
   });
 });

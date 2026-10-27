@@ -136,6 +136,17 @@ describe('it builds a sport', () => {
     expect(new Set(promotions.map((p) => p.name)).size).toBe(promotions.length);
     expect(new Set(promotions.map((p) => p.shortName)).size).toBe(promotions.length);
   });
+
+  it('gives each promotion a character of its own, not the leader’s (doc 33, doc 34 B4)', () => {
+    // Every generated promotion was a spread of the seed's leader: one country, one style.
+    expect(new Set(promotions.map((p) => p.baseCountry)).size).toBeGreaterThan(3);
+    expect(new Set(promotions.map((p) => p.matchmakingStyle)).size).toBeGreaterThan(2);
+    expect(new Set(promotions.map((p) => p.posture)).size).toBe(3);
+    expect(new Set(promotions.map((p) => p.notes)).size).toBeGreaterThan(5);
+    // The top of the sport is still American.
+    const leader = promotions.slice().sort((a, b) => b.prestige - a.prestige)[0]!;
+    expect(leader.baseCountry).toBe('USA');
+  });
 });
 
 describe('and eight years of it having happened', () => {

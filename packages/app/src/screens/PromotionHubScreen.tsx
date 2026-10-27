@@ -28,6 +28,8 @@ import {
   isActive,
   planHealth,
   planProgress,
+  POSTURE_META,
+  postureOf,
   rankDivision,
   recordString,
   type EventPlan,
@@ -456,6 +458,8 @@ export function PromotionHubScreen() {
                 />
               </div>
             </Card>
+
+            <RivalsCard db={db} mine={promotion} />
           </>
         }
       />
@@ -582,6 +586,44 @@ function FirstWeek() {
           </li>
         ))}
       </ol>
+    </Card>
+  );
+}
+
+/**
+ * Who you are up against (doc 34 B4): the promotions in your market first, then your nearest
+ * peers, each with the posture that decides what they will do to you — book against your dates,
+ * bid on your stars, buy out your champions.
+ */
+function RivalsCard({ db, mine }: { db: GameDb; mine: Promotion }) {
+  const rivals = useMemo(() => {
+    const others = (db.promotions.findAll() as unknown as Promotion[]).filter(
+      (p) => p.id !== mine.id,
+    );
+    const distance = (p: Promotion) =>
+      (p.baseCountry === mine.baseCountry ? 0 : 100) + Math.abs(p.prestige - mine.prestige);
+    return others.sort((a, b) => distance(a) - distance(b)).slice(0, 4);
+  }, [db, mine]);
+  if (rivals.length === 0) return null;
+  return (
+    <Card flush title="Rivals">
+      <div className="list">
+        {rivals.map((rival) => {
+          const posture = POSTURE_META[postureOf(rival)];
+          return (
+            <ListItem
+              key={rival.id as string}
+              primary={rival.shortName}
+              secondary={`${rival.baseCountry === mine.baseCountry ? 'Your market' : rival.baseCountry} · ${posture.blurb}`}
+              trailing={
+                <Chip tone={postureOf(rival) === 'aggressor' ? 'warning' : 'neutral'}>
+                  {posture.label}
+                </Chip>
+              }
+            />
+          );
+        })}
+      </div>
     </Card>
   );
 }
