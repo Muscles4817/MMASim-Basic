@@ -23,6 +23,7 @@ import type { TraitId } from './traits.js';
 import type { Injury } from '../health/injuries.js';
 import type { Physique } from '../progression/body.js';
 import type { FighterBackground } from '../progression/background.js';
+import type { LedgerEntry } from './relationship.js';
 
 /** How a bout ended, from the winner's perspective. */
 export type FinishMethod =
@@ -328,6 +329,13 @@ export interface Fighter {
   managerId?: ManagerId;
   /** 1–100. How the media and fans rate them, which is not the same as how good they are. */
   reputation: number;
+
+  /**
+   * What happened between this fighter and the promotions they fought for — title shots given and
+   * skipped, mismatches, a card cancelled on them, being cut. History, so stored; what it *means*
+   * is read through the personality by `relationshipWith`. Capped at `LEDGER_CAP`. Doc 34 C3.
+   */
+  ledger?: readonly LedgerEntry[];
 
   /** Day they turned professional. */
   proDebutDay: GameDay;
