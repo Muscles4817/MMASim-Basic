@@ -8,7 +8,11 @@ import { createRng, type Fighter, type Promotion } from '@mmasim/engine';
 import { comebacks, moveDivisions } from '../../packages/app/src/game/world';
 import { scanCareerEvents, takeTimeOff } from '../../packages/app/src/game/careerEvents';
 import { blockerFor, createPlan, promoterContext } from '../../packages/app/src/game/plans';
-import { heatBetween, stokeBetween } from '../../packages/app/src/game/rivalries';
+import {
+  heatBetween,
+  pruneColdRivalries,
+  stokeBetween,
+} from '../../packages/app/src/game/rivalries';
 
 function world() {
   const db = createNewGame({ adapter: undefined, era: '2026' });
@@ -126,5 +130,14 @@ describe('heat between two fighters', () => {
     expect(heatBetween(db, a!.id, b!.id, day).heat).toBe(0);
     stokeBetween(db, { a: a!, b: b!, source: 'callout', day, instigator: a, seed: 'x' });
     expect(heatBetween(db, a!.id, b!.id, day).heat).toBeGreaterThan(0);
+  });
+
+  it('is dropped from the save once it has gone completely cold', () => {
+    const { db, active, day } = world();
+    const [a, b] = active;
+    stokeBetween(db, { a: a!, b: b!, source: 'callout', day, instigator: a, seed: 'y' });
+    expect(pruneColdRivalries(db, day)).toBe(0);
+    expect(pruneColdRivalries(db, day + 3 * 365)).toBeGreaterThan(0);
+    expect(heatBetween(db, a!.id, b!.id, day).heat).toBe(0);
   });
 });

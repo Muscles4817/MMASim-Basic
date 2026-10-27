@@ -157,7 +157,13 @@ import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
 import { settleFightInjuries } from './fightInjuries';
 import { afterTheBout } from './memory';
-import { accrueHeatFromFight, heatBetween, meetings, stokeBetween } from './rivalries';
+import {
+  accrueHeatFromFight,
+  heatBetween,
+  meetings,
+  pruneColdRivalries,
+  stokeBetween,
+} from './rivalries';
 import { money } from '../ui/format';
 
 type StoredNews = NewsItem & Entity;
@@ -473,6 +479,7 @@ export function advanceWorld(
       news.push(...retireTheDrifted(db, day, rng.fork(`drift:${day}`), exceptId));
       // And some who stopped come back (doc 34 C6), before the intake counts the gaps.
       news.push(...comebacks(db, day, rng.fork(`comeback:${day}`), exceptId));
+      pruneColdRivalries(db, day);
       news.push(...replenish(db, day, rng, promotions, rosterSizes));
       // Deals run out across the roster too, so the market has other people in it.
       news.push(...resolveFreeAgency(db, day, rng, promotions, exceptId, rosterSizes));

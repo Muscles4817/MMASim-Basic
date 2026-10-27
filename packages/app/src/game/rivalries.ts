@@ -181,3 +181,19 @@ export function heatBetween(
 /** How many times these two have fought, from either one's record. */
 export const meetings = (fighter: Fighter, opponentId: FighterId): number =>
   fighter.record.filter((r) => r.opponentId === opponentId).length;
+
+/**
+ * Drop pairings that have gone completely cold. Doc 34 C6: the world's bouts now raise heat, so
+ * every pair that fights writes a rivalry row, and one nobody will ever read again — never a
+ * grudge, and its heat decayed to nothing — only costs the save its bytes. A confirmed grudge is
+ * kept whatever its heat, because it never fully cools.
+ */
+export function pruneColdRivalries(db: GameDb, day: number): number {
+  let removed = 0;
+  for (const r of db.rivalries.findAll() as StoredRivalry[]) {
+    if (r.isRivalry || currentHeat(r, day as never) >= 1) continue;
+    db.rivalries.remove(r.id as string);
+    removed += 1;
+  }
+  return removed;
+}
