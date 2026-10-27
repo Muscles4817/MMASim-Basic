@@ -33,7 +33,14 @@ import { advanceWorld, type WorldExclusion } from './world';
 import { getBooking } from './career';
 import { toll } from './contracts';
 import { readInbox, scanForInbox } from './inbox';
-import { bookingsFor, fightNightOn, missPlans, nextCardDay, scanPromoterInbox } from './plans';
+import {
+  bookingsFor,
+  fightNightOn,
+  missPlans,
+  nextCardDay,
+  scanPromoterInbox,
+  settleReplies,
+} from './plans';
 import { graceEnds } from './alerts';
 
 /*
@@ -267,6 +274,8 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
     // inbox module must not import the planner — plans already write offer outcomes into the
     // inbox, and a cycle between the two would be a module-evaluation order bug waiting to
     // happen. This is the one place that legitimately knows about both.
+    // Bout offers answer on their own day (doc 34 C4), so a counter can stop the clock when it lands.
+    settleReplies(db, onDay);
     scanForInbox(db, onDay);
     scanPromoterInbox(db, onDay);
     return blocking(readInbox(db)).some((i) => !alreadyWaiting.has(i.id));
@@ -281,6 +290,8 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
   // whose advance was interrupted on day three has lived three days, not thirty.
   const player = passTimeForPlayer(db, start, day);
 
+  // Once more on the day the clock stopped — fight night included — so nothing is left waiting.
+  settleReplies(db, day);
   const missed = missPlans(db, day);
   const fightNight = fightNightOn(db, promotionId, day);
   const stopped = { fights, truncated, player, fightNight, missed };
