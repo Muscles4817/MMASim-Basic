@@ -149,28 +149,28 @@ week, 4 fighters as people, 5 development over time.
 
 ## Tracker
 
-| Item                            | Phase | Lane        | Status                                                  | PR       |
-| ------------------------------- | ----- | ----------- | ------------------------------------------------------- | -------- |
-| A1 Fight night unmissable       | 1     | A           | Done                                                    | #47      |
-| A2 Alert hygiene                | 1     | A           | Done                                                    | #50      |
-| B0 Generated names (content)    | 1     | B           | Done                                                    | #48      |
-| C1 Identity on the page         | 4     | C           | Done                                                    | #49      |
-| B1 Economy and buzz             | 2     | B           | Changes requested                                       | #56      |
-| B2 Broadcaster and owner        | 2     | B           | Changes requested                                       | #60      |
-| B3 Prestige and tiers           | 2     | B           | In progress                                             |          |
-| A3 Fight-night show and recap   | 3     | A           | Done                                                    | #54      |
-| A4 Matchmaking UX               | 3     | A           | Done                                                    | #58      |
-| A5 Fight week                   | 3     | A           | Done; marketing + weigh-in wiring follow up after B1/C6 | #62      |
-| A6 Onboarding and readability   | 1/3   | A           | Done                                                    | #61      |
-| C2 Star power surfaced          | 4     | C           | Done                                                    | #51      |
-| C3 Memory, wants and voice      | 4     | C           | Done                                                    | #52      |
-| C4 Negotiation                  | 4     | C           | Done                                                    | #55      |
-| C5 Real careers over time       | 5     | C           | Done                                                    | #57      |
-| C6 Career events                | 5     | C           | Passed; merging master                                  | #63      |
-| B4 Rival promotions             | 5     | C           | In review                                               | #67      |
-| B5 Investment and season        | 5     | C           | In progress                                             |          |
-| B6 History, scenarios, rankings | 5     | A           | Parts 1–2 in review; part 3 in progress                 | #64, #65 |
-| Content pass after each phase   | all   | Coordinator | Not started                                             |          |
+| Item                            | Phase | Lane        | Status                                                        | PR       |
+| ------------------------------- | ----- | ----------- | ------------------------------------------------------------- | -------- |
+| A1 Fight night unmissable       | 1     | A           | Done                                                          | #47      |
+| A2 Alert hygiene                | 1     | A           | Done                                                          | #50      |
+| B0 Generated names (content)    | 1     | B           | Done                                                          | #48      |
+| C1 Identity on the page         | 4     | C           | Done                                                          | #49      |
+| B1 Economy and buzz             | 2     | B           | Changes requested                                             | #56      |
+| B2 Broadcaster and owner        | 2     | B           | Changes requested                                             | #60      |
+| B3 Prestige and tiers           | 2     | B           | In progress                                                   |          |
+| A3 Fight-night show and recap   | 3     | A           | Done                                                          | #54      |
+| A4 Matchmaking UX               | 3     | A           | Done                                                          | #58      |
+| A5 Fight week                   | 3     | A           | Done; marketing + weigh-in wiring follow up after B1/C6       | #62      |
+| A6 Onboarding and readability   | 1/3   | A           | Done                                                          | #61      |
+| C2 Star power surfaced          | 4     | C           | Done                                                          | #51      |
+| C3 Memory, wants and voice      | 4     | C           | Done                                                          | #52      |
+| C4 Negotiation                  | 4     | C           | Done                                                          | #55      |
+| C5 Real careers over time       | 5     | C           | Done                                                          | #57      |
+| C6 Career events                | 5     | C           | Passed — ready to merge (paused)                              | #63      |
+| B4 Rival promotions             | 5     | C           | Partial review: likely blockers                               | #67      |
+| B5 Investment and season        | 5     | C           | Investment built (no PR); season not started                  |          |
+| B6 History, scenarios, rankings | 5     | A           | P1 changes requested (#64); P2 passed (#65); P3 pushed, no PR | #64, #65 |
+| Content pass after each phase   | all   | Coordinator | Not started                                                   |          |
 
 ## Follow-ups routed from reviews and builder reports
 
@@ -219,3 +219,17 @@ week, 4 fighters as people, 5 development over time.
 | #62              | Marketing spend panel (needs B1 `marketingUplift`) and weigh-in panel wiring (needs C6 `resolveMissedWeight`)                                                                                                                                                                                                                   | Lane A follow-up after #56 / #63 merge                                                                                       |
 | #64 review       | 10-year world run: median title reign ~29 days, ~600 reigns across 74 belts, 0.3 defences per champion — belts change hands monthly                                                                                                                                                                                             | Real bug: stale promotion copy in `advanceWorld` → `runCardBout` (also rolled back budget/buzz). Fix in #66, merge after #56 |
 | reigns fix       | After the churn fix: median reign 1087 days, 0.46 defences/reign — booking frequency too low                                                                                                                                                                                                                                    | Follow-up (B6 / B4)                                                                                                          |
+
+## Paused state (user requested pause)
+
+| PR / branch                              | State                                                                                                                                       |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| #63 C6                                   | PASS, CI green at ce2ef9b — merge on resume                                                                                                 |
+| #65 B6 part 2                            | PASS at 6dfa9e0 — merge on resume (needs master merge check)                                                                                |
+| #66 title churn                          | PASS at 4df6e0e — merge after #56                                                                                                           |
+| #64 B6 part 1                            | CHANGES: champion who moves division keeps old belt up to a year; viewer `'none'` (fighter mode) now sees scouted values                    |
+| #67 B4                                   | Partial review: player promotion can auto-buy rival champions; `executePoach` stale budget write-back; derived posture can flip with budget |
+| #56 / #60 B1 / B2                        | Lane B reworking (budgets, owner firing, buyouts)                                                                                           |
+| `claude/promoter-a-b6-scenarios` 36009c7 | B6 part 3 built, full suite re-run pending, no PR                                                                                           |
+| `claude/promoter-c-b5-season` 2edada4    | B5 investment built, gate pending, no PR; season half not started                                                                           |
+| Follow-up                                | Champions defend only ~0.45 times per reign after the churn fix — AI books too few title defences                                           |
