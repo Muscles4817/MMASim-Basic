@@ -204,19 +204,9 @@ export function FightScreen({ boutId }: { boutId?: string }) {
     <div className="stack fight-stage" style={{ gap: 'var(--space-4)' }}>
       <Card raised>
         <div className="fight-corners">
-          <CornerName
-            fighter={red}
-            corner="red"
-            isWinner={result.winnerId === result.redId}
-            revealed={finished}
-          />
+          <CornerName fighter={red} corner="red" isWinner={result.winnerId === result.redId} revealed={finished} />
           <span className="fight-vs">vs</span>
-          <CornerName
-            fighter={blue}
-            corner="blue"
-            isWinner={result.winnerId === result.blueId}
-            revealed={finished}
-          />
+          <CornerName fighter={blue} corner="blue" isWinner={result.winnerId === result.blueId} revealed={finished} />
         </div>
         {/*
           The room, while it is happening.
@@ -277,8 +267,7 @@ export function FightScreen({ boutId }: { boutId?: string }) {
         {finished ? resultSentence(result, red, blue) : ''}
       </p>
 
-      {finished && (
-        <FightSummary
+      {finished && <FightSummary
           result={result}
           red={red}
           blue={blue}
@@ -288,8 +277,7 @@ export function FightScreen({ boutId }: { boutId?: string }) {
           notes={broadcast?.notes ?? []}
           undercard={broadcast?.undercard ?? []}
           tactics={broadcast?.tactics}
-        />
-      )}
+        />}
 
       {finished && (
         <div className="row" style={{ flexWrap: 'wrap' }}>
@@ -374,8 +362,7 @@ function PreFight({
           <p className="prefight__eyebrow">Tonight</p>
           <h2 className="prefight__name">{night.name}</h2>
           <p className="muted">
-            {night.venue.name}, {night.venue.city} ·{' '}
-            {BROADCAST_LABEL[night.broadcast] ?? night.broadcast}
+            {night.venue.name}, {night.venue.city} · {BROADCAST_LABEL[night.broadcast] ?? night.broadcast}
           </p>
           {/*
             The house. `eventRevenue` has computed attendance on every card ever run and it
@@ -420,7 +407,9 @@ function PreFight({
       {(referee || judges.length > 0 || commentator) && (
         <Card title="Officials" flush>
           <div className="list">
-            {referee && <Official role="Referee" name={referee.name} note={referee.reputation} />}
+            {referee && (
+              <Official role="Referee" name={referee.name} note={referee.reputation} />
+            )}
             {/*
               Introduced *before* the fight, which is the entire point of assigning them at
               booking — `bookFight` has said so in a comment since officials shipped. Meeting
@@ -431,11 +420,7 @@ function PreFight({
               <Official key={judge.id} role="Judge" name={judge.name} note={describeJudge(judge)} />
             ))}
             {commentator && (
-              <Official
-                role="Booth"
-                name={commentator.name}
-                note={describeCommentator(commentator)}
-              />
+              <Official role="Booth" name={commentator.name} note={describeCommentator(commentator)} />
             )}
           </div>
         </Card>
@@ -632,9 +617,7 @@ function TaleOfTheTape({
               {row.red}
             </dd>
             <dt className="tape__label">{row.label}</dt>
-            <dd
-              className={`tape__value tape__value--right${row.edge === 'blue' ? ' tape__value--edge' : ''}`}
-            >
+            <dd className={`tape__value tape__value--right${row.edge === 'blue' ? ' tape__value--edge' : ''}`}>
               <span className="visually-hidden">{`${displayName(blue)}, ${row.label}: `}</span>
               {row.blue}
             </dd>
@@ -682,13 +665,7 @@ function crowdLevel(visible: readonly FightEvent[]): number {
 }
 
 const crowdWord = (level: number): string =>
-  level >= 75
-    ? 'Deafening'
-    : level >= 50
-      ? 'Up on its feet'
-      : level >= 25
-        ? 'Watching'
-        : 'Restless';
+  level >= 75 ? 'Deafening' : level >= 50 ? 'Up on its feet' : level >= 25 ? 'Watching' : 'Restless';
 
 function CrowdMeter({ level, attendance }: { level: number; attendance?: number }) {
   return (
@@ -712,11 +689,7 @@ function CrowdMeter({ level, attendance }: { level: number; attendance?: number 
         aria-label="Crowd noise"
         aria-valuetext={crowdWord(level)}
       >
-        <span
-          className="crowd__fill"
-          style={{ width: `${level}%` }}
-          data-loud={level >= 60 || undefined}
-        />
+        <span className="crowd__fill" style={{ width: `${level}%` }} data-loud={level >= 60 || undefined} />
       </span>
       <span className="crowd__word">{crowdWord(level)}</span>
     </div>
@@ -735,9 +708,7 @@ function CornerName({
   revealed: boolean;
 }) {
   return (
-    <div
-      className={`fight-corner fight-corner--${corner}${revealed && isWinner ? ' fight-corner--winner' : ''}`}
-    >
+    <div className={`fight-corner fight-corner--${corner}${revealed && isWinner ? ' fight-corner--winner' : ''}`}>
       <span className="fight-corner__label">{corner === 'red' ? 'Red corner' : 'Blue corner'}</span>
       <span className="fight-corner__name">{fighter ? displayName(fighter) : 'Unknown'}</span>
       {/* The result is withheld until playback finishes; spoiling it above a live feed makes
@@ -918,8 +889,7 @@ function FightSummary({
       {night && (
         <Card title={night.name} flush>
           <p className="muted" style={{ padding: 'var(--space-3) var(--space-4) 0' }}>
-            {night.venue.name}, {night.venue.city} ·{' '}
-            {BROADCAST_LABEL[night.broadcast] ?? night.broadcast}
+            {night.venue.name}, {night.venue.city} · {BROADCAST_LABEL[night.broadcast] ?? night.broadcast}
           </p>
           <div className="list">
             {night.bouts.map((bout) => {
@@ -1063,9 +1033,7 @@ function FightSummary({
                     <tr key={card.judgeName} style={{ '--i': i } as React.CSSProperties}>
                       <th scope="row">
                         {card.judgeName}
-                        {judge && (
-                          <span className="scorecards__leaning">{judgeLeaning(judge)}</span>
-                        )}
+                        {judge && <span className="scorecards__leaning">{judgeLeaning(judge)}</span>}
                       </th>
                       {card.rounds.map((r) => (
                         <td key={r.round} className="numeric">
@@ -1172,9 +1140,7 @@ function RoundBreakdown({
         : `${toRed > toBlue ? redName : blueName}, ${Math.max(toRed, toBlue)}–${Math.min(toRed, toBlue)} on the cards`;
 
   const winner: Corner | undefined = toRed === toBlue ? undefined : toRed > toBlue ? 'red' : 'blue';
-  const because = winner
-    ? separatedBy(tally[winner], tally[winner === 'red' ? 'blue' : 'red'])
-    : undefined;
+  const because = winner ? separatedBy(tally[winner], tally[winner === 'red' ? 'blue' : 'red']) : undefined;
 
   return (
     <details className="round" open>
@@ -1229,10 +1195,7 @@ function RoundBreakdown({
 function separatedBy(won: RoundTally, lost: RoundTally): string | undefined {
   const share = (a: number, b: number) => (a + b <= 0 ? 0 : (a - b) / (a + b));
   const claims: readonly [number, string][] = [
-    [
-      share(won.damageDealt + won.knockdowns * 18, lost.damageDealt + lost.knockdowns * 18),
-      'did the heavier damage',
-    ],
+    [share(won.damageDealt + won.knockdowns * 18, lost.damageDealt + lost.knockdowns * 18), 'did the heavier damage'],
     [share(won.significantStrikes, lost.significantStrikes), 'landed more'],
     [share(won.controlSeconds, lost.controlSeconds), 'held control'],
     [
@@ -1375,7 +1338,13 @@ const RANGE_LABEL: Readonly<Record<Range, string>> = {
  *     one who tried twice was not really trying. Same time on the clock, different fighter, and
  *     different thing to fix before the next one.
  */
-function TacticalInspector({ result, tactics }: { result: FightResult; tactics?: TacticalPlan }) {
+function TacticalInspector({
+  result,
+  tactics,
+}: {
+  result: FightResult;
+  tactics?: TacticalPlan;
+}) {
   const mine = result.stats.red;
   const theirs = result.stats.blue;
 
@@ -1384,9 +1353,7 @@ function TacticalInspector({ result, tactics }: { result: FightResult; tactics?:
   // all.
   const clinchSeconds = mine.clinchControlSeconds + theirs.clinchControlSeconds;
   const groundSeconds =
-    mine.controlSeconds -
-    mine.clinchControlSeconds +
-    (theirs.controlSeconds - theirs.clinchControlSeconds);
+    mine.controlSeconds - mine.clinchControlSeconds + (theirs.controlSeconds - theirs.clinchControlSeconds);
   const standing = RANGES.map((r) => mine.rangeSeconds[r]);
   const total = standing.reduce((a, b) => a + b, 0) + clinchSeconds + groundSeconds;
   if (total <= 0) return null;
@@ -1430,7 +1397,8 @@ function TacticalInspector({ result, tactics }: { result: FightResult; tactics?:
               You asked for {RANGE_LABEL[wanted].toLowerCase()}
             </span>
             <span className="numeric">
-              {Math.round(gotShare * 100)}% <span className="muted">of the standing time</span>
+              {Math.round(gotShare * 100)}%{' '}
+              <span className="muted">of the standing time</span>
             </span>
           </span>
         )}

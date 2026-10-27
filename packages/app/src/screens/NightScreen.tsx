@@ -9,9 +9,9 @@
  * same straight after the run and a month later:
  *
  *  - **The show** (`NightShow`) reveals the card the way a night is watched: prelims first, the
- *    main event last, one result at a time with the money and the buzz coming in as it goes. It
- *    can be stepped, revealed in one go, or skipped, and it does not auto-play for anybody who has
- *    asked for reduced motion.
+ *    main event last, one result at a time, with what the night made and did to the buzz once the
+ *    main event is in. It can be stepped, revealed in one go, or skipped, and it does not
+ *    auto-play for anybody who has asked for reduced motion.
  *  - **The recap** (`NightRecap`) is what the night did: where the money came from, every result
  *    (each one opens the fight itself), and the bonuses the promoter hands out. The post-fight
  *    callouts follow once the voice module they are written in (C3) has landed.
@@ -56,8 +56,6 @@ export function NightShow({ plan, onDone }: { plan: EventPlan; onDone(): void })
     return () => clearTimeout(timer);
   }, [playing, done, revealed]);
 
-  // The takings arrive with the card: a share per bout shown, the whole of it at the end.
-  const share = order.length === 0 ? 1 : revealed / order.length;
   const latest = revealed > 0 ? order[revealed - 1] : undefined;
 
   return (
@@ -68,15 +66,20 @@ export function NightShow({ plan, onDone }: { plan: EventPlan; onDone(): void })
           {formatGameDay(plan.day)} · {night?.venue.name ?? plan.city}, {plan.city}
           {night?.attendance !== undefined && ` · ${night.attendance.toLocaleString()} in`}
         </p>
-        {outcome && (
+        {/*
+          The money is a fact about the whole night, settled once at the end, so it is shown once
+          the card has finished rather than ticked up bout by bout: an even share per fight would
+          read like data, and the night was never settled that way.
+        */}
+        {outcome && done && (
           <div className="facts" style={{ marginTop: 'var(--space-3)' }}>
             <KeyStat
-              value={money(Math.round(outcome.profit * share))}
-              label={done ? 'The night' : 'The night so far'}
-              tone={outcome.profit * share >= 0 ? 'good' : 'bad'}
+              value={money(outcome.profit)}
+              label="The night"
+              tone={outcome.profit >= 0 ? 'good' : 'bad'}
             />
             <KeyStat
-              value={`${outcome.buzzDelta * share >= 0 ? '+' : ''}${(outcome.buzzDelta * share).toFixed(1)}`}
+              value={`${outcome.buzzDelta >= 0 ? '+' : ''}${outcome.buzzDelta.toFixed(1)}`}
               label="Buzz"
               tone={outcome.buzzDelta >= 0 ? 'good' : 'bad'}
             />

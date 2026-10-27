@@ -35,11 +35,11 @@ import { toll } from './contracts';
 import { readInbox, scanForInbox } from './inbox';
 import {
   bookingsFor,
-  settlePendingAwards,
   fightNightOn,
   missPlans,
   nextCardDay,
   scanPromoterInbox,
+  settlePendingAwards,
 } from './plans';
 import { graceEnds } from './alerts';
 

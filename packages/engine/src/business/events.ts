@@ -445,7 +445,7 @@ export function eventRevenue(input: {
 /** Revenue points pay out on the *event*, which is why a promotion needs a platform. */
 export function revenueShareFor(points: number, revenue: EventRevenue): number {
   if (points <= 0) return 0;
-  return Math.round((revenue.gate + revenue.broadcast) * (points / 100) * 10) / 10;
+  return Math.round(((revenue.gate + revenue.broadcast) * (points / 100)) * 10) / 10;
 }
 
 // --- Naming ------------------------------------------------------------------------------------
@@ -646,7 +646,8 @@ export function settleNight(input: {
    */
   const missRatio = (delivered - baseline) / Math.max(1, baseline);
   const stickiness = 0.6 + (promotion.prestige / 100) * 0.8;
-  const buzzDelta = Math.round(clamp(missRatio / stickiness, -1, 1) * MAX_BUZZ_SWING * 10) / 10;
+  const buzzDelta =
+    Math.round(clamp(missRatio / stickiness, -1, 1) * MAX_BUZZ_SWING * 10) / 10;
 
   return {
     revenue,
