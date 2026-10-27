@@ -54,6 +54,12 @@ export function rankDivision(
    * of the older and less informed score.
    */
   promotions?: readonly Promotion[],
+  /**
+   * Everybody whose standing might be read as an opponent's, when `fighters` is only a subset —
+   * the world books vacant titles from the *available* roster, and a win over somebody injured or
+   * booked must still count for who they are. Defaults to `fighters`.
+   */
+  everyone: readonly Fighter[] = fighters,
 ): RankedFighter[] {
   /*
    * What you have done *here*, plus what is left of what you did elsewhere.
@@ -72,7 +78,9 @@ export function rankDivision(
 
   // How highly the sport rates each opponent, for weighing wins (doc 34 B6). Reputation rather
   // than ability: rankings are what the sport believes, and a win counts for what it looked like.
-  const byId = new Map(fighters.map((f) => [f.id as string, f]));
+  // Their reputation *now*, deliberately: beating somebody who went on to become a name is
+  // re-read as the better win it turned out to be, which is how the sport talks about it too.
+  const byId = new Map(everyone.map((f) => [f.id as string, f]));
   const opponentQuality = (id: FighterId): number =>
     (byId.get(id as string)?.reputation ?? 50) / 100;
 

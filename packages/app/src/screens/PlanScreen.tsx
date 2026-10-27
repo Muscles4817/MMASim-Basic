@@ -1154,7 +1154,10 @@ function ConfirmBout({
       slotId: slot.id,
       redId: red.id as string,
       blueId: blue.id as string,
-      divisionId: red.divisionId as string,
+      // A title bout is booked in the belt's division, which a double champion's second-belt
+      // defence makes the challenger's rather than the red corner's.
+      divisionId:
+        titleOptions.find((o) => o.kind === titleKind)?.divisionId ?? (red.divisionId as string),
       titleKind,
     });
 

@@ -37,7 +37,18 @@ import { plansFor, savePlan } from './plans';
 export const OVERDUE_DAYS = 365;
 
 /** Out injured this long, a champion holding the belt is holding the division up. */
-const LONG_INJURY_DAYS = 180;
+export const LONG_INJURY_DAYS = 180;
+
+/** Star power at which a champion's absence is still noticed: an overdue strip costs a point. */
+export const STAR_CHAMPION = 60;
+
+/** An unearned strip costs this much buzz before star power, and never more than the cap. */
+const POLITICS_BASE = 2;
+const POLITICS_PER_STAR = 1 / 15;
+const POLITICS_CAP = 8;
+
+/** Buzz never goes below this, whatever a promoter does. */
+const BUZZ_FLOOR = 1;
 
 export interface StripReaction {
   /** What the buzz moves by. Zero or negative. */
@@ -63,7 +74,7 @@ export function strippingReaction(champion: Fighter, day: number): StripReaction
 
   if (justified) {
     return {
-      buzzDelta: champion.starPower >= 60 ? -1 : 0,
+      buzzDelta: champion.starPower >= STAR_CHAMPION ? -1 : 0,
       justified,
       verdict:
         injuredFor > LONG_INJURY_DAYS
@@ -72,10 +83,13 @@ export function strippingReaction(champion: Fighter, day: number): StripReaction
     };
   }
   return {
-    buzzDelta: -Math.min(8, Math.round(2 + champion.starPower / 15)),
+    buzzDelta: -Math.min(
+      POLITICS_CAP,
+      Math.round(POLITICS_BASE + champion.starPower * POLITICS_PER_STAR),
+    ),
     justified,
     verdict:
-      champion.starPower >= 60
+      champion.starPower >= STAR_CHAMPION
         ? 'The fans will see it as politics. They paid to watch this champion, and they will say so.'
         : 'It will look like the promotion picking a fight with its own champion.',
   };
@@ -105,7 +119,7 @@ export function stripChampion(
 
   db.promotions.upsert({
     ...setChampion(promotion, divisionId, undefined),
-    buzz: Math.max(1, promotion.buzz + reaction.buzzDelta),
+    buzz: Math.max(BUZZ_FLOOR, promotion.buzz + reaction.buzzDelta),
   } as Promotion & Entity);
 
   const title = db.championships.findById(championshipId(promotion.id, divisionId)) as

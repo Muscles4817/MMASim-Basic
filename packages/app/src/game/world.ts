@@ -756,6 +756,8 @@ function buildNight(ctx: {
       day,
       undefined,
       ctx.allPromotions,
+      // Opponents' standing from everybody, not just who is free tonight.
+      db.fighters.findAll() as Fighter[],
     );
     /*
      * Two, because two is what a title fight takes.
@@ -1093,7 +1095,12 @@ export function runCardBout(ctx: {
     const index = divisionRanked.findIndex((r) => r.fighter.id === id);
     return index >= 0 ? index + 1 : undefined;
   };
-  const champion = promotion.champions[red.divisionId];
+  /*
+   * The belt is the bout's division's, not the red corner's. They are the same on every card but
+   * one: a double champion defending the second belt (doc 34 B6), booked in that belt's division.
+   */
+  const beltDivision = bout.divisionId;
+  const champion = promotion.champions[beltDivision];
   const isTitleFight = bout.isTitleFight;
 
   const boutId = bout.boutId;
@@ -1130,11 +1137,11 @@ export function runCardBout(ctx: {
    */
   let titleChangedHands = false;
   if (isTitleFight) {
-    const title = db.championships.findById(championshipId(promotion.id, red.divisionId)) as
+    const title = db.championships.findById(championshipId(promotion.id, beltDivision)) as
       Championship | undefined;
 
     if (result.winnerId && champion !== (result.winnerId as string)) {
-      db.promotions.upsert(setChampion(promotion, red.divisionId, result.winnerId) as never);
+      db.promotions.upsert(setChampion(promotion, beltDivision, result.winnerId) as never);
       titleChangedHands = true;
       if (title) {
         db.championships.upsert(
@@ -1277,7 +1284,7 @@ export function runCardBout(ctx: {
         method: result.method,
         round: result.round,
         submissionName: result.submissionName,
-        divisionId: red.divisionId,
+        divisionId: isTitleFight ? beltDivision : red.divisionId,
         promotionId: promotion.id,
         promotionName: promotion.shortName,
         winnerRank: winner ? rankOfId(winner.id) : undefined,
@@ -2157,16 +2164,13 @@ function vacateAbandonedBelts(db: GameDb, day: number): NewsItem[] {
 
       /*
        * A champion who won this belt from another division — champion against champion
-       * (doc 34 B6) — holds two, and is not "moved" out of the one they just won. They keep it
-       * while they keep contesting it: a year without defending it, and it goes, which is what
-       * happens to two-weight champions who cannot defend both.
+       * (doc 34 B6) — holds it as a second belt, and is not "moved" out of it. They keep it while
+       * they keep defending it (`titleOptionsFor` books the defence in this division); a year
+       * without one and it goes, as 'notDefended'. Losing or being stripped of the home belt
+       * does not touch this one.
        */
       const lastContested = title ? currentReign(title)?.lastContestedDay : undefined;
-      const holdingASecondBelt =
-        champion !== undefined &&
-        promotion.champions[champion.divisionId] === champion.id &&
-        lastContested !== undefined &&
-        day - lastContested <= 365;
+      const contestedThisYear = lastContested !== undefined && day - lastContested <= 365;
 
       const reason: VacancyReason | undefined = !champion
         ? 'leftPromotion'
@@ -2175,8 +2179,12 @@ function vacateAbandonedBelts(db: GameDb, day: number): NewsItem[] {
           : champion.promotionId !== promotion.id
             ? 'leftPromotion'
             : champion.divisionId !== (divisionId as unknown as typeof champion.divisionId) &&
-                !holdingASecondBelt
-              ? 'movedDivision'
+                !contestedThisYear
+              ? // A belt held outside the champion's own division — a double champion's second —
+                // goes after a year without a defence, and says so rather than "moved division".
+                promotion.champions[champion.divisionId] === champion.id
+                ? 'notDefended'
+                : 'movedDivision'
               : (champion.readyOnDay ?? 0) - day > 365
                 ? 'injured'
                 : undefined;

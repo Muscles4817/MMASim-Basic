@@ -881,6 +881,12 @@ function contractNoteFor(db: GameDb, fighter: Fighter): string | undefined {
 
 export interface TitleOption {
   kind: TitleKind;
+  /**
+   * The division whose belt this is: the bout's division when it is booked for it. Usually the
+   * red corner's; a double champion defending their second belt, or the visitor in a champion
+   * against champion bout, can make it the other one.
+   */
+  divisionId: string;
   label: string;
   /** Why this is or is not available, in plain words. */
   reason: string;
@@ -935,25 +941,45 @@ export function titleOptionsFor(input: {
     championOfDivision(ctx, blue.divisionId as string)?.id === blue.id &&
     neighbouringDivisions(red.divisionId as string, blue.divisionId as string);
 
+  /*
+   * A double champion defending the belt they won across a division. Their own division is their
+   * home one, so the bout's division is the *other* corner's: that is where the second belt lives,
+   * and the challenger is a contender in it. Without this the second belt could never be defended,
+   * and a year later it was vacated as if they had moved.
+   */
+  const secondBelt = !sameDivision
+    ? championOfDivision(ctx, blue.divisionId as string)?.id === red.id
+      ? { divisionId: blue.divisionId as string, holder: red }
+      : championOfDivision(ctx, divisionId)?.id === blue.id
+        ? { divisionId, holder: blue }
+        : undefined
+    : undefined;
+
   options.push({
     kind: 'undisputed',
+    divisionId: secondBelt?.divisionId ?? divisionId,
     label: champChamp
       ? `Champion vs champion, for the ${getDivision(red.divisionId).name} title`
-      : 'For the title',
-    available: (sameDivision && championInvolved) || champChamp,
+      : secondBelt
+        ? `For the ${getDivision(secondBelt.divisionId as never).name} title`
+        : 'For the title',
+    available: (sameDivision && championInvolved) || champChamp || secondBelt !== undefined,
     reason: champChamp
       ? `${displayName(red)} defends against the ${getDivision(blue.divisionId).name} champion. Win, and ${displayName(blue)} holds two belts.`
-      : !sameDivision
-        ? "Two different divisions. Only two champions a division apart can fight for a belt across them — the red corner's."
-        : !champion
-          ? 'The belt is vacant — this would be a vacant title fight.'
-          : championInvolved
-            ? `${displayName(champion)} defends.`
-            : `${displayName(champion)} holds the belt, and is not in this fight.`,
+      : secondBelt
+        ? `${displayName(secondBelt.holder)} defends the ${getDivision(secondBelt.divisionId as never).name} belt, their second.`
+        : !sameDivision
+          ? 'Two different divisions. Only two champions a division apart, or a double champion defending their second belt, can fight for a belt across them.'
+          : !champion
+            ? 'The belt is vacant — this would be a vacant title fight.'
+            : championInvolved
+              ? `${displayName(champion)} defends.`
+              : `${displayName(champion)} holds the belt, and is not in this fight.`,
   });
 
   options.push({
     kind: 'vacant',
+    divisionId,
     label: 'For the vacant title',
     available: sameDivision && champion === undefined && contenderish(red) && contenderish(blue),
     reason:
@@ -976,6 +1002,7 @@ export function titleOptionsFor(input: {
 
   options.push({
     kind: 'interim',
+    divisionId,
     label: 'For the interim title',
     available:
       sameDivision &&

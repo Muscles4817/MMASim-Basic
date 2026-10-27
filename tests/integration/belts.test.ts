@@ -26,9 +26,11 @@ import {
   placeBout,
   planById,
   promoterContext,
+  runPlan,
   savePlan,
   titleOptionsFor,
 } from '../../packages/app/src/game/plans';
+import { agreed } from '../helpers/plans';
 
 function promoter() {
   const db = createNewGame({ adapter: undefined, era: '2026' });
@@ -181,5 +183,112 @@ describe('champion against champion', () => {
     const after = db.promotions.findById(promotion.id as string) as Promotion;
     expect(after.champions[pair.heavyDiv]).toBe(pair.light);
     expect(after.champions[pair.lightDiv]).toBe(pair.light);
+  });
+});
+
+describe('a double champion, end to end', () => {
+  /** One bout on a fresh card in the main event, booked the way the confirm step books it. */
+  function book(
+    db: ReturnType<typeof promoter>['db'],
+    promotion: Promotion,
+    redId: string,
+    blueId: string,
+    on: number,
+  ) {
+    const ctx = promoterContext({
+      db,
+      promotion: db.promotions.findById(promotion.id as string) as Promotion,
+      day: getWorld(db).day,
+    });
+    const plan = createPlan({ db, promotion, day: on });
+    const red = fighter(db, redId);
+    const blue = fighter(db, blueId);
+    const option = titleOptionsFor({ ctx, red, blue, plan }).find((o) => o.kind === 'undisputed')!;
+    expect(option.available, option.reason).toBe(true);
+    const main = plan.slots.find((s) => s.position === 'mainEvent')!;
+    return agreed(
+      db,
+      placeBout({
+        plan,
+        slotId: main.id,
+        redId,
+        blueId,
+        divisionId: option.divisionId,
+        titleKind: 'undisputed',
+      }),
+    );
+  }
+
+  /** Make one fighter far better than anybody, so the bout's result is not the test's question. */
+  const dominant = (db: ReturnType<typeof promoter>['db'], id: string) => {
+    const f = fighter(db, id);
+    const best = Object.fromEntries(Object.keys(f.attributes).map((k) => [k, 99]));
+    db.fighters.upsert({ ...f, attributes: best } as never);
+  };
+
+  it('wins the second belt across a division, defends it there, and keeps it when stripped of the first', () => {
+    const { db, promotion, day } = promoter();
+    const pair = neighbouringChampions(promotion);
+    dominant(db, pair.light);
+
+    // Champion against champion, for the heavier belt: the lighter champion wins it.
+    const first = book(db, promotion, pair.heavy, pair.light, day + 30);
+    expect(runPlan({ db, plan: first })).toBeDefined();
+    let now = db.promotions.findById(promotion.id as string) as Promotion;
+    expect(now.champions[pair.heavyDiv]).toBe(pair.light);
+    expect(now.champions[pair.lightDiv]).toBe(pair.light);
+    const heavyTitle = () =>
+      db.championships.findById(championshipId(promotion.id, pair.heavyDiv)) as Championship;
+    expect(currentReign(heavyTitle())?.fighterId).toBe(pair.light);
+    expect(heavyTitle().lineage.at(-2)?.lostBy?.opponentId).toBe(pair.light);
+
+    // A defence of the second belt, against a contender from that division, booked in it.
+    setWorld(db, { day: day + 31 });
+    const challenger = (db.fighters.findAll() as Fighter[]).find(
+      (f) =>
+        f.divisionId === pair.heavyDiv &&
+        f.id !== pair.heavy &&
+        f.promotionId === promotion.id &&
+        f.retiredDay === undefined,
+    )!;
+    const defence = book(db, promotion, pair.light, challenger.id as string, day + 90);
+    expect(defence.slots.find((s) => s.bout)?.bout?.divisionId).toBe(pair.heavyDiv);
+    expect(runPlan({ db, plan: defence })).toBeDefined();
+    expect(currentReign(heavyTitle())?.fighterId).toBe(pair.light);
+    expect(currentReign(heavyTitle())?.defences).toBe(1);
+
+    // Stripped of the home belt: the second belt stays, through an advance.
+    setWorld(db, { day: day + 91 });
+    stripChampion(db, pair.lightDiv);
+    advanceTo(db, day + 100);
+    now = db.promotions.findById(promotion.id as string) as Promotion;
+    expect(now.champions[pair.lightDiv]).toBeUndefined();
+    expect(now.champions[pair.heavyDiv]).toBe(pair.light);
+  });
+});
+
+describe('a second belt nobody defends', () => {
+  it('goes after a year, as not defended rather than as a move, and leaves the home belt alone', () => {
+    const { db, promotion, day } = promoter();
+    const pair = neighbouringChampions(promotion);
+    db.promotions.upsert({
+      ...promotion,
+      champions: { ...promotion.champions, [pair.heavyDiv]: pair.light },
+    } as never);
+    const title = db.championships.findById(championshipId(promotion.id, pair.heavyDiv)) as
+      Championship | undefined;
+    expect(title).toBeDefined();
+    db.championships.upsert(
+      crown({ title: title!, fighterId: pair.light as never, day: (day - 400) as never }) as never,
+    );
+
+    advanceTo(db, day + 5);
+    const after = db.promotions.findById(promotion.id as string) as Promotion;
+    expect(after.champions[pair.heavyDiv]).toBeUndefined();
+    expect(after.champions[pair.lightDiv]).toBe(pair.light);
+    const vacated = db.championships.findById(
+      championshipId(promotion.id, pair.heavyDiv),
+    ) as Championship;
+    expect(vacated.vacancy?.reason).toBe('notDefended');
   });
 });

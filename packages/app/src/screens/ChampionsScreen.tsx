@@ -165,6 +165,10 @@ export function ChampionsScreen() {
                     <StripTitle
                       champion={champion}
                       day={world.day}
+                      defenceBooked={booked.has(champion.id as string)}
+                      otherBelts={promotion.divisions
+                        .filter((d) => d !== divisionId && promotion.champions[d] === champion.id)
+                        .map((d) => getDivision(d).name)}
                       onStrip={() => {
                         stripChampion(db, divisionId as DivisionId);
                         commit();
@@ -246,10 +250,16 @@ export function ChampionsScreen() {
 function StripTitle({
   champion,
   day,
+  defenceBooked,
+  otherBelts,
   onStrip,
 }: {
   champion: Fighter;
   day: number;
+  /** A title defence on a card already: it goes ahead, but not for the belt. */
+  defenceBooked: boolean;
+  /** Other belts this champion holds here, which stripping this one does not touch. */
+  otherBelts: readonly string[];
   onStrip(): void;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -277,6 +287,9 @@ function StripTitle({
           ? `It will cost ${-reaction.buzzDelta} buzz.`
           : 'It will cost nothing at the gate.'}{' '}
         {displayName(champion)} will not forget it.
+        {defenceBooked && ' The defence they are booked for goes ahead as a non-title fight.'}
+        {otherBelts.length > 0 &&
+          ` They keep the ${otherBelts.join(' and ')} ${otherBelts.length === 1 ? 'title' : 'titles'}: this takes one belt, not both.`}
       </p>
       <span className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
         <Button
