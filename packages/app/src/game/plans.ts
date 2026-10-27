@@ -1463,6 +1463,9 @@ export function rollWeighIns(db: GameDb, day: number): number {
   for (const plan of plansFor(db, world.playerPromotionId)) {
     if (!isLive(plan) || plan.day - WEIGH_IN_ROLL_DAYS_BEFORE > day) continue;
     let next = plan;
+    // Dated on weigh-in day, which is what the inbox and the feed should say, whichever day the
+    // clock happened to read the scales on.
+    const weighDay = plan.day - WEIGH_IN_DAYS_BEFORE;
     for (const slot of plan.slots) {
       const bout = slot.bout;
       if (bout?.status !== 'agreed' || bout.weighIn || bout.catchweightLbs !== undefined) continue;
@@ -1493,13 +1496,13 @@ export function rollWeighIns(db: GameDb, day: number): number {
       next = withSlot(next, slot.id, { ...bout, weighIn: { results, opponentAccepts } });
       if (misses.length === 0) continue;
       missed += 1;
-      raiseWeighInDecision(db, next, slot.id, day);
+      raiseWeighInDecision(db, next, slot.id, weighDay);
       if (made) {
-        const said = voiceFor(made, 'opponentMissedWeight', day as never).text;
+        const said = voiceFor(made, 'opponentMissedWeight', weighDay as never).text;
         appendNews(db, [
           {
-            id: newsId(day as never, `weighin:${plan.id}:${slot.id}`),
-            day: day as never,
+            id: newsId(weighDay as never, `weighin:${plan.id}:${slot.id}`),
+            day: weighDay as never,
             kind: 'voice',
             weight: 'normal',
             headline: `${displayName(made)} on the miss: “${said}”`,

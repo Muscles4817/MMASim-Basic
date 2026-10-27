@@ -286,8 +286,9 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
     // happen. This is the one place that legitimately knows about both.
     // Bout offers answer on their own day (doc 34 C4), so a counter can stop the clock when it lands.
     settleReplies(db, onDay);
-    // Fight week (doc 34 A5): a signed fighter can fall out on any day of the run-up. First, so a
-    // fighter who withdraws today is never weighed in.
+    // Fight week (doc 34 A5): a signed fighter can fall out on any day of the run-up until they
+    // have weighed in. First, so a fighter who withdraws today is not weighed in today; once a bout
+    // has a weigh-in, `rollRunUp` leaves it alone.
     scanFightWeek(db, onDay);
     // The scales the day before a card (doc 34 C6): a miss is a decision, so it can stop the clock.
     rollWeighIns(db, onDay);

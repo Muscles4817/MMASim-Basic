@@ -14,6 +14,7 @@ import {
   currentHeat,
   plannedBouts,
   pullOutRisk,
+  withSlot,
   type EventPlan,
   type Fighter,
   type Promotion,
@@ -135,6 +136,26 @@ describe('withdrawals in the run-up', () => {
     expect(openWithdrawals(planById(db, plan.id)!)).not.toContainEqual(
       expect.objectContaining({ slotId: w.slotId }),
     );
+  });
+});
+
+describe('a bout that has weighed in', () => {
+  it('cannot lose a fighter in the run-up any more (#63: a catchweight decision with nobody in it)', () => {
+    // The same cards that produce withdrawals above, every bout already through the scales.
+    const all = [40, 55, 70, 85].flatMap((away) => {
+      const { db, plan } = signedCard(away);
+      let weighed = plan;
+      for (const slot of plan.slots) {
+        if (slot.bout?.status !== 'agreed') continue;
+        weighed = withSlot(weighed, slot.id, {
+          ...slot.bout,
+          weighIn: { results: [], opponentAccepts: true },
+        });
+      }
+      savePlan(db, weighed);
+      return rollTheRunUp(db, weighed);
+    });
+    expect(all).toEqual([]);
   });
 });
 
