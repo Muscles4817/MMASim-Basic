@@ -29,6 +29,7 @@ import { PromotionHubScreen } from './screens/PromotionHubScreen';
 import { CardBuilderScreen } from './screens/CardBuilderScreen';
 import { PlanScreen } from './screens/PlanScreen';
 import { ChampionsScreen } from './screens/ChampionsScreen';
+import { HistoryScreen } from './screens/HistoryScreen';
 import { PromoterRosterScreen } from './screens/PromoterRosterScreen';
 import { CalendarScreen } from './screens/CalendarScreen';
 import { InboxScreen } from './screens/InboxScreen';
@@ -209,6 +210,12 @@ export function App() {
         return (
           <Shell title="Championships" wide>
             <ChampionsScreen />
+          </Shell>
+        );
+      case 'history':
+        return (
+          <Shell title="History" wide>
+            <HistoryScreen />
           </Shell>
         );
       case 'promoterRoster':

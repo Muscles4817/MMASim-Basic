@@ -1300,6 +1300,49 @@ export function runCardBout(ctx: {
 
   news.push(...remembered.news);
 
+  /*
+   * The fighter the player let go, holding a belt somewhere else (doc 34 B6).
+   *
+   * The most pointed piece of news a promoter can get, and the sport would make sure they heard
+   * it. Read off the `cut` the player's promotion left in the fighter's ledger, which survives
+   * leaving (C3) precisely so that the cut can be remembered.
+   */
+  const playerPromotionId = getWorld(db).playerPromotionId;
+  if (
+    titleChangedHands &&
+    winner &&
+    !bulk &&
+    playerPromotionId &&
+    promotion.id !== playerPromotionId &&
+    (winner.ledger ?? []).some((e) => e.kind === 'cut' && e.promotionId === playerPromotionId)
+  ) {
+    const mine = db.promotions.findById(playerPromotionId) as Promotion | undefined;
+    const headline = `${displayName(winner)}, cut by ${mine?.shortName ?? 'you'}, wins the ${promotion.shortName} ${divisionLabel(red.divisionId as string)} title`;
+    news.push({
+      id: newsId(day, `cutcrowned:${winner.id}:${boutId}`),
+      day,
+      kind: 'titleChange',
+      weight: 'major',
+      headline,
+      detail: 'The fighter you let go is a champion somewhere else now.',
+      fighterIds: [winner.id],
+      divisionId: red.divisionId,
+      promotionId: promotion.id,
+      involvesPlayer: true,
+    });
+    raise(db, {
+      id: inboxId(day, `cutcrowned:${winner.id}`),
+      day,
+      kind: 'roster',
+      priority: 'notable',
+      title: headline,
+      body: 'Released by you, champion at somebody else’s promotion. It is in the history book.',
+      link: { route: 'fighter', id: winner.id as string },
+      fighterId: winner.id,
+      promotionId: playerPromotionId as never,
+    });
+  }
+
   if (winner && !bulk) {
     const streak = streakNews({
       day,

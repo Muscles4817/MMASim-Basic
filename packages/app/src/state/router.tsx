@@ -93,6 +93,8 @@ export type Route =
   | { name: 'promoterRoster' }
   /** Belts, contenders and the divisions behind them. */
   | { name: 'champions' }
+  /** The history book: lineages, the timeline, the hall of fame, and the fighters let go. */
+  | { name: 'history' }
   // The clock and the staging ground. Shared by every mode — the one screen that owns time, and
   // the one place anything needing an answer waits.
   /**
@@ -152,6 +154,8 @@ function parse(hash: string): Route {
       return rest ? { name: 'plan', id: param, slot: rest } : { name: 'plan', id: param };
     case 'champions':
       return { name: 'champions' };
+    case 'history':
+      return { name: 'history' };
     case 'stable':
       return { name: 'promoterRoster' };
     case 'calendar':
