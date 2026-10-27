@@ -25,6 +25,7 @@ import {
   DIVISIONS,
   applyAftermath,
   applyAgeing,
+  withoutStaleTalks,
   applyTraining,
   settleWeight,
   AMBIENT_BLOCKS_PER_WEEK,
@@ -2497,7 +2498,11 @@ function ageEveryone(
   lastSeen?: Map<string, number>,
 ): void {
   const world = getWorld(db);
-  for (const fighter of db.fighters.findAll() as Fighter[]) {
+  for (const stored of db.fighters.findAll() as Fighter[]) {
+    // Contract talks past their cooldown are dropped here, the one pass that reaches everybody
+    // (doc 34 C4 follow-up): a fighter who never signed would otherwise carry them for good.
+    const fighter = withoutStaleTalks(stored, toDay);
+    if (fighter !== stored) db.fighters.upsert(fighter as Fighter & Entity);
     if (fighter.id === exceptId || fighter.retiredDay !== undefined) continue;
     const since = lastSeen?.get(fighter.id as string) ?? fromDay;
     if (since >= toDay) continue;

@@ -211,6 +211,16 @@ export function resumeTalks(
 export const talksReopenDay = (talks: Negotiation): GameDay =>
   (talks.day + TALKS_COOLDOWN_DAYS) as GameDay;
 
+/**
+ * The fighter without talks that no longer stand — past the cooldown, `resumeTalks` ignores them
+ * and they only cost the save its bytes. The same fighter object when there is nothing to drop.
+ */
+export function withoutStaleTalks<F extends Pick<Fighter, 'talks'>>(fighter: F, day: GameDay): F {
+  if (!fighter.talks || day < talksReopenDay(fighter.talks)) return fighter;
+  const { talks: _stale, ...rest } = fighter;
+  return rest as F;
+}
+
 /** Whether this counter is their last word: one more offer short of it and they walk. */
 export const isFinalCounter = (
   talks: Negotiation,
