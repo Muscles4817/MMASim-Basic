@@ -618,10 +618,17 @@ describe('withdrawals', () => {
       const db = game();
       const promotion = leader(db);
       setWorld(db, { playerRole: 'promoter', playerPromotionId: promotion.id as string });
-      agreed(db, filledPlan({ db, promotion, day: CARD_DAY, today: TODAY }));
-      return runUp(db, CARD_DAY).map((w) => `${w.day}:${w.slotId}:${w.fighterId as string}`);
+      // Several cards, so the comparison is between rolls that actually happened.
+      return [0, 40, 80, 120].flatMap((offset) => {
+        agreed(db, filledPlan({ db, promotion, day: CARD_DAY + offset, today: TODAY }));
+        return runUp(db, CARD_DAY + offset).map(
+          (w) => `${w.day}:${w.slotId}:${w.fighterId as string}`,
+        );
+      });
     };
-    expect(rolled()).toEqual(rolled());
+    const first = rolled();
+    expect(first.length, 'nobody fell out, so there was nothing to compare').toBeGreaterThan(0);
+    expect(rolled()).toEqual(first);
   });
 });
 

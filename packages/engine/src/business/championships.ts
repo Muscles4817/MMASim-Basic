@@ -35,6 +35,8 @@ export type VacancyReason =
   | 'leftPromotion'
   | 'movedDivision'
   | 'stripped'
+  /** A second belt, held across a division, that went a year without a defence. Doc 34 B6. */
+  | 'notDefended'
   | 'newDivision';
 
 /** One reign, closed or ongoing. */
@@ -172,8 +174,10 @@ export function describeVacancy(reason: VacancyReason): string {
       return 'vacated on leaving the promotion';
     case 'movedDivision':
       return 'vacated to move weight';
+    case 'notDefended':
+      return 'vacated after a year without a defence';
     case 'stripped':
-      return 'stripped for inactivity';
+      return 'stripped by the promotion';
     case 'newDivision':
       return 'never yet contested';
   }
@@ -194,7 +198,11 @@ export function describeReign(title: Championship, today: GameDay): string {
   const days = today - reign.wonDay;
   const months = Math.floor(days / 30);
   const held =
-    days < 60 ? `${days} days` : months < 24 ? `${months} months` : `${Math.floor(days / 365)} years`;
+    days < 60
+      ? `${days} days`
+      : months < 24
+        ? `${months} months`
+        : `${Math.floor(days / 365)} years`;
 
   if (reign.defences === 0) return `Champion for ${held}, no defences yet.`;
   return `Champion for ${held}, ${reign.defences} defence${reign.defences === 1 ? '' : 's'}.`;
@@ -230,10 +238,7 @@ export function longestReigns(
 export const CHAMPION_PURSE_MULTIPLIER = 1.6;
 
 /** And a defence is worth more than the night you won it, because now you are the draw. */
-export function championPurseMultiplier(input: {
-  isChampion: boolean;
-  defences: number;
-}): number {
+export function championPurseMultiplier(input: { isChampion: boolean; defences: number }): number {
   if (!input.isChampion) return 1;
   return CHAMPION_PURSE_MULTIPLIER + Math.min(0.4, input.defences * 0.08);
 }

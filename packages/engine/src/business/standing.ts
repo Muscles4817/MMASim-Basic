@@ -67,9 +67,20 @@ export function boutsWith(
  * that is the promotion publicly saying this was one of the best things on the card, and it is
  * exactly what moves somebody up a queue faster than their record alone justifies.
  */
-export function boutValue(bout: FightRecordEntry): number {
+export function boutValue(
+  bout: FightRecordEntry,
+  /**
+   * How highly the sport rated the opponent, 0–1 (doc 34 B6). A win over somebody respected is
+   * worth more than a win over a name nobody knows, and a loss to them costs less. Half is par,
+   * and par leaves the value exactly as it was, so a caller without the opponent changes nothing.
+   */
+  opponentQuality = 0.5,
+): number {
+  const q = clamp01(opponentQuality);
   // Being finished is worse than being outpointed, and the sport treats it that way.
-  if (bout.outcome === 'loss') return isDecisionMethod(bout.method) ? -7 : -10;
+  if (bout.outcome === 'loss') {
+    return (isDecisionMethod(bout.method) ? -7 : -10) * (1.3 - 0.6 * q);
+  }
   if (bout.outcome !== 'win') return 0.5;
 
   const finish = !isDecisionMethod(bout.method);
@@ -85,7 +96,7 @@ export function boutValue(bout: FightRecordEntry): number {
   // Taking a fight nobody had time to prepare for is credit in every promotion in the sport.
   if (bout.shortNotice) value += 2;
 
-  return value;
+  return value * (0.7 + 0.6 * q);
 }
 
 /** Recency. Last year is what you are; three years ago is history. */
@@ -96,17 +107,67 @@ const recencyWeight = (daysAgo: number): number => clamp01(remap(daysAgo, 0, 110
  *
  * Unbounded above rather than clamped to 0–100, because it is compared against other people's
  * rather than read as a percentage, and clamping would flatten the top of a deep division.
+ *
+ * Recency is measured back from their **latest fight here**, not from today (doc 34 B6). Measured
+ * from today, a contender's standing leaked away every day they waited for their next fight, so
+ * the #1 contender dropped out of the spot while doing exactly what a #1 contender does — waiting
+ * for the title shot. Standing now moves when somebody fights; sitting out is charged separately,
+ * and only once it is genuinely too long (`inactivityPenalty`).
  */
 export function promotionStanding(input: {
   record: readonly FightRecordEntry[];
   promotionId: PromotionId;
   day: GameDay;
+  /** The opponent's quality, 0–1, for weighing each result. Par when not supplied. */
+  opponentQuality?: (opponentId: FightRecordEntry['opponentId']) => number;
 }): number {
-  const { record, promotionId, day } = input;
-  return boutsWith(record, promotionId).reduce(
-    (total, bout) => total + boutValue(bout) * recencyWeight(day - bout.day),
+  const { record, promotionId, day, opponentQuality } = input;
+  const bouts = boutsWith(record, promotionId);
+  const latest = bouts[0]?.day ?? day;
+  return bouts.reduce(
+    (total, bout) =>
+      total +
+      boutValue(bout, opponentQuality?.(bout.opponentId)) * recencyWeight(latest - bout.day),
     0,
   );
+}
+
+/** A year out is a normal gap between big fights. Past it, the ranking starts to move on. */
+export const INACTIVITY_GRACE_DAYS = 365;
+
+/**
+ * What sitting out costs, in ranking points: nothing for a year, then two points a month, capped.
+ * Measured from the last fight anywhere, because a fighter busy elsewhere is not inactive.
+ */
+export function inactivityPenalty(record: readonly FightRecordEntry[], day: GameDay): number {
+  if (record.length === 0) return 0;
+  const last = record.reduce((latest, r) => Math.max(latest, r.day), -Infinity);
+  const idle = day - last - INACTIVITY_GRACE_DAYS;
+  return idle <= 0 ? 0 : Math.min(30, (idle / 30) * 2);
+}
+
+/**
+ * The run that earns a title shot: wins since the last loss.
+ *
+ * A draw or a no contest pauses a run rather than ending it (doc 34 B6). `summary.streak` resets
+ * on a draw, which is right for the record line and wrong for the queue: a 10-0 fighter who draws
+ * once is not back at the start of the line. A career that exists only as a prior record has no
+ * bouts to read, and falls back to its streak.
+ */
+export function winningRun(fighter: Pick<Fighter, 'record' | 'summary'>): number {
+  if (fighter.record.length === 0) return Math.max(0, fighter.summary.streak);
+  return currentRun(fighter.record).length;
+}
+
+/** The wins since the last loss, most recent first; draws and no contests are passed over. */
+function currentRun(record: readonly FightRecordEntry[]): FightRecordEntry[] {
+  const wins: FightRecordEntry[] = [];
+  for (let i = record.length - 1; i >= 0; i--) {
+    const entry = record[i]!;
+    if (entry.outcome === 'loss') break;
+    if (entry.outcome === 'win') wins.push(entry);
+  }
+  return wins;
 }
 
 /**
@@ -133,22 +194,38 @@ export function standingScore(input: {
   /** Where their outside reputation was built. Undefined for a genuine unknown. */
   previous?: Promotion;
   day: GameDay;
+  /** The opponent's quality, 0–1, so a win over somebody respected counts for more. */
+  opponentQuality?: (opponentId: FightRecordEntry['opponentId']) => number;
 }): number {
-  const { fighter, promotion, previous, day } = input;
+  const { fighter, promotion, previous, day, opponentQuality } = input;
 
   const here = boutsWith(fighter.record, promotion.id);
-  const earned = promotionStanding({ record: fighter.record, promotionId: promotion.id, day });
+  const earned = promotionStanding({
+    record: fighter.record,
+    promotionId: promotion.id,
+    day,
+    opponentQuality,
+  });
 
   const carried =
     fighter.reputation * transferRate(previous, promotion) * carryWeight(here.length) * 0.9;
 
-  const streak = fighter.summary.streak;
+  // The run a draw pauses rather than ends; a losing streak still costs what it did. Only the
+  // run's wins *here* count: wins elsewhere are already in the carried reputation, discounted for
+  // the room they came from, and counting them again let a streak built two tiers down buy a
+  // place near the top. A career that exists only as a prior record falls back to its streak.
+  const run =
+    fighter.record.length === 0
+      ? winningRun(fighter)
+      : currentRun(fighter.record).filter((r) => r.promotionId === promotion.id).length;
+  const losing = Math.min(0, fighter.summary.streak);
 
   return (
     earned +
     carried +
-    Math.max(0, streak) * 3 +
-    Math.min(0, streak) * 5 +
-    fighter.starPower * 0.15
+    run * 3 +
+    losing * 5 +
+    fighter.starPower * 0.15 -
+    inactivityPenalty(fighter.record, day)
   );
 }

@@ -20,6 +20,7 @@ import { createNewGame } from '@mmasim/data';
 import {
   boutValue,
   carryWeight,
+  inactivityPenalty,
   promotionStanding,
   rankDivision,
   standingScore,
@@ -108,18 +109,25 @@ describe('what a night here is worth', () => {
     expect(here).toBe(boutValue(record[0]!) * (here / boutValue(record[0]!)));
   });
 
-  it('discounts what happened years ago', () => {
-    const recent = promotionStanding({
+  it('discounts what happened years before the latest fight', () => {
+    // Measured back from the fighter's own latest fight here, not from today (doc 34 B6), so a
+    // contender's standing does not leak away while they wait for the next one.
+    const latest = promotionStanding({
       record: [bout({ day: DAY - 30 })],
       promotionId: UFC.id,
       day: DAY,
     });
-    const ancient = promotionStanding({
-      record: [bout({ day: DAY - 1500 })],
+    const both = promotionStanding({
+      record: [bout({ day: DAY - 1530 }), bout({ day: DAY - 30 })],
       promotionId: UFC.id,
       day: DAY,
     });
-    expect(ancient).toBeLessThan(recent * 0.5);
+    expect(both - latest).toBeLessThan(latest * 0.5);
+  });
+
+  it('charges a long absence separately, once it is longer than a normal gap', () => {
+    expect(inactivityPenalty([bout({ day: DAY - 200 })], DAY)).toBe(0);
+    expect(inactivityPenalty([bout({ day: DAY - 1500 })], DAY)).toBeGreaterThan(0);
   });
 });
 

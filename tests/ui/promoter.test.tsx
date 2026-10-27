@@ -561,6 +561,20 @@ describe('championships', () => {
     expect((await screen.findAllByText(/Next in line/i)).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Eligible for the shot|Not yet/).length).toBeGreaterThan(0);
   });
+
+  it('lets a champion be stripped, saying first what it will cost', async () => {
+    // Doc 34 B6: a decision with a price, so the price comes before the button.
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    goTo('#/champions');
+    const before = (await screen.findAllByRole('button', { name: 'Strip the title' })).length;
+    await user.click(screen.getAllByRole('button', { name: 'Strip the title' })[0]!);
+    expect(screen.getByText(/will not forget it/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /^Yes — strip / }));
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: 'Strip the title' }).length).toBe(before - 1),
+    );
+  });
 });
 
 describe('the roster, from the promotion’s chair', () => {
