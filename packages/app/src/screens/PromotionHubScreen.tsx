@@ -484,9 +484,7 @@ function LastNight({ plan, onOpen }: { plan: EventPlan; onOpen(): void }) {
 
   return (
     <Card raised title="Last time out">
-      <p style={{ fontSize: 'var(--text-xl)', fontWeight: 800, margin: 0 }}>
-        {planName(db, plan)}
-      </p>
+      <p style={{ fontSize: 'var(--text-xl)', fontWeight: 800, margin: 0 }}>{planName(db, plan)}</p>
       <p className="muted" style={{ fontSize: 'var(--text-sm)', marginTop: 0 }}>
         {formatGameDay(plan.day)} · {plan.city}
         {night?.attendance !== undefined && ` · ${night.attendance.toLocaleString()} in`}
