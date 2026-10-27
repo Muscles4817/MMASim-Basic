@@ -119,9 +119,17 @@ describe('a year on autopilot', () => {
   });
 
   it('makes a regional night worth tens of thousands, not hundreds', () => {
+    /*
+     * A typical night tens of thousands either way, and the best of the year a few hundred
+     * thousand at most. Nowhere near the audit's £481k three-fight card. The top regional now
+     * carries a major-sized organisation, so its best nights have to clear more to pay for it.
+     */
     const profits = sensible.flatMap((r) => r.cards.map((c) => c.profit));
+    const sorted = profits.slice().sort((a, b) => a - b);
+    const p90 = sorted[Math.floor(sorted.length * 0.9)]!;
     expect(Math.abs(median(profits)), `card profits ${profits.join(', ')}`).toBeLessThan(150);
-    expect(Math.max(...profits), `card profits ${profits.join(', ')}`).toBeLessThan(300);
+    expect(p90, `card profits ${profits.join(', ')}`).toBeLessThan(250);
+    expect(Math.max(...profits), `card profits ${profits.join(', ')}`).toBeLessThan(400);
   });
 
   it('forecasts a loss for a card with nothing on it', () => {
