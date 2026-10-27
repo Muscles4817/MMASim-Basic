@@ -63,7 +63,7 @@ const BY_DISCIPLINE: Readonly<Record<Discipline, readonly string[]>> = {
   distanceRunning: ['The Marathon', 'Long Distance', 'Miles'],
 };
 
-const LONG = ['Wingspan', 'Long Arm', 'Stretch', 'The Tower'];
+const LONG = ['Wingspan', 'Long Arm', 'The Rangefinder'];
 const THICK = ['The Tank', 'The Fridge', 'Brick House', 'The Boulder'];
 const LEFTY = ['Lefty', 'The Southpaw'];
 const HOME = [(c: string) => `The Pride of ${c}`, (c: string) => `The ${c} Kid`];
