@@ -33,7 +33,9 @@ import {
   awardBonuses,
   bonusPoolFor,
   buildCard,
+  clamp,
   createRng,
+  describeMethod,
   describePullOut,
   displayName,
   drawWeight,
@@ -44,6 +46,7 @@ import {
   groupFor,
   inboxId,
   isActive,
+  newsId,
   paperOdds,
   plannedBouts,
   planIssues,
@@ -60,6 +63,7 @@ import {
   withSlot,
   DELIVERY_MEMORY,
   type BoutSeed,
+  type CardBout,
   type CardPosition,
   type CornerAnswer,
   type EventPlan,
@@ -99,7 +103,7 @@ export const allPlans = (db: GameDb): EventPlan[] => db.plans.findAll() as Store
 export function plansFor(db: GameDb, promotionId: string | undefined): EventPlan[] {
   if (!promotionId) return [];
   return allPlans(db)
-    .filter((p) => p.promotionId === promotionId && p.status !== 'run' && p.status !== 'cancelled')
+    .filter((p) => p.promotionId === promotionId && isLive(p))
     .sort((a, b) => a.day - b.day);
 }
 
@@ -119,12 +123,141 @@ export function savePlan(db: GameDb, plan: EventPlan): EventPlan {
   return plan;
 }
 
+/** Whether a plan can still become a night. A run or cancelled card is history. */
+export const isLive = (plan: EventPlan): boolean =>
+  plan.status !== 'run' && plan.status !== 'cancelled';
+
 export function cancelPlan(db: GameDb, planId: string): void {
   const plan = planById(db, planId);
   if (!plan) return;
   // Kept rather than deleted: a cancelled card is a thing that happened, and the fighters who
   // were on it have a legitimate grievance the roster screen should be able to see.
-  savePlan(db, { ...plan, status: 'cancelled' });
+  savePlan(db, {
+    ...plan,
+    status: 'cancelled',
+    cancelled: { day: getWorld(db).day as never, reason: 'calledOff' },
+  });
+}
+
+// --- Fight night ---------------------------------------------------------------------------------
+
+/**
+ * The player's card that falls on this exact day, if one does and it has not been run.
+ *
+ * The question every screen with a primary button has to ask first. On the night, the only
+ * thing worth pressing is the one that runs the show — the audit found the calendar's main
+ * button offering to skip ahead to somebody's contract expiry on the day of the player's own
+ * card, because "the next thing" was computed from tomorrow.
+ */
+export const fightNightOn = (
+  db: GameDb,
+  promotionId: string | undefined,
+  day: number,
+): EventPlan | undefined => plansFor(db, promotionId).find((p) => p.day === day);
+
+/**
+ * The first day in `(from, to]` on which the player has a card to run.
+ *
+ * What the clock hard-stops on. Exclusive of `from`, because pressing advance *on* fight night
+ * is the player choosing to walk past it — which is allowed, and costs them (see `missPlans`).
+ */
+export function nextCardDay(
+  db: GameDb,
+  promotionId: string | undefined,
+  from: number,
+  to: number,
+): number | undefined {
+  return plansFor(db, promotionId).find((p) => p.day > from && p.day <= to)?.day;
+}
+
+/**
+ * What a card that never happened costs.
+ *
+ * Deliberately blunt numbers, and deliberately more than a quiet night would cost: an announced
+ * show that simply does not take place is the most visible failure a promotion has. The buzz
+ * figure is a flat hit rather than a share of what the night would have made, because the
+ * audience does not know what it would have made — only that it was told to turn up.
+ */
+export const MISSED_CARD_BUZZ = 8;
+/** Resentment added to everybody who had agreed to fight on it, and so had camped for nothing. */
+export const MISSED_CARD_RESENTMENT = 15;
+
+/**
+ * Cancel every card of the player's whose date has passed unrun, and charge for it.
+ *
+ * Called by the clock after every advance. Before this a missed card simply stayed in the save
+ * with a date in the past: it vanished from the dashboard and the calendar, because both read
+ * forward from today, and it kept every fighter on it blocked as "booked on another card within
+ * six weeks" — forever, since nothing would ever run it.
+ *
+ * Cancelling frees them, because `plansFor` (and with it every commitment check) only sees live
+ * cards. The cost lands three ways, all on things that already exist: the promotion's `buzz`,
+ * the `resentment` of everybody who had signed, and a line in the news and the inbox so the
+ * player is told rather than left to notice.
+ */
+export function missPlans(db: GameDb, day: number): EventPlan[] {
+  const world = getWorld(db);
+  if (world.playerRole !== 'promoter' || !world.playerPromotionId) return [];
+
+  const missed = plansFor(db, world.playerPromotionId).filter((p) => p.day < day);
+  if (missed.length === 0) return [];
+
+  const news: NewsItem[] = [];
+  for (const plan of missed) {
+    savePlan(db, { ...plan, status: 'cancelled', cancelled: { day: plan.day, reason: 'missed' } });
+
+    const signed = plan.slots
+      .filter((s) => s.bout?.status === 'agreed')
+      .flatMap((s) => [s.bout!.redId as string, s.bout!.blueId as string]);
+    for (const id of signed) {
+      const fighter = db.fighters.findById(id) as Fighter | undefined;
+      if (!fighter) continue;
+      db.fighters.upsert({
+        ...fighter,
+        resentment: clamp(fighter.resentment + MISSED_CARD_RESENTMENT, 0, 100),
+      } as Fighter & Entity);
+    }
+
+    const promotion = db.promotions.findById(plan.promotionId as string) as Promotion | undefined;
+    if (promotion) {
+      db.promotions.upsert({
+        ...promotion,
+        buzz: clamp(promotion.buzz - MISSED_CARD_BUZZ, 1, 100),
+      } as Promotion & Entity);
+    }
+
+    const fights = signed.length / 2;
+    const detail =
+      fights > 0
+        ? `${fights} signed ${fights === 1 ? 'fight' : 'fights'} did not happen. Everybody on it is free to be booked again, and none of them are happy about it.`
+        : 'Nobody had signed for it, but it was in the diary and the audience noticed.';
+
+    news.push({
+      id: newsId(plan.day as never, `missed:${plan.id}`),
+      day: plan.day as never,
+      kind: 'cancellation',
+      weight: 'major',
+      headline: `${plan.name} did not go ahead`,
+      detail,
+      fighterIds: [...new Set(signed)] as never,
+      promotionId: plan.promotionId,
+      involvesPlayer: true,
+    });
+
+    raise(db, {
+      id: inboxId(plan.day as never, `missed:${plan.id}`),
+      day: day as never,
+      kind: 'card',
+      priority: 'notable',
+      title: `${plan.name} was cancelled — the date passed and it never ran`,
+      body: `${detail} The promotion's buzz took the hit.`,
+      link: { route: 'plan', id: plan.id },
+      promotionId: plan.promotionId,
+    });
+  }
+
+  appendNews(db, news);
+  return missed;
 }
 
 /**
@@ -1259,6 +1392,9 @@ export function runPlan(input: {
   plan: EventPlan;
 }): { night: FightNight; profit: number; buzz: number; attendance: number } | undefined {
   const { db, plan } = input;
+  // Once. A card that has run is history, and running it again re-fought every bout on it and
+  // paid the gate twice — the screen offered exactly that, because it still read "tonight".
+  if (!isLive(plan)) return undefined;
   const promotion = db.promotions.findById(plan.promotionId as string) as Promotion | undefined;
   if (!promotion) return undefined;
 
@@ -1332,7 +1468,12 @@ export function runPlan(input: {
   const outcome = runNight({ db, night, promotion });
   if (!outcome) return undefined;
 
-  savePlan(db, { ...plan, status: 'run', nightId: night.id as string });
+  savePlan(db, {
+    ...plan,
+    status: 'run',
+    nightId: night.id as string,
+    outcome: { profit: outcome.profit, buzzDelta: outcome.buzz },
+  });
   return outcome;
 }
 
@@ -1463,6 +1604,44 @@ function runNight(input: {
     buzz: settlement.buzzDelta,
     attendance: revenue.attendance,
   };
+}
+
+/** One bout of a night that has happened, as the card reads it back the next morning. */
+export interface BoutResult {
+  bout: CardBout;
+  red?: Fighter;
+  blue?: Fighter;
+  /** Absent for a draw or a no contest. */
+  winner?: Fighter;
+  /** "by knockout in round 2", "by unanimous decision". Empty when the result is not found. */
+  how: string;
+}
+
+/**
+ * What happened on a plan's night, bout by bout, main event first.
+ *
+ * Read off the fighters' records by bout id rather than stored a second time: the record is the
+ * truth every other screen reads, and a copy on the plan would be one more thing to drift.
+ */
+export function nightResults(db: GameDb, plan: EventPlan): BoutResult[] {
+  const night = plan.nightId
+    ? (db.events.findById(plan.nightId) as FightNight | undefined)
+    : undefined;
+  if (!night) return [];
+
+  return night.bouts.map((bout) => {
+    const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
+    const blue = db.fighters.findById(bout.blueId as string) as Fighter | undefined;
+    const entry = red?.record.find((e) => e.boutId === bout.boutId);
+    const winner = entry?.outcome === 'win' ? red : entry?.outcome === 'loss' ? blue : undefined;
+    return {
+      bout,
+      red,
+      blue,
+      winner,
+      how: entry ? describeMethod(entry.method, entry.round) : '',
+    };
+  });
 }
 
 /** Odds as words. A promoter hears a fight, not a probability. */

@@ -31,7 +31,9 @@ export type NewsKind =
   | 'rivalry'
   | 'streak'
   | 'signing'
-  | 'release';
+  | 'release'
+  /** A card that did not happen. A promoter's own missed date is the case this exists for. */
+  | 'cancellation';
 
 /**
  * How loudly an item should be presented.
@@ -61,7 +63,11 @@ export interface NewsItem {
 export const newsId = (day: GameDay, key: string): NewsId => asId<NewsId>(`news_${day}_${key}`);
 
 /** How a result reads in a sentence. */
-export function describeMethod(method: FinishMethod, round: number, submissionName?: string): string {
+export function describeMethod(
+  method: FinishMethod,
+  round: number,
+  submissionName?: string,
+): string {
   if (method === 'ko') return `by knockout in round ${round}`;
   if (method === 'tko') return `by TKO in round ${round}`;
   if (method === 'doctorStoppage') return `on a doctor's stoppage in round ${round}`;

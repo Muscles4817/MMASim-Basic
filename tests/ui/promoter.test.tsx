@@ -377,6 +377,44 @@ describe('sending the card out', () => {
   });
 });
 
+describe('fight night', () => {
+  /*
+   * The audit's loop break, walked the way a player walks it: a card three months out, the clock
+   * moved a month at a time, and the night has to be where the clock stops — with the run as the
+   * one thing to press — and once it has run it is a result, not a button.
+   */
+  it('stops the clock on the night, runs once, and then reads as results', async () => {
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    await planACard(user);
+
+    await user.click(await screen.findByRole('button', { name: /Fill them in/i }));
+    await user.click(await screen.findByRole('button', { name: /Send every pencilled fight/i }));
+    await waitFor(() => expect(screen.queryAllByText(/Signed/i).length).toBeGreaterThan(0), {
+      timeout: 10000,
+    });
+
+    goTo('#/calendar');
+    for (let i = 0; i < 8; i++) {
+      if (screen.queryByRole('button', { name: /^Run fight night: / })) break;
+      await user.click(await screen.findByRole('button', { name: /^A month$/i }));
+    }
+    // Every advance was a month long and none of them walked past the card.
+    await user.click(await screen.findByRole('button', { name: /^Run fight night: / }));
+
+    // Withdrawals can empty a slot first; the button is still there to press again.
+    for (let i = 0; i < 3; i++) {
+      const run = screen.queryByRole('button', { name: /^Run fight night: / });
+      if (!run) break;
+      await user.click(run);
+    }
+
+    expect(await screen.findByText(/^Results$/i, {}, { timeout: 10000 })).toBeTruthy();
+    expect(screen.getAllByText(/ def\. | vs /).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /Run fight night/i })).toBeNull();
+  }, 60000);
+});
+
 describe('championships', () => {
   it('shows every belt, its holder and the queue behind them', async () => {
     const user = userEvent.setup();

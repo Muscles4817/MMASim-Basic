@@ -5,6 +5,8 @@ import {
   CURRENT_SCHEMA_VERSION,
   SaveCorruptError,
   SaveTooNewError,
+  SaveTooOldError,
+  assertReadableSave,
   migrateCollection,
 } from './migrations.js';
 import type { Entity } from './types.js';
@@ -152,6 +154,27 @@ describe('save integrity', () => {
       rows: JSON.stringify({ schemaVersion: 999, collection: 'rows', rows: [] }),
     });
     expect(() => createRepository<Row>('rows', adapter)).toThrow(SaveTooNewError);
+  });
+
+  it('refuses a save from a version it no longer reads, and says so', () => {
+    // Old saves were allowed to break at the fight-night rework; they must break cleanly.
+    const adapter = createMemoryAdapter({
+      rows: JSON.stringify({ schemaVersion: 1, collection: 'rows', rows: [] }),
+    });
+    expect(() => createRepository<Row>('rows', adapter)).toThrow(SaveTooOldError);
+    expect(() => createRepository<Row>('rows', adapter)).toThrow(/older version/);
+  });
+
+  it('checks the version from the world alone, before anything loads', () => {
+    const envelope = (schemaVersion: number) =>
+      createMemoryAdapter({
+        world: JSON.stringify({ schemaVersion, collection: 'world', rows: [] }),
+      });
+    expect(() => assertReadableSave(envelope(1))).toThrow(SaveTooOldError);
+    expect(() => assertReadableSave(envelope(999))).toThrow(SaveTooNewError);
+    expect(() => assertReadableSave(envelope(CURRENT_SCHEMA_VERSION))).not.toThrow();
+    // A slot that has not been built yet is not too old; it is empty.
+    expect(() => assertReadableSave(createMemoryAdapter({}))).not.toThrow();
   });
 
   it('reports corrupt JSON as a typed error, not a raw parse failure', () => {
