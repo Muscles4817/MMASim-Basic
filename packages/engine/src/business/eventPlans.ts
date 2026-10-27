@@ -171,6 +171,15 @@ export interface PlanOutcome {
   /** Thousands. */
   profit: number;
   buzzDelta: number;
+  /**
+   * Where the money came from and went, as `eventRevenue` settled it. Thousands.
+   *
+   * Copied from the settlement rather than recomputed for display, so the recap reads the
+   * figures the promotion was actually paid even after the economy model changes underneath it.
+   */
+  gate?: number;
+  broadcast?: number;
+  costs?: number;
 }
 
 // --- Building and editing ---------------------------------------------------------------------

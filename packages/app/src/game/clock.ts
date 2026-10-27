@@ -33,7 +33,14 @@ import { advanceWorld, type WorldExclusion } from './world';
 import { getBooking } from './career';
 import { toll } from './contracts';
 import { readInbox, scanForInbox } from './inbox';
-import { bookingsFor, fightNightOn, missPlans, nextCardDay, scanPromoterInbox } from './plans';
+import {
+  bookingsFor,
+  settlePendingAwards,
+  fightNightOn,
+  missPlans,
+  nextCardDay,
+  scanPromoterInbox,
+} from './plans';
 import { graceEnds } from './alerts';
 
 /*
@@ -237,6 +244,10 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
   const promotionId = getWorld(db).playerPromotionId;
   const cardDay = nextCardDay(db, promotionId, start, requestedDay);
   const targetDay = cardDay ?? requestedDay;
+
+  // A night the player left without choosing its bonuses: the matchmaker's picks stand, and are
+  // paid before anything else happens to those fighters.
+  settlePendingAwards(db, getWorld(db).playerPromotionId);
 
   const exclusion = exclusionFor(db, start);
   let day = start;

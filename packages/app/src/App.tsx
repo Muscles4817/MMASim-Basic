@@ -5,6 +5,7 @@ import { useRouter } from './state/router';
 import { Shell } from './shell/Shell';
 import { UpdatePrompt } from './shell/UpdatePrompt';
 import { Alert } from './ui/signals';
+import { ToastProvider } from './ui/toast';
 import { StartScreen } from './screens/StartScreen';
 import { StartFighterScreen } from './screens/StartFighterScreen';
 import { StartPromoterScreen } from './screens/StartPromoterScreen';
@@ -65,7 +66,8 @@ export function App() {
   }, [route.name, playerFighter, world.playerRole, replace]);
 
   return (
-    <>
+    // Toasts sit above every route, so a receipt survives the navigation that usually follows it.
+    <ToastProvider>
       {/* Renders nothing unless a newer build is genuinely waiting. Mounted here rather
           than per-screen so a pending update survives navigation. */}
       <UpdatePrompt />
@@ -88,7 +90,7 @@ export function App() {
         </div>
       )}
       {renderRoute()}
-    </>
+    </ToastProvider>
   );
 
   function renderRoute() {

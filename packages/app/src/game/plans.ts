@@ -33,6 +33,7 @@ import {
   awardBonuses,
   bonusPoolFor,
   buildCard,
+  championshipId,
   clamp,
   createRng,
   describeMethod,
@@ -64,12 +65,14 @@ import {
   DELIVERY_MEMORY,
   type BoutSeed,
   type CardBout,
+  type Championship,
   type CardPosition,
   type CornerAnswer,
   type EventPlan,
   type EventScale,
   type Fighter,
   type FightNight,
+  type FightResult,
   type IntentAppraisal,
   type Manager,
   type MatchIntentId,
@@ -91,6 +94,7 @@ import {
   nextEventNumber,
   runCardBout,
 } from './world';
+import { rememberNight } from './broadcasts';
 import { currentPurse } from './money';
 import { raise, recordOfferOutcome } from './inbox';
 import {
@@ -1462,10 +1466,7 @@ export function replacementsFor(input: {
  * turned down are both *not fights*, and putting them on anyway would make the whole offer
  * system decorative.
  */
-export function runPlan(input: {
-  db: GameDb;
-  plan: EventPlan;
-}): { night: FightNight; profit: number; buzz: number; attendance: number } | undefined {
+export function runPlan(input: { db: GameDb; plan: EventPlan }): NightOutcome | undefined {
   const { db, plan } = input;
   // Once. A card that has run is history, and running it again re-fought every bout on it and
   // paid the gate twice — the screen offered exactly that, because it still read "tonight".
@@ -1537,7 +1538,13 @@ export function runPlan(input: {
     ...plan,
     status: 'run',
     nightId: night.id as string,
-    outcome: { profit: outcome.profit, buzzDelta: outcome.buzz },
+    outcome: {
+      profit: outcome.profit,
+      buzzDelta: outcome.buzz,
+      gate: outcome.revenue.gate,
+      broadcast: outcome.revenue.broadcast,
+      costs: outcome.revenue.costs,
+    },
   });
   return outcome;
 }
@@ -1555,7 +1562,7 @@ function runNight(input: {
   db: GameDb;
   night: FightNight;
   promotion: Promotion;
-}): { night: FightNight; profit: number; buzz: number; attendance: number } | undefined {
+}): NightOutcome | undefined {
   const { db, night, promotion } = input;
   const world = getWorld(db);
   const rng = createRng(`${world.seed}:run:${night.id}`);
@@ -1587,28 +1594,18 @@ function runNight(input: {
     news.push(...outcome.news);
   }
 
+  /*
+   * The bonuses are the promoter's call on their own show.
+   *
+   * The matchmaker still picks — `awardBonuses` reads what happened — but only as a suggestion
+   * held on the night. The recap lets the player confirm or change it, and nothing is paid until
+   * they do (or until the clock next moves, when the suggestion stands; see `settlePendingAwards`).
+   * The pool itself is already in the night's costs, so who gets it changes no figure here.
+   */
   const awards = awardBonuses(
     results.map((r) => ({ boutId: r.boutId, result: r.result!.result })),
     night.bonusPool,
   );
-  const bonusRecipients = new Set<string>([
-    ...awards.performanceOfTheNight.map((f) => f as string),
-    ...(awards.fightOfTheNight
-      ? [
-          night.bouts.find((b) => b.boutId === awards.fightOfTheNight)?.redId as string,
-          night.bouts.find((b) => b.boutId === awards.fightOfTheNight)?.blueId as string,
-        ]
-      : []),
-  ]);
-  for (const id of bonusRecipients) {
-    const fighter = id ? (db.fighters.findById(id) as Fighter | undefined) : undefined;
-    if (!fighter) continue;
-    db.fighters.upsert({
-      ...fighter,
-      bank: Math.round((fighter.bank + awards.perAward) * 10) / 10,
-      lifetimeGross: Math.round((fighter.lifetimeGross + awards.perAward) * 10) / 10,
-    } as Fighter & Entity);
-  }
 
   // Re-read: bouts on this card may have changed a title, and settling against the promotion
   // captured above would silently roll the new champion back.
@@ -1658,9 +1655,50 @@ function runNight(input: {
     ),
   } as Promotion & Entity);
 
-  const ran: FightNight = { ...night, status: 'complete', attendance: revenue.attendance };
+  const ran: FightNight = {
+    ...night,
+    status: 'complete',
+    attendance: revenue.attendance,
+    awards: { ...awards, pending: true },
+  };
   db.events.upsert(ran as FightNight & Entity);
-  appendNews(db, news);
+
+  /*
+   * The player's own night in the sport's feed, marked as theirs, under a headline for the
+   * event itself. Their results were written all along and never seen: the dashboard read the
+   * feed oldest first and stopped at eight.
+   */
+  const main = results.find((r) => r.boutId === night.bouts[0]?.boutId)?.result?.result;
+  const nameOf = (id: string | undefined) => {
+    const fighter = id ? (db.fighters.findById(id) as Fighter | undefined) : undefined;
+    return fighter ? displayName(fighter) : undefined;
+  };
+  appendNews(db, [
+    {
+      id: newsId(night.day, `night:${night.id}`),
+      day: night.day,
+      kind: 'result',
+      weight: 'major',
+      headline: `${night.name}: ${revenue.attendance.toLocaleString()} in ${night.venue.city}`,
+      detail:
+        main && main.winnerId
+          ? `${nameOf(main.winnerId as string)} won the main event ${describeMethod(main.method, main.round)}.`
+          : undefined,
+      fighterIds: night.bouts.flatMap((b) => [b.redId, b.blueId]),
+      promotionId: night.promotionId,
+      involvesPlayer: true,
+    },
+    ...news.map((item) => ({ ...item, involvesPlayer: true })),
+  ]);
+
+  // The tapes, so every bout on the card can be watched back this session.
+  const commentators = db.commentators.findAll();
+  rememberNight({
+    night: ran,
+    results: results.map((r) => r.result!.result as FightResult),
+    commentatorId: commentators.length > 0 ? rng.fork('booth').pick(commentators).id : undefined,
+    nameOf,
+  });
   db.save();
 
   return {
@@ -1668,7 +1706,84 @@ function runNight(input: {
     profit: settlement.revenue.profit,
     buzz: settlement.buzzDelta,
     attendance: revenue.attendance,
+    revenue: settlement.revenue,
   };
+}
+
+/** What running a card returns: the night, and the money and buzz it settled. */
+export interface NightOutcome {
+  night: FightNight;
+  profit: number;
+  buzz: number;
+  attendance: number;
+  revenue: { gate: number; broadcast: number; costs: number; profit: number };
+}
+
+// --- Fight and Performance of the Night ------------------------------------------------------
+
+/** The player's choice: one bout for Fight of the Night, up to two winners for Performance. */
+export interface AwardPicks {
+  fightOfTheNight?: string;
+  performanceOfTheNight: readonly string[];
+}
+
+/**
+ * Give out the night's bonuses, once.
+ *
+ * Pays each recipient from the pool — a quarter each, two for the fight and up to two for
+ * performances, which is how `awardBonuses` has always split it — and writes the award onto
+ * their record line for that bout, which is what lets the rest of the game know it happened.
+ */
+export function confirmAwards(db: GameDb, nightId: string, picks: AwardPicks): boolean {
+  const night = db.events.findById(nightId) as FightNight | undefined;
+  if (!night?.awards?.pending) return false;
+  const { perAward } = night.awards;
+
+  const pay = (fighterId: string, boutId: string, bonus: 'fight' | 'performance') => {
+    const fighter = db.fighters.findById(fighterId) as Fighter | undefined;
+    if (!fighter) return;
+    db.fighters.upsert({
+      ...fighter,
+      bank: Math.round((fighter.bank + perAward) * 10) / 10,
+      lifetimeGross: Math.round((fighter.lifetimeGross + perAward) * 10) / 10,
+      record: fighter.record.map((e) => (e.boutId === boutId ? { ...e, bonus } : e)),
+    } as Fighter & Entity);
+  };
+
+  const fotn = night.bouts.find((b) => b.boutId === picks.fightOfTheNight);
+  if (fotn) {
+    pay(fotn.redId as string, fotn.boutId, 'fight');
+    pay(fotn.blueId as string, fotn.boutId, 'fight');
+  }
+  const performances = picks.performanceOfTheNight.slice(0, 2);
+  for (const id of performances) {
+    const bout = night.bouts.find((b) => b.redId === id || b.blueId === id);
+    if (bout) pay(id, bout.boutId, 'performance');
+  }
+
+  db.events.upsert({
+    ...night,
+    awards: {
+      fightOfTheNight: fotn?.boutId,
+      performanceOfTheNight: performances as never,
+      perAward,
+    },
+  } as FightNight & Entity);
+  db.save();
+  return true;
+}
+
+/** Let the matchmaker's suggestion stand on any night the player left without choosing. */
+export function settlePendingAwards(db: GameDb, promotionId: string | undefined): void {
+  for (const plan of allPlans(db)) {
+    if (plan.promotionId !== promotionId || plan.status !== 'run' || !plan.nightId) continue;
+    const night = db.events.findById(plan.nightId) as FightNight | undefined;
+    if (!night?.awards?.pending) continue;
+    confirmAwards(db, plan.nightId, {
+      fightOfTheNight: night.awards.fightOfTheNight,
+      performanceOfTheNight: night.awards.performanceOfTheNight as readonly string[],
+    });
+  }
 }
 
 /** One bout of a night that has happened, as the card reads it back the next morning. */
@@ -1680,6 +1795,11 @@ export interface BoutResult {
   winner?: Fighter;
   /** "by knockout in round 2", "by unanimous decision". Empty when the result is not found. */
   how: string;
+  /** The belt moment, on a title fight: a new champion, or one who kept it. */
+  title?: 'won' | 'defended';
+  /** The night's bonuses this bout earned, once they are given out (or suggested). */
+  fightOfTheNight?: boolean;
+  performance?: readonly string[];
 }
 
 /**
@@ -1694,19 +1814,177 @@ export function nightResults(db: GameDb, plan: EventPlan): BoutResult[] {
     : undefined;
   if (!night) return [];
 
+  const performers = new Set((night.awards?.performanceOfTheNight ?? []) as readonly string[]);
+
   return night.bouts.map((bout) => {
     const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
     const blue = db.fighters.findById(bout.blueId as string) as Fighter | undefined;
     const entry = red?.record.find((e) => e.boutId === bout.boutId);
     const winner = entry?.outcome === 'win' ? red : entry?.outcome === 'loss' ? blue : undefined;
+
+    /*
+     * Read off the belt's own lineage: a reign that began on this night, held by this winner,
+     * is a new champion; a title fight won by anybody else's reign is a defence.
+     */
+    let title: BoutResult['title'];
+    if (bout.isTitleFight && winner) {
+      const belt = db.championships.findById(championshipId(night.promotionId, bout.divisionId)) as
+        Championship | undefined;
+      const crowned = belt?.lineage.some(
+        (r) => r.fighterId === winner.id && r.wonDay === night.day,
+      );
+      title = crowned ? 'won' : 'defended';
+    }
+
     return {
       bout,
       red,
       blue,
       winner,
       how: entry ? describeMethod(entry.method, entry.round) : '',
+      title,
+      fightOfTheNight: night.awards?.fightOfTheNight === bout.boutId,
+      performance: [bout.redId as string, bout.blueId as string].filter((id) => performers.has(id)),
     };
   });
+}
+
+// --- After the night: the callouts ------------------------------------------------------------
+
+/** A winner asking for a fight, and who they are asking for. */
+export interface Callout {
+  winnerId: string;
+  targetId: string;
+  divisionId: string;
+  /** One line in the winner's voice, for the recap. */
+  line: string;
+  /** Whether the target holds the belt, which is what makes it the call it is. */
+  forTheBelt: boolean;
+}
+
+/**
+ * Two or three post-fight callouts from the top of the card.
+ *
+ * The moment a promoter's next card is born in: a winner on the microphone naming who they want.
+ * Each comes from one of the night's three biggest bouts and names either the division's
+ * champion (when the winner is not it) or the best-ranked fighter in the division who is free —
+ * not booked, not tonight's opponent, and not the winner themselves. Templated and deliberately
+ * plain; a voice for these is C3's job.
+ */
+export function calloutsFor(db: GameDb, plan: EventPlan, limit = 3): Callout[] {
+  const promotion = db.promotions.findById(plan.promotionId as string) as Promotion | undefined;
+  if (!promotion) return [];
+  const day = getWorld(db).day;
+  const booked = bookingsFor(db, promotion.id as string);
+  const fighters = db.fighters.findAll() as Fighter[];
+  const promotions = db.promotions.findAll() as unknown as Promotion[];
+  const out: Callout[] = [];
+  const named = new Set<string>();
+
+  for (const row of nightResults(db, plan).slice(0, limit)) {
+    const winner = row.winner;
+    if (!winner || winner.retiredDay !== undefined) continue;
+    const loserId = winner.id === row.red?.id ? row.blue?.id : row.red?.id;
+    const divisionId = row.bout.divisionId as string;
+    const champion = promotion.champions[divisionId as never] as string | undefined;
+
+    const free = (id: string) =>
+      id !== (winner.id as string) && id !== loserId && !booked.has(id) && !named.has(id);
+
+    let targetId: string | undefined;
+    let forTheBelt = false;
+    if (champion && champion !== winner.id && free(champion)) {
+      targetId = champion;
+      forTheBelt = true;
+    } else {
+      const ranked = rankDivision(
+        fighters,
+        divisionId as never,
+        promotion.id,
+        day,
+        champion as never,
+        promotions,
+      );
+      targetId = ranked
+        .map((r) => r.fighter)
+        .find((f) => f.promotionId === promotion.id && isActive(f, day) && free(f.id as string))
+        ?.id as string | undefined;
+    }
+    if (!targetId) continue;
+
+    const target = db.fighters.findById(targetId) as Fighter | undefined;
+    if (!target) continue;
+    named.add(targetId);
+    out.push({
+      winnerId: winner.id as string,
+      targetId,
+      divisionId,
+      forTheBelt,
+      line: forTheBelt
+        ? `${displayName(winner)}: "${target.lastName}, that belt is mine. Give me the fight."`
+        : row.title === 'won' || champion === winner.id
+          ? `${displayName(winner)}: "Who's next? ${target.lastName} — you're next."`
+          : `${displayName(winner)}: "I want ${target.lastName}. Make it happen."`,
+    });
+  }
+  return out;
+}
+
+/**
+ * Put a callout on the next card with room for it, as a pencilled-in draft.
+ *
+ * Nothing is offered: the player still sends it, which is the whole rule of the planner. The
+ * card chosen is the soonest live one at least `MINIMUM_LEAD_DAYS` out on which neither fighter
+ * is blocked, in its highest empty slot — the main event first, because a callout worth taking
+ * is usually a headline.
+ */
+export function pencilCallout(
+  db: GameDb,
+  callout: Callout,
+): { plan: EventPlan; slotId: string } | { reason: string } {
+  const world = getWorld(db);
+  const promotion = db.promotions.findById(world.playerPromotionId as string) as
+    Promotion | undefined;
+  if (!promotion) return { reason: 'No promotion.' };
+  const red = db.fighters.findById(callout.winnerId) as Fighter | undefined;
+  const blue = db.fighters.findById(callout.targetId) as Fighter | undefined;
+  if (!red || !blue) return { reason: 'One of them is gone.' };
+
+  const ctx = promoterContext({ db, promotion, day: world.day });
+  const order: readonly CardPosition[] = ['mainEvent', 'coMain', 'mainCard', 'prelim'];
+  const candidates = plansFor(db, promotion.id as string).filter(
+    (p) => p.day >= world.day + MINIMUM_LEAD_DAYS,
+  );
+
+  for (const plan of candidates) {
+    const slot = order
+      .flatMap((position) => plan.slots.filter((s) => s.position === position))
+      .find((s) => !s.bout);
+    if (!slot) continue;
+    const blocked =
+      blockerFor({ ctx, fighter: red, plan, ignoreSlotId: slot.id }) ??
+      blockerFor({ ctx, fighter: blue, plan, ignoreSlotId: slot.id });
+    if (blocked) continue;
+
+    const next = savePlan(
+      db,
+      placeBout({
+        plan,
+        slotId: slot.id,
+        redId: callout.winnerId,
+        blueId: callout.targetId,
+        divisionId: callout.divisionId,
+      }),
+    );
+    return { plan: next, slotId: slot.id };
+  }
+
+  return {
+    reason:
+      candidates.length === 0
+        ? 'There is no card far enough out to put it on. Plan one first.'
+        : 'No card coming up has room for it with both of them cleared.',
+  };
 }
 
 /** Odds as words. A promoter hears a fight, not a probability. */

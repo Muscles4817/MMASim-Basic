@@ -84,6 +84,14 @@ export interface FightNight {
    * existed has none.
    */
   attendance?: number;
+  /**
+   * Fight and Performance of the Night, as given out.
+   *
+   * On the night itself rather than only in the purses they paid, so a card read back later can
+   * say who earned them. `pending` while a promoter has not yet confirmed the matchmaker's
+   * suggestion — the pool is held until they do, or until the clock next moves.
+   */
+  awards?: BonusAwards & { pending?: boolean };
 }
 
 export const eventId = (promotionId: PromotionId, day: GameDay): EventId =>
@@ -437,7 +445,7 @@ export function eventRevenue(input: {
 /** Revenue points pay out on the *event*, which is why a promotion needs a platform. */
 export function revenueShareFor(points: number, revenue: EventRevenue): number {
   if (points <= 0) return 0;
-  return Math.round(((revenue.gate + revenue.broadcast) * (points / 100)) * 10) / 10;
+  return Math.round((revenue.gate + revenue.broadcast) * (points / 100) * 10) / 10;
 }
 
 // --- Naming ------------------------------------------------------------------------------------
@@ -638,8 +646,7 @@ export function settleNight(input: {
    */
   const missRatio = (delivered - baseline) / Math.max(1, baseline);
   const stickiness = 0.6 + (promotion.prestige / 100) * 0.8;
-  const buzzDelta =
-    Math.round(clamp(missRatio / stickiness, -1, 1) * MAX_BUZZ_SWING * 10) / 10;
+  const buzzDelta = Math.round(clamp(missRatio / stickiness, -1, 1) * MAX_BUZZ_SWING * 10) / 10;
 
   return {
     revenue,
