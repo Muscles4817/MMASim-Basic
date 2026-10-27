@@ -156,10 +156,10 @@ week, 4 fighters as people, 5 development over time.
 | B0 Generated names (content)    | 1     | B           | Done                | #48 |
 | C1 Identity on the page         | 4     | C           | Done                | #49 |
 | B1 Economy and buzz             | 2     | B           | Changes requested   | #56 |
-| B2 Broadcaster and owner        | 2     | B           | In review           | #60 |
+| B2 Broadcaster and owner        | 2     | B           | Changes requested   | #60 |
 | B3 Prestige and tiers           | 2     | B           | In progress         |     |
 | A3 Fight-night show and recap   | 3     | A           | Done                | #54 |
-| A4 Matchmaking UX               | 3     | A           | Changes requested   | #58 |
+| A4 Matchmaking UX               | 3     | A           | Done                | #58 |
 | A5 Fight week                   | 3     | A           | In progress         |     |
 | A6 Onboarding and readability   | 1/3   | A           | Built, PR after #58 |     |
 | C2 Star power surfaced          | 4     | C           | Done                | #51 |
