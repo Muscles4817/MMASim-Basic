@@ -97,6 +97,10 @@ import {
   hashSeed,
   simulateFight,
   streakNews,
+  nicknameNews,
+  earnedNickname,
+  nicknamesTaken,
+  uniqueNickname,
   trimFeed,
   type BoutSeed,
   type CardBout,
@@ -1227,6 +1231,24 @@ export function runCardBout(ctx: {
         : undefined;
   const loser = winner ? (winner.id === red.id ? developed.blue : developed.red) : undefined;
 
+  // A highlight finish can earn a fighter without a nickname one. Doc 34 C1.
+  const lastBout = winner?.record[winner.record.length - 1];
+  const earned =
+    winner && lastBout?.boutId === boutId
+      ? earnedNickname(winner, lastBout, rng.fork(`nickname:${winner.id}`))
+      : undefined;
+  // Never one somebody in the division is already known by.
+  const nickname =
+    winner && earned
+      ? uniqueNickname(
+          earned,
+          winner.id as string,
+          nicknamesTaken(db.fighters.findAll() as Fighter[], winner.divisionId),
+        )
+      : undefined;
+  if (winner && nickname)
+    developed[winner.id === red.id ? 'red' : 'blue'] = { ...winner, nickname };
+
   const item = bulk
     ? undefined
     : fightNews({
@@ -1248,6 +1270,18 @@ export function runCardBout(ctx: {
         titleChangedHands,
       });
   if (item) news.push(item);
+  if (winner && nickname && !bulk) {
+    news.push(
+      nicknameNews({
+        day,
+        fighterId: winner.id,
+        name: displayName(winner),
+        nickname,
+        divisionId: winner.divisionId,
+        promotionId: promotion.id,
+      }),
+    );
+  }
 
   if (winner && !bulk) {
     const streak = streakNews({
@@ -2309,9 +2343,19 @@ function replenish(
        */
       const rooms = db.gyms.findAll() as unknown as Gym[];
       const room = rooms.length > 0 ? genRng.pick(rooms) : undefined;
-      const placed: Fighter = room
+      const located: Fighter = room
         ? { ...born, gymId: room.id, headCoachId: room.headCoachId }
         : born;
+      // A debutant's nickname, kept only if nobody in the division already answers to it.
+      const unique =
+        located.nickname &&
+        uniqueNickname(
+          located.nickname,
+          located.id as string,
+          nicknamesTaken(db.fighters.findAll() as Fighter[], located.divisionId),
+        );
+      const placed: Fighter =
+        located.nickname === unique ? located : { ...located, nickname: unique || undefined };
 
       db.fighters.upsert(placed as Fighter & Entity);
       news.push(

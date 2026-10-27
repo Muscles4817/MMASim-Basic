@@ -23,6 +23,7 @@ import type { Personality } from '../domain/personality.js';
 import { PERSONALITY_AXES } from '../domain/personality.js';
 import {
   ALL_TRAITS,
+  TRAITS,
   findTraitConflicts,
   type AffinityAttribute,
   type TraitDef,
@@ -38,6 +39,8 @@ import {
   type Naturals,
 } from '../ratings/attributes.js';
 import { generateName } from './names.js';
+import { rollNickname } from './nicknames.js';
+import { hometownOf } from './identity.js';
 import {
   aptitudeLeanFor,
   bodyPriorFor,
@@ -54,7 +57,9 @@ import {
   walkingWeightLbs,
   type Body,
 } from './body.js';
+import { displayBand, type BandContext } from '../ratings/displayBand.js';
 import {
+  ELITE_LIFT,
   PHYSICAL_SCALE_KEYS,
   expectedPhysical,
   medianRatingAtMass,
@@ -503,6 +508,39 @@ export function traitReferenceFor(
 }
 
 /**
+ * Whether the fighter's own ratings say the opposite of what a trait claims.
+ *
+ * `traitFit`'s floor keeps an unlikely trait *possible*, on purpose — and the audit found what that
+ * produced at the far end: a Cardio Machine whose cardio the same page labels a Liability, and a
+ * Glass Cannon with a chin rated very good. Unlikely is texture; flatly contradicted is a bug the
+ * player can see, because the trait and the band sit on the same screen.
+ *
+ * So the test is the band the page shows, not a distance from a pivot. A trait that leans on an
+ * attribute (weight ≥ 0.5) is refused when that attribute reads Liability or worse; one that leans
+ * against it is refused when it reads Very good or better. Anything in between stays a weight —
+ * an Iron Chin on a below-average chin is the texture `TRAIT_FIT_FLOOR` exists to keep, and the
+ * trait tests above hold it to that.
+ */
+const CONTRADICTION_WEIGHT = 0.5;
+const LIABILITY: ReadonlySet<string> = new Set(['liability', 'absent']);
+const STRENGTH: ReadonlySet<string> = new Set(['veryGood', 'elite', 'worldBest', 'allTime']);
+
+export function traitContradicts(
+  trait: TraitDef,
+  attributes: Attributes,
+  context?: BandContext,
+): boolean {
+  if (!trait.affinity) return false;
+  return (Object.entries(trait.affinity) as [AffinityAttribute, number][]).some(([key, weight]) => {
+    const band = displayBand(key, attributes[key], context).key;
+    return (
+      (weight >= CONTRADICTION_WEIGHT && LIABILITY.has(band)) ||
+      (weight <= -CONTRADICTION_WEIGHT && STRENGTH.has(band))
+    );
+  });
+}
+
+/**
  * Roll traits, refusing any combination that contradicts itself.
  *
  * Weighted by `traitFit` since docs/19 phase 3. The uniform draw this replaces gave every fighter
@@ -530,6 +568,34 @@ export function generateTraits(
     traits.push(candidate);
   }
   return traits;
+}
+
+/**
+ * Swap out any trait the fighter's own ratings flatly contradict. See `traitContradicts`.
+ *
+ * A separate pass on its own forked stream rather than a filter inside `generateTraits`, on
+ * purpose. Filtering the pool there changed which trait *every* weighted draw landed on, and so
+ * every draw after it — a whole-world reshuffle for the sake of the few fighters with a Cardio
+ * Machine on a Liability engine. Done afterwards, the main stream is exactly what it was and only
+ * the fighters who drew a contradiction come out any different.
+ */
+export function withoutContradictions(
+  traits: readonly TraitId[],
+  rng: Rng,
+  attributes: Attributes,
+  reference?: Readonly<Partial<Record<AttributeKey, number>>>,
+  context?: BandContext,
+): TraitId[] {
+  const kept = traits.filter((id) => !traitContradicts(TRAITS[id], attributes, context));
+  if (kept.length === traits.length) return [...traits];
+  const pool = ALL_TRAITS.filter((t) => !t.acquirable && !traitContradicts(t, attributes, context));
+  for (let attempt = 0; attempt < 30 && kept.length < traits.length; attempt++) {
+    const candidate = rng.pickWeighted(pool, (t) => traitFit(t, attributes, reference)).id;
+    if (kept.includes(candidate) || traits.includes(candidate)) continue;
+    if (findTraitConflicts([...kept, candidate]).length > 0) continue;
+    kept.push(candidate);
+  }
+  return kept;
 }
 
 /**
@@ -706,8 +772,9 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
    * and combinations like a Hiroshi Kowalski from Nigeria. `generateName` reads both.
    */
   const named = generateName(rng, options.sex, options.nationality);
+  const reference = traitReferenceFor(options.divisionId, options.sex);
 
-  return {
+  const fighter: Fighter = {
     id: asFighterId(options.id),
     firstName: options.firstName ?? named.firstName,
     lastName: options.lastName ?? named.lastName,
@@ -735,11 +802,12 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     ),
     potential,
     personality: generatePersonality(rng),
-    traits: generateTraits(
-      rng,
-      rng.int(1, 3),
+    traits: withoutContradictions(
+      generateTraits(rng, rng.int(1, 3), attributes, reference),
+      rng.fork(`traits:${options.id}`),
       attributes,
-      traitReferenceFor(options.divisionId, options.sex),
+      reference,
+      { divisionId: options.divisionId as string, sex: options.sex, eliteLift: ELITE_LIFT },
     ),
 
     condition: freshCondition(),
@@ -778,4 +846,26 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
       1,
     ),
   };
+
+  /*
+   * A nickname for some of them. Forked, for the same reason as the background: it draws a variable
+   * number of times, and the stream every later draw reads must not depend on whether this fighter
+   * happened to arrive with a name. Keyed by id too, because a fork reads the stream's *seed* rather
+   * than its position, and a caller that generates a whole roster from one stream would otherwise
+   * hand every fighter in it the same roll.
+   */
+  const nickname = rollNickname(rng.fork(`nickname:${options.id}`), {
+    attributes,
+    reference,
+    background,
+    heightInches: body.heightInches,
+    reachInches: body.reachInches,
+    muscleIndex: fighter.physique.muscleIndex,
+    stance: fighter.stance,
+    hometown: hometownOf(fighter),
+    sex: options.sex,
+    age,
+    tier,
+  });
+  return nickname ? { ...fighter, nickname } : fighter;
 }

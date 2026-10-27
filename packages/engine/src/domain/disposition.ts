@@ -141,7 +141,13 @@ export function dispositionsOf(fighter: Fighter, limit = 3): Disposition[] {
  * all — the information existed as ambition, a rank and a streak, and nobody had joined them up.
  */
 export type FighterWant =
-  'titleShot' | 'rankedOpponent' | 'activity' | 'money' | 'anyWin' | 'stayBusy';
+  | 'titleShot'
+  | 'worthyChallenger'
+  | 'rankedOpponent'
+  | 'activity'
+  | 'money'
+  | 'anyWin'
+  | 'stayBusy';
 
 export interface WantRead {
   id: FighterWant;
@@ -192,6 +198,21 @@ export function wantsOf(input: {
       id: 'anyWin',
       label: 'A win they can get',
       detail: 'On a bad run. A hard fight now probably ends them here.',
+    };
+  }
+
+  /*
+   * A champion is rank 0, and rank 0 used to fall through every branch above to "Somebody ranked" —
+   * telling the promoter the best fighter in the division wanted to fight his way up it. What a
+   * champion wants is a defence that means something, and the ambitious ones want it loudly.
+   */
+  if (rank === 0) {
+    return {
+      id: 'worthyChallenger',
+      label: 'A worthy challenger',
+      detail: ambitious
+        ? 'Holds the belt and wants the defence that proves it — not a payday against a name nobody knows.'
+        : 'Holds the belt. Wants defences that are worth the risk and paid like it.',
     };
   }
 

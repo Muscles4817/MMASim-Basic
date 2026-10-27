@@ -14,6 +14,9 @@ import {
   availabilityOf,
   careerArc,
   conditionRead,
+  scoutedAttributes,
+  scoutedRating,
+  scoutingMargin,
   scoutingRead,
   valueRead,
 } from './fighterRead.js';
@@ -21,6 +24,8 @@ import { makeFighter, TEST_DAY } from '../testing/fixtures.js';
 import { uniformAttributes } from '../ratings/attributes.js';
 import type { Fighter, RecordSummary } from '../domain/fighter.js';
 import { emptyRecordSummary } from '../domain/fighter.js';
+import { FIGHT_THROUGH_WEEKS, type Injury } from '../health/injuries.js';
+import type { InjuryId } from '../core/ids.js';
 
 const summary = (o: Partial<RecordSummary> = {}): RecordSummary => ({
   ...emptyRecordSummary(),
@@ -164,7 +169,42 @@ describe('availability', () => {
   });
 });
 
+describe('availability and injuries (doc 34 C1)', () => {
+  const hurt = (weeks: number): Fighter => ({
+    ...makeFighter(),
+    injuries: [
+      {
+        id: 'inj' as InjuryId,
+        type: 'knee',
+        day: 90,
+        healedDay: 100 + weeks * 7,
+        severity: 0.5,
+        source: 'camp',
+      } satisfies Injury,
+    ],
+  });
+
+  it('is not "Ready" while carrying an injury that stops them fighting', () => {
+    const read = availabilityOf({ fighter: hurt(FIGHT_THROUGH_WEEKS + 4), day: 100 });
+    expect(read.state).toBe('injured');
+    expect(read.detail).toMatch(/4 weeks/);
+    expect(read.readyOn).toBe(100 + 4 * 7);
+  });
+
+  it('says so when they can fight but are hurt, rather than reading as fit', () => {
+    // The audit's pair: "Ready" next to "Currently injured — 8 weeks".
+    const read = availabilityOf({ fighter: hurt(FIGHT_THROUGH_WEEKS), day: 100 });
+    expect(read.state).toBe('carrying');
+    expect(read.label).not.toBe('Ready');
+  });
+});
+
 describe('condition', () => {
+  it('does not use the freshness word for a career read', () => {
+    // "Recovering" beside "Fresh" read as a contradiction; one is this week, the other a career.
+    expect(conditionRead(makeFighter({ age: 24 }), TEST_DAY).label).not.toMatch(/fresh/i);
+  });
+
   it('calls a fresh young fighter fresh', () => {
     expect(conditionRead(makeFighter({ age: 24 }), TEST_DAY).tone).toBe('good');
   });
@@ -188,5 +228,52 @@ describe('value for money', () => {
 
   it('does not price a fighter nobody has valued yet', () => {
     expect(valueRead({ paid: 20, worth: 0 }).tone).toBe('neutral');
+  });
+});
+
+describe('ability against standing (doc 34 C1)', () => {
+  it('never tells a champion they are not troubling the ranked fighters', () => {
+    const read = abilityRead(uniformAttributes(45), { isChampion: true, rank: 0 });
+    expect(read.klass).toBe('roster');
+    expect(read.blurb).not.toMatch(/not troubling/i);
+    expect(read.blurb).toMatch(/belt/i);
+  });
+
+  it('reads a ranked fighter at roster level as ranked in a thin division', () => {
+    expect(abilityRead(uniformAttributes(45), { rank: 4 }).blurb).toMatch(/ranked here/i);
+    // Unranked, the band's own sentence is true and stays.
+    expect(abilityRead(uniformAttributes(45)).blurb).toMatch(/not troubling/i);
+    expect(abilityRead(uniformAttributes(45), { rank: 40 }).blurb).toMatch(/not troubling/i);
+  });
+});
+
+describe('scouted ratings (doc 29 § 8)', () => {
+  const fighter = makeFighter({ id: 'scouted_one' });
+
+  it('is the same every time it is read', () => {
+    expect(scoutedRating(fighter, 'power')).toEqual(scoutedRating(fighter, 'power'));
+  });
+
+  it('is a range around an estimate, and the estimate is not always the truth', () => {
+    const misses = (['power', 'speed', 'cardio', 'wrestling', 'fightIq'] as const).filter((key) => {
+      const read = scoutedRating(fighter, key);
+      expect(read.low).toBeLessThanOrEqual(read.estimate);
+      expect(read.high).toBeGreaterThanOrEqual(read.estimate);
+      return read.estimate !== fighter.attributes[key];
+    });
+    expect(misses.length).toBeGreaterThan(0);
+  });
+
+  it('tightens as the tape builds up', () => {
+    expect(scoutingMargin(0)).toBeGreaterThan(scoutingMargin(20));
+    const veteran = withRecord(fighter, { wins: 25, losses: 5 });
+    const read = scoutedRating(veteran, 'power');
+    expect(read.high - read.low).toBe(2 * scoutingMargin(30));
+    expect(Math.abs(read.estimate - veteran.attributes.power)).toBeLessThanOrEqual(3);
+  });
+
+  it('feeds everything computed from the ratings', () => {
+    const all = scoutedAttributes(fighter);
+    expect(all.power).toBe(scoutedRating(fighter, 'power').estimate);
   });
 });

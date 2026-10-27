@@ -37,6 +37,7 @@ import {
   type TitleShotVerdict,
   type TrainingFocus,
   isPhysical,
+  localRoom,
   ATTRIBUTE_META,
   activeInjuries,
   weeksUntilFit,
@@ -47,6 +48,31 @@ import { advanceWorld } from './world';
 import { advanceTo } from './clock';
 import { campCostFor, payForCamp } from './money';
 import { toll } from './contracts';
+
+/**
+ * The room a fighter trains in and who runs it, as the fighter page names them.
+ *
+ * The stored gym and head coach when the fighter has them; otherwise the generated fighter's local
+ * room (`localRoom`), which is the engine's no-gym default given a name and costs nothing to store.
+ * `local` says which, so a screen can tell a named seed gym from a club round the corner.
+ */
+export interface TrainingRoom {
+  gym?: Gym;
+  coach?: Coach;
+  local: boolean;
+}
+
+export function trainingRoomOf(db: GameDb, fighter: Fighter): TrainingRoom {
+  const local = localRoom(fighter);
+  if (local) return { ...local, local: true };
+  return {
+    gym: fighter.gymId ? (db.gyms.findById(fighter.gymId) as Gym | undefined) : undefined,
+    coach: fighter.headCoachId
+      ? (db.coaches.findById(fighter.headCoachId) as Coach | undefined)
+      : undefined,
+    local: false,
+  };
+}
 
 /** How much an existing injury is blunting a camp, 0-1. Surfaced on the training screen. */
 export function currentCampImpairment(fighter: Fighter, day: number): number {

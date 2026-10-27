@@ -34,7 +34,8 @@ export type NewsKind =
   | 'signing'
   | 'release'
   /** A card that did not happen. A promoter's own missed date is the case this exists for. */
-  | 'cancellation';
+  | 'cancellation'
+  | 'nickname';
 
 /**
  * How loudly an item should be presented.
@@ -275,6 +276,35 @@ export function signingNews(input: {
     fighterIds: [input.fighterId],
     divisionId: input.divisionId,
     promotionId: input.promotionId,
+  };
+}
+
+/**
+ * A fighter picked up a name. See `progression/nicknames.ts:earnedNickname`.
+ *
+ * Minor, because it is texture rather than news — but it is the moment the name arrives, and a
+ * nickname that simply appears on a roster one day reads as a data change rather than a story.
+ */
+export function nicknameNews(input: {
+  day: GameDay;
+  fighterId: FighterId;
+  /** The name as it was, without the nickname. */
+  name: string;
+  nickname: string;
+  divisionId: DivisionId;
+  promotionId?: PromotionId;
+  involvesPlayer?: boolean;
+}): NewsItem {
+  return {
+    id: newsId(input.day, `nickname_${input.fighterId}`),
+    day: input.day,
+    kind: 'nickname',
+    weight: 'minor',
+    headline: `After a finish like that, they are calling ${input.name} "${input.nickname}".`,
+    fighterIds: [input.fighterId],
+    divisionId: input.divisionId,
+    promotionId: input.promotionId,
+    involvesPlayer: input.involvesPlayer,
   };
 }
 

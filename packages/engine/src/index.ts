@@ -64,6 +64,8 @@ export * from './progression/background.js';
 export * from './progression/body.js';
 export * from './progression/generation.js';
 export * from './progression/names.js';
+export * from './progression/nicknames.js';
+export * from './progression/identity.js';
 export * from './progression/ringRust.js';
 export * from './progression/development.js';
 export * from './progression/trainingPlan.js';

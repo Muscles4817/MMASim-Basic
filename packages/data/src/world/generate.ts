@@ -33,6 +33,7 @@ import { createPromotionNamer, type PyramidRung } from './promotionNames.js';
 import {
   DIVISIONS,
   asFighterId,
+  dedupeNicknames,
   asPromotionId,
   championshipId,
   type Championship,
@@ -429,13 +430,16 @@ export function generatePyramid(options: GenerateOptions = {}): GameDb {
   }
   db.championships.upsertMany(titles as unknown as (Championship & Entity)[]);
 
-  const fighters = buildDepthFighters({
-    targets,
-    existing: [],
-    day,
-    seed: `${seed}:depth`,
-    ageForwardYears: options.ageForwardYears,
-  }).map((f, i) => ({ ...f, id: asFighterId(`${f.id}_${i}`) }));
+  // One of each nickname per division: generation rolls each fighter alone and cannot know.
+  const fighters = dedupeNicknames(
+    buildDepthFighters({
+      targets,
+      existing: [],
+      day,
+      seed: `${seed}:depth`,
+      ageForwardYears: options.ageForwardYears,
+    }).map((f, i) => ({ ...f, id: asFighterId(`${f.id}_${i}`) })),
+  );
   db.fighters.upsertMany(fighters as (Fighter & Entity)[]);
 
   const divisionTargets: Record<string, number> = {};

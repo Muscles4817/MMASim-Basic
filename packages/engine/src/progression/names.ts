@@ -569,12 +569,27 @@ export function generateName(
 ): { firstName: string; lastName: string; nationality: string } {
   const pool = (nationality ? poolFor(nationality) : undefined) ?? pickNationality(rng);
   const given = sex === 'female' ? pool.female : pool.male;
+  const firstName = rng.pick(given);
+  const drawn = rng.pick(pool.surnames);
 
   return {
-    firstName: rng.pick(given),
-    lastName: rng.pick(pool.surnames),
+    firstName,
+    lastName: drawn === firstName ? nextSurname(pool, drawn) : drawn,
     // The requested nationality wins even when there is no pool for it, so a caller can seed a
     // country this table does not cover without the fighter being silently relocated.
     nationality: nationality ?? pool.nationality,
   };
+}
+
+/**
+ * The neighbouring surname, for the one draw that would otherwise read as a typo.
+ *
+ * Several pools carry a word as both a given name and a surname (`Preston`, `Marcus`), so two
+ * independent draws produced a Preston Preston about once in a thousand fighters — rare, and the
+ * first thing anybody notices on a roster screen. Stepping to the neighbour rather than redrawing
+ * keeps the stream's draw count fixed, so no other fighter in the world changes because of it.
+ */
+function nextSurname(pool: NamePool, drawn: string): string {
+  const at = pool.surnames.indexOf(drawn);
+  return pool.surnames[(at + 1) % pool.surnames.length]!;
 }

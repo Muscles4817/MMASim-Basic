@@ -25,13 +25,16 @@
  * stored read would be wrong the day after the fighter changed.
  */
 
-import { clamp, clamp01 } from '../core/math.js';
+import { clamp, clamp01, remap } from '../core/math.js';
+import { createRng } from '../core/rng.js';
 import type { GameDay } from '../core/clock.js';
 import type { Fighter } from '../domain/fighter.js';
 import { fighterAge } from '../domain/fighter.js';
 import { ATTRIBUTE_META, overallRating, ratingBand } from '../ratings/attributes.js';
 import type { AttributeKey, Attributes } from '../ratings/attributes.js';
 import { TRAUMA_CONCERN, TRAUMA_MEDICAL, WEAR_CONCERN } from '../progression/retirement.js';
+import { RANKED_DEPTH } from './ladder.js';
+import { FIGHT_THROUGH_WEEKS, canFightOn, weeksUntilFit } from '../health/injuries.js';
 
 // --- Ability, as a class rather than a number --------------------------------------------------
 
@@ -107,7 +110,36 @@ const ABILITY_BANDS: readonly {
   },
 ];
 
-export function abilityRead(attributes: Attributes): AbilityRead {
+/**
+ * Where the fighter actually stands in their own promotion, for `abilityRead`.
+ *
+ * The bands are absolute — a contender-level fighter is the same fighter at every promotion — and
+ * their sentences were written as if everybody fought at the top of the sport. So a regional
+ * champion read "Roster level: not troubling the ranked fighters" on a page that also said they
+ * held the belt. Both halves were true; the sentence was not.
+ */
+export interface AbilityStanding {
+  isChampion?: boolean;
+  /** Ladder position. Only the first `RANKED_DEPTH` count as ranked, as on the rankings screen. */
+  rank?: number;
+}
+
+/** The bands whose sentence makes a claim about the ranked fighters, which a ranked fighter falsifies. */
+const RANK_CLAIMING: ReadonlySet<AbilityClass> = new Set(['roster', 'developmental', 'outclassed']);
+
+function standingBlurb(band: (typeof ABILITY_BANDS)[number], standing: AbilityStanding) {
+  const level = band.label.toLowerCase();
+  if (standing.isChampion && band.klass !== 'championship' && band.klass !== 'contender') {
+    return `Holds the belt here, on ability the wider sport would call ${level}. The best in this division, not necessarily anywhere else.`;
+  }
+  const ranked = standing.rank !== undefined && standing.rank > 0 && standing.rank <= RANKED_DEPTH;
+  if (!standing.isChampion && ranked && RANK_CLAIMING.has(band.klass)) {
+    return `Ranked here, on ability the wider sport would call ${level}. The division is thinner than the top of the sport.`;
+  }
+  return band.blurb;
+}
+
+export function abilityRead(attributes: Attributes, standing: AbilityStanding = {}): AbilityRead {
   const rating = overallRating(attributes);
   const band =
     ABILITY_BANDS.find((b) => rating >= b.floor) ?? ABILITY_BANDS[ABILITY_BANDS.length - 1]!;
@@ -115,11 +147,62 @@ export function abilityRead(attributes: Attributes): AbilityRead {
   return {
     klass: band.klass,
     label: band.label,
-    blurb: band.blurb,
+    blurb: standingBlurb(band, standing),
     // Coarse by construction: every fighter in a class draws the same bar, so the bar cannot be
     // read back as a hidden number.
     fill: (ABILITY_BANDS.length - index) / ABILITY_BANDS.length,
   };
+}
+
+// --- A rating, as a scout reads it -------------------------------------------------------------
+
+/**
+ * One attribute as somebody outside the fighter's camp can know it: an estimate and a range.
+ *
+ * Doc 29 § 8 refuses the exact overall because a promoter who can compare 34 with 47 is doing
+ * arithmetic rather than scouting — and then the Skills tab printed all fifteen true ratings to the
+ * point, which is the same number in fifteen pieces. A promoter now sees what tape and reputation
+ * would tell them: a best guess, off by a few points in a direction they cannot know, inside a range
+ * that narrows as the fighter piles up footage.
+ *
+ * Deterministic and derived, never stored. The error is a fixed draw per fighter and attribute, so
+ * the same fighter reads the same way every visit rather than flickering, and it shrinks with the
+ * record rather than being re-rolled — a fighter thirty fights deep is genuinely well scouted.
+ */
+export interface ScoutedRating {
+  estimate: number;
+  low: number;
+  high: number;
+}
+
+/** Half-width of the range: ten points on a debutant, three on somebody with twenty fights of tape. */
+export function scoutingMargin(bouts: number): number {
+  return Math.round(clamp(remap(bouts, 0, 20, 10, 3), 3, 10));
+}
+
+export function scoutedRating(
+  fighter: Pick<Fighter, 'id' | 'attributes' | 'summary'>,
+  key: AttributeKey,
+): ScoutedRating {
+  const s = fighter.summary;
+  const margin = scoutingMargin(s.wins + s.losses + s.draws);
+  const error = clamp(createRng(`scouted:${fighter.id as string}:${key}`).normal(), -2, 2);
+  const estimate = Math.round(clamp(fighter.attributes[key] + error * margin * 0.5, 1, 100));
+  return {
+    estimate,
+    low: Math.max(1, estimate - margin),
+    high: Math.min(100, estimate + margin),
+  };
+}
+
+/** Every attribute's estimate, for anything computed from the ratings (derived stats, badges). */
+export function scoutedAttributes(
+  fighter: Pick<Fighter, 'id' | 'attributes' | 'summary'>,
+): Attributes {
+  const out = { ...fighter.attributes };
+  for (const key of Object.keys(out) as AttributeKey[])
+    out[key] = scoutedRating(fighter, key).estimate;
+  return out;
 }
 
 // --- The scouting read -------------------------------------------------------------------------
@@ -434,7 +517,8 @@ export function careerArc(input: CareerArcInput): CareerArc {
 
 // --- Availability ---------------------------------------------------------------------------
 
-export type AvailabilityState = 'ready' | 'recovering' | 'suspended' | 'booked' | 'retired';
+export type AvailabilityState =
+  'ready' | 'carrying' | 'injured' | 'recovering' | 'suspended' | 'booked' | 'retired';
 
 export interface Availability {
   state: AvailabilityState;
@@ -483,6 +567,31 @@ export function availabilityOf(input: {
       label: medical ? 'Suspended' : 'Recovering',
       detail: `Not cleared for another ${days} day${days === 1 ? '' : 's'}.`,
       readyOn,
+    };
+  }
+
+  /*
+   * The injury, which this did not read. A fighter eight weeks from fit was "Ready" directly above a
+   * card saying they were injured — both true, since `canFightOn` will let them fight through it, and
+   * read together as a contradiction. So the injury is named either way: not cleared, or cleared and
+   * hurt, which is a different booking from a fit fighter and the promoter is entitled to know it.
+   */
+  const injuries = fighter.injuries ?? [];
+  const weeks = weeksUntilFit(injuries, target);
+  if (!canFightOn(injuries, target)) {
+    const out = weeks - FIGHT_THROUGH_WEEKS;
+    return {
+      state: 'injured',
+      label: 'Injured',
+      detail: `Not fit to fight for another ${out} week${out === 1 ? '' : 's'}.`,
+      readyOn: target + out * 7,
+    };
+  }
+  if (weeks > 0) {
+    return {
+      state: 'carrying',
+      label: 'Fit, but hurt',
+      detail: `Can fight, carrying an injury that needs ${weeks} more week${weeks === 1 ? '' : 's'}.`,
     };
   }
 
@@ -550,9 +659,14 @@ export function conditionRead(fighter: Fighter, day: GameDay): ConditionRead {
       tone: 'warn',
     };
   }
+  /*
+   * Not "Fresh". That is `describeFreshness`'s word for how rested somebody is this week, and this
+   * is a read on the whole career — so a fighter a week out of a fight read "Recovering" and
+   * "Fresh" in the same header, which were both true and sounded like a contradiction.
+   */
   return {
     integrity,
-    label: 'Fresh',
+    label: 'Low mileage',
     detail: 'Nothing on the clock yet. This is an asset with years in it.',
     tone: 'good',
   };

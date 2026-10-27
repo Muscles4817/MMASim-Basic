@@ -6,6 +6,7 @@
  */
 
 import {
+  dedupeNicknames,
   asGymId,
   asPromotionId,
   type Championship,
@@ -112,7 +113,9 @@ export interface SeedWorld {
  */
 export function buildSeedWorld(era: EraId = DEFAULT_ERA): SeedWorld {
   if (era === '2026') {
-    const fighters = buildFighters2026();
+    // Generated depth is named alone, one fighter at a time; this makes the names unique per
+    // division, keeping the real fighters' own nicknames first.
+    const fighters = dedupeNicknames(buildFighters2026());
     return {
       day: DAY_2026,
       fighters,

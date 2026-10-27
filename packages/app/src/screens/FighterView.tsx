@@ -50,7 +50,10 @@ import {
   isPhysical,
   marketValue,
   recordString,
+  scoutedAttributes,
+  scoutedRating,
   scoutingRead,
+  summariseRecord,
   valueRead,
   wantsOf,
   type Fighter,
@@ -60,8 +63,8 @@ import {
   ELITE_LIFT,
   type BandContext,
 } from '@mmasim/engine';
-import type { GameDb } from '@mmasim/data';
-import { Button, Card, Chip, Flag, RatingRow } from '../ui';
+import { getWorld, type GameDb } from '@mmasim/data';
+import { Button, Card, Chip, RatingRow } from '../ui';
 import { Alert, AttributeBadge, Fact, ICON, Icon, KeyStat } from '../ui/signals';
 import { AbilityBand, Console, Ledger, LedgerRow, MiniRating, TabPanel, Tabs } from '../ui/console';
 import { FightRecordList, RecordSummaryBar } from '../ui/FightRecord';
@@ -72,6 +75,9 @@ import { rivalriesFor } from '../game/rivalries';
 import { contractStanding } from '../game/contracts';
 import { currentPurse, promotionOf } from '../game/money';
 import { GROUP_LABELS } from '../game/labels';
+import { daysUnbookedBy } from '../game/plans';
+import { IdentityStrip } from './FighterIdentity';
+import './FighterView.css';
 
 /** Who is looking. Decides the vocabulary, the disclosure and the lead tab — never the facts. */
 export type FighterViewer = 'self' | 'coach' | 'promoter' | 'none';
@@ -201,8 +207,19 @@ export function FighterView({
     rank: ladder.position,
     isChampion: ladder.isChampion,
   });
-  const ability = abilityRead(fighter.attributes);
+  const ability = abilityRead(fighter.attributes, {
+    isChampion: ladder.isChampion,
+    rank: ladder.position,
+  });
   const scouting = scoutingRead(fighter, day);
+  /*
+   * What this viewer can know about the ratings. Doc 29 § 8: a promoter scouts, so a promoter sees
+   * the scouted estimate rather than the true number — the Skills tab printing all fifteen to the
+   * point was the exact overall the ability band refuses, in fifteen pieces. You see your own and
+   * a coach sees their own fighter's, which is what being in the room means.
+   */
+  const scouted = viewer === 'promoter';
+  const seen = scouted ? scoutedAttributes(fighter) : fighter.attributes;
   const availability = availabilityOf({ fighter, day, booked });
   const standing = contractStanding(db, fighter);
 
@@ -219,9 +236,10 @@ export function FighterView({
       <Card raised>
         <h2 style={{ fontSize: 'var(--text-2xl)', lineHeight: 1.15 }}>{displayName(fighter)}</h2>
         <p className="muted">
-          {division.name} · {fighterAge(fighter, day)} · <Flag nationality={fighter.nationality} />{' '}
-          · {fighter.stance}
+          {division.name} · {fighterAge(fighter, day)} · {fighter.stance}
         </p>
+
+        <IdentityStrip db={db} fighter={fighter} />
 
         <div style={{ marginTop: 'var(--space-4)' }}>
           <KeyStat
@@ -235,9 +253,14 @@ export function FighterView({
         </div>
 
         <div className="row" style={{ marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
-          <Chip tone={arc.tone === 'good' ? 'positive' : arc.tone === 'bad' ? 'negative' : 'info'}>
-            {arc.label}
-          </Chip>
+          {/* A champion's arc *is* "Champion", and the belt chip below says it with the icon. */}
+          {arc.id !== 'champion' && (
+            <Chip
+              tone={arc.tone === 'good' ? 'positive' : arc.tone === 'bad' ? 'negative' : 'info'}
+            >
+              {arc.label}
+            </Chip>
+          )}
           {ladder.isChampion && (
             <Chip tone="accent" title="Reigning divisional champion">
               <Icon name="champion" /> Champion
@@ -300,7 +323,7 @@ export function FighterView({
                         {scouting.strengths.map((call) => (
                           <AttributeBadge
                             key={call.key}
-                            call={{ key: call.key, value: call.value }}
+                            call={{ key: call.key, value: seen[call.key] }}
                             kind="strength"
                           />
                         ))}
@@ -313,7 +336,7 @@ export function FighterView({
                           {scouting.weaknesses.map((call) => (
                             <AttributeBadge
                               key={call.key}
-                              call={{ key: call.key, value: call.value }}
+                              call={{ key: call.key, value: seen[call.key] }}
                               kind="weakness"
                             />
                           ))}
@@ -344,9 +367,7 @@ export function FighterView({
                   </Alert>
                 )}
 
-                <Card title={words.form}>
-                  <RecordSummaryBar summary={fighter.summary} />
-                </Card>
+                <FormCard fighter={fighter} title={words.form} />
               </>
             }
             side={
@@ -455,6 +476,12 @@ export function FighterView({
               Absolute, never relative to the division: 78 power is the same force at flyweight and
               at heavyweight.
             </p>
+            {scouted && (
+              <p className="faint prose" style={{ fontSize: 'var(--text-sm)' }}>
+                Scouted, not known: each figure is a best estimate from the tape, with the range it
+                could plausibly sit in. The more they have fought, the tighter it gets.
+              </p>
+            )}
           </Card>
 
           {ATTRIBUTE_GROUPS.map((group) => (
@@ -469,8 +496,12 @@ export function FighterView({
                 ATTRIBUTES_BY_GROUP[group].map((key) => (
                   <RatingRow
                     key={key}
-                    label={ATTRIBUTE_META[key].label}
-                    value={fighter.attributes[key]}
+                    label={
+                      scouted
+                        ? `${ATTRIBUTE_META[key].label} (scouted ${scoutedRating(fighter, key).low}–${scoutedRating(fighter, key).high})`
+                        : ATTRIBUTE_META[key].label
+                    }
+                    value={seen[key]}
                     /* Your own ceilings, and only your own. A promoter who could see them would
                        be scouting with certainty, which is the one thing the model refuses. */
                     ceiling={
@@ -489,7 +520,8 @@ export function FighterView({
                     <MiniRating
                       key={key}
                       label={ATTRIBUTE_META[key].label}
-                      value={fighter.attributes[key]}
+                      value={seen[key]}
+                      range={scouted ? scoutedRange(fighter, key) : undefined}
                       hint={ATTRIBUTE_META[key].blurb}
                       attribute={key}
                       bands={bands}
@@ -518,7 +550,7 @@ export function FighterView({
                   <MiniRating
                     key={meta.key}
                     label={meta.label}
-                    value={deriveRatings(fighter.attributes)[meta.key]}
+                    value={deriveRatings(seen)[meta.key]}
                     hint={meta.blurb}
                   />
                 ))}
@@ -541,6 +573,67 @@ export function FighterView({
         </TabPanel>
       )}
     </div>
+  );
+}
+
+// --- Shared reads --------------------------------------------------------------------------------
+
+/**
+ * The contract in one phrase, for every place the page states it.
+ *
+ * The overview said "Free agent" while the Contract tab listed four fights remaining, because one
+ * read `freeAgent` and the other read the agreement's own counter — and an agreement whose clock
+ * has run out is both. Saying it once, here, is what keeps the two tabs from disagreeing.
+ */
+function contractLine(standing: ReturnType<typeof contractStanding>): string {
+  if (standing.freeAgent) return standing.agreement ? 'Free agent · deal expired' : 'Free agent';
+  if (!standing.status) return 'No written deal';
+  const n = standing.status.fightsRemaining;
+  return `${n} ${n === 1 ? 'fight' : 'fights'} left`;
+}
+
+/** A rating's scouted range, for `MiniRating`. */
+function scoutedRange(fighter: Fighter, key: Parameters<typeof scoutedRating>[1]) {
+  const read = scoutedRating(fighter, key);
+  return [read.low, read.high] as const;
+}
+
+/** How many bouts "recent" covers. */
+const FORM_BOUTS = 5;
+
+/**
+ * Recent form, which is the last few fights rather than the whole career.
+ *
+ * This card rendered `fighter.summary` under a heading that said *Recent form*, so a 24-3 veteran on
+ * a three-fight losing run read as in form. When nothing has been fought here yet the game has no
+ * dated bouts to show, and the card says it is the career record rather than pretending.
+ */
+function FormCard({ fighter, title }: { fighter: Fighter; title: string }) {
+  const recent = fighter.record.slice(-FORM_BOUTS);
+  if (recent.length === 0) {
+    return (
+      <Card title="Career record">
+        <RecordSummaryBar summary={fighter.summary} />
+      </Card>
+    );
+  }
+  return (
+    <Card title={`${title} · last ${recent.length}`}>
+      <p className="record-form" aria-label="Most recent last">
+        {recent.map((r) => (
+          <span key={r.boutId} className={`record-form__pip record-form__pip--${r.outcome}`}>
+            {r.outcome === 'win'
+              ? 'W'
+              : r.outcome === 'loss'
+                ? 'L'
+                : r.outcome === 'draw'
+                  ? 'D'
+                  : 'NC'}
+          </span>
+        ))}
+      </p>
+      <RecordSummaryBar summary={summariseRecord(recent)} />
+    </Card>
   );
 }
 
@@ -585,16 +678,12 @@ function SituationCard({
       <Ledger>
         <LedgerRow
           label="Contract"
-          value={
-            standing.freeAgent
-              ? 'Free agent'
-              : standing.status
-                ? `${standing.status.fightsRemaining} ${standing.status.fightsRemaining === 1 ? 'fight' : 'fights'} left`
-                : 'No written deal'
-          }
+          value={contractLine(standing)}
           tone={standing.freeAgent ? 'bad' : undefined}
         />
-        {purse && <LedgerRow label="Pay" value={`${money(purse.show)} / ${money(purse.win)}`} />}
+        {purse && (
+          <LedgerRow label="Main-card purse" value={`${money(purse.show)} / ${money(purse.win)}`} />
+        )}
         <LedgerRow
           label="Bouts this year"
           value={boutsThisYear}
@@ -903,11 +992,16 @@ function ContractTab({
     purse !== undefined && worth !== undefined
       ? valueRead({ paid: purse.show + purse.win, worth })
       : undefined;
+  /*
+   * Days since they last fought, measured from the start of the save for somebody who has not fought
+   * in it — the same measure the matchmaker's picker uses. This was a hard-coded 0, so "To be
+   * booked" could never be what anybody wanted however long they had been sat on the shelf.
+   */
   const wants = wantsOf({
     fighter,
     day,
     rank: getLadderStatus(db, fighter).position,
-    daysIdle: 0,
+    daysIdle: daysUnbookedBy(fighter, day, getWorld(db).startedDay ?? day),
     aggrieved: (standing.fairness ?? 1) < 0.7,
   });
 
@@ -919,13 +1013,31 @@ function ContractTab({
             {standing.agreement ? (
               <Ledger>
                 <LedgerRow label="Promotion" value={promotion?.shortName ?? '—'} />
+                <LedgerRow
+                  label="Status"
+                  value={contractLine(standing)}
+                  tone={standing.freeAgent ? 'bad' : undefined}
+                />
                 <LedgerRow label="Show purse" value={money(standing.agreement.showPurse)} />
                 <LedgerRow label="Win bonus" value={money(standing.agreement.winBonus)} />
-                <LedgerRow
-                  label="Fights remaining"
-                  value={standing.agreement.fightsRemaining}
-                  tone={standing.agreement.fightsRemaining <= 1 ? 'bad' : undefined}
-                />
+                {/*
+                  What the terms above actually pay on a main card, with the belt if they hold it.
+                  The overview quotes this figure, and without it here the two tabs printed two
+                  different purses for the same fighter with nothing to say why.
+                */}
+                {purse && (
+                  <LedgerRow
+                    label="Main-card purse"
+                    value={`${money(purse.show)} / ${money(purse.win)}`}
+                  />
+                )}
+                {!standing.freeAgent && (
+                  <LedgerRow
+                    label="Fights remaining"
+                    value={standing.agreement.fightsRemaining}
+                    tone={standing.agreement.fightsRemaining <= 1 ? 'bad' : undefined}
+                  />
+                )}
                 <LedgerRow
                   label="Activity guarantee"
                   value={`${standing.agreement.activityGuarantee} a year`}
