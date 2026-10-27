@@ -221,7 +221,7 @@ export function App() {
       case 'calendar':
         return (
           <Shell title="Calendar">
-            <CalendarScreen />
+            <CalendarScreen key={route.newCard ? 'new' : 'diary'} newCard={route.newCard} />
           </Shell>
         );
       case 'inbox':

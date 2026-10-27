@@ -493,6 +493,29 @@
   margin-bottom: calc(var(--space-1) * -1);
 }
 
+/*
+ * More chips than fit: the far edge fades, so the row says it scrolls. The scrollbar is hidden
+ * (it read as clutter on every promoter screen), and without this a chip cut off at the edge
+ * looked like the end of the list. `SubNav` sets the attributes from the scroll position.
+ */
+.subnav[data-more-right='true'] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+
+.subnav[data-more-left='true'] {
+  mask-image: linear-gradient(to left, #000 calc(100% - 2.5rem), transparent);
+}
+
+.subnav[data-more-left='true'][data-more-right='true'] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 2.5rem,
+    #000 calc(100% - 2.5rem),
+    transparent
+  );
+}
+
 .subnav::-webkit-scrollbar {
   display: none;
 }
@@ -502,7 +525,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  min-height: 2.25rem;
+  /* A thumb target, like every other control. These were 36px. */
+  min-height: var(--tap-target);
   padding: 0 var(--space-3);
   border-radius: var(--radius-full);
   border: 1px solid var(--border);
@@ -719,4 +743,49 @@
   .division-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* --- First-week checklist ------------------------------------------------------------------- */
+
+.checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.checklist__step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--tap-target);
+}
+
+.checklist__mark {
+  flex: 0 0 1.5rem;
+  text-align: center;
+  font-weight: 800;
+  color: var(--text-faint);
+}
+
+.checklist__step[data-done='true'] .checklist__mark {
+  color: var(--positive);
+}
+
+.checklist__step[data-done='true'] .checklist__label {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.checklist__label {
+  display: block;
+  font-weight: 600;
+}
+
+.checklist__hint {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
 }

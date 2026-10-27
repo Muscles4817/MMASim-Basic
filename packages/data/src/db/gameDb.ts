@@ -121,6 +121,14 @@ export interface WorldMeta extends Entity {
    * fills, and a generated world is the default a new player gets.
    */
   generatedSize?: string;
+  /**
+   * Onboarding the player has put away: the first-week checklist and any tip they dismissed.
+   *
+   * Kept in the save rather than the browser, because it is about this career — a second save
+   * is a second first week — and so it survives a reload, which a dismissed tip that comes back
+   * every session would not.
+   */
+  dismissed?: readonly string[];
   schemaVersion: number;
 }
 
