@@ -45,6 +45,7 @@ import { attentionFor } from '../game/attention';
 import { describeRunway, financialSnapshot } from '../game/finances';
 import { fightNightOn, forecastPlan, plansFor, promoterContext } from '../game/plans';
 import { PromoterSubNav } from './promoterNav';
+import { PROMOTION_TIER_LABELS } from '../game/labels';
 
 /** How many rows the dashboard shows before it stops being a dashboard. */
 const ATTENTION_SHOWN = 6;
@@ -418,7 +419,7 @@ export function PromotionHubScreen() {
                 />
                 <Fact
                   label="Standing"
-                  value={describeTier(promotion)}
+                  value={PROMOTION_TIER_LABELS[promotion.tier]}
                   emphasis="tertiary"
                   hint={`${promotion.baseCountry}. Attention sits at ${Math.round(promotion.buzz)} out of 100.`}
                 />
@@ -430,12 +431,3 @@ export function PromotionHubScreen() {
     </div>
   );
 }
-
-const describeTier = (promotion: Promotion): string =>
-  promotion.tier === 'global'
-    ? 'The biggest in the sport'
-    : promotion.tier === 'major'
-      ? 'A genuine major'
-      : promotion.tier === 'regional'
-        ? 'Regional'
-        : 'Developmental';

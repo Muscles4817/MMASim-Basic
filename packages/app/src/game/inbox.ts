@@ -282,7 +282,7 @@ export function recordOfferOutcome(input: {
       body: `Both corners have agreed${
         bout.titleKind ? ' — and it is for the belt' : ''
       }. It goes on ${plan.name}.`,
-      link: { route: 'plan', id: plan.id },
+      link: { route: 'plan', id: plan.id, slot: slotId },
       fighterId: bout.redId,
       opponentId: bout.blueId,
       promotionId: plan.promotionId,
@@ -313,7 +313,7 @@ export function recordOfferOutcome(input: {
           isDismiss: true,
         },
       ],
-      link: { route: 'plan', id: plan.id },
+      link: { route: 'plan', id: plan.id, slot: slotId },
       fighterId: counter.fighterId,
       promotionId: plan.promotionId,
     });
@@ -328,7 +328,7 @@ export function recordOfferOutcome(input: {
       priority: 'notable',
       title: `${nameOf(refusal.fighterId as string)} turned the fight down`,
       body: `${refusal.note} ${red} vs ${blue} is off unless you change something.`,
-      link: { route: 'plan', id: plan.id },
+      link: { route: 'plan', id: plan.id, slot: slotId },
       fighterId: refusal.fighterId,
       promotionId: plan.promotionId,
     });

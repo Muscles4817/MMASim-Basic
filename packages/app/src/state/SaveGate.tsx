@@ -36,7 +36,8 @@ import {
   type WorldSize,
 } from '@mmasim/data';
 import { GameProvider } from './GameProvider';
-import { DeleteSave, MenuScreen } from '../screens/MenuScreen';
+import { MenuScreen } from '../screens/MenuScreen';
+import { DeleteSave } from '../ui/DeleteSave';
 import { generateWorld } from '../game/newWorld';
 import { Button } from '../ui';
 
