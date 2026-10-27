@@ -7,14 +7,21 @@
  * the sloppy player making every time:
  *
  *  - `sloppy` pays every counter-offer, which reprices the fighter's contract for good.
- *  - `sensible` turns a counter down, refills the slot from the matchmaker once, and asks again.
+ *  - `sensible` pays a counter only when the card forecasts better with that fight paid than
+ *    without it, then refills whatever is still open from the matchmaker once and asks again.
  *
  * Shared by `tests/long-sim/promoter-economy.test.ts`, which pins the result, and by
  * `tools/economy-autopilot.ts`, which prints it.
  */
 
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
-import { withSlot, type EventPlan, type EventScale, type Promotion } from '@mmasim/engine';
+import {
+  withSlot,
+  type EventPlan,
+  type EventScale,
+  type Fighter,
+  type Promotion,
+} from '@mmasim/engine';
 import { advanceTo } from '../../packages/app/src/game/clock';
 import { resolveItem } from '../../packages/app/src/game/inbox';
 import {
@@ -36,6 +43,9 @@ export interface CardLog {
   day: number;
   agreed: number;
   slots: number;
+  /** Fights that came back with a counter-offer, and how many of those the policy paid. */
+  countered: number;
+  paid: number;
   /** What the forecast said before the date, with the card as booked. */
   forecast: number;
   /** What the empty card forecast when it was created. */
@@ -72,6 +82,15 @@ function advance(db: GameDb, target: number): void {
   }
 }
 
+/** Long enough for every corner to have answered an offer. */
+const REPLY_WAIT = 8;
+
+/** Move the clock on until the replies are in, and read the card back. */
+function awaitReplies(db: GameDb, plan: EventPlan, until: number): EventPlan {
+  advance(db, until);
+  return db.plans.findById(plan.id) as EventPlan;
+}
+
 /** One card, from an empty date to the night. */
 export function runOneCard(input: {
   db: GameDb;
@@ -93,14 +112,57 @@ export function runOneCard(input: {
     plan = applySuggestion(plan, suggestion);
   }
   plan = savePlan(db, sendAllDrafts({ ctx, plan: savePlan(db, plan) }).plan);
+  // Answers come back over a few days (doc 34's C4), so wait for them before deciding anything.
+  plan = awaitReplies(db, plan, day + REPLY_WAIT);
+  const countered = plan.slots.filter((s) =>
+    s.bout?.answers?.some((a) => a.verdict === 'countered'),
+  ).length;
+  let paid = 0;
 
   if (policy === 'sloppy') {
     for (const slot of plan.slots) {
       if (slot.bout?.answers?.some((a) => a.verdict === 'countered')) {
         plan = savePlan(db, acceptCounter({ ctx, plan, slotId: slot.id }));
+        paid++;
       }
     }
   } else {
+    /*
+     * Pay a counter only when the fight is worth its price: the card with it paid has to forecast
+     * better than the card without it. Paying repapers the contract, so a refused one is put back.
+     *
+     * Against the card as signed, not as offered. A forecast counts every fight still out for an
+     * answer as if it will happen, and on a nine-fight card the ninth adds little to the gate, so
+     * against that card every counter looked like a loss and a sensible promoter turned all of them
+     * down — then refilled, had half the refills come back declined, and ran a four-fight card.
+     * What a fight is worth is what it adds to the fights actually agreed.
+     */
+    const signedOnly = (p: EventPlan): EventPlan =>
+      p.slots.reduce(
+        (card, s) =>
+          s.bout && s.bout.status !== 'agreed' ? withSlot(card, s.id, undefined) : card,
+        p,
+      );
+    for (const slot of plan.slots) {
+      if (!slot.bout?.answers?.some((a) => a.verdict === 'countered')) continue;
+      const without = forecastPlan({ ctx, plan: signedOnly(plan) }).projectedProfit;
+      const papers = new Map(
+        slot.bout.answers.map((a) => {
+          const fighter = db.fighters.findById(a.fighterId as string) as Fighter | undefined;
+          return [
+            fighter?.agreementId as string,
+            db.agreements.findById(fighter?.agreementId as string),
+          ];
+        }),
+      );
+      const paidPlan = acceptCounter({ ctx, plan, slotId: slot.id });
+      if (forecastPlan({ ctx, plan: signedOnly(paidPlan) }).projectedProfit > without) {
+        plan = savePlan(db, paidPlan);
+        paid++;
+      } else {
+        for (const agreement of papers.values()) if (agreement) db.agreements.upsert(agreement);
+      }
+    }
     for (const slot of plan.slots) {
       if (slot.bout && slot.bout.status !== 'agreed') plan = withSlot(plan, slot.id, undefined);
     }
@@ -108,6 +170,7 @@ export function runOneCard(input: {
       plan = applySuggestion(plan, suggestion);
     }
     plan = savePlan(db, sendAllDrafts({ ctx, plan }).plan);
+    plan = awaitReplies(db, plan, day + 2 * REPLY_WAIT);
   }
 
   const forecast = forecastPlan({ ctx, plan }).projectedProfit;
@@ -122,6 +185,8 @@ export function runOneCard(input: {
     day: plan.day,
     agreed,
     slots: plan.slots.length,
+    countered,
+    paid,
     forecast,
     emptyForecast,
     profit: ran?.profit ?? 0,

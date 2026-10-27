@@ -26,6 +26,8 @@ export * from './domain/personality.js';
 export * from './domain/confidence.js';
 export * from './domain/traits.js';
 export * from './domain/disposition.js';
+export * from './domain/voice.js';
+export * from './domain/relationship.js';
 export * from './domain/divisions.js';
 export * from './domain/nationalities.js';
 export * from './domain/gameplan.js';
@@ -102,6 +104,7 @@ export * from './business/matchmakingStyle.js';
 export * from './business/matchmakingIntent.js';
 export * from './business/fighterRead.js';
 export * from './business/starPower.js';
+export * from './business/negotiation.js';
 export * from './business/news.js';
 
 // Testing helpers (shared across the out-of-package test suites)

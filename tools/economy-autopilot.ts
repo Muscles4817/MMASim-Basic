@@ -61,7 +61,7 @@ let year = 0;
 for (let n = 1; getWorld(db).day < start + YEARS * 365; n++) {
   const card = runOneCard({ db, promotionId: player.id as string, policy: POLICY });
   console.log(
-    `card ${n}: ${card.agreed}/${card.slots} signed, forecast ${card.forecast} (empty ${card.emptyForecast}), ` +
+    `card ${n}: ${card.agreed}/${card.slots} signed, ${card.paid}/${card.countered} counters paid, forecast ${card.forecast} (empty ${card.emptyForecast}), ` +
       `profit ${card.profit}, crowd ${card.attendance}, buzz ${card.buzz}, cash ${card.cash}`,
   );
   const reached = Math.floor((getWorld(db).day - start) / 365);

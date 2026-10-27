@@ -50,6 +50,7 @@ import {
   type PlanSlot,
   type Promotion,
   type TitleKind,
+  describeCounter,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
@@ -1107,6 +1108,12 @@ function BookedBout({
   const counters = (bout.answers ?? []).filter((a) => a.verdict === 'countered');
   const refusals = (bout.answers ?? []).filter((a) => a.verdict === 'declined');
   const ask = counters.reduce((sum, c) => sum + (c.askingPurse ?? 0), 0);
+  // Doc 34 C4 (minimal; A4 does the full treatment): a counter can ask for something other than
+  // money, and a different opponent cannot be granted from here — that is a re-booking.
+  const asks = counters.flatMap((c) =>
+    c.counter && c.counter.kind !== 'money' ? [c.counter] : [],
+  );
+  const wantsAnotherOpponent = asks.some((c) => c.kind === 'opponent');
 
   const nameOf = (id: string) => {
     const fighter = ctx.db.fighters.findById(id) as Fighter | undefined;
@@ -1164,13 +1171,15 @@ function BookedBout({
             paying. Somebody who flatly refused cannot be bought, which is what keeps a refusal
             meaningful.
           */}
-          {counters.length > 0 && refusals.length === 0 && (
+          {counters.length > 0 && refusals.length === 0 && !wantsAnotherOpponent && (
             <Button
               variant="primary"
               block
               onClick={() => onChange(acceptCounter({ ctx, plan, slotId: slot.id }))}
             >
-              Pay {money(ask)} and close it
+              {asks.length > 0
+                ? `Accept: ${asks.map(describeCounter).join(' ')}${ask > 0 ? ` Pay ${money(ask)}.` : ''}`
+                : `Pay ${money(ask)} and close it`}
             </Button>
           )}
 

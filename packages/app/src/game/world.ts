@@ -47,8 +47,7 @@ import {
   describeVacancy,
   vacate,
   chargeCosts,
-  periodCosts,
-  COST_PERIOD_DAYS,
+  annualCosts,
   DELIVERY_MEMORY,
   broadcastFor,
   buildCard,
@@ -109,6 +108,11 @@ import {
   earnedNickname,
   nicknamesTaken,
   uniqueNickname,
+  driftAfter,
+  milestonesOf,
+  stayChance,
+  leavingPromotion,
+  withLedgerEntry,
   trimFeed,
   type BoutSeed,
   type CardBout,
@@ -144,6 +148,7 @@ import { currentPurse } from './money';
 import { raise, scanForInbox } from './inbox';
 import { getRivalry } from './rivalries';
 import { settleFightInjuries } from './fightInjuries';
+import { afterTheBout } from './memory';
 import { money } from '../ui/format';
 
 type StoredNews = NewsItem & Entity;
@@ -460,6 +465,7 @@ export function advanceWorld(
       news.push(...replenish(db, day, rng, promotions, rosterSizes));
       // Deals run out across the roster too, so the market has other people in it.
       news.push(...resolveFreeAgency(db, day, rng, promotions, exceptId, rosterSizes));
+      news.push(...fillHoles(db, day, rng, promotions));
       reindex();
     }
 
@@ -942,7 +948,17 @@ function buildNight(ctx: {
       purses,
       bonuses: bonusPoolFor(promotion),
     });
-    const allowed = inDistress(promotion, ctx.roster.length) ? 0 : purses * LOSS_TOLERANCE;
+    /*
+     * Except at the bottom of the sport, which runs at a loss by nature: a town show is a
+     * promoter with a phone book, its fighters need the fights, and a card it cannot quite pay
+     * for still goes ahead. Applied there, this emptied the smallest local shows in pre-history —
+     * no card was ever worth staging, so nobody fought, and every deal walked out on inactivity.
+     */
+    const allowed = inDistress(promotion, ctx.roster.length)
+      ? 0
+      : promotion.tier === 'developmental'
+        ? Infinity
+        : purses * LOSS_TOLERANCE;
     return expected.profit >= -allowed;
   };
   if (!tolerable(card)) {
@@ -1320,6 +1336,24 @@ export function runCardBout(ctx: {
   if (winner && nickname)
     developed[winner.id === red.id ? 'red' : 'blue'] = { ...winner, nickname };
 
+  // Drift, memory and voice: what the night leaves in the people on it. Doc 34 C3.
+  const remembered = afterTheBout({
+    db,
+    day,
+    promotion,
+    red: developed.red,
+    blue: developed.blue,
+    boutId,
+    winnerId: result.winnerId,
+    method: result.method,
+    isTitleFight,
+    championId: champion,
+    ranked: divisionRanked,
+    quiet: bulk,
+  });
+  developed.red = remembered.red;
+  developed.blue = remembered.blue;
+
   const item = bulk
     ? undefined
     : fightNews({
@@ -1353,6 +1387,8 @@ export function runCardBout(ctx: {
       }),
     );
   }
+
+  news.push(...remembered.news);
 
   if (winner && !bulk) {
     const streak = streakNews({
@@ -1476,6 +1512,20 @@ function runStatisticalCard(ctx: {
 
   const card = rng.fork('card').shuffle(pairs).slice(0, CARD_SIZE);
   const booked = new Set<string>();
+  /*
+   * Nicknames already worn, per division, built on first use and kept current as names are earned
+   * on this card — one roster scan per division per card, not one per earned name.
+   */
+  const takenByDivision = new Map<string, Set<string>>();
+  const takenIn = (divisionId: Fighter['divisionId']): Set<string> => {
+    const key = divisionId as string;
+    let taken = takenByDivision.get(key);
+    if (!taken) {
+      taken = nicknamesTaken(db.fighters.findAll() as Fighter[], divisionId);
+      takenByDivision.set(key, taken);
+    }
+    return taken;
+  };
 
   for (const [a, b] of card) {
     if (booked.has(a.id as string) || booked.has(b.id as string)) continue;
@@ -1544,13 +1594,42 @@ function runStatisticalCard(ctx: {
         bodyWear: clamp(stored.condition.bodyWear + (finishes ? 0.6 : 1.1), 0, 100),
       };
 
+      const summary = summariseRecord(record);
+      /*
+       * The same two things a full bout does to a person, at the same cost (doc 34 C3): a career's
+       * milestones move the personality, and a highlight finish can earn a name — unique in the
+       * division, like every other nickname.
+       */
+      const earned =
+        outcome === 'win'
+          ? earnedNickname(
+              stored,
+              record[record.length - 1]!,
+              boutRng.fork(`nickname:${fighter.id}`),
+            )
+          : undefined;
+      const nickname =
+        earned && uniqueNickname(earned, fighter.id as string, takenIn(stored.divisionId));
+      if (nickname) takenIn(stored.divisionId).add(nickname);
       const next: Fighter = {
         ...stored,
         record,
-        summary: summariseRecord(record),
+        summary,
         condition,
         // Standing moves with results, or nothing ever climbs out of the bottom of the sport.
         reputation: clamp(stored.reputation + (outcome === 'win' ? 1.6 : -0.8), 0, 100),
+        personality: driftAfter(
+          stored.personality,
+          milestonesOf({
+            won: outcome === 'win',
+            knockedOut: stopped,
+            scoredKnockout: outcome === 'win' && isKoMethod(method),
+            wonTitle: false,
+            lostTitle: false,
+            streak: summary.streak,
+          }),
+        ),
+        ...(nickname ? { nickname } : {}),
       };
 
       // No camp here either — `ageEveryone` trains everybody, including these two.
@@ -1656,6 +1735,16 @@ function releaseIfCut(
     ...fighter,
     promotionId: undefined,
     agreementId: undefined,
+    // Cut by the player's promotion: remembered, and the rest of the relationship forgotten.
+    ...(getWorld(db).playerPromotionId === promotion.id
+      ? {
+          ledger: withLedgerEntry(leavingPromotion(fighter.ledger, promotion.id), {
+            day,
+            promotionId: promotion.id,
+            kind: 'cut',
+          }),
+        }
+      : {}),
   } as Fighter & Entity);
 
   const skid = Math.max(0, -fighter.summary.streak);
@@ -1926,7 +2015,10 @@ function resolveFreeAgency(
     const next =
       stepUp.length > 0 && fRng.chance(0.7)
         ? fRng.pickWeighted(stepUp, (p) => room(p) * Math.max(1, p.prestige) ** 1.4)
-        : promotion && pool.includes(promotion) && fRng.chance(0.7)
+        : // Stays more readily where they were treated well, less where they were not (doc 34 C3).
+          promotion &&
+            pool.includes(promotion) &&
+            fRng.chance(stayChance(fighter, promotion.id, day))
           ? promotion
           : whereThereIsRoom();
 
@@ -1964,6 +2056,10 @@ function resolveFreeAgency(
       promotionId: next.id,
       agreementId: signed.id,
       resentment: 0,
+      // Leaving ends the working relationship; only a cut is carried out of the door (doc 34 C3).
+      ...(promotion && promotion.id !== next.id && fighter.ledger
+        ? { ledger: leavingPromotion(fighter.ledger, promotion.id) }
+        : {}),
     } as Fighter & { id: string });
 
     // Keep the divisional index current, so the rest of this quarter's free agents do not all
@@ -2343,6 +2439,86 @@ function retireTheDrifted(
   return news;
 }
 
+/** Fighters a weight class needs before a promotion can make even one fight in it. */
+const MIN_FIGHTS_DEEP = 2;
+
+/** A debutant at `division`'s weight, signed to `promotion` (or nobody), with a gym and a coach. */
+function signDebutant(
+  db: GameDb,
+  day: number,
+  rng: Rng,
+  division: (typeof DIVISIONS)[number],
+  promotion: Promotion | undefined,
+  i: number | string,
+  news: NewsItem[],
+): void {
+  /*
+   * Most people who turn professional are never going to be anything. A few are.
+   *
+   * `generateFighter` defaults to a tier drawn around 45, which produces a population whose
+   * ceilings sit comfortably below elite — so with the intake finally running, the sport
+   * still had nobody capable of *becoming* elite. Measured over ten years: population held at
+   * 627 while fighters rated 70 or better fell from 48 to 13, because the seeded elite aged
+   * out and the intake could not replace them at that level.
+   *
+   * The sport does not work by lifting everybody. It works by a small number of genuine
+   * prospects arriving each year among a great many who will spend a career on regional
+   * cards — so roughly one in twelve is drawn from a much higher band, and the rest are
+   * left exactly as they were.
+   */
+  const genRng = rng.fork(`gen:${day}:${division.id}:${i}`);
+  const isProspect = genRng.chance(0.085);
+
+  const born = generateFighter(genRng, {
+    id: `gen_${day}_${division.id}_${i}`,
+    divisionId: division.id,
+    sex: division.sex,
+    day,
+    promotionId: promotion?.id,
+    tier: isProspect ? Math.round(genRng.normalClamped(78, 9, 62, 97)) : undefined,
+  });
+  /*
+   * A gym, and with it a head coach.
+   *
+   * `replenish` created fighters with no `gymId` and no `headCoachId`, and nothing ever gave
+   * them one — so every fighter generated during a save trained at the no-gym default of
+   * quality 40 with no coach for their entire career. That is a development multiplier of
+   * about 0.4 against roughly 1.9 in a good room with the right specialist: a quarter speed,
+   * permanently.
+   *
+   * It is why the sport's elite kept emptying out even once the intake was running and the
+   * prospects were real. Measured after ten years: 327 generated fighters alive, the best of
+   * them carrying a potential of 88, and **not one had reached a rating of 70** — the best
+   * actual rating in the entire generated population was 67. They were not failing to arrive.
+   * They were arriving and then never being allowed to grow.
+   */
+  const rooms = db.gyms.findAll() as unknown as Gym[];
+  const room = rooms.length > 0 ? genRng.pick(rooms) : undefined;
+  const located: Fighter = room ? { ...born, gymId: room.id, headCoachId: room.headCoachId } : born;
+  // A debutant's nickname, kept only if nobody in the division already answers to it.
+  const unique =
+    located.nickname &&
+    uniqueNickname(
+      located.nickname,
+      located.id as string,
+      nicknamesTaken(db.fighters.findAll() as Fighter[], located.divisionId),
+    );
+  const placed: Fighter =
+    located.nickname === unique ? located : { ...located, nickname: unique || undefined };
+
+  db.fighters.upsert(placed as Fighter & Entity);
+  news.push(
+    debutNews({
+      day,
+      fighterId: placed.id,
+      name: displayName(born),
+      divisionId: division.id,
+      promotionId: promotion?.id,
+      promotionName: promotion?.shortName,
+    }),
+  );
+}
+
 /** Replace retirees so divisions do not quietly empty out over a long career. */
 function replenish(
   db: GameDb,
@@ -2357,14 +2533,8 @@ function replenish(
   for (const division of DIVISIONS) {
     const active = all.filter((f) => f.divisionId === division.id && f.retiredDay === undefined);
     const target = divisionTargetFor(getWorld(db), division.id as string, division.sex);
-
     // How deep each promotion is *in this division*, which is what a debutant fills a hole in.
-    const depthHere = new Map<string, number>();
-    for (const f of active) {
-      if (!f.promotionId) continue;
-      const id = f.promotionId as string;
-      depthHere.set(id, (depthHere.get(id) ?? 0) + 1);
-    }
+    const depthHere = depthByPromotion(active);
 
     for (let i = active.length; i < target; i++) {
       /*
@@ -2389,73 +2559,57 @@ function replenish(
           depthOf: (promotionId) => depthHere.get(promotionId) ?? 0,
         },
       );
-      /*
-       * Most people who turn professional are never going to be anything. A few are.
-       *
-       * `generateFighter` defaults to a tier drawn around 45, which produces a population whose
-       * ceilings sit comfortably below elite — so with the intake finally running, the sport
-       * still had nobody capable of *becoming* elite. Measured over ten years: population held at
-       * 627 while fighters rated 70 or better fell from 48 to 13, because the seeded elite aged
-       * out and the intake could not replace them at that level.
-       *
-       * The sport does not work by lifting everybody. It works by a small number of genuine
-       * prospects arriving each year among a great many who will spend a career on regional
-       * cards — so roughly one in twelve is drawn from a much higher band, and the rest are
-       * left exactly as they were.
-       */
-      const genRng = rng.fork(`gen:${day}:${division.id}:${i}`);
-      const isProspect = genRng.chance(0.085);
+      signDebutant(db, day, rng, division, promotion, i, news);
+    }
+  }
+  return news;
+}
 
-      const born = generateFighter(genRng, {
-        id: `gen_${day}_${division.id}_${i}`,
-        divisionId: division.id,
-        sex: division.sex,
-        day,
-        promotionId: promotion?.id,
-        tier: isProspect ? Math.round(genRng.normalClamped(78, 9, 62, 97)) : undefined,
-      });
-      /*
-       * A gym, and with it a head coach.
-       *
-       * `replenish` created fighters with no `gymId` and no `headCoachId`, and nothing ever gave
-       * them one — so every fighter generated during a save trained at the no-gym default of
-       * quality 40 with no coach for their entire career. That is a development multiplier of
-       * about 0.4 against roughly 1.9 in a good room with the right specialist: a quarter speed,
-       * permanently.
-       *
-       * It is why the sport's elite kept emptying out even once the intake was running and the
-       * prospects were real. Measured after ten years: 327 generated fighters alive, the best of
-       * them carrying a potential of 88, and **not one had reached a rating of 70** — the best
-       * actual rating in the entire generated population was 67. They were not failing to arrive.
-       * They were arriving and then never being allowed to grow.
-       */
-      const rooms = db.gyms.findAll() as unknown as Gym[];
-      const room = rooms.length > 0 ? genRng.pick(rooms) : undefined;
-      const located: Fighter = room
-        ? { ...born, gymId: room.id, headCoachId: room.headCoachId }
-        : born;
-      // A debutant's nickname, kept only if nobody in the division already answers to it.
-      const unique =
-        located.nickname &&
-        uniqueNickname(
-          located.nickname,
-          located.id as string,
-          nicknamesTaken(db.fighters.findAll() as Fighter[], located.divisionId),
-        );
-      const placed: Fighter =
-        located.nickname === unique ? located : { ...located, nickname: unique || undefined };
+/** How many of one weight class's active fighters each promotion holds. */
+function depthByPromotion(active: readonly Fighter[]): Map<string, number> {
+  const depth = new Map<string, number>();
+  for (const f of active) {
+    if (!f.promotionId) continue;
+    const id = f.promotionId as string;
+    depth.set(id, (depth.get(id) ?? 0) + 1);
+  }
+  return depth;
+}
 
-      db.fighters.upsert(placed as Fighter & Entity);
-      news.push(
-        debutNews({
+/**
+ * A weight class a promotion runs but can no longer make a fight in.
+ *
+ * The intake is sized to the sport's headcount at each weight, so a division that was full across
+ * the sport sent nobody to the one promotion where it had emptied: a town show whose flyweights had
+ * all moved up, retired or left in free agency kept running a weight class with one fighter in it,
+ * for good. A promotion in that position signs local debutants until it can make a fight again.
+ * Run after free agency, which is what most often empties a small promotion's weight class.
+ */
+function fillHoles(
+  db: GameDb,
+  day: number,
+  rng: Rng,
+  promotions: readonly Promotion[],
+): NewsItem[] {
+  const news: NewsItem[] = [];
+  const all = db.fighters.findAll() as Fighter[];
+  for (const division of DIVISIONS) {
+    const depthHere = depthByPromotion(
+      all.filter((f) => f.divisionId === division.id && f.retiredDay === undefined),
+    );
+    for (const promotion of promotions) {
+      if (!promotion.divisions.includes(division.id)) continue;
+      for (let n = depthHere.get(promotion.id as string) ?? 0; n < MIN_FIGHTS_DEEP; n++) {
+        signDebutant(
+          db,
           day,
-          fighterId: placed.id,
-          name: displayName(born),
-          divisionId: division.id,
-          promotionId: promotion?.id,
-          promotionName: promotion?.shortName,
-        }),
-      );
+          rng,
+          division,
+          promotion,
+          `hole:${promotion.id as string}:${n}`,
+          news,
+        );
+      }
     }
   }
   return news;
@@ -2683,8 +2837,7 @@ const DISTRESSED_RESIGN_SHARE = 0.5;
 const DISTRESS_RUNWAY_YEARS = 3;
 
 function inDistress(promotion: Promotion, rosterSize: number): boolean {
-  const year = (periodCosts({ promotion, rosterSize }).total * 365) / COST_PERIOD_DAYS;
-  return promotion.budget < year * DISTRESS_RUNWAY_YEARS;
+  return promotion.budget < annualCosts({ promotion, rosterSize }) * DISTRESS_RUNWAY_YEARS;
 }
 
 function chargePromotions(db: GameDb, fromDay: number, day: number): void {

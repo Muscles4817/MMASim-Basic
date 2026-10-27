@@ -28,6 +28,11 @@
 
 import {
   GROUP_ORDER,
+  withLedgerEntry,
+  describeCounter,
+  replyDelayDays,
+  shapeBoutCounter,
+  wantsOf,
   acceptanceOf,
   appraiseMatchup,
   awardBonuses,
@@ -208,8 +213,6 @@ export function nextCardDay(
  * show's 30–45 that was a fifth of its attention for one missed date.
  */
 export const MISSED_CARD_BUZZ = MAX_BUZZ_SWING;
-/** Resentment added to everybody who had agreed to fight on it, and so had camped for nothing. */
-export const MISSED_CARD_RESENTMENT = 15;
 
 /**
  * Cancel every card of the player's whose date has passed unrun, and charge for it.
@@ -220,8 +223,9 @@ export const MISSED_CARD_RESENTMENT = 15;
  * six weeks" — forever, since nothing would ever run it.
  *
  * Cancelling frees them, because `plansFor` (and with it every commitment check) only sees live
- * cards. The cost lands three ways, all on things that already exist: the promotion's `buzz`,
- * the `resentment` of everybody who had signed, and a line in the news and the inbox so the
+ * cards. The cost lands three ways: the promotion's `buzz`, a `cardCancelled` entry in the
+ * relationship ledger of everybody who had signed (doc 34 C3 — it was a flat +15 resentment, which
+ * the next contract settlement recomputed away), and a line in the news and the inbox so the
  * player is told rather than left to notice.
  */
 export function missPlans(db: GameDb, day: number): EventPlan[] {
@@ -245,6 +249,8 @@ export function missPlans(db: GameDb, day: number): EventPlan[] {
       }),
     );
 
+    // Only signed bouts cost goodwill. An offer still waiting on an answer simply lapses with the
+    // card — nobody had camped for it yet.
     const signed = plan.slots
       .filter((s) => s.bout?.status === 'agreed')
       .flatMap((s) => [s.bout!.redId as string, s.bout!.blueId as string]);
@@ -253,7 +259,11 @@ export function missPlans(db: GameDb, day: number): EventPlan[] {
       if (!fighter) continue;
       db.fighters.upsert({
         ...fighter,
-        resentment: clamp(fighter.resentment + MISSED_CARD_RESENTMENT, 0, 100),
+        ledger: withLedgerEntry(fighter.ledger, {
+          day: plan.day as never,
+          promotionId: plan.promotionId,
+          kind: 'cardCancelled',
+        }),
       } as Fighter & Entity);
     }
 
@@ -651,6 +661,9 @@ export function opponentsFor(input: {
       manager: managerOf(ctx.db, fighter),
       notice: plan.day - ctx.day < 35 ? 'short' : 'full',
       isTitleFight: slot.bout?.titleKind !== undefined,
+      day: ctx.day,
+      rank: rankOfFighter(ctx, fighter),
+      opponentRank: subjectRank,
     });
 
     return {
@@ -857,8 +870,10 @@ export interface OfferOutcome {
   slotId: string;
   bout: PlannedBout;
   accepted: boolean;
-  /** Each corner's answer, in their own words. */
+  /** Each corner's answer, in their own words. Empty while the answers are still out. */
   answers: readonly CornerAnswer[];
+  /** Set when the corners have not answered yet: the day they will have. Doc 34 C4. */
+  replyDay?: number;
 }
 
 /**
@@ -890,7 +905,6 @@ export function sendOffer(input: {
 
   const notice = plan.day - ctx.day < 35 ? 'short' : 'full';
   const answers: CornerAnswer[] = [];
-  let accepted = true;
 
   for (const [fighter, opponent] of [
     [red, blue],
@@ -903,6 +917,9 @@ export function sendOffer(input: {
       manager: managerOf(ctx.db, fighter),
       notice,
       isTitleFight: bout.titleKind !== undefined,
+      day: ctx.day,
+      rank: rankOfFighter(ctx, fighter),
+      opponentRank: rankOfFighter(ctx, opponent),
     });
 
     const rng = createRng(
@@ -914,8 +931,6 @@ export function sendOffer(input: {
       continue;
     }
 
-    accepted = false;
-
     /*
      * A counter rather than a refusal when money is the problem.
      *
@@ -925,7 +940,37 @@ export function sendOffer(input: {
      * that, and this is the first thing in the game to ask them.
      */
     const buyable = fighter.personality.loyalty < 55 && read.chance > 0.18;
-    if (buyable) {
+    /*
+     * What they counter with. Doc 34 C4: money was the only counter a corner could make, and a
+     * fighter who wants the main card, five rounds or a different opponent is not asking for cash.
+     */
+    const shaped =
+      read.chance > 0.18
+        ? shapeBoutCounter({
+            fighter,
+            read,
+            position: slot.position,
+            rounds: bout.rounds,
+            want: wantsOf({
+              fighter,
+              day: ctx.day,
+              rank: rankOfFighter(ctx, fighter),
+              daysIdle: daysUnbookedBy(fighter, ctx.day, ctx.startedDay),
+            }),
+            preferred: preferredOpponent(ctx, fighter, opponent),
+            show: currentPurse(ctx.db, fighter, slot.position)?.show ?? ctx.promotion.minimumPurse,
+            buyable: buyable && !read.holdout,
+          })
+        : undefined;
+    if (shaped && shaped.kind !== 'money') {
+      answers.push({
+        fighterId: fighter.id,
+        verdict: 'countered',
+        note: describeCounter(shaped),
+        counter: shaped,
+        quote: read.quote,
+      });
+    } else if (buyable && !read.holdout) {
       const base = currentPurse(ctx.db, fighter, slot.position);
       const show = base?.show ?? ctx.promotion.minimumPurse;
       // The ask scales with how reluctant they are: a near-yes is cheap to close.
@@ -937,45 +982,150 @@ export function sendOffer(input: {
           ? `${read.concern} They will do it for the right money.`
           : 'They want paying properly for this one.',
         askingPurse: Math.round(show * multiplier * 10) / 10,
+        counter: { kind: 'money', askingPurse: Math.round(show * multiplier * 10) / 10 },
+        quote: read.quote,
       });
     } else {
       answers.push({
         fighterId: fighter.id,
         verdict: 'declined',
-        note: read.concern ?? 'Not interested in this one.',
+        // Their own words after the reason, when they have any. Doc 34 C3.
+        note: [read.concern ?? 'Not interested in this one.', read.quote].filter(Boolean).join(' '),
       });
     }
   }
 
-  const next: PlannedBout = {
+  /*
+   * Out, and waiting. Doc 34 C4: corners answer over two to seven days, not on the spot. The
+   * answers are decided now — seeded on the offer, so nothing can reroll them — and revealed on the
+   * day the slower corner gets back (`settleReplies`, which the clock runs after every advance).
+   *
+   * Never later than the day before the card: an answer that landed on fight night would land
+   * after the card had already been run without it. An offer sent inside that window is answered
+   * on the spot, which is what a corner does with a fight that is tomorrow.
+   */
+  const replyDay = Math.min(
+    plan.day - 1,
+    ctx.day +
+      Math.max(
+        ...[red, blue].map((f) =>
+          replyDelayDays(f, managerOf(db, f), ctx.promotion.id, `${plan.id}:${slotId}:${f.id}`),
+        ),
+      ),
+  );
+  if (replyDay <= ctx.day) {
+    const done = answered({ ...bout, pending: answers, offeredDay: ctx.day as never });
+    const next = withSlot(plan, slotId, done);
+    const accepted = done.status === 'agreed';
+    recordOfferOutcome({
+      db,
+      plan: next,
+      cardName: planName(db, next),
+      slotId,
+      bout: done,
+      accepted,
+      answers: done.answers ?? [],
+    });
+    return { plan: next, outcome: { slotId, bout: done, accepted, answers: done.answers ?? [] } };
+  }
+  const waiting: PlannedBout = {
     ...bout,
-    status: accepted ? 'agreed' : 'declined',
-    answers,
+    status: 'offered',
+    answers: undefined,
+    pending: answers,
+    replyDay: replyDay as never,
     offeredDay: ctx.day as never,
   };
-
-  /*
-   * The answer goes to the inbox as well as onto the card.
-   *
-   * An answer that exists only as a chip on the builder is an answer the player loses the moment
-   * they navigate — and a counter-offer nobody reads is a fight that quietly does not happen.
-   * The inbox is where things wait until they are dealt with, which is exactly what an
-   * unanswered price is.
-   */
-  recordOfferOutcome({
-    db,
-    plan,
-    cardName: planName(db, plan),
-    slotId,
-    bout: next,
-    accepted,
-    answers,
-  });
-
   return {
-    plan: withSlot(plan, slotId, next),
-    outcome: { slotId, bout: next, accepted, answers },
+    plan: withSlot(plan, slotId, waiting),
+    outcome: { slotId, bout: waiting, accepted: false, answers: [], replyDay },
   };
+}
+
+/**
+ * Who a fighter would rather be fighting, for an opponent counter: the one who beat them last, if
+ * they want that back, else the champion. Never tonight's opponent.
+ */
+function preferredOpponent(
+  ctx: PromoterContext,
+  fighter: Fighter,
+  opponent: Fighter,
+): Fighter | undefined {
+  const last = fighter.record[fighter.record.length - 1];
+  const rival =
+    last?.outcome === 'loss'
+      ? (ctx.db.fighters.findById(last.opponentId as string) as Fighter | undefined)
+      : undefined;
+  const pick = rival ?? championOfDivision(ctx, fighter.divisionId as string);
+  return pick && pick.id !== opponent.id && pick.id !== fighter.id ? pick : undefined;
+}
+
+/**
+ * A corner whose answer no longer stands because they are no longer there to give it: retired,
+ * cut, or signed elsewhere while the offer was out. Doc 34 C4 review — an answer decided on the
+ * day the offer went out would otherwise sign a fight for somebody who has since left.
+ */
+function stillHere(db: GameDb, answer: CornerAnswer): CornerAnswer {
+  const fighter = db.fighters.findById(answer.fighterId as string) as Fighter | undefined;
+  const reason = !fighter
+    ? 'They are no longer around to answer.'
+    : fighter.retiredDay !== undefined
+      ? 'They have retired.'
+      : fighter.promotionId !== getWorld(db).playerPromotionId
+        ? 'They are no longer under contract here.'
+        : undefined;
+  return reason ? { fighterId: answer.fighterId, verdict: 'declined', note: reason } : answer;
+}
+
+/** A bout's answers, once they are in: agreed when every corner said yes. */
+function answered(bout: PlannedBout, db?: GameDb): PlannedBout {
+  const answers = (bout.pending ?? []).map((a) => (db ? stillHere(db, a) : a));
+  return {
+    ...bout,
+    status: answers.every((a) => a.verdict === 'accepted') ? 'agreed' : 'declined',
+    answers,
+    pending: undefined,
+    replyDay: undefined,
+  };
+}
+
+/**
+ * Reveal every answer that has come in by `day`. Doc 34 C4.
+ *
+ * Run by the clock after every advance, including the one that stops on fight night, so nothing
+ * on a card that is about to run is left waiting. The answer goes to the inbox as well as onto the
+ * card: an answer that exists only as a chip on the builder is one the player loses the moment
+ * they navigate, and a counter nobody reads is a fight that quietly does not happen.
+ *
+ * Returns how many bouts were answered.
+ */
+export function settleReplies(db: GameDb, day: number): number {
+  const world = getWorld(db);
+  if (!world.playerPromotionId) return 0;
+  let settled = 0;
+  for (const plan of plansFor(db, world.playerPromotionId)) {
+    let next = plan;
+    for (const slot of plan.slots) {
+      const bout = slot.bout;
+      if (bout?.status !== 'offered' || !bout.pending || (bout.replyDay ?? Infinity) > day) {
+        continue;
+      }
+      const done = answered(bout, db);
+      next = withSlot(next, slot.id, done);
+      settled += 1;
+      recordOfferOutcome({
+        db,
+        plan: next,
+        cardName: planName(db, next),
+        slotId: slot.id,
+        bout: done,
+        accepted: done.status === 'agreed',
+        answers: done.answers ?? [],
+      });
+    }
+    if (next !== plan) savePlan(db, next);
+  }
+  return settled;
 }
 
 /**
@@ -999,6 +1149,24 @@ export function acceptCounter(input: {
   if (counters.length === 0) return plan;
   // A corner that flatly declined cannot be bought, so the fight is still off.
   if ((slot.bout.answers ?? []).some((a) => a.verdict === 'declined')) return plan;
+
+  /*
+   * What each counter costs to meet (doc 34 C4). Money is paid; five rounds are granted on the
+   * spot; a better slot is given if that slot on this card is free; a different opponent cannot
+   * be granted here at all — that is a new booking, and the player makes it.
+   */
+  let bout = slot.bout;
+  let targetSlotId = slotId;
+  for (const answer of counters) {
+    const counter = answer.counter;
+    if (counter?.kind === 'opponent') return plan;
+    if (counter?.kind === 'rounds') bout = { ...bout, rounds: counter.rounds };
+    if (counter?.kind === 'slot') {
+      const free = plan.slots.find((s) => s.position === counter.position && !s.bout);
+      if (!free) return plan;
+      targetSlotId = free.id;
+    }
+  }
 
   /*
    * The extra money comes off the budget when the card is settled rather than now, but the
@@ -1027,11 +1195,21 @@ export function acceptCounter(input: {
     } as PromotionalAgreement & Entity);
   }
 
-  return withSlot(plan, slotId, {
-    ...slot.bout,
+  const closed: PlannedBout = {
+    ...bout,
     status: 'agreed',
-    answers: counters.map((c) => ({ ...c, verdict: 'accepted' as const, note: 'Paid, and in.' })),
-  });
+    answers: counters.map((c) => ({
+      ...c,
+      verdict: 'accepted' as const,
+      note:
+        c.counter && c.counter.kind !== 'money'
+          ? 'Given what they asked for, and in.'
+          : 'Paid, and in.',
+    })),
+  };
+  return targetSlotId === slotId
+    ? withSlot(plan, slotId, closed)
+    : withSlot(clearSlot(plan, slotId), targetSlotId, closed);
 }
 
 /** Send every draft bout on the card at once. The convenience, not the mechanism. */

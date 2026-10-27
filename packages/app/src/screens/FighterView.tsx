@@ -40,6 +40,11 @@ import {
   careerArc,
   conditionRead,
   deriveRatings,
+  describeLedger,
+  isHoldingOut,
+  relationshipWith,
+  voiceFor,
+  wantVoice,
   drawRead,
   describeFairness,
   describeHeat,
@@ -162,6 +167,8 @@ export function FighterView({
   viewer,
   booked = false,
   actions,
+  negotiation,
+  negotiationLabel = 'Talk terms',
   onOpponentClick,
 }: {
   db: GameDb;
@@ -179,6 +186,14 @@ export function FighterView({
   booked?: boolean;
   /** What this viewer can do about this fighter. The caller owns it entirely. */
   actions?: ReactNode;
+  /**
+   * The contract table, when the viewer can negotiate with this fighter (doc 34 C4). Rendered at
+   * the top of the Contract tab, with a header button that opens it. The caller builds it, because
+   * signing writes to the database and this component does not own a commit.
+   */
+  negotiation?: ReactNode;
+  /** The header button's words for opening talks: "Offer a deal", "Re-sign". */
+  negotiationLabel?: string;
   onOpponentClick?(id: string): void;
 }) {
   const [tab, setTab] = useState<TabId>('overview');
@@ -296,9 +311,17 @@ export function FighterView({
           ))}
         </div>
 
-        {actions && (
+        {(actions || negotiation) && (
           <div className="row" style={{ marginTop: 'var(--space-4)', flexWrap: 'wrap' }}>
             {actions}
+            {negotiation && (
+              <Button
+                variant={actions ? 'secondary' : 'primary'}
+                onClick={() => setTab('contract')}
+              >
+                {negotiationLabel}
+              </Button>
+            )}
           </div>
         )}
       </Card>
@@ -566,6 +589,7 @@ export function FighterView({
 
       {tab === 'contract' && (
         <TabPanel id="contract">
+          {negotiation}
           <ContractTab
             fighter={fighter}
             db={db}
@@ -1056,11 +1080,23 @@ function ContractTab({
     daysIdle: daysUnbookedBy(fighter, day, getWorld(db).startedDay ?? day),
     aggrieved: (standing.fairness ?? 1) < 0.7,
   });
+  const holdingOut = isHoldingOut(fighter) && !self;
+  const situation = wantVoice(wants.id);
+  const said = situation ? voiceFor(fighter, situation, day) : undefined;
+  const relationship = promotion ? relationshipWith(fighter, promotion.id, day) : undefined;
 
   return (
     <Console
       main={
         <>
+          {/* Doc 34 C4: underpaid and proud enough to stop fighting until it is fixed. */}
+          {holdingOut && (
+            <Alert tone="warn" title="Holding out">
+              Will not take another fight until the deal is renegotiated. No bout offer moves them —
+              only a new contract does.
+            </Alert>
+          )}
+
           <Card title="The deal">
             {standing.agreement ? (
               <Ledger>
@@ -1178,7 +1214,36 @@ function ContractTab({
 
           <Card title={words.wants}>
             <KeyStat value={wants.label} label="Next" detail={wants.detail} />
+            {/* In their own words, when the want is one they would say out loud. Doc 34 C3. */}
+            {said && (
+              <blockquote className="prose voice-quote" style={{ margin: 'var(--space-3) 0 0' }}>
+                “{said.quote}”
+              </blockquote>
+            )}
           </Card>
+
+          {/*
+            What they remember about this promotion. Read through their personality on the day, so
+            the same history is a grudge to one fighter and water under the bridge to another.
+          */}
+          {relationship && promotion && (
+            <Card title={self ? `You and ${promotion.shortName}` : `With ${promotion.shortName}`}>
+              <KeyStat
+                value={relationship.label}
+                label="Relationship"
+                detail={
+                  relationship.worst && relationship.score < 0
+                    ? `${self ? 'You have' : 'They have'} not forgotten ${describeLedger(relationship.worst.kind)}.`
+                    : relationship.best && relationship.score > 0
+                      ? `${self ? 'You remember' : 'They remember'} ${describeLedger(relationship.best.kind)}.`
+                      : 'No history worth remembering either way yet.'
+                }
+                tone={
+                  relationship.score <= -10 ? 'bad' : relationship.score >= 10 ? 'good' : 'neutral'
+                }
+              />
+            </Card>
+          )}
 
           {standing.manager && (
             <Card title="Represented by">

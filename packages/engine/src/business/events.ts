@@ -395,6 +395,19 @@ export function showCost(promotion: Promotion, market: Market): number {
 /** About £23k a night for a regional show in a small market, £44k for the leader at home. */
 const SHOW_COST_PER_PRESTIGE = 0.45;
 
+/** Production, per this many seats in the building: lighting, staging, the crew to run them. */
+const SEATS_PER_PRODUCTION_UNIT = 150;
+
+/**
+ * Production a broadcast needs before a seat is counted, in thousands. A pay-per-view is a
+ * television event; a stream is a few cameras and a commentary desk.
+ */
+const PRODUCTION_BASE: Readonly<Record<Broadcast, number>> = {
+  ppv: 300,
+  televised: 90,
+  streamed: 10,
+};
+
 /**
  * Hiring the room, per seat, in thousands, before the market's cost factor.
  *
@@ -497,7 +510,7 @@ export function eventRevenue(input: {
   // A crew costs more in a big city, but it travels: production takes the square root of the
   // market's premium, where the building itself (below) takes all of it.
   const production = Math.round(
-    (venue.capacity / 150 + (broadcast === 'ppv' ? 300 : broadcast === 'televised' ? 90 : 10)) *
+    (venue.capacity / SEATS_PER_PRODUCTION_UNIT + PRODUCTION_BASE[broadcast]) *
       Math.sqrt(market.costFactor),
   );
   // The building itself, at the city's prices.
@@ -554,10 +567,11 @@ export function eventRevenue(input: {
 
 /*
  * Sponsorship per thousand people in the building, in thousands: a base, and a little more for a
- * promotion people have heard of. Was 18 + 0.12 per prestige point, sized when a regional show
- * drew twice the crowd it does now that buzz starts where the tier is.
+ * promotion people have heard of. The base was 18 when a regional show drew twice the crowd it
+ * does now that buzz starts where the tier is, and 16 while offers were answered on the spot; once
+ * corners took days to reply and a card waited for them, more of every card got signed.
  */
-const SPONSOR_PER_THOUSAND = 16;
+const SPONSOR_PER_THOUSAND = 12;
 const SPONSOR_PER_PRESTIGE = 0.12;
 
 /*
