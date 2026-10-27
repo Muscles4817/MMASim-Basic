@@ -23,9 +23,10 @@ import {
 import { advanceTo } from '../../packages/app/src/game/clock';
 import { readInbox, recordOfferOutcome } from '../../packages/app/src/game/inbox';
 import { attentionFor } from '../../packages/app/src/game/attention';
-import { GRACE_DAYS, graceEnds, walkDay } from '../../packages/app/src/game/alerts';
+import { GRACE_DAYS, graceEnds, raiseDecisions, walkDay } from '../../packages/app/src/game/alerts';
 import { bookingsFor, savePlan } from '../../packages/app/src/game/plans';
 import { agreed, filledPlan } from '../helpers/plans';
+import { sign } from '../../packages/app/src/game/contracts';
 
 const game = () => createNewGame({ adapter: undefined, era: '2026' });
 
@@ -58,6 +59,18 @@ const roster = (db: ReturnType<typeof game>, promotion: Promotion) =>
     (f) => f.promotionId === promotion.id && f.retiredDay === undefined,
   );
 
+const TERMS = {
+  showPurse: 4,
+  winBonus: 4,
+  signingBonus: 0,
+  revenuePoints: 0,
+  fightsOwed: 4,
+  championshipExtension: 'none',
+  matchingRights: false,
+  exclusive: true,
+  outsideBouts: 0,
+} as const;
+
 const agreementOf = (db: ReturnType<typeof game>, f: Fighter) =>
   db.agreements.findById(f.agreementId as string) as PromotionalAgreement | undefined;
 
@@ -65,8 +78,17 @@ describe('the walk-out warning', () => {
   it('is raised once per fighter per stage, not every day', () => {
     const { db, start } = asPromoter();
 
-    // A day at a time is the worst case: every day used to be a new item.
-    for (let day = start + 1; day <= start + 120; day++) advanceTo(db, day);
+    /*
+     * Two years in weekly hops. The scan runs on every simulated day inside each hop, so this is
+     * the case that used to write a new item per fighter per day. Two years, because the seeded
+     * roster's deals do not come due until well into the second.
+     */
+    for (let day = start + 7; day <= start + 730; day += 7) {
+      advanceTo(db, day);
+      for (const item of readInbox(db).filter(isBlocking)) {
+        db.inbox.upsert({ ...item, resolvedDay: day, resolvedWith: 'ok' } as never);
+      }
+    }
 
     const keys = activityKeys(readInbox(db));
     expect(keys.size).toBeGreaterThan(0);
@@ -79,12 +101,20 @@ describe('the walk-out warning', () => {
       perSubject.set(subject, (perSubject.get(subject) ?? 0) + 1);
     }
     for (const [subject, stages] of perSubject) expect(stages, subject).toBeLessThanOrEqual(2);
+
+    // What does not stop the clock is folded into a weekly digest, and every line goes somewhere.
+    const digests = readInbox(db).filter((i) => i.id.endsWith('_digest'));
+    expect(digests.length).toBeGreaterThan(0);
+    for (const digest of digests) {
+      expect(isBlocking(digest)).toBe(false);
+      for (const entry of digest.entries ?? []) expect(entry.link, entry.title).toBeDefined();
+    }
   });
 
   it('stops the clock a handful of times a year, not every day', () => {
     const { db, start } = asPromoter();
     let stops = 0;
-    while (getWorld(db).day < start + 365) {
+    while (getWorld(db).day < start + 730) {
       const result = advanceTo(db, getWorld(db).day + 30);
       if (result.interrupted) stops += 1;
       for (const item of readInbox(db).filter(isBlocking)) {
@@ -92,7 +122,8 @@ describe('the walk-out warning', () => {
       }
     }
     // Measured at 129 stops in two years before the rework; a few is the point.
-    expect(stops).toBeLessThanOrEqual(6);
+    expect(stops).toBeGreaterThan(0);
+    expect(stops).toBeLessThanOrEqual(10);
   });
 
   it('never counts down from a deadline that has already passed', () => {
@@ -137,13 +168,23 @@ describe('a new save', () => {
 
   it('cannot lose anybody to the walk-out rule inside the grace period', () => {
     const { db, promotion, start } = asPromoter();
-    const before = new Set(roster(db, promotion).map((f) => f.id as string));
+
+    // Twenty fighters on two-year-old deals with nothing fought: every one of them in breach.
+    const shelved = roster(db, promotion).slice(0, 20);
+    for (const fighter of shelved) {
+      sign(db, fighter, promotion, TERMS);
+      const signed = db.fighters.findById(fighter.id as string) as Fighter;
+      const agreement = agreementOf(db, signed)!;
+      db.agreements.upsert({ ...agreement, signedDay: start - 730 } as never);
+      db.fighters.upsert({ ...signed, record: [] } as never);
+    }
+
     advanceTo(db, start + GRACE_DAYS - 1);
-    const walked = (db.news.findAll() as { headline: string; promotionId?: string }[]).filter(
-      (n) => n.promotionId === promotion.id && /walks out/.test(n.headline),
-    );
-    expect(walked).toEqual([]);
-    expect(before.size).toBeGreaterThan(0);
+    for (const fighter of shelved) {
+      expect((db.fighters.findById(fighter.id as string) as Fighter).promotionId).toBe(
+        promotion.id,
+      );
+    }
   });
 });
 
@@ -202,23 +243,37 @@ describe('decisions settle themselves', () => {
   });
 
   it('stops blocking once the fighter it was about is booked', () => {
-    const { db, promotion, start } = asPromoter();
-    let stoppedOn: InboxItem | undefined;
-    for (let day = start + 7; day <= start + 365 && !stoppedOn; day += 7) {
-      const result = advanceTo(db, day);
-      stoppedOn = result.waiting.find((i) => i.id.startsWith('alert:activity:'));
-    }
-    if (!stoppedOn) return; // Nobody on this roster is owed a bout: nothing to settle.
+    const { db, promotion } = asPromoter();
+    const today = graceEnds(db);
+    setWorld(db, { day: today });
 
-    const fighterId = stoppedOn.id.split(':')[2]!;
-    const today = getWorld(db).day;
-    let plan = filledPlan({ db, promotion, day: today + 21, today });
-    const slot = plan.slots.find((s) => s.bout && s.bout.redId !== fighterId)!;
-    plan = withSlot(plan, slot.id, { ...slot.bout!, redId: fighterId as never, status: 'agreed' });
+    // Somebody with a deal, warned at the thirty-day stage.
+    sign(db, roster(db, promotion)[0]!, promotion, TERMS);
+    const fighter = roster(db, promotion).find((f) => f.agreementId)!;
+    const deadline = walkDay(db, fighter, agreementOf(db, fighter)!);
+    raiseDecisions(
+      db,
+      today,
+      [
+        {
+          key: `activity:${fighter.id}:${deadline}:30`,
+          kind: 'roster',
+          title: 'Can walk',
+          fighterId: fighter.id,
+        },
+      ],
+      { kind: 'activity', title: () => '', body: '' },
+    );
+    expect(readInbox(db).filter(isBlocking)).toHaveLength(1);
+
+    // Put them on a card: the warning has nothing left to say.
+    let plan = filledPlan({ db, promotion, day: today + 30, today });
+    const slot = plan.slots.find((s) => s.bout && s.bout.blueId !== fighter.id)!;
+    plan = withSlot(plan, slot.id, { ...slot.bout!, redId: fighter.id, status: 'agreed' });
     savePlan(db, plan);
 
-    expect(bookingsFor(db, promotion.id as string).has(fighterId)).toBe(true);
-    expect(readInbox(db).find((i) => i.id === stoppedOn!.id)?.resolvedWith).toBe('settled');
+    expect(bookingsFor(db, promotion.id as string).has(fighter.id as string)).toBe(true);
+    expect(readInbox(db).filter(isBlocking)).toHaveLength(0);
   });
 });
 
