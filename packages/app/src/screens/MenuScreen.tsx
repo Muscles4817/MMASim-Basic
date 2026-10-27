@@ -242,18 +242,26 @@ export function MenuScreen({
         before. Nothing is removed from it: a technical warning is not clutter.
       */}
       <Alert tone="warn" title="Your saves live on this device only">
-        They are kept in the browser&rsquo;s own database. <strong>Clearing your browser data
-        will delete them</strong>, they do not follow you to another machine, and there is no
-        cloud copy.
+        They are kept in the browser&rsquo;s own database.{' '}
+        <strong>Clearing your browser data will delete them</strong>, they do not follow you to
+        another machine, and there is no cloud copy.
       </Alert>
     </div>
   );
 }
 
-/** One line under a save's name: who, which world, how far in. */
+/**
+ * One line under a save's name: what they are, which world, how far in.
+ *
+ * A generated world is labelled as one. It is built on the first era's calendar, so reading the
+ * era id alone put "2026" on every generated save — a year that names a seeded world the player
+ * did not choose.
+ */
 function describeSave(save: SaveSummary): string {
   const era = ERAS.find((e) => e.id === save.era);
-  const parts = [era ? era.name.split(' — ')[0] : save.era];
+  const parts: string[] = [];
+  if (save.playerRole === 'promoter') parts.push('Promoter');
+  parts.push(save.size !== undefined ? 'Generated' : era ? era.name.split(' — ')[0]! : save.era);
   if (save.record) parts.push(save.record);
   parts.push(formatGameDay(save.day));
   return parts.join(' · ');

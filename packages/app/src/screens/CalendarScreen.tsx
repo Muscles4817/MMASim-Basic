@@ -28,7 +28,13 @@ import { Alert } from '../ui/signals';
 import { formatGameDay } from '../shell/Shell';
 import { buildCalendar, defaultFilter, nextStop, type CalendarEntry } from '../game/calendar';
 import { ADVANCE_STEPS, advanceTo, type AdvanceResult } from '../game/clock';
-import { DEFAULT_LEAD_DAYS, MARKETS, MINIMUM_LEAD_DAYS, createPlan } from '../game/plans';
+import {
+  DEFAULT_LEAD_DAYS,
+  MARKETS,
+  MINIMUM_LEAD_DAYS,
+  createPlan,
+  fightNightOn,
+} from '../game/plans';
 import { PromoterSubNav } from './promoterNav';
 
 /**
@@ -75,6 +81,10 @@ export function CalendarScreen() {
 
   const shown = filter === 'yours' ? entries.filter((e) => e.ownership === 'yours') : entries;
   const upNext = useMemo(() => nextStop(db, world.day), [db, world.day]);
+  const tonight = useMemo(
+    () => fightNightOn(db, world.playerPromotionId, world.day),
+    [db, world.playerPromotionId, world.day],
+  );
 
   const advance = (days: number) => {
     setLastAdvance(advanceTo(db, world.day + days));
@@ -100,16 +110,31 @@ export function CalendarScreen() {
         </p>
 
         <div className="stack" style={{ gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
-          <Button
-            variant="primary"
-            block
-            onClick={advanceToNext}
-            aria-disabled={upNext === undefined}
-          >
-            {upNext === undefined
-              ? 'Nothing in the diary'
-              : `Go to ${describeNext(entries, upNext)} — ${formatGameDay(upNext)}`}
-          </Button>
+          {/*
+            On fight night the only primary action is the night. "The next thing" is computed
+            from tomorrow, so on the day of the player's own card this button used to offer to
+            skip straight past it to somebody's contract expiry.
+          */}
+          {tonight ? (
+            <Button
+              variant="primary"
+              block
+              onClick={() => navigate({ name: 'plan', id: tonight.id })}
+            >
+              Run fight night: {tonight.name}
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              block
+              onClick={advanceToNext}
+              aria-disabled={upNext === undefined}
+            >
+              {upNext === undefined
+                ? 'Nothing in the diary'
+                : `Go to ${describeNext(entries, upNext)} — ${formatGameDay(upNext)}`}
+            </Button>
+          )}
 
           <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
             {ADVANCE_STEPS.map((step) => (
@@ -123,8 +148,23 @@ export function CalendarScreen() {
               </Button>
             ))}
           </div>
+          {tonight && (
+            <p className="faint prose" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+              Moving the clock on without running {tonight.name} cancels it, and that costs you.
+            </p>
+          )}
         </div>
       </Card>
+
+      {lastAdvance?.missed && lastAdvance.missed.length > 0 && (
+        <Alert
+          tone="danger"
+          title={`${lastAdvance.missed.map((p) => p.name).join(', ')} never ran`}
+        >
+          The date passed without the show, so it is cancelled. The fighters on it are free again
+          and unhappy about it, and the promotion&rsquo;s buzz took the hit.
+        </Alert>
+      )}
 
       {lastAdvance?.interrupted && (
         <Alert tone="warn" title="Something needs you">
@@ -444,14 +484,17 @@ function PlanACard({
 /**
  * What the "go to next" button is actually going to.
  *
- * A card's title is a proper name — `RIZIN 1`, not `rizin 1` — so it goes in as written. Only the
- * sentence-shaped titles ("Your contract expires") get lowercased to sit inside the button's own
- * sentence.
+ * Titles go in as written, with one exception: a title that opens on one of the calendar's own
+ * sentence words ("Your contract expires", "Camp began") has that first letter lowered to sit
+ * inside the button's sentence. Lowercasing the whole title, as this used to, also lowercased
+ * every proper name in it — "Go to quentin preston's contract expires".
  */
 function describeNext(entries: readonly CalendarEntry[], day: number): string {
   const entry = entries.find((e) => e.day === day && e.ownership === 'yours');
   if (!entry) return 'the next thing';
-  return entry.kind === 'plan' || entry.kind === 'card' ? entry.title : entry.title.toLowerCase();
+  return /^(Your|You|Camp|Medically)\b/.test(entry.title)
+    ? entry.title[0]!.toLowerCase() + entry.title.slice(1)
+    : entry.title;
 }
 
 /** How far away, in the words a person uses. Never "in 37 days". */

@@ -11,9 +11,19 @@
  *    future version added is how saves get quietly corrupted.
  */
 
-import type { CollectionEnvelope, Entity } from './types.js';
+import type { CollectionEnvelope, Entity, StorageAdapter } from './types.js';
 
-export const CURRENT_SCHEMA_VERSION = 1;
+/**
+ * The save format this build reads and writes.
+ *
+ * - **1** — the first format.
+ * - **2** — the promoter audit's fight-night rework (docs/34, A1): a plan records how it ended
+ *   (`outcome`, `cancelled`), and a card whose date passed unrun is cancelled rather than left
+ *   in the past. A version-1 save can hold exactly that stranded card, with its fighters blocked
+ *   for ever. Old saves were allowed to break for this rework, so there is deliberately no
+ *   1 -> 2 step: a version-1 save is refused with `SaveTooOldError`.
+ */
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export interface Migration {
   from: number;
@@ -58,6 +68,48 @@ export class SaveTooNewError extends Error {
 }
 
 /**
+ * A save from a version of the game this build no longer reads.
+ *
+ * The other half of {@link SaveTooNewError}, and the honest outcome when a format change ships
+ * without a migration: the save is untouched and the player is told plainly why it will not
+ * open, rather than meeting a stack trace from inside a render.
+ */
+export class SaveTooOldError extends Error {
+  constructor(
+    readonly found: number,
+    readonly supported: number,
+  ) {
+    super(
+      `This save was made by an older version of the game (save format ${found}; this build ` +
+        `reads format ${supported}) and cannot be opened. Start a new game to keep playing.`,
+    );
+    this.name = 'SaveTooOldError';
+  }
+}
+
+/**
+ * Refuse a save this build cannot read, before anything tries to load it.
+ *
+ * Reads only the world envelope's version, which is a few hundred bytes, so the menu's gate can
+ * say "too old" or "too new" without deserialising a roster. A save with no world yet (a slot
+ * that is about to be built) passes.
+ */
+export function assertReadableSave(adapter: Pick<StorageAdapter, 'read'>): void {
+  const raw = adapter.read('world');
+  if (!raw) return;
+  let found: number;
+  try {
+    found = (JSON.parse(raw) as Partial<CollectionEnvelope<Entity>>).schemaVersion ?? 0;
+  } catch (cause) {
+    throw new SaveCorruptError('world', 'it is not valid JSON', cause);
+  }
+  if (found > CURRENT_SCHEMA_VERSION) throw new SaveTooNewError(found, CURRENT_SCHEMA_VERSION);
+  if (found < CURRENT_SCHEMA_VERSION && pendingMigrations(found).length === 0) {
+    throw new SaveTooOldError(found, CURRENT_SCHEMA_VERSION);
+  }
+}
+
+/**
  * Walk one collection forward to {@link CURRENT_SCHEMA_VERSION}.
  *
  * `expectedCollection` is what makes the envelope's `collection` field earn its place: it
@@ -85,11 +137,8 @@ export function migrateCollection<T extends Entity>(
 
   while (version < CURRENT_SCHEMA_VERSION) {
     const step = MIGRATIONS.find((m) => m.from === version);
-    if (!step) {
-      throw new Error(
-        `No migration from schema ${version} to ${version + 1} for collection "${envelope.collection}".`,
-      );
-    }
+    // No path forward is a save this build has stopped supporting, not a bug to throw raw.
+    if (!step) throw new SaveTooOldError(found, CURRENT_SCHEMA_VERSION);
     // Guards against a mis-authored step that does not advance the version, which would
     // otherwise spin forever inside a render.
     if (step.to <= version) {

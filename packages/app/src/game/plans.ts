@@ -1633,8 +1633,7 @@ export function nightResults(db: GameDb, plan: EventPlan): BoutResult[] {
     const red = db.fighters.findById(bout.redId as string) as Fighter | undefined;
     const blue = db.fighters.findById(bout.blueId as string) as Fighter | undefined;
     const entry = red?.record.find((e) => e.boutId === bout.boutId);
-    const winner =
-      entry?.outcome === 'win' ? red : entry?.outcome === 'loss' ? blue : undefined;
+    const winner = entry?.outcome === 'win' ? red : entry?.outcome === 'loss' ? blue : undefined;
     return {
       bout,
       red,
