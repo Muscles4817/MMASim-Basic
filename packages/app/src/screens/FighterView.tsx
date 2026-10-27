@@ -41,6 +41,7 @@ import {
   conditionRead,
   deriveRatings,
   describeLedger,
+  isHoldingOut,
   relationshipWith,
   voiceFor,
   wantVoice,
@@ -166,6 +167,8 @@ export function FighterView({
   viewer,
   booked = false,
   actions,
+  negotiation,
+  negotiationLabel = 'Talk terms',
   onOpponentClick,
 }: {
   db: GameDb;
@@ -183,6 +186,14 @@ export function FighterView({
   booked?: boolean;
   /** What this viewer can do about this fighter. The caller owns it entirely. */
   actions?: ReactNode;
+  /**
+   * The contract table, when the viewer can negotiate with this fighter (doc 34 C4). Rendered at
+   * the top of the Contract tab, with a header button that opens it. The caller builds it, because
+   * signing writes to the database and this component does not own a commit.
+   */
+  negotiation?: ReactNode;
+  /** The header button's words for opening talks: "Offer a deal", "Re-sign". */
+  negotiationLabel?: string;
   onOpponentClick?(id: string): void;
 }) {
   const [tab, setTab] = useState<TabId>('overview');
@@ -300,9 +311,17 @@ export function FighterView({
           ))}
         </div>
 
-        {actions && (
+        {(actions || negotiation) && (
           <div className="row" style={{ marginTop: 'var(--space-4)', flexWrap: 'wrap' }}>
             {actions}
+            {negotiation && (
+              <Button
+                variant={actions ? 'secondary' : 'primary'}
+                onClick={() => setTab('contract')}
+              >
+                {negotiationLabel}
+              </Button>
+            )}
           </div>
         )}
       </Card>
@@ -570,6 +589,7 @@ export function FighterView({
 
       {tab === 'contract' && (
         <TabPanel id="contract">
+          {negotiation}
           <ContractTab
             fighter={fighter}
             db={db}
@@ -1060,6 +1080,7 @@ function ContractTab({
     daysIdle: daysUnbookedBy(fighter, day, getWorld(db).startedDay ?? day),
     aggrieved: (standing.fairness ?? 1) < 0.7,
   });
+  const holdingOut = isHoldingOut(fighter) && !self;
   const situation = wantVoice(wants.id);
   const said = situation ? voiceFor(fighter, situation, day) : undefined;
   const relationship = promotion ? relationshipWith(fighter, promotion.id, day) : undefined;
@@ -1068,6 +1089,14 @@ function ContractTab({
     <Console
       main={
         <>
+          {/* Doc 34 C4: underpaid and proud enough to stop fighting until it is fixed. */}
+          {holdingOut && (
+            <Alert tone="warn" title="Holding out">
+              Will not take another fight until the deal is renegotiated. No bout offer moves them —
+              only a new contract does.
+            </Alert>
+          )}
+
           <Card title="The deal">
             {standing.agreement ? (
               <Ledger>

@@ -22,6 +22,7 @@ import type { DivisionId, FighterId, PromotionId } from '../core/ids.js';
 import type { Broadcast } from './events.js';
 import { MAIN_CARD_SIZE, PRELIM_CARD_SIZE } from './events.js';
 import type { CardPosition } from './money.js';
+import type { BoutCounter } from './boutAgreements.js';
 
 /**
  * How big a night this is meant to be.
@@ -88,6 +89,13 @@ export interface CornerAnswer {
   note: string;
   /** Thousands. Present on a counter: what it would take. */
   askingPurse?: number;
+  /**
+   * What a counter asks for, when it is not only money: a slot, five rounds, a different opponent.
+   * A money counter carries `askingPurse` as well, for everything that already reads it. Doc 34 C4.
+   */
+  counter?: BoutCounter;
+  /** In their own words, when they said something. */
+  quote?: string;
 }
 
 /**
@@ -111,6 +119,12 @@ export interface PlannedBout {
   answers?: readonly CornerAnswer[];
   /** The day the offer went out, so short notice can be judged against the card date. */
   offeredDay?: GameDay;
+  /**
+   * The day both corners will have answered, while the offer is out. Doc 34 C4: answers take two
+   * to seven days. Until then `status` is `offered` and the answers wait in `pending`.
+   */
+  replyDay?: GameDay;
+  pending?: readonly CornerAnswer[];
 }
 
 export interface PlanSlot {
