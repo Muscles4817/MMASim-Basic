@@ -40,7 +40,7 @@ export type StaffLevel = 1 | 2 | 3 | 4 | 5;
 
 export function staffLevel(promotion: Promotion): StaffLevel {
   const p = promotion.prestige;
-  const built: StaffLevel = p >= 85 ? 5 : p >= 60 ? 4 : p >= 44 ? 3 : p >= 28 ? 2 : 1;
+  const built: StaffLevel = p >= 85 ? 5 : p >= 56 ? 4 : p >= 44 ? 3 : p >= 28 ? 2 : 1;
 
   /*
    * Unless it cannot pay for it. A promotion that cannot cover its organisation for
@@ -72,22 +72,26 @@ export const yearOf = (perPeriod: number): number => (perPeriod * 365) / COST_PE
 /**
  * A fortnight of overheads at each staff level, in thousands.
  *
- * About £5k a year for a town show, £26k for a feeder, £91k for a regional promotion, £390k for a
- * major and £3.1m for the leader — the organisation between cards. What a card itself costs to
- * stage, the officials, medicals and crew, is charged per night instead (`showCost`), so a
- * promotion that runs cards pays for running them and one that does not still pays for existing.
- * One regional card's profit, tens of thousands, cannot carry a regional's year: it has to run a
- * schedule to stand still.
+ * About £5k a year for a town show, £26k for a feeder, £156k for a regional promotion, £339k for
+ * the top of the regional tier and the majors, and £3.1m for the leader — the organisation between
+ * cards. What a card itself costs to stage, the officials, medicals and crew, is charged per night
+ * instead (`showCost`), so a promotion that runs cards pays for running them and one that does not
+ * still pays for existing.
  *
- * Each level costs between about 3.5 and 8 times the one below. Level 4 was 30 — twelve times
- * level 3 — which made a promotion crossing into the majors take on overheads its cards could not
- * yet pay for.
+ * Level 4 starts at prestige 56 rather than 60, so the strongest regionals — the promotions a
+ * promoter is handed — carry an organisation built to grow into a major. Sized against that
+ * promoter's first year once a generated promotion's bank came down to a couple of years of
+ * costs: below it, paying every counter-offer still grew the promotion by a fifth, and no way of
+ * running it could lose. The rest of the regional tier stays at level 3, where the 2026 era's
+ * regionals can afford a decade. Each level costs between about 2 and 9 times the one below.
+ * Level 4 was once twelve times level 3, which made a promotion crossing into the majors take on
+ * overheads its cards could not yet pay for.
  */
 export const STAFF_LEVEL_OVERHEADS: Readonly<Record<StaffLevel, number>> = {
   1: 0.2,
   2: 1,
   3: 6,
-  4: 15,
+  4: 13,
   5: 120,
 };
 

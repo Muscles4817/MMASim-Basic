@@ -176,7 +176,7 @@ const RUNWAY_YEARS: Readonly<Record<PromotionTier, number>> = {
   developmental: 1.5,
   regional: 1.5,
   major: 2.5,
-  global: 8,
+  global: 10,
 };
 
 /** Cards' worth of purses on top, so a promotion can book its first cards before they pay. */

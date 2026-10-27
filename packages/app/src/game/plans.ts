@@ -1352,8 +1352,7 @@ export function acceptCounter(input: {
      * regional card's purses from £265k to £2m inside a year.
      */
     const atSlot = currentPurse(ctx.db, fighter, slot.position)?.show ?? 0;
-    const repapered =
-      atSlot > 0 ? (agreement.showPurse * askingPurse) / atSlot : askingPurse;
+    const repapered = atSlot > 0 ? (agreement.showPurse * askingPurse) / atSlot : askingPurse;
     ctx.db.agreements.upsert({
       ...agreement,
       showPurse: Math.max(agreement.showPurse, Math.round(repapered * 10) / 10),

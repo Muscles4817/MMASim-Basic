@@ -332,6 +332,11 @@ export function ticketPrice(promotion: Promotion, headlineDraw: number): number 
  * Was 18 + 0.9 per prestige point + 0.35 per point of draw, which priced a regional show at nearly
  * £100 a seat. Against a crowd that the old flat buzz of 88 inflated as well, one three-fight
  * regional card in front of 4,461 people cleared £481k — a year's overheads in a night.
+ *
+ * Then 18 + 0.3 per point of draw, until matchmaking that sells fights (doc 34 A4) put more draw
+ * on every card and a promotion's bank came down to a couple of years of costs: an autopilot
+ * paying every counter grew a regional by a fifth in a year, and one running sensible cards by
+ * three-quarters.
  */
 const TICKET_BASE = 18;
 /*
