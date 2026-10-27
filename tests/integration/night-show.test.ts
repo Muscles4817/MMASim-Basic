@@ -19,9 +19,11 @@ import { advanceTo } from '../../packages/app/src/game/clock';
 import { readNews } from '../../packages/app/src/game/world';
 import { reviewSpan } from '../../packages/app/src/game/review';
 import {
+  calloutsFor,
   confirmAwards,
   createPlan,
   nightResults,
+  pencilCallout,
   planById,
   runPlan,
   savePlan,
@@ -181,6 +183,47 @@ describe('the results', () => {
     const outcome = planById(db, plan.id)!.outcome!;
     // The cost the recap shows is derived from these, and must be the night's real cost.
     expect(outcome.gate! + outcome.broadcast! - outcome.profit).toBeCloseTo(ran.revenue.costs, 0);
+  });
+});
+
+describe('the callouts', () => {
+  it('quote the night as the feed has it, and name who they want', () => {
+    const { db, plan } = ranCard();
+    runPlan({ db, plan });
+
+    const callouts = calloutsFor(db, planById(db, plan.id)!);
+    expect(callouts.length).toBeGreaterThan(0);
+    expect(callouts.length).toBeLessThanOrEqual(3);
+    const voices = readNews(db).filter((n) => n.kind === 'voice');
+    for (const c of callouts) {
+      expect(c.targetId).not.toBe(c.winnerId);
+      // One line, said once: the recap reads C3's callout rather than writing its own.
+      const said = voices.find((n) => n.detail === c.line)!;
+      expect(said.fighterIds).toEqual([c.winnerId, c.targetId]);
+    }
+  });
+
+  it('go onto the next card with room in one step, or say why not', () => {
+    const { db, promotion, plan } = ranCard();
+    runPlan({ db, plan });
+    setWorld(db, { day: plan.day });
+    const callouts = calloutsFor(db, planById(db, plan.id)!);
+
+    // No card to put it on yet: said, not thrown.
+    const none = pencilCallout(db, callouts[0]!);
+    expect('reason' in none).toBe(true);
+
+    const next = createPlan({ db, promotion, day: plan.day + 120 });
+    const placed = callouts.map((c) => ({ c, placed: pencilCallout(db, c) }));
+    const done = placed.find((p) => 'plan' in p.placed);
+    expect(done).toBeDefined();
+    if (done && 'plan' in done.placed) {
+      const { plan: onto, slotId } = done.placed;
+      expect(onto.id).toBe(next.id);
+      const bout = onto.slots.find((s) => s.id === slotId)!.bout!;
+      expect(bout.status).toBe('draft');
+      expect([bout.redId, bout.blueId]).toContain(done.c.targetId);
+    }
   });
 });
 
