@@ -153,15 +153,8 @@ describe('bulk runs the same sport', () => {
      * plan while Full ranged 119 to 349 — to agreeing within about a tenth on control, volume and
      * takedown rate. What is left is second-order: six years of contracts and rankings compound
      * whatever fights differ, and the leader's roster is where that lands.
-     *
-     * Widened again to 0.3 at doc 34 C1, which changed nothing about either path and still moved
-     * this. Refusing traits a fighter's ratings flatly contradict shifts which trait some debutants
-     * draw, and with it every stream downstream. Six seeds before that change read 0.752 (this
-     * test's own seed — one point inside 0.75), 0.832, 0.815, 0.890, 0.793, 0.953; after it 0.710,
-     * 0.861, 0.802, 0.828, 0.874, 0.860. Same spread, a different draw on the one seed the test
-     * runs, which is what a bound set flush against a distribution does.
      */
-    within('leaderRoster', 0.3);
+    within('leaderRoster', 0.25);
     expect(bulk.championsHeld, describeBoth('championsHeld')).toBeGreaterThan(
       full.championsHeld * 0.8,
     );

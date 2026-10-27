@@ -23,6 +23,7 @@ import type { Personality } from '../domain/personality.js';
 import { PERSONALITY_AXES } from '../domain/personality.js';
 import {
   ALL_TRAITS,
+  TRAITS,
   findTraitConflicts,
   type AffinityAttribute,
   type TraitDef,
@@ -553,15 +554,10 @@ export function generateTraits(
   count = 2,
   attributes?: Attributes,
   reference?: Readonly<Partial<Record<AttributeKey, number>>>,
-  /** The division the physical bands compare against, for `traitContradicts`. */
-  context?: BandContext,
 ): TraitId[] {
   const traits: TraitId[] = [];
-  // Acquired traits are earned in play, not handed out at generation, and a trait the ratings
-  // flatly contradict is not handed out at all.
-  const pool = ALL_TRAITS.filter(
-    (t) => !t.acquirable && !(attributes && traitContradicts(t, attributes, context)),
-  );
+  // Acquired traits are earned in play, not handed out at generation.
+  const pool = ALL_TRAITS.filter((t) => !t.acquirable);
 
   for (let attempt = 0; attempt < 30 && traits.length < count; attempt++) {
     const candidate = attributes
@@ -572,6 +568,34 @@ export function generateTraits(
     traits.push(candidate);
   }
   return traits;
+}
+
+/**
+ * Swap out any trait the fighter's own ratings flatly contradict. See `traitContradicts`.
+ *
+ * A separate pass on its own forked stream rather than a filter inside `generateTraits`, on
+ * purpose. Filtering the pool there changed which trait *every* weighted draw landed on, and so
+ * every draw after it — a whole-world reshuffle for the sake of the few fighters with a Cardio
+ * Machine on a Liability engine. Done afterwards, the main stream is exactly what it was and only
+ * the fighters who drew a contradiction come out any different.
+ */
+export function withoutContradictions(
+  traits: readonly TraitId[],
+  rng: Rng,
+  attributes: Attributes,
+  reference?: Readonly<Partial<Record<AttributeKey, number>>>,
+  context?: BandContext,
+): TraitId[] {
+  const kept = traits.filter((id) => !traitContradicts(TRAITS[id], attributes, context));
+  if (kept.length === traits.length) return [...traits];
+  const pool = ALL_TRAITS.filter((t) => !t.acquirable && !traitContradicts(t, attributes, context));
+  for (let attempt = 0; attempt < 30 && kept.length < traits.length; attempt++) {
+    const candidate = rng.pickWeighted(pool, (t) => traitFit(t, attributes, reference)).id;
+    if (kept.includes(candidate) || traits.includes(candidate)) continue;
+    if (findTraitConflicts([...kept, candidate]).length > 0) continue;
+    kept.push(candidate);
+  }
+  return kept;
 }
 
 /**
@@ -778,11 +802,13 @@ export function generateFighter(rng: Rng, options: GenerationOptions): Fighter {
     ),
     potential,
     personality: generatePersonality(rng),
-    traits: generateTraits(rng, rng.int(1, 3), attributes, reference, {
-      divisionId: options.divisionId as string,
-      sex: options.sex,
-      eliteLift: ELITE_LIFT,
-    }),
+    traits: withoutContradictions(
+      generateTraits(rng, rng.int(1, 3), attributes, reference),
+      rng.fork(`traits:${options.id}`),
+      attributes,
+      reference,
+      { divisionId: options.divisionId as string, sex: options.sex, eliteLift: ELITE_LIFT },
+    ),
 
     condition: freshCondition(),
     record: [],
