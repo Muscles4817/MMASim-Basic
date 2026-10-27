@@ -120,21 +120,31 @@ describe('the world gets hurt too', () => {
      *
      * The pathology it replaces: eight years of generated pre-history left **76%** of the roster
      * carrying something and only 71 of 824 active fighters bookable at all.
+     *
+     * Pooled over three seeds (doc 34 C5). One world of ~140 fighters is too small a sample for a
+     * claim about the sport: on master, six seeds ranged from 17% to 26% shelved, so the single
+     * seed this used to run passed or failed on which fights happened to happen. On these three,
+     * master reads 20.2% and C5 21.6% (over twelve seeds, 20.3% and 21.3%). The bound is unchanged.
      */
-    const db = createNewGame({ adapter: createMemoryAdapter(), seed: 'world-gate' });
-    let day = getWorld(db).day;
-    for (let step = 0; step < 52; step++) {
-      advanceWorld(db, day, day + 14, {});
-      day += 14;
-      setWorld(db, { day });
+    let shelvedCount = 0;
+    let rosterCount = 0;
+    for (const seed of ['world-gate', 'world-gate-2', 'world-gate-3']) {
+      const db = createNewGame({ adapter: createMemoryAdapter(), seed });
+      let day = getWorld(db).day;
+      for (let step = 0; step < 52; step++) {
+        advanceWorld(db, day, day + 14, {});
+        day += 14;
+        setWorld(db, { day });
+      }
+
+      const roster = (db.fighters.findAll() as Fighter[]).filter((f) => f.retiredDay === undefined);
+      shelvedCount += roster.filter((f) => !canFightOn(f.injuries ?? [], day)).length;
+      rosterCount += roster.length;
     }
 
-    const roster = (db.fighters.findAll() as Fighter[]).filter((f) => f.retiredDay === undefined);
-    const shelved = roster.filter((f) => !canFightOn(f.injuries ?? [], day));
-
     expect(
-      shelved.length / roster.length,
-      `${shelved.length} of ${roster.length} are too hurt to be booked`,
+      shelvedCount / rosterCount,
+      `${shelvedCount} of ${rosterCount} are too hurt to be booked`,
     ).toBeLessThan(0.25);
   });
 

@@ -26,6 +26,7 @@ import {
   settleReplies,
 } from '../../packages/app/src/game/plans';
 import { advanceTo } from '../../packages/app/src/game/clock';
+import { advanceWorld } from '../../packages/app/src/game/world';
 import {
   TALKS_COOLDOWN_DAYS,
   counterLimit,
@@ -212,6 +213,21 @@ describe('talks that were left', () => {
     const signed = sign(db, fighter, promotion, openingTerms(fighter, promotion));
     expect(signed.ok).toBe(true);
     expect((db.fighters.findById(fighter.id as string) as Fighter).talks).toBeUndefined();
+  });
+
+  it('is dropped from the save once the cooldown has passed, signed or not', () => {
+    const { db, promotion, roster, day } = world();
+    const fighter = roster[0]!;
+    recordTalks(
+      db,
+      fighter,
+      makeOffer(tableFor(db, fighter, promotion), undefined, lowball(fighter, promotion)),
+    );
+    const stored = () => (db.fighters.findById(fighter.id as string) as Fighter).talks;
+    advanceWorld(db, day, day + 30, {});
+    expect(stored(), 'dropped while it still stands').toBeDefined();
+    advanceWorld(db, day + 30, day + TALKS_COOLDOWN_DAYS + 1, {});
+    expect(stored()).toBeUndefined();
   });
 });
 

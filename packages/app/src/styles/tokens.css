@@ -117,7 +117,11 @@
   /* Table micro-labels and column headers only. Never body copy — it is below the floor. */
   --text-2xs: 0.6875rem;
   --text-xs: 0.75rem;
-  --text-sm: 0.8125rem;
+  /*
+   * Secondary copy — the explanatory sentence under a heading, a row's second line. It is read,
+   * not glanced at, so it sits at the 14px floor for body text rather than the 13px it was.
+   */
+  --text-sm: 0.875rem;
   /*
    * Body copy. Sized for a phone held at arm's length, which is the primary target and the
    * reason it is under 1rem. `--text-body` steps it up on a desktop, where the same size read

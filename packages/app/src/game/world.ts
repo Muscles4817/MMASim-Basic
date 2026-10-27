@@ -25,7 +25,11 @@ import {
   DIVISIONS,
   applyAftermath,
   applyAgeing,
+  withoutStaleTalks,
   applyTraining,
+  trainingBlocks,
+  trajectoryOf,
+  withTraitsStillTrue,
   settleWeight,
   AMBIENT_BLOCKS_PER_WEEK,
   campInjuryChance,
@@ -65,6 +69,8 @@ import {
   eventName,
   fightNews,
   generateFighter,
+  debutAge,
+  KO_LOSS_TRAUMA,
   offerOpponents,
   rankDivision,
   readinessDelay,
@@ -326,8 +332,13 @@ export interface WorldExclusion {
    * a question about the player's planned cards, which this module cannot import. A fighter the
    * promoter has put on a card has been given the bout they were owed, and a new save's grace
    * period holds the whole inherited roster.
+   *
+   * Each fighter maps to the last day the hold lasts: `Infinity` for a signed booking, the end
+   * of the grace period for the rest. A day rather than a flag, so a grace period that ends in
+   * the middle of a long advance ends on its day — the walk-out risk is charged only for the
+   * part of the span after it — rather than covering the whole advance it started in.
    */
-  activityHold?: ReadonlySet<string>;
+  activityHold?: ReadonlyMap<string, number>;
   /**
    * How the world resolves its own bouts. Defaults to `simulateFight`.
    *
@@ -1490,7 +1501,11 @@ function runStatisticalCard(ctx: {
       const stopped = outcome === 'loss' && isKoMethod(method);
       const condition = {
         ...stored.condition,
-        headTrauma: clamp(stored.condition.headTrauma + (stopped ? 2.4 : 0.5), 0, 100),
+        headTrauma: clamp(
+          stored.condition.headTrauma + (stopped ? 2.4 + KO_LOSS_TRAUMA : 0.5),
+          0,
+          100,
+        ),
         bodyWear: clamp(stored.condition.bodyWear + (finishes ? 0.6 : 1.1), 0, 100),
       };
 
@@ -2015,7 +2030,12 @@ function develop(
     // this was and which pulled every fighter in the world toward the same shape (docs/19 §12).
     focuses: [pickTrainingFocus(rng, fighter)],
     weeks,
-    blocks,
+    /*
+     * Scaled by where this career is. Doc 34 C5: a breakout year, a stalled one, and a pace of
+     * their own, so that two prospects of the same age and gym do not develop in lockstep. The
+     * world's fighters only: the player's own training is the player's to decide.
+     */
+    blocks: (blocks ?? trainingBlocks(weeks)) * trajectoryOf(fighter, day).rate,
     gym,
     coach,
     day,
@@ -2060,7 +2080,8 @@ function develop(
    * A no-op for anybody already inside their division's weight band, which is almost everybody
    * almost always: `settleWeight` returns the fighter unchanged on its second line.
    */
-  return settleWeight(aged);
+  // And a trait the ratings no longer bear out goes with them (doc 34 C5).
+  return settleWeight(withTraitsStillTrue(aged));
 }
 
 function finalise(
@@ -2356,7 +2377,15 @@ function replenish(
       depthHere.set(id, (depthHere.get(id) ?? 0) + 1);
     }
 
-    for (let i = active.length; i < target; i++) {
+    /*
+     * During a generated world's pre-history, a share of the gap each quarter rather than all of
+     * it, so debutants arrive spread across the years (doc 34 C5). Afterwards, the whole gap.
+     */
+    const rampUntil = getWorld(db).intakeRampUntil;
+    const quartersLeft =
+      rampUntil !== undefined && day < rampUntil ? Math.ceil((rampUntil - day) / QUARTER_DAYS) : 1;
+    const intake = Math.ceil(Math.max(0, target - active.length) / quartersLeft);
+    for (let i = active.length; i < active.length + intake; i++) {
       /*
        * Where a debutant starts.
        *
@@ -2403,6 +2432,7 @@ function replenish(
         day,
         promotionId: promotion?.id,
         tier: isProspect ? Math.round(genRng.normalClamped(78, 9, 62, 97)) : undefined,
+        age: debutAge(genRng),
       });
       /*
        * A gym, and with it a head coach.
@@ -2467,7 +2497,11 @@ function ageEveryone(
   lastSeen?: Map<string, number>,
 ): void {
   const world = getWorld(db);
-  for (const fighter of db.fighters.findAll() as Fighter[]) {
+  for (const stored of db.fighters.findAll() as Fighter[]) {
+    // Contract talks past their cooldown are dropped here, the one pass that reaches everybody
+    // (doc 34 C4 follow-up): a fighter who never signed would otherwise carry them for good.
+    const fighter = withoutStaleTalks(stored, toDay);
+    if (fighter !== stored) db.fighters.upsert(fighter as Fighter & Entity);
     if (fighter.id === exceptId || fighter.retiredDay !== undefined) continue;
     const since = lastSeen?.get(fighter.id as string) ?? fromDay;
     if (since >= toDay) continue;
@@ -2697,13 +2731,15 @@ function enforceActivity(
   day: number,
   rng: Rng,
   exceptId: FighterId | undefined,
-  hold?: ReadonlySet<string>,
+  hold?: ReadonlyMap<string, number>,
 ): NewsItem[] {
   const news: NewsItem[] = [];
 
   for (const fighter of db.fighters.findAll() as Fighter[]) {
     // Booked by the player, or inside a new save's grace period. See `activityHold`.
-    if (hold?.has(fighter.id as string)) continue;
+    const heldUntil = hold?.get(fighter.id as string);
+    if (heldUntil !== undefined && day <= heldUntil) continue;
+    const exposedFrom = heldUntil === undefined ? fromDay : Math.max(fromDay, heldUntil);
     /*
      * Never the player, and this is the whole of doc 21 § 1.2.
      *
@@ -2779,7 +2815,7 @@ function enforceActivity(
       (agreement.activityGuarantee - boutsInLastYear) / Math.max(1, agreement.activityGuarantee),
     );
     const perYear = (0.08 + leverage * 0.3) * shortfall;
-    const span = Math.max(1, day - fromDay);
+    const span = Math.max(1, day - exposedFrom);
     const chance = 1 - (1 - perYear) ** (span / 365);
     if (!rng.fork(`breach:${fighter.id}:${day}`).chance(chance)) continue;
 

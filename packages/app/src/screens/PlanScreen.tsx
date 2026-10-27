@@ -57,6 +57,7 @@ import { Alert, Fact, KeyStat } from '../ui/signals';
 import { Console, Ledger, LedgerRow, LedgerRule } from '../ui/console';
 import { formatGameDay } from '../shell/Shell';
 import { useToast } from '../ui/toast';
+import { Tip } from '../ui/tip';
 import { NightRecap, NightShow } from './NightScreen';
 import { TaleOfTheTape } from '../ui/TaleOfTheTape';
 import { money } from '../ui/format';
@@ -249,6 +250,11 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
    */
   const board = (
     <>
+      <Tip id="plan-slots" title="Every slot is a decision">
+        Tap a slot to choose who fights in it. Pencilling a fight in costs nothing and asks nobody;
+        only sending the offer does, and both corners have to say yes.
+      </Tip>
+
       {/*
         On the night, the night is the screen. The run button used to sit in the side
         column under the forecast — below the fold on a phone, under twelve slot rows.
@@ -845,6 +851,10 @@ function SubjectPicker({
               size="sm"
               variant={divisionId === id ? 'primary' : 'secondary'}
               onClick={() => setDivisionId(id)}
+              // Abbreviated to fit a row of filters; the full name is what is announced and
+              // what a hover shows.
+              aria-label={getDivision(id as never).name}
+              title={getDivision(id as never).name}
             >
               {getDivision(id as never).shortName}
             </Button>
@@ -1144,6 +1154,7 @@ function ConfirmBout({
    * them remember to designate it meant champions turning up in three-round bouts that risked
    * the belt's standing for nothing.
    */
+  const toast = useToast();
   const [titleKind, setTitleKind] = useState<TitleKind | undefined>(
     () => titleOptions.find((o) => o.kind === 'undisputed' && o.available)?.kind,
   );
@@ -1223,6 +1234,17 @@ function ConfirmBout({
             onClick={() => {
               const placed = place();
               const result = sendOffer({ ctx, plan: placed, slotId: slot.id });
+              const bout = result?.plan.slots.find((s) => s.id === slot.id)?.bout;
+              if (bout) {
+                // Since C4 most corners answer over days, so an offer that is out says when.
+                const waiting = bout.status === 'offered' && bout.replyDay !== undefined;
+                toast(
+                  waiting
+                    ? `Offered: ${displayName(red)} vs ${displayName(blue)}. The corners answer in ${bout.replyDay! - ctx.day} days.`
+                    : `${displayName(red)} vs ${displayName(blue)}: ${boutStatusLabel(bout)}.`,
+                  bout.status === 'agreed' ? 'good' : waiting ? 'info' : 'warn',
+                );
+              }
               onDone(result?.plan ?? placed, true);
             }}
           >

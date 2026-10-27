@@ -33,6 +33,7 @@ import { fighterAge } from '../domain/fighter.js';
 import { ATTRIBUTE_META, overallRating, ratingBand } from '../ratings/attributes.js';
 import type { AttributeKey, Attributes } from '../ratings/attributes.js';
 import { TRAUMA_CONCERN, TRAUMA_MEDICAL, WEAR_CONCERN } from '../progression/retirement.js';
+import { developmentTrend, type DevelopmentTrend } from '../progression/trajectory.js';
 import { RANKED_DEPTH } from './ladder.js';
 import { FIGHT_THROUGH_WEEKS, canFightOn, weeksUntilFit } from '../health/injuries.js';
 
@@ -220,6 +221,8 @@ export interface ScoutingRead {
   weaknesses: readonly AttributeCall[];
   /** Short phrases for chips: 'Finisher', 'Goes the distance', 'Grappler'. */
   tags: readonly string[];
+  /** Which way they are heading. Doc 34 C5. */
+  trend: DevelopmentTrend;
 }
 
 const call = (attributes: Attributes, key: AttributeKey): AttributeCall => ({
@@ -292,6 +295,13 @@ export function scoutingRead(fighter: Fighter, day: GameDay): ScoutingRead {
   else if (grappling - striking > 8) tags.push('Grappler');
   else tags.push('Mixed');
 
+  /*
+   * Which way they are heading, second only to what they are. Doc 34 C5: a promoter signing a
+   * 24-year-old is buying the next three years, and the card said nothing about them.
+   */
+  const trend = developmentTrend(fighter, day);
+  tags.push(trend.label);
+
   if (finishRate > 0.6 && summaryRecord.wins >= 3) tags.push('Finisher');
   else if (finishRate < 0.25 && summaryRecord.wins >= 4) tags.push('Goes the distance');
   if (a.cardio >= 75) tags.push('Never tires');
@@ -347,10 +357,14 @@ export function scoutingRead(fighter: Fighter, day: GameDay): ScoutingRead {
       : ' No obvious hole to attack, which is rare and expensive.';
 
   return {
-    summary: `A ${shape} ${engine}. ${standing}${hole}${decline}`,
+    // The mileage line already says it for a worn veteran who is slipping.
+    summary: `A ${shape} ${engine}. ${standing}${hole}${decline}${
+      decline && trend.id === 'slipping' ? '' : ` ${trend.sentence}`
+    }`,
     strengths,
     weaknesses,
     tags,
+    trend,
   };
 }
 
