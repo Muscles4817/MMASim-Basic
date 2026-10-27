@@ -1236,9 +1236,13 @@ function ConfirmBout({
               const result = sendOffer({ ctx, plan: placed, slotId: slot.id });
               const bout = result?.plan.slots.find((s) => s.id === slot.id)?.bout;
               if (bout) {
+                // Since C4 most corners answer over days, so an offer that is out says when.
+                const waiting = bout.status === 'offered' && bout.replyDay !== undefined;
                 toast(
-                  `${displayName(red)} vs ${displayName(blue)}: ${boutStatusLabel(bout)}.`,
-                  bout.status === 'agreed' ? 'good' : 'warn',
+                  waiting
+                    ? `Offered: ${displayName(red)} vs ${displayName(blue)}. The corners answer in ${bout.replyDay! - ctx.day} days.`
+                    : `${displayName(red)} vs ${displayName(blue)}: ${boutStatusLabel(bout)}.`,
+                  bout.status === 'agreed' ? 'good' : waiting ? 'info' : 'warn',
                 );
               }
               onDone(result?.plan ?? placed, true);
