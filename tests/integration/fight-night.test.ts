@@ -35,7 +35,7 @@ import {
   promoterContext,
   runPlan,
 } from '../../packages/app/src/game/plans';
-import { agreed, filledPlan } from '../helpers/plans';
+import { advanceThrough, agreed, filledPlan } from '../helpers/plans';
 
 const game = () => createNewGame({ adapter: undefined, era: '2026' });
 
@@ -60,7 +60,7 @@ describe('the clock stops on fight night', () => {
   it('will not run through the player’s own card, however far it is asked to go', () => {
     const { db, plan, today } = withCard();
 
-    const result = advanceTo(db, today + 60);
+    const result = advanceThrough(db, today + 60);
 
     expect(result.day).toBe(plan.day);
     expect(getWorld(db).day).toBe(plan.day);
@@ -81,8 +81,9 @@ describe('the clock stops on fight night', () => {
 describe('a card nobody ran', () => {
   it('is cancelled once its date has passed, rather than left in the past', () => {
     const { db, plan } = withCard();
-    const name = planName(db, plan);
-    advanceTo(db, plan.day);
+    advanceThrough(db, plan.day);
+    // Named on the night: a main event that fell out in the run-up changes the name.
+    const name = planName(db, planById(db, plan.id)!);
     advanceTo(db, plan.day + 1);
 
     const after = planById(db, plan.id)!;
@@ -106,7 +107,7 @@ describe('a card nobody ran', () => {
       blockerFor({ ctx: promoterContext({ db, promotion, day }), fighter: someone, plan: later });
     expect(blocker(plan.day)).toMatch(/another card/i);
 
-    advanceTo(db, plan.day);
+    advanceThrough(db, plan.day);
     advanceTo(db, plan.day + 1);
 
     expect(blocker(plan.day + 1) ?? '').not.toMatch(/another card/i);
@@ -114,17 +115,19 @@ describe('a card nobody ran', () => {
 
   it('costs buzz and goodwill, and says so', () => {
     const { db, promotion, plan } = withCard();
-    const signedId = plannedBouts(plan)[0]!.redId as string;
-    const before = db.fighters.findById(signedId) as Fighter;
-    const name = planName(db, plan);
 
-    advanceTo(db, plan.day);
+    advanceThrough(db, plan.day);
+    const name = planName(db, planById(db, plan.id)!);
+    // Whoever is still signed on the night: anybody who fell out in the run-up is not on it.
+    const signedId = plannedBouts(planById(db, plan.id)!)[0]!.redId as string;
+    const before = db.fighters.findById(signedId) as Fighter;
+    const buzzBefore = (db.promotions.findById(promotion.id as string) as Promotion).buzz;
     const result = advanceTo(db, plan.day + 1);
 
     expect(result.missed?.map((p) => p.id)).toEqual([plan.id]);
 
     const after = db.promotions.findById(promotion.id as string) as Promotion;
-    expect(after.buzz).toBe(Math.max(1, promotion.buzz - MISSED_CARD_BUZZ));
+    expect(after.buzz).toBe(Math.max(1, buzzBefore - MISSED_CARD_BUZZ));
 
     // Remembered rather than added to a number the next settlement recomputes. Doc 34 C3.
     const fighter = db.fighters.findById(signedId) as Fighter;

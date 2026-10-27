@@ -17,7 +17,7 @@
  * promotion.
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { toCalendar } from '@mmasim/engine';
 import type { EventScale, Promotion } from '@mmasim/engine';
 import { EVENT_SCALES, describeHealth, marketsFor } from '@mmasim/engine';
@@ -28,6 +28,7 @@ import { Alert } from '../ui/signals';
 import { fromNow, money } from '../ui/format';
 import { reviewSpan, type SpanReview } from '../game/review';
 import { useToast } from '../ui/toast';
+import { Tip } from '../ui/tip';
 import { formatGameDay } from '../shell/Shell';
 import { buildCalendar, defaultFilter, nextStop, type CalendarEntry } from '../game/calendar';
 import { ADVANCE_STEPS, advanceTo, type AdvanceResult } from '../game/clock';
@@ -38,7 +39,6 @@ import {
   fightNightOn,
   planName,
 } from '../game/plans';
-import { PromoterSubNav } from './promoterNav';
 
 /**
  * How far ahead the board looks.
@@ -64,7 +64,7 @@ const MONTH_NAMES = [
   'December',
 ];
 
-export function CalendarScreen() {
+export function CalendarScreen({ newCard = false }: { newCard?: boolean }) {
   const { db, world, commit } = useGame();
   const { navigate } = useRouter();
 
@@ -75,8 +75,14 @@ export function CalendarScreen() {
 
   const [filter, setFilter] = useState<'yours' | 'all'>(() => defaultFilter(world));
   const [lastAdvance, setLastAdvance] = useState<AdvanceResult | undefined>();
-  const [planning, setPlanning] = useState(false);
+  // Opened by every "Plan a card" button in the game, so the form is the first thing on screen.
+  const [planning, setPlanning] = useState(newCard);
+  const planRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (newCard) planRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [newCard]);
   const [review, setReview] = useState<SpanReview | undefined>();
+  const [announcement, setAnnouncement] = useState('');
   const toast = useToast();
 
   const entries = useMemo(
@@ -101,6 +107,18 @@ export function CalendarScreen() {
     const result = advanceTo(db, target);
     setLastAdvance(result);
     setReview(isPromoter ? reviewSpan(db, from, result.day, budgetBefore) : undefined);
+    // Said once, politely: where the clock landed and why it stopped there.
+    setAnnouncement(
+      [
+        `Now ${formatGameDay(result.day)}.`,
+        result.fightNight ? `Fight night: ${planName(db, result.fightNight)}.` : '',
+        result.interrupted
+          ? `${result.waiting.length} ${result.waiting.length === 1 ? 'thing needs' : 'things need'} you.`
+          : '',
+      ]
+        .filter(Boolean)
+        .join(' '),
+    );
     commit();
   };
   const advance = (days: number) => moveTo(world.day + days);
@@ -108,7 +126,16 @@ export function CalendarScreen() {
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
-      {isPromoter && <PromoterSubNav current="calendar" />}
+      <p className="visually-hidden" aria-live="polite">
+        {announcement}
+      </p>
+
+      {isPromoter && (
+        <Tip id="calendar-clock" title="The clock stops for you">
+          Move time on a day, a week or a month at a time. It stops early whenever something needs a
+          decision, and always on the night of one of your cards.
+        </Tip>
+      )}
 
       <Card raised>
         <p className="section-title">Today</p>
@@ -222,36 +249,41 @@ export function CalendarScreen() {
         already full and was run in the same sitting.
       */}
       {isPromoter && promotion && (
-        <Card
-          title="Plan a card"
-          action={
-            <Button size="sm" onClick={() => setPlanning((open) => !open)}>
-              {planning ? 'Close' : 'New card'}
-            </Button>
-          }
+        <div
+          ref={planRef}
+          style={{ scrollMarginTop: 'calc(var(--header-height) + var(--space-4))' }}
         >
-          {planning ? (
-            <PlanACard
-              promotion={promotion}
-              today={world.day}
-              onCreate={(input) => {
-                const plan = createPlan({ db, promotion, ...input });
-                commit();
-                toast(
-                  `${planName(db, plan)} is in the diary for ${formatGameDay(plan.day)}.`,
-                  'good',
-                );
-                setPlanning(false);
-                navigate({ name: 'plan', id: plan.id });
-              }}
-            />
-          ) : (
-            <p className="prose faint" style={{ fontSize: 'var(--text-sm)' }}>
-              Pick a date, a market and a size. The card can stay half empty for months — that is
-              what planning is. You fill it as the fights become makeable.
-            </p>
-          )}
-        </Card>
+          <Card
+            title="Plan a card"
+            action={
+              <Button size="sm" onClick={() => setPlanning((open) => !open)}>
+                {planning ? 'Close' : 'New card'}
+              </Button>
+            }
+          >
+            {planning ? (
+              <PlanACard
+                promotion={promotion}
+                today={world.day}
+                onCreate={(input) => {
+                  const plan = createPlan({ db, promotion, ...input });
+                  commit();
+                  toast(
+                    `${planName(db, plan)} is in the diary for ${formatGameDay(plan.day)}.`,
+                    'good',
+                  );
+                  setPlanning(false);
+                  navigate({ name: 'plan', id: plan.id });
+                }}
+              />
+            ) : (
+              <p className="prose faint" style={{ fontSize: 'var(--text-sm)' }}>
+                Pick a date, a market and a size. The card can stay half empty for months — that is
+                what planning is. You fill it as the fights become makeable.
+              </p>
+            )}
+          </Card>
+        </div>
       )}
 
       <Segmented

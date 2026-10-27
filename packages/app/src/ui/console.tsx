@@ -16,7 +16,7 @@
  * arrives as a prop at the route boundary, never as a branch inside a shared component.
  */
 
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   displayBand,
   ratingBand,
@@ -63,8 +63,37 @@ export interface SubNavItem {
  * there.
  */
 export function SubNav({ items, label }: { items: readonly SubNavItem[]; label: string }) {
+  /*
+   * Whether there is more of the row off either edge, which the CSS turns into a fade. Read on
+   * scroll and on resize; a row that fits sets neither.
+   */
+  const ref = useRef<HTMLElement>(null);
+  const [more, setMore] = useState({ left: false, right: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const read = () =>
+      setMore({
+        left: el.scrollLeft > 1,
+        right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
+      });
+    read();
+    el.addEventListener('scroll', read, { passive: true });
+    window.addEventListener('resize', read);
+    return () => {
+      el.removeEventListener('scroll', read);
+      window.removeEventListener('resize', read);
+    };
+  }, [items.length]);
+
   return (
-    <nav className="subnav" aria-label={label}>
+    <nav
+      ref={ref}
+      className="subnav"
+      aria-label={label}
+      data-more-left={more.left ? 'true' : undefined}
+      data-more-right={more.right ? 'true' : undefined}
+    >
       {items.map((item) => (
         <a
           key={item.label}

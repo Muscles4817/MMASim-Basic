@@ -95,7 +95,12 @@ export type Route =
   | { name: 'champions' }
   // The clock and the staging ground. Shared by every mode — the one screen that owns time, and
   // the one place anything needing an answer waits.
-  | { name: 'calendar' }
+  /**
+   * The calendar, and with `newCard` the new-card form already open — which is what every
+   * "Plan a card" button means. They used to land on the calendar and leave the player to find
+   * the "New card" toggle among the diary.
+   */
+  | { name: 'calendar'; newCard?: boolean }
   | { name: 'inbox' }
   | { name: 'editor' }
   | { name: 'editorFighter'; id: string }
@@ -150,7 +155,7 @@ function parse(hash: string): Route {
     case 'stable':
       return { name: 'promoterRoster' };
     case 'calendar':
-      return { name: 'calendar' };
+      return param === 'new' ? { name: 'calendar', newCard: true } : { name: 'calendar' };
     case 'inbox':
       return { name: 'inbox' };
     case 'editor':
@@ -179,6 +184,8 @@ export function toHash(route: Route): string {
       return `#/fight/${route.boutId}`;
     case 'plan':
       return route.slot ? `#/plan/${route.id}/${route.slot}` : `#/plan/${route.id}`;
+    case 'calendar':
+      return route.newCard ? '#/calendar/new' : '#/calendar';
     case 'editorFighter':
       return `#/editor/${route.id}`;
     case 'editorList':
@@ -202,6 +209,9 @@ export function toHash(route: Route): string {
  * is how a link to one slot on a card became a link to the card.
  */
 export function routeOf(link: { route: string; id?: string; slot?: string }): Route {
+  if (link.route === 'calendar') {
+    return link.id === 'new' ? { name: 'calendar', newCard: true } : { name: 'calendar' };
+  }
   if (link.route === 'plan' && link.id) {
     return link.slot
       ? { name: 'plan', id: link.id, slot: link.slot }

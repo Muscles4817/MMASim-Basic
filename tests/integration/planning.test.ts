@@ -30,9 +30,9 @@ import {
   issuesFor,
   opponentsFor,
   placeBout,
+  planById,
   plansFor,
   promoterContext,
-  rollWithdrawals,
   runPlan,
   savePlan,
   settleReplies,
@@ -43,6 +43,7 @@ import {
 } from '../../packages/app/src/game/plans';
 import { advanceWorld } from '../../packages/app/src/game/world';
 import { agreed, filledPlan } from '../helpers/plans';
+import { RUN_UP_DAYS, rollRunUp } from '../../packages/app/src/game/fightWeek';
 
 const game = () => createNewGame({ adapter: undefined, era: '2026' });
 const leader = (db: ReturnType<typeof game>) =>
@@ -580,35 +581,47 @@ describe('running the night', () => {
 });
 
 describe('withdrawals', () => {
+  /*
+   * The sport's defining operational emergency, rolled through a card's run-up rather than on the
+   * night (doc 34 A5): `rollRunUp` is what the clock calls each day. These are the two properties
+   * the night-time roll used to pin, on the path that replaced it.
+   */
+  const runUp = (db: ReturnType<typeof game>, cardDay: number) =>
+    Array.from({ length: RUN_UP_DAYS }, (_, i) => rollRunUp(db, cardDay - RUN_UP_DAYS + i)).flat();
+
   it('empties the corner it happened in rather than scratching the whole card', () => {
-    /*
-     * The sport's defining operational emergency, and now it happens to a card that exists in
-     * the save — so the player fixes it in the same matchmaking screen they built it with.
-     */
     const db = game();
     const promotion = leader(db);
+    setWorld(db, { playerRole: 'promoter', playerPromotionId: promotion.id as string });
 
     let broken = 0;
     for (let i = 0; i < 8; i++) {
-      const plan = agreed(db, filledPlan({ db, promotion, day: CARD_DAY + i, today: TODAY }));
-      const rolled = rollWithdrawals({ db, plan });
-      broken += rolled.withdrawals.length;
-      for (const withdrawal of rolled.withdrawals) {
-        expect(rolled.plan.slots.find((s) => s.id === withdrawal.slotId)?.bout).toBeUndefined();
+      const day = CARD_DAY + i * 40;
+      const plan = agreed(db, filledPlan({ db, promotion, day, today: TODAY }));
+      const fell = runUp(db, day).filter((w) =>
+        planById(db, plan.id)?.slots.some((s) => s.id === w.slotId),
+      );
+      broken += fell.length;
+      const after = planById(db, plan.id)!;
+      for (const withdrawal of fell) {
+        expect(after.slots.find((s) => s.id === withdrawal.slotId)?.bout).toBeUndefined();
       }
+      // The rest of the card is still on it.
+      expect(after.slots.some((s) => s.bout?.status === 'agreed')).toBe(true);
     }
 
     expect(broken, 'across eight full cards nobody at all fell out').toBeGreaterThan(0);
   });
 
   it('gives the same answer twice, so a reload is not a second roll', () => {
-    const db = game();
-    const promotion = leader(db);
-    const plan = agreed(db, filledPlan({ db, promotion, day: CARD_DAY, today: TODAY }));
-
-    const first = rollWithdrawals({ db, plan }).withdrawals.map((w) => w.slotId);
-    const second = rollWithdrawals({ db, plan }).withdrawals.map((w) => w.slotId);
-    expect(second).toEqual(first);
+    const rolled = () => {
+      const db = game();
+      const promotion = leader(db);
+      setWorld(db, { playerRole: 'promoter', playerPromotionId: promotion.id as string });
+      agreed(db, filledPlan({ db, promotion, day: CARD_DAY, today: TODAY }));
+      return runUp(db, CARD_DAY).map((w) => `${w.day}:${w.slotId}:${w.fighterId as string}`);
+    };
+    expect(rolled()).toEqual(rolled());
   });
 });
 
