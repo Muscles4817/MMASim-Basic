@@ -159,8 +159,8 @@ week, 4 fighters as people, 5 development over time.
 | A4 Matchmaking UX               | 3     | A           | Not started       |     |
 | A5 Fight week                   | 3     | A           | Not started       |     |
 | A6 Onboarding and readability   | 1/3   | A           | Not started       |     |
-| C2 Star power surfaced          | 4     | C           | Not started       |     |
-| C3 Memory, wants and voice      | 4     | C           | Not started       |     |
+| C2 Star power surfaced          | 4     | C           | In review         | #51 |
+| C3 Memory, wants and voice      | 4     | C           | In progress       |     |
 | C4 Negotiation                  | 4     | C           | Not started       |     |
 | C5 Real careers over time       | 5     | C           | Not started       |     |
 | C6 Career events                | 5     | C           | Not started       |     |
@@ -189,3 +189,5 @@ week, 4 fighters as people, 5 development over time.
 | #49 report | Scouted error does not scale with scouting investment                                                                                              | B5                     |
 | #50 report | An open decision's title is fixed when raised, so an unanswered 7-day warning still says "in 7 days"                                               | A6                     |
 | #50 review | Grace period is decided once per advance and can overrun its end by one advance                                                                    | A6 (minor)             |
+| #51 report | Persona and trend can describe the same fighter differently (a "Grinder" whose trend is rising on finishes)                                        | C3                     |
+| #51 report | A4 picker rows: `<DrawBadge fighter day market detail />` and `fightSells(...).headline`                                                           | A4                     |
