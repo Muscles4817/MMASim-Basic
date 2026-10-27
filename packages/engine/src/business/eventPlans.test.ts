@@ -13,6 +13,7 @@ import {
   EVENT_SCALES,
   eventScale,
   fightersIn,
+  describeHealth,
   planHealth,
   planIssues,
   planProgress,
@@ -132,6 +133,13 @@ describe('what is wrong with a card', () => {
     let p = withSlot(plan(), 'main', bout('a', 'b', { status: 'agreed' }));
     p = withSlot(p, 'co', bout('a', 'c', { status: 'agreed' }));
     expect(planIssues(p).some((i) => i.kind === 'doubleBooked')).toBe(true);
+  });
+
+  it('does not report a refusal on the undercard as a missing main event', () => {
+    let p = withSlot(plan(), 'main', bout('a', 'b', { status: 'agreed' }));
+    p = withSlot(p, 'co', bout('c', 'd', { status: 'declined' }));
+    expect(planHealth(p)).toBe('turnedDown');
+    expect(describeHealth(planHealth(p))).toBe('Fights turned down');
   });
 
   it('says a bout was turned down, and keeps saying it until the slot changes', () => {

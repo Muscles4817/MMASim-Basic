@@ -34,7 +34,7 @@ import {
   type Promotion,
 } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
-import { useRouter } from '../state/router';
+import { routeOf, useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, ListItem } from '../ui';
 import { Fact, KeyStat } from '../ui/signals';
 import { AttentionRow, Console, Ledger, LedgerRow, LedgerRule, PipelineCard } from '../ui/console';
@@ -45,6 +45,7 @@ import { attentionFor } from '../game/attention';
 import { describeRunway, financialSnapshot } from '../game/finances';
 import { fightNightOn, forecastPlan, planName, plansFor, promoterContext } from '../game/plans';
 import { PromoterSubNav } from './promoterNav';
+import { PROMOTION_TIER_LABELS } from '../game/labels';
 
 /** How many rows the dashboard shows before it stops being a dashboard. */
 const ATTENTION_SHOWN = 6;
@@ -253,7 +254,13 @@ export function PromotionHubScreen() {
                         meta={`${plan.city} · ${describeHealth(health)}`}
                         filled={progress.filled}
                         slots={progress.slots}
-                        state={health === 'run' || health === 'cancelled' ? 'thin' : health}
+                        state={
+                          health === 'run' || health === 'cancelled'
+                            ? 'thin'
+                            : health === 'turnedDown'
+                              ? 'atRisk'
+                              : health
+                        }
                         onClick={() => navigate({ name: 'plan', id: plan.id })}
                       />
                     );
@@ -293,16 +300,7 @@ export function PromotionHubScreen() {
                         title={item.title}
                         detail={item.detail}
                         cue={action?.label}
-                        onClick={
-                          action
-                            ? () =>
-                                navigate(
-                                  action.id
-                                    ? ({ name: action.route, id: action.id } as never)
-                                    : ({ name: action.route } as never),
-                                )
-                            : undefined
-                        }
+                        onClick={action ? () => navigate(routeOf(action)) : undefined}
                       />
                     );
                   })}
@@ -421,7 +419,7 @@ export function PromotionHubScreen() {
                 />
                 <Fact
                   label="Standing"
-                  value={describeTier(promotion)}
+                  value={PROMOTION_TIER_LABELS[promotion.tier]}
                   emphasis="tertiary"
                   hint={`${promotion.baseCountry}. Attention sits at ${Math.round(promotion.buzz)} out of 100.`}
                 />
@@ -433,12 +431,3 @@ export function PromotionHubScreen() {
     </div>
   );
 }
-
-const describeTier = (promotion: Promotion): string =>
-  promotion.tier === 'global'
-    ? 'The biggest in the sport'
-    : promotion.tier === 'major'
-      ? 'A genuine major'
-      : promotion.tier === 'regional'
-        ? 'Regional'
-        : 'Developmental';

@@ -316,6 +316,15 @@ export interface WorldExclusion {
    */
   playerHasBooking?: boolean;
   /**
+   * The player's fighters who may not walk out over the activity guarantee during this advance.
+   *
+   * Answered by the clock for the same dependency reason as `playerHasBooking`: who is booked is
+   * a question about the player's planned cards, which this module cannot import. A fighter the
+   * promoter has put on a card has been given the bout they were owed, and a new save's grace
+   * period holds the whole inherited roster.
+   */
+  activityHold?: ReadonlySet<string>;
+  /**
    * How the world resolves its own bouts. Defaults to `simulateFight`.
    *
    * Doc 27 § 5's Reduced level, passed in rather than switched on inside, because *which* fights
@@ -609,7 +618,9 @@ export function advanceWorld(
   chargePromotions(db, reached - fromDay);
 
   // And the deals of anybody the world forgot to book. See `enforceActivity`.
-  news.push(...enforceActivity(db, fromDay, reached, rng.fork('breach'), exceptId));
+  news.push(
+    ...enforceActivity(db, fromDay, reached, rng.fork('breach'), exceptId, exclusion.activityHold),
+  );
 
   // The player's own side of the same question, which is a conversation rather than a rule.
   news.push(
@@ -2213,8 +2224,7 @@ function pickStartingPromotion(
    */
   division: { id: string; sex: 'male' | 'female'; depthOf: (promotionId: string) => number },
 ): Promotion | undefined {
-  const floor =
-    division.sex === 'female' ? MIN_WOMENS_DIVISION_DEPTH : MIN_DIVISION_DEPTH;
+  const floor = division.sex === 'female' ? MIN_WOMENS_DIVISION_DEPTH : MIN_DIVISION_DEPTH;
 
   const eligible = promotions.filter((p) => p.divisions.includes(division.id as DivisionId));
   const weights = eligible.map((p) => {
@@ -2237,10 +2247,7 @@ function pickStartingPromotion(
     const room = target <= 0 ? 0 : Math.max(0.08, clamp01((target - have) / target));
     // Floored rather than zeroed, so a promotion whose division is full still occasionally signs
     // somebody — a roster is not a bucket that stops filling at a line.
-    const divisionRoom = Math.max(
-      0.1,
-      clamp01((floor - division.depthOf(p.id as string)) / floor),
-    );
+    const divisionRoom = Math.max(0.1, clamp01((floor - division.depthOf(p.id as string)) / floor));
     return Math.max(1, 100 - p.prestige) ** 2 * room * divisionRoom;
   });
   const total = weights.reduce((a, b) => a + b, 0);
@@ -2638,10 +2645,13 @@ function enforceActivity(
   day: number,
   rng: Rng,
   exceptId: FighterId | undefined,
+  hold?: ReadonlySet<string>,
 ): NewsItem[] {
   const news: NewsItem[] = [];
 
   for (const fighter of db.fighters.findAll() as Fighter[]) {
+    // Booked by the player, or inside a new save's grace period. See `activityHold`.
+    if (hold?.has(fighter.id as string)) continue;
     /*
      * Never the player, and this is the whole of doc 21 § 1.2.
      *
@@ -2940,7 +2950,7 @@ function chaseOpponent(
  *
  * `finalise` already scans every promotion for exactly this reason, with the same comment.
  */
-function holdsABeltAnywhere(db: GameDb, fighter: Fighter): boolean {
+export function holdsABeltAnywhere(db: GameDb, fighter: Fighter): boolean {
   return (db.promotions.findAll() as unknown as Promotion[]).some(
     (p) => p.champions[fighter.divisionId] === fighter.id,
   );
