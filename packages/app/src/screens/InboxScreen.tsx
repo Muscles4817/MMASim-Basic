@@ -18,13 +18,21 @@ import { Button, Card, Chip, Empty } from '../ui';
 import { Alert } from '../ui/signals';
 import { formatGameDay } from '../shell/Shell';
 import { markItemRead, readInbox, resolveItem } from '../game/inbox';
+import { presentAlert } from '../game/plans';
 import { answerBoutOffer } from '../game/career';
 
 export function InboxScreen() {
   const { db, world, commit, playerFighter } = useGame();
   const { navigate } = useRouter();
 
-  const items = useMemo(() => readInbox(db).slice().sort(inboxOrder), [db, world.day]);
+  // Open decisions are read with today's countdowns (`presentAlert`), not the day they arrived.
+  const items = useMemo(
+    () =>
+      readInbox(db)
+        .map((item) => presentAlert(db, item, world.day))
+        .sort(inboxOrder),
+    [db, world.day],
+  );
 
   const decisions = items.filter(isBlocking);
   const rest = items.filter((i) => !isBlocking(i));

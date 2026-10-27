@@ -25,7 +25,7 @@ import { advanceTo } from '../../packages/app/src/game/clock';
 import { readInbox, recordOfferOutcome } from '../../packages/app/src/game/inbox';
 import { attentionFor } from '../../packages/app/src/game/attention';
 import { GRACE_DAYS, graceEnds, raiseDecisions, walkDay } from '../../packages/app/src/game/alerts';
-import { bookingsFor, createPlan, savePlan } from '../../packages/app/src/game/plans';
+import { bookingsFor, createPlan, presentAlert, savePlan } from '../../packages/app/src/game/plans';
 import { bookedOnPlans } from '../../packages/app/src/game/finances';
 import { agreed, filledPlan } from '../helpers/plans';
 import { sign } from '../../packages/app/src/game/contracts';
@@ -226,6 +226,48 @@ describe('a new save', () => {
       0,
     );
     expect(walkedOver(false)).toBe(0);
+  });
+});
+
+describe('an open decision', () => {
+  it('counts down as the days pass rather than keeping the day it was raised', () => {
+    const { db, promotion, start } = asPromoter();
+    const fighter = roster(db, promotion)[0]!;
+    const deadline = start + 60;
+    raiseDecisions(
+      db,
+      start + 53,
+      [
+        {
+          key: `activity:${fighter.id}:${deadline}:7`,
+          kind: 'roster',
+          title: 'frozen',
+          fighterId: fighter.id,
+        },
+      ],
+      { kind: 'activity', title: () => '', body: '' },
+    );
+    const item = readInbox(db).find((i) => i.id.startsWith('alert:activity:'))!;
+    expect(presentAlert(db, item, start + 57).title).toMatch(/can walk in 3 days$/);
+    expect(presentAlert(db, item, start + 59).title).toMatch(/can walk in 1 day$/);
+    expect(presentAlert(db, item, start + 60).title).toMatch(/can walk now$/);
+    // Answered, it is history and keeps its words.
+    const answered = { ...item, resolvedDay: start + 55, resolvedWith: 'ok' };
+    expect(presentAlert(db, answered, start + 60).title).toBe('frozen');
+  });
+});
+
+describe('the grace period ends on its day', () => {
+  it('even when one advance runs straight through it', () => {
+    /*
+     * The hold used to be decided once per advance, from the day it started: an advance that
+     * began inside the grace period held the whole inherited roster for its entire length, so a
+     * long one carried the grace period weeks or months past its end.
+     */
+    const { db, promotion, start } = asPromoter();
+    const shelved = shelve(db, promotion, start, 200);
+    advanceThrough(db, start + GRACE_DAYS + 200);
+    expect(walkedOut(db, promotion, shelved)).toBeGreaterThan(0);
   });
 });
 

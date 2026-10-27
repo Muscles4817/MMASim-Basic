@@ -318,8 +318,13 @@ export interface WorldExclusion {
    * a question about the player's planned cards, which this module cannot import. A fighter the
    * promoter has put on a card has been given the bout they were owed, and a new save's grace
    * period holds the whole inherited roster.
+   *
+   * Each fighter maps to the last day the hold lasts: `Infinity` for a signed booking, the end
+   * of the grace period for the rest. A day rather than a flag, so a grace period that ends in
+   * the middle of a long advance ends on its day — the walk-out risk is charged only for the
+   * part of the span after it — rather than covering the whole advance it started in.
    */
-  activityHold?: ReadonlySet<string>;
+  activityHold?: ReadonlyMap<string, number>;
   /**
    * How the world resolves its own bouts. Defaults to `simulateFight`.
    *
@@ -2586,13 +2591,15 @@ function enforceActivity(
   day: number,
   rng: Rng,
   exceptId: FighterId | undefined,
-  hold?: ReadonlySet<string>,
+  hold?: ReadonlyMap<string, number>,
 ): NewsItem[] {
   const news: NewsItem[] = [];
 
   for (const fighter of db.fighters.findAll() as Fighter[]) {
     // Booked by the player, or inside a new save's grace period. See `activityHold`.
-    if (hold?.has(fighter.id as string)) continue;
+    const heldUntil = hold?.get(fighter.id as string);
+    if (heldUntil !== undefined && day <= heldUntil) continue;
+    const exposedFrom = heldUntil === undefined ? fromDay : Math.max(fromDay, heldUntil);
     /*
      * Never the player, and this is the whole of doc 21 § 1.2.
      *
@@ -2668,7 +2675,7 @@ function enforceActivity(
       (agreement.activityGuarantee - boutsInLastYear) / Math.max(1, agreement.activityGuarantee),
     );
     const perYear = (0.08 + leverage * 0.3) * shortfall;
-    const span = Math.max(1, day - fromDay);
+    const span = Math.max(1, day - exposedFrom);
     const chance = 1 - (1 - perYear) ** (span / 365);
     if (!rng.fork(`breach:${fighter.id}:${day}`).chance(chance)) continue;
 
