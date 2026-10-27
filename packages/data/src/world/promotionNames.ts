@@ -368,6 +368,36 @@ function candidate(rng: Rng, rung: PyramidRung): PromotionIdentity & { head: str
   return { head, name: `${head} ${tail.text}`, shortName: initials(head) + tail.abbr };
 }
 
+/**
+ * Initials that already mean something else.
+ *
+ * "Lancaster Showdown" abbreviates to a drug and "Salina Throwdown" to a disease, and a card
+ * billed as `STD 12` is a joke the generator should not be telling. Also the agencies and leagues
+ * a reader would take the letters for first.
+ */
+const TAKEN_INITIALS = new Set([
+  'ASS',
+  'ATF',
+  'CIA',
+  'DEA',
+  'DUI',
+  'FBI',
+  'ICE',
+  'IRS',
+  'KKK',
+  'LSD',
+  'MLB',
+  'MMA',
+  'NBA',
+  'NFL',
+  'NHL',
+  'NSA',
+  'OMG',
+  'STD',
+  'WTF',
+  'WWE',
+]);
+
 /** Enough draws that a clash on the last local show of a Large world is still vanishingly rare. */
 const ATTEMPTS = 400;
 
@@ -385,7 +415,7 @@ export function createPromotionNamer(seed: string): (rung: PyramidRung) => Promo
   const root = createRng(`${seed}:promotion-names`);
   const streams = new Map<PyramidRung, Rng>();
   const names = new Set<string>();
-  const shortNames = new Set<string>();
+  const shortNames = new Set<string>(TAKEN_INITIALS);
   const heads = new Set<string>();
   for (const real of [...PROMOTIONS_2026, ...SEED_PROMOTIONS]) {
     names.add(real.name);

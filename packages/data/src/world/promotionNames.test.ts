@@ -66,6 +66,7 @@ describe('generated promotion names', () => {
         expect(identity.name).not.toMatch(/\b(apex|major|national|feeder|local)\b/i);
         expect(identity.shortName).not.toMatch(/\d|^(APE|MAJ|NAT|FEE|LOC)/);
         expect(identity.shortName).toMatch(/^[A-Z]{2,6}$/);
+        expect(identity.shortName).not.toMatch(/^(LSD|STD|KKK|WTF)$/);
       }
     }
   });

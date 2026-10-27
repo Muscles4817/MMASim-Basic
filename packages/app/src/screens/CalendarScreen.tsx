@@ -468,7 +468,9 @@ function describeGap(days: number): string {
   if (days < 7) return `${days} days`;
   if (days < 14) return 'next week';
   if (days < 31) return `${Math.round(days / 7)} weeks`;
-  return `${Math.round(days / 30)} months`;
+  // From 31 days a month rounds to one, and "1 months" was on every row five weeks out.
+  const months = Math.round(days / 30);
+  return months === 1 ? 'a month' : `${months} months`;
 }
 
 /**
