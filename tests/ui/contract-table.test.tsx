@@ -79,4 +79,38 @@ describe('talking terms', () => {
     expect(signed).toBe(1);
     expect(screen.getByRole('status').textContent).toMatch(/Signed/);
   });
+
+  it('opens on a walk-out that is still standing, with no offer to make', async () => {
+    // Review of #55: leaving the table and coming back used to start the talks again.
+    const { db, promotion, fighter } = setup();
+    const first = render(
+      <ContractTable
+        db={db}
+        fighter={fighter}
+        promotion={promotion}
+        mode="resign"
+        onSigned={() => {}}
+      />,
+    );
+    const user = userEvent.setup();
+    const show = screen.getByLabelText(/Show purse/) as HTMLInputElement;
+    await user.clear(show);
+    await user.type(show, '0');
+    await user.click(screen.getByRole('button', { name: 'Make the offer' }));
+    expect(screen.getByText(/walked away/)).toBeTruthy();
+    first.unmount();
+
+    render(
+      <ContractTable
+        db={db}
+        fighter={fighter}
+        promotion={promotion}
+        mode="resign"
+        onSigned={() => {}}
+      />,
+    );
+    expect(screen.getByText(/walked away/)).toBeTruthy();
+    expect(screen.getByText(/They will talk again in 2 months/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Make the offer' })).toBeNull();
+  });
 });

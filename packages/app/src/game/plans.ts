@@ -1027,14 +1027,35 @@ export function sendOffer(input: {
    * Out, and waiting. Doc 34 C4: corners answer over two to seven days, not on the spot. The
    * answers are decided now — seeded on the offer, so nothing can reroll them — and revealed on the
    * day the slower corner gets back (`settleReplies`, which the clock runs after every advance).
+   *
+   * Never later than the day before the card: an answer that landed on fight night would land
+   * after the card had already been run without it. An offer sent inside that window is answered
+   * on the spot, which is what a corner does with a fight that is tomorrow.
    */
-  const replyDay =
+  const replyDay = Math.min(
+    plan.day - 1,
     ctx.day +
-    Math.max(
-      ...[red, blue].map((f) =>
-        replyDelayDays(f, managerOf(db, f), ctx.promotion.id, `${plan.id}:${slotId}:${f.id}`),
+      Math.max(
+        ...[red, blue].map((f) =>
+          replyDelayDays(f, managerOf(db, f), ctx.promotion.id, `${plan.id}:${slotId}:${f.id}`),
+        ),
       ),
-    );
+  );
+  if (replyDay <= ctx.day) {
+    const done = answered({ ...bout, pending: answers, offeredDay: ctx.day as never });
+    const next = withSlot(plan, slotId, done);
+    const accepted = done.status === 'agreed';
+    recordOfferOutcome({
+      db,
+      plan: next,
+      cardName: planName(db, next),
+      slotId,
+      bout: done,
+      accepted,
+      answers: done.answers ?? [],
+    });
+    return { plan: next, outcome: { slotId, bout: done, accepted, answers: done.answers ?? [] } };
+  }
   const waiting: PlannedBout = {
     ...bout,
     status: 'offered',
@@ -1067,9 +1088,26 @@ function preferredOpponent(
   return pick && pick.id !== opponent.id && pick.id !== fighter.id ? pick : undefined;
 }
 
+/**
+ * A corner whose answer no longer stands because they are no longer there to give it: retired,
+ * cut, or signed elsewhere while the offer was out. Doc 34 C4 review — an answer decided on the
+ * day the offer went out would otherwise sign a fight for somebody who has since left.
+ */
+function stillHere(db: GameDb, answer: CornerAnswer): CornerAnswer {
+  const fighter = db.fighters.findById(answer.fighterId as string) as Fighter | undefined;
+  const reason = !fighter
+    ? 'They are no longer around to answer.'
+    : fighter.retiredDay !== undefined
+      ? 'They have retired.'
+      : fighter.promotionId !== getWorld(db).playerPromotionId
+        ? 'They are no longer under contract here.'
+        : undefined;
+  return reason ? { fighterId: answer.fighterId, verdict: 'declined', note: reason } : answer;
+}
+
 /** A bout's answers, once they are in: agreed when every corner said yes. */
-function answered(bout: PlannedBout): PlannedBout {
-  const answers = bout.pending ?? [];
+function answered(bout: PlannedBout, db?: GameDb): PlannedBout {
+  const answers = (bout.pending ?? []).map((a) => (db ? stillHere(db, a) : a));
   return {
     ...bout,
     status: answers.every((a) => a.verdict === 'accepted') ? 'agreed' : 'declined',
@@ -1100,7 +1138,7 @@ export function settleReplies(db: GameDb, day: number): number {
       if (bout?.status !== 'offered' || !bout.pending || (bout.replyDay ?? Infinity) > day) {
         continue;
       }
-      const done = answered(bout);
+      const done = answered(bout, db);
       next = withSlot(next, slot.id, done);
       settled += 1;
       recordOfferOutcome({

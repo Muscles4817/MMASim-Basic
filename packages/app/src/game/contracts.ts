@@ -32,6 +32,8 @@ import {
   tollAgreement,
   willRepresent,
   canMatch,
+  resumeTalks,
+  type Negotiation,
   type TableContext,
   type Fighter,
   type Gym,
@@ -166,6 +168,8 @@ export function sign(
     // Signing bonus is cash on the day, which is the fringe's one real weapon.
     bank: Math.round((fighter.bank + terms.signingBonus) * 10) / 10,
     resentment: 0,
+    // Signed: whatever talks were standing are over (doc 34 C4).
+    talks: undefined,
   };
   db.fighters.upsert(updated as Fighter & { id: string });
   db.save();
@@ -392,6 +396,32 @@ export function tableFor(db: GameDb, fighter: Fighter, promotion: Promotion): Ta
     day: getWorld(db).day,
     incumbent: fighter.promotionId === promotion.id,
   };
+}
+
+/**
+ * The talks standing with this fighter, if the promoter left any inside the cooldown. Doc 34 C4.
+ *
+ * Read from the fighter in the database rather than from whatever copy a screen holds, so a
+ * table opened twice reads one conversation.
+ */
+export function talksWith(
+  db: GameDb,
+  fighter: Fighter,
+  promotion: Promotion,
+): Negotiation | undefined {
+  const stored = (db.fighters.findById(fighter.id as string) as Fighter | undefined) ?? fighter;
+  return resumeTalks(stored, promotion.id, getWorld(db).day);
+}
+
+/**
+ * Store where the talking got to, so leaving the table does not reset it. A signature clears it
+ * (`sign`), so an agreed negotiation is never kept.
+ */
+export function recordTalks(db: GameDb, fighter: Fighter, talks: Negotiation): void {
+  if (talks.state === 'agreed') return;
+  const stored = (db.fighters.findById(fighter.id as string) as Fighter | undefined) ?? fighter;
+  db.fighters.upsert({ ...stored, talks } as Fighter & { id: string });
+  db.save();
 }
 
 /** Whether a promoter can open talks with this fighter now, and why not when they cannot. */

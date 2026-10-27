@@ -8,18 +8,23 @@
  * (never a percentage), and a fighter who answers — yes, a counter or two shaped by who they are
  * and what they remember about you, or a walk.
  *
- * The talking lives in component state: a negotiation is a conversation the player is having
- * right now, not a record. What it produces — a signed agreement — goes through `sign`, the only
- * door into a contract.
+ * The talking is stored on the fighter (`recordTalks`) as it moves, and the table opens on whatever
+ * is standing (`talksWith`): talks that lived only in component state could be walked out of and
+ * started fresh until the answer was yes. A walk-out or a last word holds for
+ * `TALKS_COOLDOWN_DAYS`. What the talking produces — a signed agreement — goes through `sign`, the
+ * only door into a contract.
  */
 
 import { useMemo, useState } from 'react';
 import {
   MAX_FIGHTS_OWED,
+  isFinalCounter,
   makeOffer,
   openingTerms,
   readTerms,
   takeCounter,
+  talksReopenDay,
+  TALKS_COOLDOWN_DAYS,
   type Fighter,
   type Negotiation,
   type OfferTerms,
@@ -29,8 +34,16 @@ import type { GameDb } from '@mmasim/data';
 import { Button, Card, Segmented } from '../ui';
 import { Alert } from '../ui/signals';
 import { Ledger, LedgerRow } from '../ui/console';
-import { money } from '../ui/format';
-import { matchBid, rivalBidsFor, sign, tableFor } from '../game/contracts';
+import { fromNow, money } from '../ui/format';
+import { matchBid, recordTalks, rivalBidsFor, sign, tableFor, talksWith } from '../game/contracts';
+
+/** "in 3 days", "in a week or two", "in 2 months". */
+const reopensIn = (days: number): string =>
+  days < 7
+    ? `in ${days} day${days === 1 ? '' : 's'}`
+    : days < 14
+      ? 'in a week or two'
+      : `in ${fromNow(days)}`;
 
 const FIGHTS = Array.from({ length: MAX_FIGHTS_OWED }, (_, i) => String(i + 1));
 
@@ -51,7 +64,14 @@ export function ContractTable({
 }) {
   const table = tableFor(db, fighter, promotion);
   const [terms, setTerms] = useState<OfferTerms>(() => openingTerms(fighter, promotion));
-  const [talks, setTalks] = useState<Negotiation | undefined>();
+  const [talks, setStoredTalks] = useState<Negotiation | undefined>(() =>
+    talksWith(db, fighter, promotion),
+  );
+  /** Every move is written down as it happens, so leaving the table does not reset it. */
+  const setTalks = (next: Negotiation) => {
+    setStoredTalks(next);
+    recordTalks(db, fighter, next);
+  };
   const [result, setResult] = useState<string | undefined>();
   const read = readTerms(table, terms);
   const bids = useMemo(
@@ -75,6 +95,8 @@ export function ContractTable({
   };
 
   const walked = talks?.state === 'walked';
+  const lastWord = talks !== undefined && isFinalCounter(talks, fighter);
+  const reopens = talks ? reopensIn(talksReopenDay(talks) - table.day) : '';
   const who = table.manager ? `${table.manager.name}, for ${fighter.lastName}` : fighter.lastName;
 
   return (
@@ -184,7 +206,7 @@ export function ContractTable({
         {talks?.state === 'countered' && talks.ask && (
           <div className="stack" style={{ gap: 'var(--space-2)' }}>
             <p className="prose" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
-              {who} came back with:
+              {who} came back with{lastWord ? ' their last word' : ''}:
             </p>
             <Ledger>
               <LedgerRow
@@ -223,13 +245,21 @@ export function ContractTable({
 
         {walked ? (
           <Alert tone="warn" title="They have walked away">
-            Not at this table, not today. Try again another time — or let somebody else have them.
+            Not at this table. They will talk again {reopens} — or let somebody else have them.
           </Alert>
         ) : (
           talks?.state !== 'agreed' && (
-            <Button variant="primary" onClick={offer}>
-              {talks?.state === 'countered' ? 'Make a revised offer' : 'Make the offer'}
-            </Button>
+            <>
+              {lastWord && (
+                <p className="faint prose" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
+                  That is their last word. Offer anything they will not take and they walk — and
+                  will not sit down again for {fromNow(TALKS_COOLDOWN_DAYS)}.
+                </p>
+              )}
+              <Button variant="primary" onClick={offer}>
+                {talks?.state === 'countered' ? 'Make a revised offer' : 'Make the offer'}
+              </Button>
+            </>
           )
         )}
 

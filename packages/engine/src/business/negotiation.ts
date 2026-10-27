@@ -12,7 +12,10 @@
  * What they will take is personal: their manager, their loyalty, how ambitious they are about the
  * length of the deal, how broke they are, and what they remember about this promotion.
  *
- * Pure. The caller owns the state (`Negotiation`) and where it is stored, if anywhere.
+ * Pure. The caller owns the state (`Negotiation`) and stores it on the fighter (`Fighter.talks`),
+ * because talks that lived only on the screen could be walked out of and started again until the
+ * answer was yes: a manager who has walked away, or has given their last word, does not sit down
+ * again for `TALKS_COOLDOWN_DAYS`.
  */
 
 import { clamp, clamp01 } from '../core/math.js';
@@ -176,7 +179,43 @@ export interface Negotiation {
   quote?: string;
   /** The terms that were agreed, when `state` is `agreed`. */
   agreed?: OfferTerms;
+  /** The day the talking last moved. The cooldown runs from here. */
+  day: GameDay;
 }
+
+/**
+ * How long talks stay where they were left. Doc 34 C4.
+ *
+ * Within it, coming back to the table resumes the same conversation — the same counters spent,
+ * the same last word, the same walk-out — rather than a fresh one. Two months: long enough that
+ * leaving the room is not a reroll, short enough that a fighter who walked in spring can be
+ * talked to before the autumn cards.
+ */
+export const TALKS_COOLDOWN_DAYS = 60;
+
+/**
+ * The conversation a promoter comes back to, if there is one still standing: the stored talks
+ * with this promotion, inside the cooldown, and not already closed by a signature.
+ */
+export function resumeTalks(
+  fighter: Pick<Fighter, 'talks'>,
+  promotionId: Promotion['id'],
+  day: GameDay,
+): Negotiation | undefined {
+  const talks = fighter.talks;
+  if (!talks || talks.promotionId !== promotionId || talks.state === 'agreed') return undefined;
+  return day - talks.day < TALKS_COOLDOWN_DAYS ? talks : undefined;
+}
+
+/** The first day they will sit down again after these talks. */
+export const talksReopenDay = (talks: Negotiation): GameDay =>
+  (talks.day + TALKS_COOLDOWN_DAYS) as GameDay;
+
+/** Whether this counter is their last word: one more offer short of it and they walk. */
+export const isFinalCounter = (
+  talks: Negotiation,
+  fighter: Pick<Fighter, 'personality'>,
+): boolean => talks.state === 'countered' && talks.counters >= counterLimit(fighter);
 
 /** How many times this fighter comes back with a number before they stop talking. */
 export function counterLimit(fighter: Pick<Fighter, 'personality'>): number {
@@ -225,11 +264,16 @@ export function makeOffer(
   current: Negotiation | undefined,
   offer: OfferTerms,
 ): Negotiation {
-  const base: Negotiation = current ?? {
-    fighterId: ctx.fighter.id,
-    promotionId: ctx.promotion.id,
-    state: 'open',
-    counters: 0,
+  // Walking out is final for the cooldown: no offer reopens it.
+  if (current?.state === 'walked' || current?.state === 'agreed') return current;
+  const base: Negotiation = {
+    ...(current ?? {
+      fighterId: ctx.fighter.id,
+      promotionId: ctx.promotion.id,
+      state: 'open',
+      counters: 0,
+    }),
+    day: ctx.day,
   };
   const read = readTerms(ctx, offer);
   if (read.chance >= 0.9)
