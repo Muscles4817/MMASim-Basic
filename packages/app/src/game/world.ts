@@ -793,9 +793,7 @@ function buildNight(ctx: {
    * of the world's promotions facing the same economics as the player's.
    */
   const club = eventScale('club');
-  const cardSize = inDistress(promotion, roster.length)
-    ? club.mainCard + club.prelims
-    : CARD_SIZE;
+  const cardSize = inDistress(promotion, roster.length) ? club.mainCard + club.prelims : CARD_SIZE;
 
   for (let attempt = 0; attempt < cardSize * 2 && seeds.length < cardSize; attempt++) {
     const pool = roster.filter((f) => !used.has(f.id as string));

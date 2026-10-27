@@ -51,7 +51,10 @@ export function staffLevel(promotion: Promotion): StaffLevel {
    * the leader went to zero without it.
    */
   let level = built;
-  while (level > 1 && yearOf(STAFF_LEVEL_OVERHEADS[level]) * STAFF_RUNWAY_YEARS > promotion.budget) {
+  while (
+    level > 1 &&
+    yearOf(STAFF_LEVEL_OVERHEADS[level]) * STAFF_RUNWAY_YEARS > promotion.budget
+  ) {
     level = (level - 1) as StaffLevel;
   }
   return level;
