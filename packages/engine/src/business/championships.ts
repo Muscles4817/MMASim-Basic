@@ -173,7 +173,7 @@ export function describeVacancy(reason: VacancyReason): string {
     case 'movedDivision':
       return 'vacated to move weight';
     case 'stripped':
-      return 'stripped for inactivity';
+      return 'stripped by the promotion';
     case 'newDivision':
       return 'never yet contested';
   }
