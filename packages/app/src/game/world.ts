@@ -104,6 +104,8 @@ import {
   driftAfter,
   milestonesOf,
   stayChance,
+  leavingPromotion,
+  withLedgerEntry,
   trimFeed,
   type BoutSeed,
   type CardBout,
@@ -1440,6 +1442,20 @@ function runStatisticalCard(ctx: {
 
   const card = rng.fork('card').shuffle(pairs).slice(0, CARD_SIZE);
   const booked = new Set<string>();
+  /*
+   * Nicknames already worn, per division, built on first use and kept current as names are earned
+   * on this card — one roster scan per division per card, not one per earned name.
+   */
+  const takenByDivision = new Map<string, Set<string>>();
+  const takenIn = (divisionId: Fighter['divisionId']): Set<string> => {
+    const key = divisionId as string;
+    let taken = takenByDivision.get(key);
+    if (!taken) {
+      taken = nicknamesTaken(db.fighters.findAll() as Fighter[], divisionId);
+      takenByDivision.set(key, taken);
+    }
+    return taken;
+  };
 
   for (const [a, b] of card) {
     if (booked.has(a.id as string) || booked.has(b.id as string)) continue;
@@ -1523,12 +1539,8 @@ function runStatisticalCard(ctx: {
             )
           : undefined;
       const nickname =
-        earned &&
-        uniqueNickname(
-          earned,
-          fighter.id as string,
-          nicknamesTaken(db.fighters.findAll() as Fighter[], stored.divisionId),
-        );
+        earned && uniqueNickname(earned, fighter.id as string, takenIn(stored.divisionId));
+      if (nickname) takenIn(stored.divisionId).add(nickname);
       const next: Fighter = {
         ...stored,
         record,
@@ -1541,6 +1553,7 @@ function runStatisticalCard(ctx: {
           milestonesOf({
             won: outcome === 'win',
             knockedOut: stopped,
+            scoredKnockout: outcome === 'win' && isKoMethod(method),
             wonTitle: false,
             lostTitle: false,
             streak: summary.streak,
@@ -1652,6 +1665,16 @@ function releaseIfCut(
     ...fighter,
     promotionId: undefined,
     agreementId: undefined,
+    // Cut by the player's promotion: remembered, and the rest of the relationship forgotten.
+    ...(getWorld(db).playerPromotionId === promotion.id
+      ? {
+          ledger: withLedgerEntry(leavingPromotion(fighter.ledger, promotion.id), {
+            day,
+            promotionId: promotion.id,
+            kind: 'cut',
+          }),
+        }
+      : {}),
   } as Fighter & Entity);
 
   const skid = Math.max(0, -fighter.summary.streak);
@@ -1942,6 +1965,10 @@ function resolveFreeAgency(
       promotionId: next.id,
       agreementId: signed.id,
       resentment: 0,
+      // Leaving ends the working relationship; only a cut is carried out of the door (doc 34 C3).
+      ...(promotion && promotion.id !== next.id && fighter.ledger
+        ? { ledger: leavingPromotion(fighter.ledger, promotion.id) }
+        : {}),
     } as Fighter & { id: string });
 
     // Keep the divisional index current, so the rest of this quarter's free agents do not all

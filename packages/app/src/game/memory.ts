@@ -85,7 +85,10 @@ export function afterTheBout(input: {
       milestonesOf({
         won,
         knockedOut: lost && isKoMethod(method),
-        wonTitle: isTitleFight && won && championId !== fighter.id,
+        scoredKnockout: won && isKoMethod(method),
+        // Taken from somebody, so it has its mirror in the champion who lost it. A vacant belt
+        // has no loser, and counting it would push the whole sport's ego one way.
+        wonTitle: isTitleFight && won && championId !== undefined && championId !== fighter.id,
         lostTitle: isTitleFight && lost && championId === fighter.id,
         streak: fighter.summary.streak,
       }),

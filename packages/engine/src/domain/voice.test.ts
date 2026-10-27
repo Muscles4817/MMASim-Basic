@@ -8,6 +8,8 @@ import {
   boutMemories,
   ledgerWeight,
   LEDGER_CAP,
+  LEDGER_FORGOTTEN_DAYS,
+  leavingPromotion,
   relationshipWith,
   stayChance,
   withLedgerEntry,
@@ -77,6 +79,25 @@ describe('the relationship ledger', () => {
     for (let i = 0; i < LEDGER_CAP + 5; i++) ledger = withLedgerEntry(ledger, entry('mismatch', i));
     expect(ledger).toHaveLength(LEDGER_CAP);
     expect(ledger[ledger.length - 1]!.day).toBe(LEDGER_CAP + 4);
+  });
+
+  it('prunes what has faded below a twentieth of its weight', () => {
+    const old = entry('mismatch', 0);
+    const fresh = entry('titleShotGiven', LEDGER_FORGOTTEN_DAYS);
+    expect(withLedgerEntry([old], fresh)).toEqual([fresh]);
+    expect(withLedgerEntry([old], entry('mismatch', LEDGER_FORGOTTEN_DAYS - 1))).toHaveLength(2);
+    // The horizon is where the weight falls under 5%, and not before.
+    expect(0.5 ** (LEDGER_FORGOTTEN_DAYS / 720)).toBeLessThan(0.05);
+    expect(0.5 ** ((LEDGER_FORGOTTEN_DAYS - 30) / 720)).toBeGreaterThan(0.05);
+  });
+
+  it('forgets the working relationship on leaving, but not being cut', () => {
+    const other = { ...entry('mismatch'), promotionId: 'p_other' as PromotionId };
+    expect(leavingPromotion([entry('mismatch'), entry('cut'), other], P)).toEqual([
+      entry('cut'),
+      other,
+    ]);
+    expect(leavingPromotion([entry('mismatch')], P)).toBeUndefined();
   });
 
   it('reads the same history through the personality', () => {
@@ -153,18 +174,38 @@ describe('people change', () => {
     expect(driftAfter(p, [])).toBe(p);
     const crowned = driftAfter(
       p,
-      milestonesOf({ won: true, knockedOut: false, wonTitle: true, lostTitle: false, streak: 1 }),
+      milestonesOf({
+        won: true,
+        knockedOut: false,
+        scoredKnockout: false,
+        wonTitle: true,
+        lostTitle: false,
+        streak: 1,
+      }),
     );
     expect(crowned.ego).toBeGreaterThan(p.ego);
     expect(Math.abs(crowned.ego - p.ego)).toBeLessThanOrEqual(5);
     const slump = milestonesOf({
       won: false,
       knockedOut: true,
+      scoredKnockout: false,
       wonTitle: false,
       lostTitle: false,
       streak: -3,
     });
     expect(slump).toEqual(['knockedOut', 'losingRun']);
+  });
+
+  it('moves the two corners of a fight by equal and opposite amounts', () => {
+    // The sport cannot drift: every milestone has a mirror, and a pair of them cancels exactly.
+    const p = uniformPersonality(50);
+    for (const [a, b] of [
+      ['wonTitle', 'lostTitle'],
+      ['knockedOut', 'scoredKnockout'],
+      ['winningRun', 'losingRun'],
+    ] as const) {
+      expect(driftAfter(driftAfter(p, [a]), [b])).toEqual(p);
+    }
   });
 });
 

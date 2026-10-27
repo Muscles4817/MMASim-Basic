@@ -27,7 +27,7 @@
 import { describe, expect, it } from 'vitest';
 import { createNewGame } from '@mmasim/data';
 import { advanceWorld } from '../../packages/app/src/game/world';
-import { DIVISIONS, overallRating, type Fighter, type Gym } from '@mmasim/engine';
+import { DIVISIONS, careerSummary, overallRating, type Fighter, type Gym } from '@mmasim/engine';
 
 const YEAR = 365;
 const START = 2192;
@@ -55,6 +55,34 @@ describe('the sport replaces its own people', () => {
       after.length,
       `roster went ${before.length} → ${after.length}`,
     ).toBeGreaterThan(before.length * 0.6);
+  });
+
+  /*
+   * Doc 34 C3's personality drift, held to the sport as a whole. Drift moves ego, aggression and
+   * ambition at milestones in mirrored pairs; the first version had only the humbling half and,
+   * over this same decade, took the world's aggression 49.6 → 46.7 and ambition 51.4 → 47.5.
+   *
+   * Only the drifting axes are held: the others move with turnover alone, because the intake is
+   * drawn around 50 and the seed is not — measured with drift switched off, discipline went 53.9
+   * → 51.9 over the decade, which is the roster changing rather than anybody in it.
+   */
+  it('lets careers change people without moving the sport', () => {
+    const mean = (fs: readonly Fighter[], axis: 'ego' | 'aggression' | 'ambition') =>
+      fs.reduce((t, f) => t + f.personality[axis], 0) / fs.length;
+    for (const axis of ['ego', 'aggression', 'ambition'] as const) {
+      const shift = mean(after, axis) - mean(before, axis);
+      expect(Math.abs(shift), `${axis} moved ${shift.toFixed(2)}`).toBeLessThanOrEqual(1.5);
+    }
+  });
+
+  it('keeps its veterans: drift does not retire people early', () => {
+    // 427 fighters with 15+ bouts at the start; 638 after ten years with drift off, 644 with it on.
+    const veterans = (fs: readonly Fighter[]) =>
+      fs.filter((f) => {
+        const s = careerSummary(f);
+        return s.wins + s.losses + s.draws >= 15;
+      }).length;
+    expect(veterans(after)).toBeGreaterThan(veterans(before));
   });
 
   it('actually generates people rather than waiting for a division to empty', () => {

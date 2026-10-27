@@ -69,6 +69,18 @@ export interface AcceptanceRead {
   quote?: string;
 }
 
+/** Doc 34 C3: the offer is the fight they want (×1.15), or plainly is not (×0.9). */
+export const WANT_MET = 1.15;
+export const WANT_UNMET = 0.9;
+/**
+ * Doc 34 C3: a fighter in the red takes fights more readily (docs/17); one sitting on more than
+ * `RICH_BANK` thousand can afford to be choosy about a step up of more than `RICH_STEP` overall.
+ */
+export const BANK_BROKE = 1.12;
+export const BANK_RICH = 0.92;
+export const RICH_BANK = 250;
+export const RICH_STEP = 4;
+
 export function acceptanceOf(input: {
   fighter: Fighter;
   opponent: Fighter;
@@ -217,7 +229,7 @@ export function acceptanceOf(input: {
   const met = want
     ? wantMet(want, { opponent, isTitleFight, opponentRank: input.opponentRank, step })
     : undefined;
-  const wantTerm = met === true ? 1.15 : met === false ? 0.9 : 1;
+  const wantTerm = met === true ? WANT_MET : met === false ? WANT_UNMET : 1;
   if (met === false && want) {
     concerns.push({
       label: `Not the fight they are after — they want ${want.label.toLowerCase()}`,
@@ -230,7 +242,8 @@ export function acceptanceOf(input: {
    * The bank. A fighter in the red takes fights they otherwise would not (docs/17), and one
    * sitting on a fortune can afford to be choosy about a step up.
    */
-  const bankTerm = fighter.bank < 0 ? 1.12 : fighter.bank > 250 && step > 4 ? 0.92 : 1;
+  const bankTerm =
+    fighter.bank < 0 ? BANK_BROKE : fighter.bank > RICH_BANK && step > RICH_STEP ? BANK_RICH : 1;
 
   const chance = clamp01(
     0.9 *
