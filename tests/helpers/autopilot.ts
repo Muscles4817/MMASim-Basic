@@ -7,14 +7,21 @@
  * the sloppy player making every time:
  *
  *  - `sloppy` pays every counter-offer, which reprices the fighter's contract for good.
- *  - `sensible` turns a counter down, refills the slot from the matchmaker once, and asks again.
+ *  - `sensible` pays a counter only when the card forecasts better with that fight paid than
+ *    without it, then refills whatever is still open from the matchmaker once and asks again.
  *
  * Shared by `tests/long-sim/promoter-economy.test.ts`, which pins the result, and by
  * `tools/economy-autopilot.ts`, which prints it.
  */
 
 import { getWorld, setWorld, type GameDb } from '@mmasim/data';
-import { withSlot, type EventPlan, type EventScale, type Promotion } from '@mmasim/engine';
+import {
+  withSlot,
+  type EventPlan,
+  type EventScale,
+  type Fighter,
+  type Promotion,
+} from '@mmasim/engine';
 import { advanceTo } from '../../packages/app/src/game/clock';
 import { resolveItem } from '../../packages/app/src/game/inbox';
 import {
@@ -101,6 +108,30 @@ export function runOneCard(input: {
       }
     }
   } else {
+    // Pay a counter only when the fight is worth its price: the card with it paid has to forecast
+    // better than the card without it. Paying repapers the contract, so a refused one is put back.
+    for (const slot of plan.slots) {
+      if (!slot.bout?.answers?.some((a) => a.verdict === 'countered')) continue;
+      const without = forecastPlan({
+        ctx,
+        plan: withSlot(plan, slot.id, undefined),
+      }).projectedProfit;
+      const papers = new Map(
+        slot.bout.answers.map((a) => {
+          const fighter = db.fighters.findById(a.fighterId as string) as Fighter | undefined;
+          return [
+            fighter?.agreementId as string,
+            db.agreements.findById(fighter?.agreementId as string),
+          ];
+        }),
+      );
+      const paid = acceptCounter({ ctx, plan, slotId: slot.id });
+      if (forecastPlan({ ctx, plan: paid }).projectedProfit > without) {
+        plan = savePlan(db, paid);
+      } else {
+        for (const agreement of papers.values()) if (agreement) db.agreements.upsert(agreement);
+      }
+    }
     for (const slot of plan.slots) {
       if (slot.bout && slot.bout.status !== 'agreed') plan = withSlot(plan, slot.id, undefined);
     }

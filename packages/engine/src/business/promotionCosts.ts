@@ -63,20 +63,27 @@ export function staffLevel(promotion: Promotion): StaffLevel {
 /** Years of overheads a promotion keeps its organisation for. Below this, it downsizes. */
 export const STAFF_RUNWAY_YEARS = 2;
 
-const yearOf = (fortnight: number): number => (fortnight * 365) / COST_PERIOD_DAYS;
+/** A year of a cost charged every `COST_PERIOD_DAYS`. */
+export const yearOf = (perPeriod: number): number => (perPeriod * 365) / COST_PERIOD_DAYS;
 
 /**
  * A fortnight of overheads at each staff level, in thousands.
  *
- * A regional promotion (level 3) carries about £300k a year, which one card's profit — tens of
- * thousands on a good regional night — cannot cover: the business has to run a schedule to stand
- * still. The leader's is about £3.4m.
+ * About £5k a year for a town show, £26k for a feeder, £65k for a regional promotion, £390k for a
+ * major and £3.1m for the leader — the organisation between cards. What a card itself costs to
+ * stage, the officials, medicals and crew, is charged per night instead (`showCost`), so a
+ * promotion that runs cards pays for running them and one that does not still pays for existing.
+ * One regional card's profit, tens of thousands, cannot carry a regional's year: it has to run a
+ * schedule to stand still.
+ *
+ * The steps grow by about 2.5× to 6× a level. Level 4 was 30 — twelve times level 3 — which made a
+ * promotion crossing into the majors take on overheads its cards could not yet pay for.
  */
 export const STAFF_LEVEL_OVERHEADS: Readonly<Record<StaffLevel, number>> = {
   1: 0.2,
   2: 1,
   3: 2.5,
-  4: 30,
+  4: 15,
   5: 120,
 };
 
@@ -136,6 +143,10 @@ export function periodCosts(input: {
  * roster hits free agency — and inventing it silently as a negative number would produce
  * nonsense purses across the whole roster, since every purse derives from the budget.
  */
+/** A year of running costs at today's roster: overheads and upkeep, not cards. */
+export const annualCosts = (input: { promotion: Promotion; rosterSize: number }): number =>
+  yearOf(periodCosts(input).total);
+
 export function chargeCosts(input: { promotion: Promotion; rosterSize: number; days: number }): {
   promotion: Promotion;
   charged: number;
@@ -167,8 +178,7 @@ export function runwayCards(input: {
   cardsPerYear: number;
 }): number {
   const { promotion, rosterSize, netPerCard, cardsPerYear } = input;
-  const annualCosts = (periodCosts({ promotion, rosterSize }).total * 365) / COST_PERIOD_DAYS;
-  const perCard = netPerCard + annualCosts / Math.max(1, cardsPerYear);
+  const perCard = netPerCard + annualCosts({ promotion, rosterSize }) / Math.max(1, cardsPerYear);
 
   // Cards that make money mean the runway is not the binding constraint, and saying "infinite"
   // is more honest than a very large number the player would read as a target.

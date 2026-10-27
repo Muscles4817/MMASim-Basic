@@ -389,6 +389,19 @@ export function showCost(promotion: Promotion, market: Market): number {
 /** About £23k a night for a regional show in a small market, £44k for the leader at home. */
 const SHOW_COST_PER_PRESTIGE = 0.45;
 
+/** Production, per this many seats in the building: lighting, staging, the crew to run them. */
+const SEATS_PER_PRODUCTION_UNIT = 150;
+
+/**
+ * Production a broadcast needs before a seat is counted, in thousands. A pay-per-view is a
+ * television event; a stream is a few cameras and a commentary desk.
+ */
+const PRODUCTION_BASE: Readonly<Record<Broadcast, number>> = {
+  ppv: 300,
+  televised: 90,
+  streamed: 10,
+};
+
 /**
  * Hiring the room, per seat, in thousands, before the market's cost factor.
  *
@@ -489,7 +502,7 @@ export function eventRevenue(input: {
   // A crew costs more in a big city, but it travels: production takes the square root of the
   // market's premium, where the building itself (below) takes all of it.
   const production = Math.round(
-    (venue.capacity / 150 + (broadcast === 'ppv' ? 300 : broadcast === 'televised' ? 90 : 10)) *
+    (venue.capacity / SEATS_PER_PRODUCTION_UNIT + PRODUCTION_BASE[broadcast]) *
       Math.sqrt(market.costFactor),
   );
   // The building itself, at the city's prices.

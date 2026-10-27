@@ -8,9 +8,10 @@
  * leader from £19m to £133m. Doc 34's B1 rebuilt the money underneath that; this pins what it is
  * meant to produce.
  *
- * Three worlds, because a year of the running world is chaotic and one draw tests the seed as much
- * as the design. The same three for both policies, so the comparison is the decision and nothing
- * else.
+ * Six worlds, and every claim is about their mean. A year of the running world is chaotic: one
+ * world's sloppy year measured anywhere from +9% to −15%, so a bound on any single world tests the
+ * seed as much as the design. The same six for both policies, so the comparison is the decision
+ * and nothing else.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -24,7 +25,14 @@ import {
   type CardLog,
 } from '../helpers/autopilot';
 
-const SEEDS = ['economy-a', 'economy-b', 'economy-c'] as const;
+const SEEDS = [
+  'economy-a',
+  'economy-b',
+  'economy-c',
+  'economy-d',
+  'economy-e',
+  'economy-f',
+] as const;
 const YEAR = 365;
 
 interface Run {
@@ -82,20 +90,15 @@ describe('a year on autopilot', () => {
 
   it('rewards turning a bad price down', () => {
     /*
-     * Same world, one decision different — and it has to show in the bank on average. Per world
-     * it is allowed to come out a point or two behind: the rest of the sport reacts to the
-     * player's card as well, and one world's year can hinge on who else was free that month.
+     * Same worlds, one decision different, and it has to show in the bank. On the mean: a single
+     * world can still go the other way, because the rest of the sport reacts to the player's
+     * cards as well, and the spread between two policies in one world was measured at about five
+     * points either way.
      */
     expect(
       mean(sensible.map((r) => r.growth)) - mean(sloppy.map((r) => r.growth)),
       `${summary(sloppy)} || ${summary(sensible)}`,
-    ).toBeGreaterThan(0);
-    for (let i = 0; i < SEEDS.length; i++) {
-      expect(
-        sensible[i]!.growth,
-        `${SEEDS[i]}: ${summary([sloppy[i]!, sensible[i]!])}`,
-      ).toBeGreaterThan(sloppy[i]!.growth - 0.02);
-    }
+    ).toBeGreaterThan(0.01);
   });
 
   it('makes a regional night worth tens of thousands, not hundreds', () => {

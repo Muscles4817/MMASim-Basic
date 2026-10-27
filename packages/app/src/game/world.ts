@@ -47,8 +47,7 @@ import {
   describeVacancy,
   vacate,
   chargeCosts,
-  periodCosts,
-  COST_PERIOD_DAYS,
+  annualCosts,
   DELIVERY_MEMORY,
   broadcastFor,
   buildCard,
@@ -2769,8 +2768,7 @@ const DISTRESSED_RESIGN_SHARE = 0.5;
 const DISTRESS_RUNWAY_YEARS = 3;
 
 function inDistress(promotion: Promotion, rosterSize: number): boolean {
-  const year = (periodCosts({ promotion, rosterSize }).total * 365) / COST_PERIOD_DAYS;
-  return promotion.budget < year * DISTRESS_RUNWAY_YEARS;
+  return promotion.budget < annualCosts({ promotion, rosterSize }) * DISTRESS_RUNWAY_YEARS;
 }
 
 function chargePromotions(db: GameDb, fromDay: number, day: number): void {
