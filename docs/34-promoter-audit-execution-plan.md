@@ -164,8 +164,8 @@ week, 4 fighters as people, 5 development over time.
 | A6 Onboarding and readability   | 1/3   | A           | Not started       |     |
 | C2 Star power surfaced          | 4     | C           | Changes requested | #51 |
 | C3 Memory, wants and voice      | 4     | C           | Changes requested | #52 |
-| C4 Negotiation                  | 4     | C           | In progress       |     |
-| C5 Real careers over time       | 5     | C           | Not started       |     |
+| C4 Negotiation                  | 4     | C           | In review         | #55 |
+| C5 Real careers over time       | 5     | C           | In progress       |     |
 | C6 Career events                | 5     | C           | Not started       |     |
 | B4 Rival promotions             | 5     | B           | Not started       |     |
 | B5 Investment and season        | 5     | B           | Not started       |     |
