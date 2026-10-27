@@ -407,6 +407,8 @@ describe('fight night', () => {
     await waitFor(() => expect(screen.queryAllByText(/Signed/i).length).toBeGreaterThan(0), {
       timeout: 10000,
     });
+    // The receipt.
+    expect(await screen.findByText(/offers sent/i)).toBeTruthy();
 
     goTo('#/calendar');
     for (let i = 0; i < 8; i++) {
@@ -423,9 +425,25 @@ describe('fight night', () => {
       await user.click(run);
     }
 
+    // The show first; the recap after it.
+    await user.click(
+      await screen.findByRole('button', { name: /^Reveal all$/i }, { timeout: 10000 }),
+    );
+    await user.click(screen.getByRole('button', { name: /The morning after/i }));
     expect(await screen.findByText(/^Results$/i, {}, { timeout: 10000 })).toBeTruthy();
     expect(screen.getAllByText(/ def\. | vs /).length).toBeGreaterThan(0);
     expect(screen.queryByRole('button', { name: /Run fight night/i })).toBeNull();
+
+    // The bonuses are the promoter's to give, and every result opens its fight.
+    await user.click(screen.getByRole('button', { name: /Pay the bonuses/i }));
+    expect(await screen.findByText(/Bonuses paid/i)).toBeTruthy();
+    const watchable = document.querySelector('button.list__item') as HTMLElement;
+    await user.click(watchable);
+    expect(await screen.findByRole('button', { name: /Make the walk/i })).toBeTruthy();
+
+    // And the dashboard leads with the night that just happened.
+    goTo('#/promotion');
+    expect(await screen.findByText(/Last time out/i)).toBeTruthy();
   }, 60000);
 });
 
