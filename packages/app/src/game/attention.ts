@@ -29,6 +29,7 @@ import {
   displayName,
   getDivision,
   isActive,
+  attributesSeenBy,
   overallRating,
   plannedBouts,
   planProgress,
@@ -384,7 +385,8 @@ function rosterIssues(input: {
       if (status.fightsRemaining <= 1 && !status.heldByBelt) {
         expiring += 1;
         // Only the ones worth keeping earn a row of their own; the rest are counted below.
-        if (fighter.starPower >= 40 || overallRating(fighter.attributes) >= 62) {
+        // Worth keeping as a promoter can judge it: from the scouted read, never the true ratings.
+        if (fighter.starPower >= 40 || overallRating(attributesSeenBy(fighter, 'promoter')) >= 62) {
           items.push({
             id: `contract:${id}`,
             kind: 'contract',

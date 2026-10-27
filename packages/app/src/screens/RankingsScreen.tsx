@@ -8,7 +8,7 @@ import {
   overallRating,
   rankDivision,
   recordString,
-  scoutedAttributes,
+  attributesSeenBy,
   type Fighter,
   type Promotion,
   type RankedFighter,
@@ -51,7 +51,7 @@ import { Console } from '../ui/console';
  * true ratings. Sorting the ability column on the true overall leaked the hidden number one row
  * at a time — two fighters in the same band, in a known order, is the number.
  */
-const seenRating = (f: Fighter): number => overallRating(scoutedAttributes(f));
+const seenRating = (f: Fighter): number => overallRating(attributesSeenBy(f, 'promoter'));
 
 /** The synthetic promotion filter for the cross-promotional view. */
 const P4P = '__p4p__';
@@ -182,9 +182,9 @@ export function RankingsScreen() {
       id: 'ability',
       label: 'Ability',
       title:
-        'What the fighter is, as against what the promotion believes — the two disagreeing is the point',
+        'How good they look on tape, as against where the promotion ranks them — the two disagreeing is the point',
       render: (r) => (
-        <span className="faint">{abilityRead(scoutedAttributes(r.fighter)).label}</span>
+        <span className="faint">{abilityRead(attributesSeenBy(r.fighter, 'promoter')).label}</span>
       ),
       sort: (a, b) => seenRating(a.fighter) - seenRating(b.fighter),
       onPhone: 'trailing',

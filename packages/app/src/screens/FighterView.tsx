@@ -34,6 +34,7 @@ import {
   DERIVED_META,
   TRAITS,
   abilityRead,
+  attributesSeenBy,
   activeInjuries,
   askingPrice,
   availabilityOf,
@@ -56,7 +57,6 @@ import {
   isPhysical,
   marketValue,
   recordString,
-  scoutedAttributes,
   scoutedRating,
   scoutingRead,
   summariseRecord,
@@ -224,19 +224,20 @@ export function FighterView({
     rank: ladder.position,
     isChampion: ladder.isChampion,
   });
-  const ability = abilityRead(fighter.attributes, {
-    isChampion: ladder.isChampion,
-    rank: ladder.position,
-  });
-  const scouting = scoutingRead(fighter, day);
   /*
    * What this viewer can know about the ratings. Doc 29 § 8: a promoter scouts, so a promoter sees
    * the scouted estimate rather than the true number — the Skills tab printing all fifteen to the
    * point was the exact overall the ability band refuses, in fifteen pieces. You see your own and
-   * a coach sees their own fighter's, which is what being in the room means.
+   * a coach sees their own fighter's, which is what being in the room means. The band, the read
+   * and the badges all come from this one set (`attributesSeenBy`).
    */
-  const scouted = viewer === 'promoter';
-  const seen = scouted ? scoutedAttributes(fighter) : fighter.attributes;
+  const seen = attributesSeenBy(fighter, viewer);
+  const scouted = seen !== fighter.attributes;
+  const ability = abilityRead(seen, {
+    isChampion: ladder.isChampion,
+    rank: ladder.position,
+  });
+  const scouting = scoutingRead(fighter, day, seen);
   const availability = availabilityOf({ fighter, day, booked });
   const standing = contractStanding(db, fighter);
 

@@ -33,6 +33,7 @@ import {
   MATCH_INTENTS,
   TAG_LABEL,
   abilityRead,
+  attributesSeenBy,
   careerArc,
   describeAcceptance,
   displayName,
@@ -546,7 +547,7 @@ function MatchupCompare({
       <Card title={displayName(red)}>
         <p className="prose" style={{ fontSize: 'var(--text-sm)', marginTop: 0 }}>
           {recordString(red.summary)} · {describeRank(rank, champion)} ·{' '}
-          {abilityRead(red.attributes).label}
+          {abilityRead(attributesSeenBy(red, 'promoter')).label}
           {arc.label !== describeRank(rank, champion) && ` · ${arc.label}`}
         </p>
         <p className="faint prose" style={{ fontSize: 'var(--text-sm)', marginBottom: 0 }}>
@@ -1067,7 +1068,7 @@ function OpponentRow({
   onPick(fighter: Fighter): void;
 }) {
   const { fighter, rank, appraisal, acceptance, concern, blocker, cost, contractNote } = option;
-  const ability = abilityRead(fighter.attributes);
+  const ability = abilityRead(attributesSeenBy(fighter, 'promoter'));
 
   return (
     <button

@@ -12,7 +12,7 @@ import { summariseRecord, type Fighter, type FightRecordEntry } from '../domain/
 import { makeFighter, makePromotion } from '../testing/fixtures.js';
 import { rankDivision, titleShotEligibility } from './ladder.js';
 import { INACTIVITY_GRACE_DAYS, winningRun } from './standing.js';
-import { scoutedRating, scoutingRead } from './fighterRead.js';
+import { attributesSeenBy, scoutedRating, scoutingRead } from './fighterRead.js';
 
 const DIV = asDivisionId('mens-lightweight');
 const P = asPromotionId('p_test');
@@ -132,13 +132,39 @@ describe('quality of wins', () => {
   });
 });
 
-describe('what the outside world can see', () => {
-  it('calls strengths and holes from the scouted read, not the true ratings', () => {
-    const f = withRecord('scouted', [bout(1, 'win')]);
-    const read = scoutingRead(f, 10);
-    expect(read.strengths.length).toBeGreaterThan(0);
+describe('what each viewer can see', () => {
+  /** A fighter whose ratings vary enough for a top three, a shape and some tags to mean something. */
+  const varied = (): Fighter => {
+    const base = withRecord('scouted', [bout(1, 'win'), bout(2, 'win'), bout(3, 'loss')]);
+    const keys = Object.keys(base.attributes) as (keyof Fighter['attributes'])[];
+    const attributes = Object.fromEntries(keys.map((k, i) => [k, 30 + ((i * 37) % 60)]));
+    return { ...base, attributes: attributes as Fighter['attributes'] };
+  };
+
+  it('reads a promoter everything from the scouted estimates: strengths, holes, tags and the sentence', () => {
+    const f = varied();
+    const seen = attributesSeenBy(f, 'promoter');
+    expect(seen).not.toEqual(f.attributes);
+    const read = scoutingRead(f, 10, seen);
     for (const call of [...read.strengths, ...read.weaknesses]) {
       expect(call.value).toBe(scoutedRating(f, call.key).estimate);
     }
+    // Exactly the read of a fighter whose ratings *were* the estimates: nothing reads the truth.
+    const asIfTrue = scoutingRead({ ...f, attributes: seen }, 10);
+    expect(read.tags).toEqual(asIfTrue.tags);
+    expect(read.summary).toBe(asIfTrue.summary);
+  });
+
+  it('reads the fighter and their coach the truth, with the real top three', () => {
+    const f = varied();
+    expect(attributesSeenBy(f, 'self')).toBe(f.attributes);
+    expect(attributesSeenBy(f, 'coach')).toBe(f.attributes);
+    const read = scoutingRead(f, 10, attributesSeenBy(f, 'self'));
+    const top = (Object.entries(f.attributes) as [string, number][])
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, 3)
+      .map(([k]) => k);
+    expect(read.strengths.map((c) => c.key)).toEqual(top);
+    for (const call of read.strengths) expect(call.value).toBe(f.attributes[call.key]);
   });
 });

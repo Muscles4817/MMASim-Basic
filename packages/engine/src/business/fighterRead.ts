@@ -206,6 +206,21 @@ export function scoutedAttributes(
   return out;
 }
 
+/** Who is looking at a fighter, as far as what they may know of the ratings is concerned. */
+export type AttributeViewer = 'self' | 'coach' | 'promoter' | 'none';
+
+/**
+ * The ratings a viewer can know: the truth for the fighter and their coach — being in the room —
+ * and the scouted estimates for everybody else. One rule, used by every screen that turns ratings
+ * into words, so the same fighter cannot read as two different ability bands on two screens.
+ */
+export function attributesSeenBy(
+  fighter: Pick<Fighter, 'id' | 'attributes' | 'summary'>,
+  viewer: AttributeViewer,
+): Attributes {
+  return viewer === 'self' || viewer === 'coach' ? fighter.attributes : scoutedAttributes(fighter);
+}
+
 // --- The scouting read -------------------------------------------------------------------------
 
 export interface AttributeCall {
@@ -262,15 +277,19 @@ const listOf = (items: readonly string[]): string =>
  * sentence that joins them: *a record built on durability and volume against opposition that
  * could not put him away*.
  */
-export function scoutingRead(fighter: Fighter, day: GameDay): ScoutingRead {
-  const a = fighter.attributes;
-  /*
-   * Strengths and holes as a scout would call them, from the estimates — not the true ratings.
-   * Reading them off the truth leaked the hidden numbers one ranking at a time: the order of a
-   * fighter's best three attributes is information no tape gives anybody.
+export function scoutingRead(
+  fighter: Fighter,
+  day: GameDay,
+  /**
+   * The ratings this viewer is entitled to: the truth for the fighter themselves or their coach,
+   * the scouted estimates for anybody else (`attributesSeenBy`). Every attribute-derived part of
+   * the read — strengths, holes, tags, shape, the sentence — comes from this one set, so a read
+   * cannot leak a number the viewer could not know, or contradict the badges beside it.
    */
-  const seen = scoutedAttributes(fighter);
-  const entries = (Object.keys(seen) as AttributeKey[]).map((key) => call(seen, key));
+  attributes: Attributes = fighter.attributes,
+): ScoutingRead {
+  const a = attributes;
+  const entries = (Object.keys(a) as AttributeKey[]).map((key) => call(a, key));
   const sorted = [...entries].sort((x, y) => y.value - x.value);
 
   const strengths = sorted.slice(0, 3);
