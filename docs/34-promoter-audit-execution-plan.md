@@ -41,6 +41,9 @@
 3. New behaviour has tests at the tier that fits (engine unit, integration, playability).
 4. Engine stays pure (no `Math.random`, no `Date`, no I/O) — lint enforces it.
 5. CI green on the PR, reviewer PASS, then merge.
+6. **Up to date with master before merging.** If master moved since the PR's last green CI run, the
+   branch merges master in and CI runs again before it merges. (Learned the hard way: #49 and #50
+   were each green alone and typechecked together, but one test failed on the combination.)
 
 ### File ownership (who may edit freely; others touch only with a small, called-out change)
 
