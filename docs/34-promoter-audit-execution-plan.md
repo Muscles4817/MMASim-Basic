@@ -166,7 +166,7 @@ week, 4 fighters as people, 5 development over time.
 | C3 Memory, wants and voice      | 4     | C           | Done                      | #52 |
 | C4 Negotiation                  | 4     | C           | Done                      | #55 |
 | C5 Real careers over time       | 5     | C           | Done                      | #57 |
-| C6 Career events                | 5     | C           | In review                 | #63 |
+| C6 Career events                | 5     | C           | Changes requested         | #63 |
 | B4 Rival promotions             | 5     | C           | In progress               |     |
 | B5 Investment and season        | 5     | B           | Not started               |     |
 | B6 History, scenarios, rankings | 5     | A           | In progress               |     |
