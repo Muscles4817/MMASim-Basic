@@ -200,7 +200,11 @@ export type VoiceSituation =
   | 'farewellFight'
   | 'comeback'
   | 'wantsMoveUp'
-  | 'rivalry';
+  | 'rivalry'
+  // Fight week's press conference, as the promoter chose to play it. Doc 34 A5.
+  | 'pressCivil'
+  | 'pressTrashTalk'
+  | 'pressConfrontation';
 
 const SAYS: Readonly<Record<VoiceSituation, Readonly<Record<Tone, readonly string[]>>>> = {
   wantsTitleShot: {
@@ -456,6 +460,54 @@ const SAYS: Readonly<Record<VoiceSituation, Readonly<Record<Tone, readonly strin
       'There is only one fight I care about right now.',
     ],
     plain: ['I want the rematch.', 'We have unfinished business.'],
+  },
+  pressCivil: {
+    brash: [
+      'I will be polite today. On the night I will not be.',
+      'Nice and calm up here. It will not be calm in there.',
+    ],
+    cold: ['Good camp. See you on the night.', 'Nothing to say. I am ready.'],
+    respectful: [
+      'Big respect to my opponent. It will be a great fight for everybody watching.',
+      'Thank you to the promotion and to everybody here. We are both ready.',
+    ],
+    hungry: [
+      'This is the fight I wanted. I am taking the next step on fight night.',
+      'Camp went perfectly. Watch what I do with this chance.',
+    ],
+    plain: ['Camp went well. Looking forward to it.', 'Ready to go. Should be a good one.'],
+  },
+  pressTrashTalk: {
+    brash: [
+      'Look at him. He knows. Everybody in this room knows.',
+      'I have sparred people better than this every week of camp.',
+    ],
+    cold: ['He talks a lot for somebody about to lose.', 'Words will not help him on the night.'],
+    respectful: [
+      'I do not need to say anything. I will let the fight answer him.',
+      'He can say what he likes. I respect the sport too much for that.',
+    ],
+    hungry: [
+      'He has been ducking people for years. Not this time.',
+      'Everything he has said is going in the tank for fight night.',
+    ],
+    plain: ['He is overrated and I will show it.', 'He has said enough. Fight night, then.'],
+  },
+  pressConfrontation: {
+    brash: [
+      'Get him out of my face before I finish it right here.',
+      'Touch me again and we do not need to wait for fight night.',
+    ],
+    cold: ['Push me again.', 'He will regret that.'],
+    respectful: [
+      'That was not professional, and I will not be drawn into it.',
+      'Keep it for the cage. That is where this gets settled.',
+    ],
+    hungry: [
+      'I am not backing down from anybody, not up here and not in there.',
+      'He wanted a reaction. He has got one.',
+    ],
+    plain: ['That got out of hand.', 'Save it for the fight.'],
   },
 };
 

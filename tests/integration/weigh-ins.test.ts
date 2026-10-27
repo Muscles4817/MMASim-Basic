@@ -56,19 +56,19 @@ const reread = (db: ReturnType<typeof heavyOnFlyweight>['db'], plan: EventPlan) 
 const mainOf = (plan: EventPlan) => plan.slots.find((s) => s.id === 'main')!.bout!;
 
 describe('the weigh-in', () => {
-  it('is held the day before, once, and a miss is a decision with the opponent’s reaction', () => {
+  it('is read as weigh-in day begins, once, and a miss is a decision with the opponent’s reaction', () => {
     const { db, plan, heavy } = heavyOnFlyweight();
-    expect(rollWeighIns(db, plan.day - 2), 'too early').toBe(0);
+    expect(rollWeighIns(db, plan.day - 3), 'too early').toBe(0);
     expect(mainOf(reread(db, plan)).weighIn).toBeUndefined();
 
-    expect(rollWeighIns(db, plan.day - 1)).toBe(1);
+    expect(rollWeighIns(db, plan.day - 2)).toBe(1);
     const weighed = mainOf(reread(db, plan));
     const miss = weighed.weighIn!.results.find((r) => r.fighterId === heavy.id)!;
     expect(miss.made).toBe(false);
     expect(miss.overLbs).toBeGreaterThan(0);
 
     // Again: not reweighed.
-    expect(rollWeighIns(db, plan.day - 1)).toBe(0);
+    expect(rollWeighIns(db, plan.day - 2)).toBe(0);
     expect(mainOf(reread(db, plan)).weighIn).toEqual(weighed.weighIn);
 
     const decision = db.inbox
@@ -82,7 +82,7 @@ describe('the weigh-in', () => {
 
   it('can be cancelled by the promoter, and the fighter who made weight remembers', () => {
     const { db, plan, fly } = heavyOnFlyweight();
-    rollWeighIns(db, plan.day - 1);
+    rollWeighIns(db, plan.day - 2);
     const item = db.inbox.findAll().find((i) => String(i.id).endsWith(`weighin:${plan.id}:main`))!;
     expect(answerWeighIn(db, item as never, 'weighIn:cancel')).toBe(true);
 
@@ -98,7 +98,7 @@ describe('the weigh-in', () => {
 
   it('is decided by fight night when nobody chose — and says so', () => {
     const { db, plan, heavy, fly } = heavyOnFlyweight();
-    rollWeighIns(db, plan.day - 1);
+    rollWeighIns(db, plan.day - 2);
     const before = mainOf(reread(db, plan)).weighIn!;
     const banks = [heavy, fly].map((f) => (db.fighters.findById(f.id as string) as Fighter).bank);
 

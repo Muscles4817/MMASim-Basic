@@ -22,6 +22,7 @@ import {
   savePlan,
   suggestFills,
 } from '../../packages/app/src/game/plans';
+import { advanceTo, type AdvanceResult } from '../../packages/app/src/game/clock';
 
 /** A card on `day` with the matchmaker's best suggestion pencilled into every slot. */
 export function filledPlan(input: {
@@ -50,4 +51,17 @@ export function agreed(db: GameDb, plan: EventPlan): EventPlan {
     next = withSlot(next, slot.id, { ...slot.bout, status: 'agreed' });
   }
   return savePlan(db, next);
+}
+
+/**
+ * Advance to `day`, walking on past whatever stops the clock on the way.
+ *
+ * A signed fighter can pull out on any day of a card's run-up (doc 34 A5), and the withdrawal stops
+ * the clock. Tests about something else — the night itself, a missed card — are not about that, and
+ * a player who presses advance again has seen it and walks on. Still stops on fight night.
+ */
+export function advanceThrough(db: GameDb, day: number): AdvanceResult {
+  let result = advanceTo(db, day);
+  while (result.interrupted && result.day < day) result = advanceTo(db, day);
+  return result;
 }

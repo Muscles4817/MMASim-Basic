@@ -4,14 +4,20 @@
 
 import { describe, expect, it } from 'vitest';
 import { createNewGame, getWorld, setWorld } from '@mmasim/data';
-import { createRng, type Fighter, type Promotion } from '@mmasim/engine';
+import { createRng, withSlot, type Fighter, type Promotion } from '@mmasim/engine';
 import { comebacks, moveDivisions } from '../../packages/app/src/game/world';
 import {
   answerDivisionMove,
   scanCareerEvents,
   takeTimeOff,
 } from '../../packages/app/src/game/careerEvents';
-import { blockerFor, createPlan, promoterContext } from '../../packages/app/src/game/plans';
+import {
+  blockerFor,
+  createPlan,
+  placeBout,
+  promoterContext,
+  savePlan,
+} from '../../packages/app/src/game/plans';
 import {
   heatBetween,
   pruneColdRivalries,
@@ -117,6 +123,27 @@ describe('division moves in the world', () => {
     expect(refused.resentment).toBeGreaterThan(before);
 
     const allow = item!.actions!.find((a) => a.id.startsWith('move:allow:'))!;
+
+    // Booked onto a card since asking: allowing it now waits (#63 review).
+    const opponent = active.find(
+      (f) => f.promotionId === promotion.id && f.divisionId === 'mens-lightweight',
+    )!;
+    let plan = createPlan({ db, promotion, day: day + 30 });
+    plan = placeBout({
+      plan,
+      slotId: 'main',
+      redId: heavy.id as string,
+      blueId: opponent.id as string,
+      divisionId: 'mens-lightweight',
+    });
+    const booked = plan.slots.find((x) => x.id === 'main')!.bout!;
+    plan = savePlan(db, withSlot(plan, 'main', { ...booked, status: 'agreed' }));
+    answerDivisionMove(db, item as never, allow.id);
+    expect((db.fighters.findById(heavy.id as string) as Fighter).divisionId).toBe(
+      'mens-lightweight',
+    );
+
+    savePlan(db, withSlot(plan, 'main', undefined));
     answerDivisionMove(db, item as never, allow.id);
     expect((db.fighters.findById(heavy.id as string) as Fighter).divisionId).toBe(
       'mens-welterweight',

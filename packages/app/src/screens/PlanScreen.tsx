@@ -60,15 +60,18 @@ import { useToast } from '../ui/toast';
 import { Tip } from '../ui/tip';
 import { NightRecap, NightShow } from './NightScreen';
 import { TaleOfTheTape } from '../ui/TaleOfTheTape';
+import { FightWeekPanel, WeighInPanel } from './FightWeekPanel';
 import { money } from '../ui/format';
 import { DrawBadge } from '../ui/DrawBadge';
 import {
   FILL_SCOPES,
   acceptCounter,
   applySuggestion,
+  MISSED_CARD_BUZZ,
   blockerFor,
   boutStatusLabel,
   cancelPlan,
+  cancellationCost,
   clearSlot,
   counterTerms,
   defaultIntentFor,
@@ -81,7 +84,7 @@ import {
   planById,
   promoterContext,
   rankOfFighter,
-  rollWithdrawals,
+  resolveMissedWeight,
   planName,
   runPlan,
   savePlan,
@@ -91,12 +94,12 @@ import {
   suggestFills,
   titleOptionsFor,
   whatItSells,
+  type CancellationCost,
   type FillScope,
   type OpponentOption,
   type PromoterContext,
   type Suggestion,
   type SubjectOption,
-  type Withdrawal,
 } from '../game/plans';
 
 /** What the player is doing to one slot right now. */
@@ -135,7 +138,6 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
       : { step: 'subject', slotId: target.id };
   });
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [settings, setSettings] = useState(false);
   const [showing, setShowing] = useState(false);
   const toast = useToast();
@@ -228,15 +230,8 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
     );
 
   const runIt = () => {
-    // Withdrawals first. Somebody falling out at the last minute is the promoter's most
-    // authentic recurring emergency, and it now happens to a card that exists rather than
-    // inside a modal bolted onto the announce button.
-    const rolled = rollWithdrawals({ db, plan });
-    if (rolled.withdrawals.length > 0) {
-      update(rolled.plan);
-      setWithdrawals(rolled.withdrawals);
-      return;
-    }
+    // Nobody falls out on the night any more: withdrawals roll through the run-up, while there is
+    // still time to replace them (doc 34 A5, `game/fightWeek.ts`). Whoever is in this morning fights.
     // The plan is re-read on the next render with `status: 'run'`, which is what swaps this
     // screen for the results.
     if (runPlan({ db, plan })) setShowing(true);
@@ -311,36 +306,30 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
           <CardSettings
             plan={plan}
             onChange={update}
+            cost={cancellationCost(plan, world.day)}
             onCancel={() => {
               const name = planName(db, plan);
-              cancelPlan(db, plan.id);
+              const cost = cancelPlan(db, plan.id);
               commit();
-              toast(`${name} is cancelled. Everybody on it is free again.`);
+              toast(
+                `${name} is cancelled${cost && cost.buzz > 0 ? `, for ${cost.buzz} buzz` : ''}. Everybody on it is free again.`,
+                cost && cost.buzz > 0 ? 'warn' : 'info',
+              );
               navigate({ name: 'calendar' });
             }}
           />
         )}
       </Card>
 
-      {withdrawals.length > 0 && (
-        <Alert tone="danger" title={`${withdrawals.length} pulled out`}>
-          <span className="stack" style={{ gap: 'var(--space-1)' }}>
-            {withdrawals.map((w) => (
-              <span
-                key={w.slotId}
-                className="prose"
-                style={{ display: 'block', fontSize: 'var(--text-sm)' }}
-              >
-                {w.note}
-              </span>
-            ))}
-            <span className="prose" style={{ display: 'block', fontSize: 'var(--text-sm)' }}>
-              Those slots are empty again. Find replacements, or run a shorter card — a thin night
-              is worth less at the gate, and nobody stays home over one missing prelim.
-            </span>
-          </span>
-        </Alert>
-      )}
+      <FightWeekPanel
+        ctx={ctx}
+        plan={plan}
+        onChange={update}
+        onPress={() => {
+          commit();
+          setVersion((v) => v + 1);
+        }}
+      />
 
       {issues.length > 0 && !isFightNight && (
         <Alert
@@ -1328,6 +1317,18 @@ function BookedBout({
           </div>
         )}
 
+        {/* The day-before weigh-in (doc 34 C6), in A5's panel. */}
+        {bout.weighIn && (
+          <WeighInPanel
+            weighIn={bout.weighIn}
+            nameOf={nameOf}
+            resolve={(choice) => {
+              const next = resolveMissedWeight(ctx.db, plan.id, slot.id, choice);
+              if (next) onChange(next);
+            }}
+          />
+        )}
+
         <div className="stack" style={{ gap: 'var(--space-2)' }}>
           {bout.status === 'draft' && (
             <Button
@@ -1514,10 +1515,13 @@ function AutofillPanel({
 
 function CardSettings({
   plan,
+  cost,
   onChange,
   onCancel,
 }: {
   plan: EventPlan;
+  /** What calling it off today costs, said before the confirmation rather than after it. */
+  cost: CancellationCost;
   onChange(plan: EventPlan): void;
   onCancel(): void;
 }) {
@@ -1542,6 +1546,11 @@ function CardSettings({
         empty slots you can fill whenever you like.
       </p>
 
+      {confirming && (
+        <p className="prose" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+          {describeCancellation(cost)}
+        </p>
+      )}
       {confirming ? (
         <div className="row" style={{ gap: 'var(--space-2)', flexWrap: 'wrap' }}>
           <Button variant="danger" onClick={onCancel}>
@@ -1558,6 +1567,21 @@ function CardSettings({
       )}
     </div>
   );
+}
+
+/** The cost of calling a card off, in a sentence. */
+function describeCancellation(cost: CancellationCost): string {
+  const fights =
+    cost.signedFights > 0
+      ? `The ${cost.signedFights === 1 ? 'two fighters' : `${cost.signedFights * 2} fighters`} who signed will remember it.`
+      : '';
+  const buzz =
+    cost.buzz >= MISSED_CARD_BUZZ
+      ? `This close to the night it costs ${cost.buzz} buzz, the same as not turning up.`
+      : cost.buzz > 0
+        ? `It costs ${cost.buzz} buzz.`
+        : 'Far enough out that the audience will barely notice.';
+  return `${buzz} ${fights}`.trim();
 }
 
 // --- After the night ------------------------------------------------------------------------------------

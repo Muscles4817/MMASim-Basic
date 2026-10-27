@@ -45,6 +45,7 @@ import {
   rollWeighIns,
 } from './plans';
 import { graceEnds } from './alerts';
+import { scanFightWeek } from './fightWeek';
 
 /*
  * There is no step any more, and that is the change.
@@ -285,6 +286,9 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
     // happen. This is the one place that legitimately knows about both.
     // Bout offers answer on their own day (doc 34 C4), so a counter can stop the clock when it lands.
     settleReplies(db, onDay);
+    // Fight week (doc 34 A5): a signed fighter can fall out on any day of the run-up. First, so a
+    // fighter who withdraws today is never weighed in.
+    scanFightWeek(db, onDay);
     // The scales the day before a card (doc 34 C6): a miss is a decision, so it can stop the clock.
     rollWeighIns(db, onDay);
     scanCareerEvents(db, onDay);

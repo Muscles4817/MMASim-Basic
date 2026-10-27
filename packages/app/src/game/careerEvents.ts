@@ -22,6 +22,10 @@ import {
 import { getWorld, type GameDb } from '@mmasim/data';
 import { raise } from './inbox';
 import { applyDivisionMove } from './world';
+import { bookingsFor } from './plans';
+
+/** What being kept at a weight they asked to leave costs the relationship. */
+export const MOVE_REFUSED_RESENTMENT = 8;
 
 /**
  * Time off for a fighter's head: not bookable for `TIME_OFF_DAYS`, and the reset it buys applied
@@ -110,8 +114,15 @@ export function answerDivisionMove(db: GameDb, item: InboxItem, actionId: string
   const fighter = db.fighters.findById(item.fighterId as string) as Fighter | undefined;
   if (!fighter || fighter.retiredDay !== undefined) return true;
   if (actionId === 'move:refuse') {
-    db.fighters.upsert({ ...fighter, resentment: Math.min(100, fighter.resentment + 8) } as never);
+    db.fighters.upsert({
+      ...fighter,
+      resentment: Math.min(100, fighter.resentment + MOVE_REFUSED_RESENTMENT),
+    } as never);
     db.save();
+    return true;
+  }
+  // Booked onto a card since they asked: the bout was made at this weight, so the move waits.
+  if (bookingsFor(db, getWorld(db).playerPromotionId).get(fighter.id as string)?.signed) {
     return true;
   }
   const target = actionId.slice('move:allow:'.length);
