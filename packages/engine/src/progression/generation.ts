@@ -720,6 +720,22 @@ export function arrivalFactor(key: AttributeKey, age: number, history?: ArrivalH
 }
 
 /**
+ * The share of a prior record's results that were knockouts (won or lost), for an average rating.
+ * About the sport's own rate: roughly three in ten professional MMA bouts end by KO/TKO.
+ */
+export const PRIOR_KO_SHARE = 0.3;
+/** The share of prior wins that were submissions, for average submission skill. */
+export const PRIOR_SUBMISSION_SHARE = 0.18;
+/** The share of prior losses that were by submission, for average scrambling. */
+export const PRIOR_SUBMITTED_SHARE = 0.2;
+/**
+ * The bounds on any of those shares once the rating moves it (one point of share per rating point
+ * from 50): nobody's record is all one method, and nobody's is entirely free of one.
+ */
+export const PRIOR_SHARE_MIN = 0.05;
+export const PRIOR_SHARE_MAX = 0.75;
+
+/**
  * How a career before the simulation started broke down, from who the fighter is. Doc 34 C5.
  *
  * Generated records were wins and losses with nothing behind them — no knockouts either way — so
@@ -728,13 +744,17 @@ export function arrivalFactor(key: AttributeKey, age: number, history?: ArrivalH
  * durability for how they lose) and needs no random draw, so it moves nothing else in generation.
  */
 export function priorSummary(wins: number, losses: number, a: Attributes): RecordSummary {
-  const share = (rating: number, base: number) => clamp(base + (rating - 50) / 100, 0.05, 0.75);
-  const koWins = Math.round(wins * share(a.power, 0.3));
-  const submissionWins = Math.min(wins - koWins, Math.round(wins * share(a.submissions, 0.18)));
-  const koLosses = Math.round(losses * share(100 - a.durability, 0.3));
+  const share = (rating: number, base: number) =>
+    clamp(base + (rating - 50) / 100, PRIOR_SHARE_MIN, PRIOR_SHARE_MAX);
+  const koWins = Math.round(wins * share(a.power, PRIOR_KO_SHARE));
+  const submissionWins = Math.min(
+    wins - koWins,
+    Math.round(wins * share(a.submissions, PRIOR_SUBMISSION_SHARE)),
+  );
+  const koLosses = Math.round(losses * share(100 - a.durability, PRIOR_KO_SHARE));
   const submissionLosses = Math.min(
     losses - koLosses,
-    Math.round(losses * share(100 - a.scrambling, 0.2)),
+    Math.round(losses * share(100 - a.scrambling, PRIOR_SUBMITTED_SHARE)),
   );
   return {
     ...emptyRecordSummary(),
