@@ -325,7 +325,7 @@ export function ticketPrice(promotion: Promotion, headlineDraw: number): number 
  * £100 a seat. Against a crowd that the old flat buzz of 88 inflated as well, one three-fight
  * regional card in front of 4,461 people cleared £481k — a year's overheads in a night.
  */
-const TICKET_BASE = 20;
+const TICKET_BASE = 18;
 /*
  * Convex in prestige: the gap between a town show and a regional is a few pounds, the gap between
  * a regional and the leader is the difference between a night out and an event. Linear, a price

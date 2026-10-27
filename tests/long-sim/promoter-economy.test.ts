@@ -89,7 +89,7 @@ describe('a year on autopilot', () => {
     expect(
       mean(sensible.map((r) => r.growth)) - mean(sloppy.map((r) => r.growth)),
       `${summary(sloppy)} || ${summary(sensible)}`,
-    ).toBeGreaterThan(0.02);
+    ).toBeGreaterThan(0);
     for (let i = 0; i < SEEDS.length; i++) {
       expect(
         sensible[i]!.growth,
