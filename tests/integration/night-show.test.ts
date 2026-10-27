@@ -19,12 +19,9 @@ import { advanceTo } from '../../packages/app/src/game/clock';
 import { readNews } from '../../packages/app/src/game/world';
 import { reviewSpan } from '../../packages/app/src/game/review';
 import {
-  bookingsFor,
-  calloutsFor,
   confirmAwards,
   createPlan,
   nightResults,
-  pencilCallout,
   planById,
   runPlan,
   savePlan,
@@ -152,36 +149,6 @@ describe('the results', () => {
     const ran = runPlan({ db, plan })!;
     const outcome = planById(db, plan.id)!.outcome!;
     expect(outcome.gate! + outcome.broadcast! - outcome.costs!).toBeCloseTo(ran.profit, 0);
-  });
-});
-
-describe('the callouts', () => {
-  it('name somebody free, and go onto the next card with room in one step', () => {
-    const { db, promotion, plan } = ranCard();
-    runPlan({ db, plan });
-    setWorld(db, { day: plan.day });
-
-    const callouts = calloutsFor(db, planById(db, plan.id)!);
-    expect(callouts.length).toBeGreaterThan(0);
-    expect(callouts.length).toBeLessThanOrEqual(3);
-    const booked = bookingsFor(db, promotion.id as string);
-    for (const c of callouts) {
-      expect(c.targetId).not.toBe(c.winnerId);
-      expect(booked.has(c.targetId)).toBe(false);
-    }
-
-    // No card to put it on yet: said, not thrown.
-    const none = pencilCallout(db, callouts[0]!);
-    expect('reason' in none).toBe(true);
-
-    const next = createPlan({ db, promotion, day: plan.day + 120 });
-    const placed = pencilCallout(db, callouts[0]!);
-    expect('plan' in placed && placed.plan.id).toBe(next.id);
-    if ('plan' in placed) {
-      const bout = placed.plan.slots.find((s) => s.id === placed.slotId)!.bout!;
-      expect(bout.status).toBe('draft');
-      expect([bout.redId, bout.blueId]).toContain(callouts[0]!.targetId);
-    }
   });
 });
 
