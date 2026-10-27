@@ -1,14 +1,14 @@
 /* The fighter page's own pieces: the identity strip in the header (FighterIdentity.tsx) and the
    recent-form pips. */
 
-.identity {
+.fighter-identity {
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
   margin-top: var(--space-3);
 }
 
-.identity__facts {
+.fighter-identity__facts {
   flex: 1;
   min-width: 0;
   margin: 0;
@@ -17,28 +17,28 @@
   gap: var(--space-2) var(--space-3);
 }
 
-.identity__fact {
+.fighter-identity__fact {
   min-width: 0;
 }
 
-.identity__fact--wide {
+.fighter-identity__fact--wide {
   grid-column: 1 / -1;
 }
 
-.identity__fact dt {
+.fighter-identity__fact dt {
   font-size: var(--text-xs);
   color: var(--text-faint);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
-.identity__fact dd {
+.fighter-identity__fact dd {
   margin: 0;
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
 
-.identity__sub {
+.fighter-identity__sub {
   display: block;
   color: var(--text-muted);
 }
@@ -65,10 +65,10 @@
 }
 
 @media (min-width: 48rem) {
-  .identity__fact--wide {
+  .fighter-identity__fact--wide {
     grid-column: auto;
   }
-  .identity__facts {
+  .fighter-identity__facts {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

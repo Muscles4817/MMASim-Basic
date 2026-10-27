@@ -60,6 +60,7 @@ import { displayBand, type BandContext } from '../ratings/displayBand.js';
 import {
   ELITE_LIFT,
   PHYSICAL_SCALE_KEYS,
+  isPhysicalScaleKey,
   expectedPhysical,
   medianRatingAtMass,
   ratingSd,
@@ -515,8 +516,11 @@ export function traitReferenceFor(
  * player can see, because the trait and the band sit on the same screen.
  *
  * So the test is the band the page shows, not a distance from a pivot. A trait that leans on an
- * attribute (weight ≥ 0.5) is refused when that attribute reads Liability or worse; one that leans
- * against it is refused when it reads Very good or better. Anything in between stays a weight.
+ * attribute (weight ≥ 0.5) is refused when that attribute reads Liability or worse — or Below level,
+ * for a physical, because a chin or an engine is mostly born and a debutant's is close to what they
+ * will carry, whereas a 40 in wrestling at 21 says little about the wrestler at 28. One that leans
+ * against an attribute is refused when it reads Very good or better. Anything in between stays a
+ * weight.
  */
 const CONTRADICTION_WEIGHT = 0.5;
 const LIABILITY: ReadonlySet<string> = new Set(['liability', 'absent']);
@@ -531,7 +535,8 @@ export function traitContradicts(
   return (Object.entries(trait.affinity) as [AffinityAttribute, number][]).some(([key, weight]) => {
     const band = displayBand(key, attributes[key], context).key;
     return (
-      (weight >= CONTRADICTION_WEIGHT && LIABILITY.has(band)) ||
+      (weight >= CONTRADICTION_WEIGHT &&
+        (LIABILITY.has(band) || (isPhysicalScaleKey(key) && band === 'belowLevel'))) ||
       (weight <= -CONTRADICTION_WEIGHT && STRENGTH.has(band))
     );
   });

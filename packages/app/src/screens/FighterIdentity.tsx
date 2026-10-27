@@ -30,10 +30,10 @@ export function IdentityStrip({ db, fighter }: { db: GameDb; fighter: Fighter })
   const coach = room.coach ? `${room.coach.firstName} ${room.coach.lastName}` : undefined;
 
   return (
-    <div className="identity" data-testid="identity-strip">
+    <div className="fighter-identity" data-testid="identity-strip">
       <Silhouette fighter={fighter} />
-      <dl className="identity__facts">
-        <div className="identity__fact identity__fact--wide">
+      <dl className="fighter-identity__facts">
+        <div className="fighter-identity__fact fighter-identity__fact--wide">
           <dt>From</dt>
           <dd>
             {hometown ? `${hometown}, ` : ''}
@@ -41,29 +41,29 @@ export function IdentityStrip({ db, fighter }: { db: GameDb; fighter: Fighter })
           </dd>
         </div>
         {fighter.background && (
-          <div className="identity__fact identity__fact--wide">
+          <div className="fighter-identity__fact fighter-identity__fact--wide">
             <dt>Came up in</dt>
             <dd>{describeBackground(fighter.background, fighter.sex)}</dd>
           </div>
         )}
-        <div className="identity__fact identity__fact--wide">
+        <div className="fighter-identity__fact fighter-identity__fact--wide">
           <dt>Trains at</dt>
           <dd>
             {room.gym
               ? `${room.gym.name}${room.gym.city ? `, ${room.gym.city}` : ''}`
               : 'No gym on record'}
-            {coach && <span className="identity__sub">Head coach {coach}</span>}
+            {coach && <span className="fighter-identity__sub">Head coach {coach}</span>}
           </dd>
         </div>
-        <div className="identity__fact">
+        <div className="fighter-identity__fact">
           <dt>Height</dt>
           <dd>{feetAndInches(fighter.heightInches)}</dd>
         </div>
-        <div className="identity__fact">
+        <div className="fighter-identity__fact">
           <dt>Reach</dt>
           <dd>{Math.round(fighter.reachInches)}″</dd>
         </div>
-        <div className="identity__fact">
+        <div className="fighter-identity__fact">
           <dt>Walks around</dt>
           <dd>{walkingWeightOf(fighter)} lb</dd>
         </div>
