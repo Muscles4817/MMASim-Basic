@@ -44,7 +44,6 @@ import {
   clamp,
   createRng,
   describeMethod,
-  describePullOut,
   displayName,
   drawWeight,
   eventName,
@@ -59,7 +58,6 @@ import {
   plannedBouts,
   planIssues,
   planProgress,
-  pullOutRisk,
   rankDivision,
   rankOf,
   rematchCooldownFor,
@@ -1909,65 +1907,9 @@ export function issuesFor(input: { ctx: PromoterContext; plan: EventPlan }): Pla
 
 // --- Withdrawals ---------------------------------------------------------------------------------
 
-export interface Withdrawal {
-  slotId: string;
-  fighterId: string;
-  /** One line, for the alert and the inbox. */
-  note: string;
-}
-
-/**
- * Who has fallen out between the offer and the night.
- *
- * The sport's defining operational fact and the mode's signature scene: a main event losing a
- * man at six weeks. Under the old one-sitting builder this had to be a modal scramble bolted
- * onto the announce button, because there was no card sitting in the save for anybody to fall
- * out of. Now there is — so a withdrawal simply empties the corner it happened in and the player
- * fixes it in the same matchmaking screen they built the card with, which is both simpler and
- * closer to the job.
- *
- * Seeded per bout and per card so re-reading the screen cannot reroll it, and so a player who
- * reloads gets the same bad news.
- */
-export function rollWithdrawals(input: { db: GameDb; plan: EventPlan }): {
-  plan: EventPlan;
-  withdrawals: Withdrawal[];
-} {
-  const { db } = input;
-  const world = getWorld(db);
-  let plan = input.plan;
-  const withdrawals: Withdrawal[] = [];
-
-  for (const slot of plan.slots) {
-    if (slot.bout?.status !== 'agreed') continue;
-
-    for (const id of [slot.bout.redId, slot.bout.blueId]) {
-      const fighter = db.fighters.findById(id as string) as Fighter | undefined;
-      if (!fighter) continue;
-
-      const rng = createRng(`${world.seed}:pullout:${plan.id}:${slot.id}:${id}`);
-      if (!rng.chance(pullOutRisk(fighter))) continue;
-
-      const reason = rng.pickWeighted(['injury', 'illness', 'weight', 'personal'] as const, (r) =>
-        r === 'injury' ? 6 : r === 'illness' ? 2 : r === 'weight' ? 2 : 1,
-      );
-
-      withdrawals.push({
-        slotId: slot.id,
-        fighterId: id as string,
-        note: describePullOut(reason, fighter),
-      });
-
-      // The bout comes off, not the whole card. The opponent is still ready and still wants a
-      // fight, which is exactly the position the player has to solve.
-      plan = withSlot(plan, slot.id, undefined);
-      // One withdrawal per bout: the fight is already off, and a second is noise.
-      break;
-    }
-  }
-
-  return { plan, withdrawals };
-}
+// Withdrawals roll through a card's run-up, day by day, in `fightWeek.ts` (doc 34 A5). There is
+// deliberately no roll on the night: a second one would double every fighter's chance of falling
+// out.
 
 /**
  * Somebody who would step in on this notice.
