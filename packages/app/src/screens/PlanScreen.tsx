@@ -1356,7 +1356,7 @@ function CardResults({ plan, onDone }: { plan: EventPlan; onDone(): void }) {
             value={money(outcome.profit)}
             label={outcome.profit >= 0 ? 'The night made money' : 'The night lost money'}
             tone={outcome.profit >= 0 ? 'good' : 'bad'}
-            detail={`${outcome.attendance.toLocaleString()} in the building. ${describeBuzz(outcome.buzzDelta)}`}
+            detail={`${night?.attendance !== undefined ? `${night.attendance.toLocaleString()} in the building. ` : ''}${describeBuzz(outcome.buzzDelta)}`}
           />
         )}
       </Card>

@@ -156,6 +156,16 @@ export function CalendarScreen() {
         </div>
       </Card>
 
+      {/*
+        Said when the clock stopped short for the night, so a player who asked for a month and
+        got eleven days knows why rather than wondering whether the button worked.
+      */}
+      {lastAdvance?.fightNight && !lastAdvance.interrupted && (
+        <Alert tone="info" title={`Time stopped for ${lastAdvance.fightNight.name}`}>
+          It is fight night. Run the card, or move the clock on and cancel it.
+        </Alert>
+      )}
+
       {lastAdvance?.missed && lastAdvance.missed.length > 0 && (
         <Alert
           tone="danger"

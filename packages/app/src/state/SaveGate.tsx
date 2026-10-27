@@ -36,7 +36,7 @@ import {
   type WorldSize,
 } from '@mmasim/data';
 import { GameProvider } from './GameProvider';
-import { MenuScreen } from '../screens/MenuScreen';
+import { DeleteSave, MenuScreen } from '../screens/MenuScreen';
 import { generateWorld } from '../game/newWorld';
 import { Button } from '../ui';
 
@@ -293,6 +293,7 @@ export function SaveGate({ children }: { children: ReactNode }) {
       <OpenFailed
         error={session.error}
         onBack={toMenu}
+        saveName={saves.find((s) => s.id === session.id)?.name ?? 'this save'}
         onDelete={() => {
           remove(session.id);
           toMenu();
@@ -405,10 +406,12 @@ function OpenFailed({
   error,
   onBack,
   onDelete,
+  saveName,
 }: {
   error: Error;
   onBack(): void;
   onDelete(): void;
+  saveName: string;
 }) {
   /*
    * A save from another version is a different failure from storage refusing, and the old copy
@@ -442,9 +445,7 @@ function OpenFailed({
               Back to the menu
             </Button>
             {error instanceof SaveTooOldError && (
-              <Button variant="danger" onClick={onDelete}>
-                Delete this save
-              </Button>
+              <DeleteSave name={saveName} onDelete={onDelete} label="Delete this save" />
             )}
           </div>
         </div>

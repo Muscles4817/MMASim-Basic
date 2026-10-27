@@ -43,7 +43,7 @@ import { formatGameDay } from '../shell/Shell';
 import { money } from '../ui/format';
 import { attentionFor } from '../game/attention';
 import { describeRunway, financialSnapshot } from '../game/finances';
-import { forecastPlan, plansFor, promoterContext } from '../game/plans';
+import { fightNightOn, forecastPlan, plansFor, promoterContext } from '../game/plans';
 import { PromoterSubNav } from './promoterNav';
 
 /** How many rows the dashboard shows before it stops being a dashboard. */
@@ -131,7 +131,8 @@ export function PromotionHubScreen() {
   }
 
   const next = plans[0];
-  const tonight = next !== undefined && next.day === world.day;
+  // The same question the calendar and the clock ask, answered by the same helper.
+  const tonight = fightNightOn(db, promotion.id as string, world.day) !== undefined;
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>

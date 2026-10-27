@@ -143,6 +143,8 @@ export interface EventPlan {
    * that cannot be read back off anything else: the bouts are in the fighters' records, but the
    * gate and the buzz it moved were settled into the promotion and are gone. Without it a card
    * reopened the next morning could show who won and not whether it was worth running.
+   *
+   * Attendance is not here: the night already keeps it (`FightNight.attendance`).
    */
   outcome?: PlanOutcome;
   /**
@@ -158,7 +160,6 @@ export interface PlanOutcome {
   /** Thousands. */
   profit: number;
   buzzDelta: number;
-  attendance: number;
 }
 
 // --- Building and editing ---------------------------------------------------------------------

@@ -356,7 +356,10 @@ describe('a save from an older version', () => {
     await user.click(screen.getByRole('button', { name: /^Continue$/i }));
 
     expect(await screen.findByText(/This save is from an older version/i)).toBeTruthy();
+    // Two taps, the same as from the menu: the first only asks.
     await user.click(screen.getByRole('button', { name: /Delete this save/i }));
+    expect(listSaves(localStorage)).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: /^Delete An old career$/i }));
     await waitFor(() => expect(listSaves(localStorage)).toHaveLength(0));
     expect(await screen.findByRole('button', { name: /New game/i })).toBeTruthy();
   });

@@ -143,11 +143,8 @@ describe('a card that ran', () => {
     const ran = runPlan({ db, plan })!;
 
     const stored = planById(db, plan.id)!;
-    expect(stored.outcome).toEqual({
-      profit: ran.profit,
-      buzzDelta: ran.buzz,
-      attendance: ran.attendance,
-    });
+    expect(stored.outcome).toEqual({ profit: ran.profit, buzzDelta: ran.buzz });
+    expect(ran.night.attendance).toBe(ran.attendance);
 
     const results = nightResults(db, stored);
     expect(results).toHaveLength(ran.night.bouts.length);

@@ -36,9 +36,10 @@ export interface Migration {
 /**
  * Ordered migration steps.
  *
- * Empty at version 1 — deliberately kept rather than deferred, because the loader, the
- * refusal path and the tests all exist and are exercised from day one. Adding the plumbing
- * later, under pressure, mid-schema-change, is how saves get lost.
+ * Empty: version 2 deliberately broke version-1 saves rather than migrating them (see
+ * `CURRENT_SCHEMA_VERSION`), so there is no step to walk. The loader, the refusal path and the
+ * tests stay in place regardless, because adding the plumbing later, under pressure,
+ * mid-schema-change, is how saves get lost.
  */
 export const MIGRATIONS: readonly Migration[] = [];
 

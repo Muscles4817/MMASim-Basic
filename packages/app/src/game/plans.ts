@@ -1472,7 +1472,7 @@ export function runPlan(input: {
     ...plan,
     status: 'run',
     nightId: night.id as string,
-    outcome: { profit: outcome.profit, buzzDelta: outcome.buzz, attendance: outcome.attendance },
+    outcome: { profit: outcome.profit, buzzDelta: outcome.buzz },
   });
   return outcome;
 }
