@@ -40,6 +40,12 @@ import {
   careerArc,
   conditionRead,
   deriveRatings,
+  describeLedger,
+  isHoldingOut,
+  relationshipWith,
+  voiceFor,
+  wantVoice,
+  drawRead,
   describeFairness,
   describeHeat,
   describeInjury,
@@ -77,6 +83,7 @@ import { currentPurse, promotionOf } from '../game/money';
 import { GROUP_LABELS } from '../game/labels';
 import { daysUnbookedBy } from '../game/plans';
 import { IdentityStrip } from './FighterIdentity';
+import { DrawBadge } from '../ui/DrawBadge';
 import './FighterView.css';
 
 /** Who is looking. Decides the vocabulary, the disclosure and the lead tab — never the facts. */
@@ -160,6 +167,8 @@ export function FighterView({
   viewer,
   booked = false,
   actions,
+  negotiation,
+  negotiationLabel = 'Talk terms',
   onOpponentClick,
 }: {
   db: GameDb;
@@ -177,6 +186,14 @@ export function FighterView({
   booked?: boolean;
   /** What this viewer can do about this fighter. The caller owns it entirely. */
   actions?: ReactNode;
+  /**
+   * The contract table, when the viewer can negotiate with this fighter (doc 34 C4). Rendered at
+   * the top of the Contract tab, with a header button that opens it. The caller builds it, because
+   * signing writes to the database and this component does not own a commit.
+   */
+  negotiation?: ReactNode;
+  /** The header button's words for opening talks: "Offer a deal", "Re-sign". */
+  negotiationLabel?: string;
   onOpponentClick?(id: string): void;
 }) {
   const [tab, setTab] = useState<TabId>('overview');
@@ -294,9 +311,17 @@ export function FighterView({
           ))}
         </div>
 
-        {actions && (
+        {(actions || negotiation) && (
           <div className="row" style={{ marginTop: 'var(--space-4)', flexWrap: 'wrap' }}>
             {actions}
+            {negotiation && (
+              <Button
+                variant={actions ? 'secondary' : 'primary'}
+                onClick={() => setTab('contract')}
+              >
+                {negotiationLabel}
+              </Button>
+            )}
           </div>
         )}
       </Card>
@@ -372,6 +397,8 @@ export function FighterView({
             }
             side={
               <>
+                <DrawCard fighter={fighter} day={day} db={db} self={viewer === 'self'} />
+
                 <SituationCard
                   title={words.situation}
                   fighter={fighter}
@@ -562,6 +589,7 @@ export function FighterView({
 
       {tab === 'contract' && (
         <TabPanel id="contract">
+          {negotiation}
           <ContractTab
             fighter={fighter}
             db={db}
@@ -633,6 +661,54 @@ function FormCard({ fighter, title }: { fighter: Fighter; title: string }) {
         ))}
       </p>
       <RecordSummaryBar summary={summariseRecord(recent)} />
+    </Card>
+  );
+}
+
+// --- Draw --------------------------------------------------------------------------------------
+
+/**
+ * What they sell, which until now no screen said. Doc 34 C2.
+ *
+ * A class, a direction, a persona and a home market — never the star-power number, for the same
+ * reason the ability band refuses the overall. The market is the promotion's own country, because
+ * that is where this fighter's cards are mostly going to be sold.
+ */
+function DrawCard({
+  fighter,
+  day,
+  db,
+  self,
+}: {
+  fighter: Fighter;
+  day: number;
+  db: GameDb;
+  self: boolean;
+}) {
+  const market = promotionOf(db, fighter)?.baseCountry;
+  const read = drawRead(fighter, day, market);
+  return (
+    <Card title={self ? 'Your draw' : 'Draw'}>
+      <div className="stack" style={{ gap: 'var(--space-3)' }}>
+        <DrawBadge fighter={fighter} day={day} read={read} />
+        <p className="prose" style={{ margin: 0, fontSize: 'var(--text-sm)' }}>
+          {read.blurb} {read.trend.detail}
+        </p>
+        <div>
+          <strong>{read.persona.label}</strong>
+          <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+            {read.persona.blurb}
+          </p>
+        </div>
+        <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+          Sells best in {read.homeMarket}
+          {read.atHome
+            ? ' — which is where this promotion runs its cards. Sponsors pay more at home.'
+            : market
+              ? `. This promotion runs its cards in ${market}.`
+              : '.'}
+        </p>
+      </div>
     </Card>
   );
 }
@@ -1004,11 +1080,23 @@ function ContractTab({
     daysIdle: daysUnbookedBy(fighter, day, getWorld(db).startedDay ?? day),
     aggrieved: (standing.fairness ?? 1) < 0.7,
   });
+  const holdingOut = isHoldingOut(fighter) && !self;
+  const situation = wantVoice(wants.id);
+  const said = situation ? voiceFor(fighter, situation, day) : undefined;
+  const relationship = promotion ? relationshipWith(fighter, promotion.id, day) : undefined;
 
   return (
     <Console
       main={
         <>
+          {/* Doc 34 C4: underpaid and proud enough to stop fighting until it is fixed. */}
+          {holdingOut && (
+            <Alert tone="warn" title="Holding out">
+              Will not take another fight until the deal is renegotiated. No bout offer moves them —
+              only a new contract does.
+            </Alert>
+          )}
+
           <Card title="The deal">
             {standing.agreement ? (
               <Ledger>
@@ -1126,7 +1214,36 @@ function ContractTab({
 
           <Card title={words.wants}>
             <KeyStat value={wants.label} label="Next" detail={wants.detail} />
+            {/* In their own words, when the want is one they would say out loud. Doc 34 C3. */}
+            {said && (
+              <blockquote className="prose voice-quote" style={{ margin: 'var(--space-3) 0 0' }}>
+                “{said.quote}”
+              </blockquote>
+            )}
           </Card>
+
+          {/*
+            What they remember about this promotion. Read through their personality on the day, so
+            the same history is a grudge to one fighter and water under the bridge to another.
+          */}
+          {relationship && promotion && (
+            <Card title={self ? `You and ${promotion.shortName}` : `With ${promotion.shortName}`}>
+              <KeyStat
+                value={relationship.label}
+                label="Relationship"
+                detail={
+                  relationship.worst && relationship.score < 0
+                    ? `${self ? 'You have' : 'They have'} not forgotten ${describeLedger(relationship.worst.kind)}.`
+                    : relationship.best && relationship.score > 0
+                      ? `${self ? 'You remember' : 'They remember'} ${describeLedger(relationship.best.kind)}.`
+                      : 'No history worth remembering either way yet.'
+                }
+                tone={
+                  relationship.score <= -10 ? 'bad' : relationship.score >= 10 ? 'good' : 'neutral'
+                }
+              />
+            </Card>
+          )}
 
           {standing.manager && (
             <Card title="Represented by">

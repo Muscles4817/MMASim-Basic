@@ -90,6 +90,37 @@ describe('the bonuses are the promoter’s call', () => {
     expect(confirmAwards(db, night.id as string, { performanceOfTheNight: [] })).toBe(false);
   });
 
+  it('pays a fighter once for both awards, into net earnings too, and never a loser for performance', () => {
+    const { db, plan } = ranCard();
+    const ran = runPlan({ db, plan })!;
+    const night = nightOf(db, ran.night.id as string);
+    const row = nightResults(db, planById(db, plan.id)!).find((r) => r.winner)!;
+    const winnerId = row.winner!.id as string;
+    const loserId = (row.bout.redId === winnerId ? row.bout.blueId : row.bout.redId) as string;
+    const { perAward } = night.awards!;
+    const before = (id: string) => db.fighters.findById(id) as Fighter;
+    const [winner, loser] = [before(winnerId), before(loserId)];
+
+    // The winner takes Fight and Performance of the Night; the loser is offered Performance too.
+    confirmAwards(db, night.id as string, {
+      fightOfTheNight: row.bout.boutId,
+      performanceOfTheNight: [winnerId, winnerId, loserId],
+    });
+
+    const won = before(winnerId);
+    expect(won.bank).toBeCloseTo(winner.bank + perAward, 1);
+    expect(won.lifetimeGross).toBeCloseTo(winner.lifetimeGross + perAward, 1);
+    expect(won.lifetimeNet).toBeCloseTo(winner.lifetimeNet + perAward * 0.55, 1);
+    expect(won.record.find((e) => e.boutId === row.bout.boutId)?.bonus).toBe('performance');
+
+    // Paid for the fight, not for a performance they lost.
+    const lost = before(loserId);
+    expect(lost.bank).toBeCloseTo(loser.bank + perAward, 1);
+    expect(lost.lifetimeNet).toBeCloseTo(loser.lifetimeNet + perAward * 0.55, 1);
+    expect(lost.record.find((e) => e.boutId === row.bout.boutId)?.bonus).toBe('fight');
+    expect(nightOf(db, night.id as string).awards?.performanceOfTheNight).toEqual([winnerId]);
+  });
+
   it('lets the suggestion stand once the clock moves', () => {
     const { db, plan } = ranCard();
     const ran = runPlan({ db, plan })!;
@@ -148,7 +179,8 @@ describe('the results', () => {
     const { db, plan } = ranCard();
     const ran = runPlan({ db, plan })!;
     const outcome = planById(db, plan.id)!.outcome!;
-    expect(outcome.gate! + outcome.broadcast! - outcome.costs!).toBeCloseTo(ran.profit, 0);
+    // The cost the recap shows is derived from these, and must be the night's real cost.
+    expect(outcome.gate! + outcome.broadcast! - outcome.profit).toBeCloseTo(ran.revenue.costs, 0);
   });
 });
 

@@ -72,6 +72,20 @@ async function becomePromoter(user: ReturnType<typeof userEvent.setup>) {
 }
 
 /** Create a card from the calendar and land on it. */
+/**
+ * Let a week pass and come back to the card. Doc 34 C4: corners answer an offer over two to seven
+ * days, so the answers are only on the card once the clock has moved. An advance can stop early on
+ * a counter landing, so it is pressed until a week has really gone.
+ */
+async function waitAWeekForAnswers(user: ReturnType<typeof userEvent.setup>) {
+  const card = window.location.hash;
+  goTo('#/calendar');
+  for (let i = 0; i < 4; i++) {
+    await user.click(await screen.findByRole('button', { name: /^A week$/i }));
+  }
+  goTo(card);
+}
+
 async function planACard(user: ReturnType<typeof userEvent.setup>) {
   goTo('#/calendar');
   await user.click(await screen.findByRole('button', { name: /New card/i }));
@@ -408,6 +422,7 @@ describe('sending the card out', () => {
     await user.click(await screen.findByRole('button', { name: /Fill them in/i }));
     await screen.findByRole('button', { name: /Send every pencilled fight/i });
     await user.click(screen.getByRole('button', { name: /Send every pencilled fight/i }));
+    await waitAWeekForAnswers(user);
 
     // Some say yes and some do not — the point is that the answer is theirs, so both outcomes
     // are a pass and an unchanged card is not.
@@ -435,6 +450,7 @@ describe('fight night', () => {
 
     await user.click(await screen.findByRole('button', { name: /Fill them in/i }));
     await user.click(await screen.findByRole('button', { name: /Send every pencilled fight/i }));
+    await waitAWeekForAnswers(user);
     await waitFor(() => expect(screen.queryAllByText(/Signed/i).length).toBeGreaterThan(0), {
       timeout: 10000,
     });

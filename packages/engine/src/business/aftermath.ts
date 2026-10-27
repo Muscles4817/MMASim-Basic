@@ -50,6 +50,16 @@ export interface AftermathOutput {
   notes: readonly string[];
 }
 
+/**
+ * What one result does to a fighter's following, before opponent value and headroom: a finish 9,
+ * any other win 5, and anything else — a loss, a draw, a no contest — −3. Exported because the
+ * promoter's trend read (`starPower.ts:starTrend`) must move by the same numbers this does.
+ */
+export function starPerformanceValue(won: boolean, method: FinishMethod): number {
+  if (!won) return -3;
+  return isKoMethod(method) || method === 'submission' ? 9 : 5;
+}
+
 /** Apply a fight's consequences to both fighters. Returns new objects; inputs are untouched. */
 export function applyAftermath(input: AftermathInput): AftermathOutput {
   const { result, day, divisionId, promotionId, rng } = input;
@@ -197,7 +207,7 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
     }
 
     // --- Star power & reputation --------------------------------------------------------
-    const performanceValue = won ? (isKoMethod(result.method) || result.method === 'submission' ? 9 : 5) : -3;
+    const performanceValue = starPerformanceValue(won, result.method);
     const opponentValue = opponent.starPower / 25;
     // Gains compress as star power rises. Getting noticed is easy; going from famous to
     // iconic is not, and without this the long-sim suite showed active fighters ratcheting

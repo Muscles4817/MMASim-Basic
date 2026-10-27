@@ -13,15 +13,17 @@
  */
 
 import { useEffect } from 'react';
-import { type Fighter } from '@mmasim/engine';
+import { type Fighter, type Promotion } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Empty } from '../ui';
 import { FighterView, type FighterViewer } from './FighterView';
+import { ContractTable } from './ContractTable';
+import { canNegotiate } from '../game/contracts';
 import { bookedOnPlans } from '../game/finances';
 
 export function FighterScreen({ id }: { id: string }) {
-  const { db, world, playerFighter } = useGame();
+  const { db, world, playerFighter, commit } = useGame();
   const { navigate, replace } = useRouter();
 
   const fighter = db.fighters.findById(id) as Fighter | undefined;
@@ -66,12 +68,36 @@ export function FighterScreen({ id }: { id: string }) {
     world.playerPromotionId !== undefined &&
     fighter.promotionId === world.playerPromotionId;
 
+  /*
+   * The contract table, when a promoter can talk terms with this fighter: a free agent, somebody
+   * whose deal elsewhere has run out, or one of your own (doc 34 C4). Signing goes through `sign`
+   * and the screen commits, so the page re-reads the fighter on the new deal.
+   */
+  const promotion =
+    isPromoter && world.playerPromotionId
+      ? (db.promotions.findById(world.playerPromotionId) as Promotion | undefined)
+      : undefined;
+  const talks = promotion ? canNegotiate(db, fighter, promotion) : undefined;
+
   return (
     <FighterView
       db={db}
       day={world.day}
       fighter={fighter}
       viewer={viewer}
+      negotiation={
+        promotion && talks?.open && talks.mode ? (
+          <ContractTable
+            key={`${fighter.id}:${fighter.agreementId ?? ''}`}
+            db={db}
+            fighter={fighter}
+            promotion={promotion}
+            mode={talks.mode}
+            onSigned={commit}
+          />
+        ) : undefined
+      }
+      negotiationLabel={talks?.mode === 'resign' ? 'Re-sign' : 'Offer a deal'}
       /* Only a promoter has cards to be booked on, so only a promoter asks. In fighter mode
          `playerPromotionId` is undefined and this was asked anyway, which left the availability
          chip on every fighter page in the mode answering a question nobody had put. */
