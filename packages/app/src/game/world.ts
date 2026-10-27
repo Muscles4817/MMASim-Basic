@@ -108,6 +108,7 @@ import {
   withLedgerEntry,
   trimFeed,
   type BoutSeed,
+  type BonusAwards,
   type CardBout,
   type Championship,
   type VacancyReason,
@@ -976,39 +977,7 @@ function buildNight(ctx: {
   }
 
   // --- The bonuses, decided by what actually happened ---------------------------------------
-  const awards = awardBonuses(results, night.bonusPool);
-  const bonusRecipients = new Set<string>(awards.performanceOfTheNight.map((id) => id as string));
-  const fotn = card.find((b) => b.boutId === awards.fightOfTheNight);
-  if (fotn) {
-    bonusRecipients.add(fotn.redId as string);
-    bonusRecipients.add(fotn.blueId as string);
-  }
-
-  for (const id of bonusRecipients) {
-    const fighter = db.fighters.findById(id) as Fighter | undefined;
-    if (!fighter) continue;
-
-    /*
-     * The award goes on the record as well as into the bank, exactly as it does on the player's
-     * own cards. Without this the world's fighters would build standing purely on results while
-     * the player's benefited from bonuses too, and the rankings would quietly favour the player
-     * for reasons nobody could see.
-     */
-    const kind: 'performance' | 'fight' = awards.performanceOfTheNight.includes(fighter.id)
-      ? 'performance'
-      : 'fight';
-    const record = fighter.record.map((entry) =>
-      entry.day === day && entry.promotionId === promotion.id ? { ...entry, bonus: kind } : entry,
-    );
-
-    db.fighters.upsert({
-      ...fighter,
-      record,
-      bank: round1(fighter.bank + awards.perAward),
-      lifetimeGross: round1(fighter.lifetimeGross + awards.perAward),
-      lifetimeNet: round1(fighter.lifetimeNet + awards.perAward * 0.55),
-    } as Fighter & { id: string });
-  }
+  payBonuses(db, card, awardBonuses(results, night.bonusPool));
 
   db.events.upsert(night as FightNight & Entity);
 
@@ -2596,6 +2565,46 @@ export function divisionHealth(db: GameDb, divisionId: DivisionId): number {
 }
 
 const round1 = (n: number): number => Math.round(n * 10) / 10;
+
+/**
+ * Pay a night's Fight and Performance of the Night, and write each onto the record.
+ *
+ * One payment per fighter however many awards they took — the pool is split into per-recipient
+ * shares, and a fighter in the Fight of the Night who also won Performance is one recipient, not
+ * two — with the award on the record line for their bout on this card. Shared by the world's
+ * cards and the player's own (`confirmAwards`), so the two cannot pay differently.
+ *
+ * The award goes on the record as well as into the bank. Without it the world's fighters would
+ * build standing purely on results while the player's benefited from bonuses too, and the
+ * rankings would quietly favour one side for reasons nobody could see.
+ */
+export function payBonuses(db: GameDb, card: readonly CardBout[], awards: BonusAwards): void {
+  const recipients = new Set<string>(awards.performanceOfTheNight.map((id) => id as string));
+  const fotn = card.find((b) => b.boutId === awards.fightOfTheNight);
+  if (fotn) {
+    recipients.add(fotn.redId as string);
+    recipients.add(fotn.blueId as string);
+  }
+
+  for (const id of recipients) {
+    const fighter = db.fighters.findById(id) as Fighter | undefined;
+    const bout = card.find((b) => b.redId === id || b.blueId === id);
+    if (!fighter || !bout) continue;
+
+    const kind: 'performance' | 'fight' = awards.performanceOfTheNight.includes(fighter.id)
+      ? 'performance'
+      : 'fight';
+    db.fighters.upsert({
+      ...fighter,
+      record: fighter.record.map((entry) =>
+        entry.boutId === bout.boutId ? { ...entry, bonus: kind } : entry,
+      ),
+      bank: round1(fighter.bank + awards.perAward),
+      lifetimeGross: round1(fighter.lifetimeGross + awards.perAward),
+      lifetimeNet: round1(fighter.lifetimeNet + awards.perAward * 0.55),
+    } as Fighter & { id: string });
+  }
+}
 
 /**
  * What the promotion paid the card, so the night's profit is a real number.

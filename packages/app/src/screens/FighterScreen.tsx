@@ -101,7 +101,7 @@ export function FighterScreen({ id }: { id: string }) {
       /* Only a promoter has cards to be booked on, so only a promoter asks. In fighter mode
          `playerPromotionId` is undefined and this was asked anyway, which left the availability
          chip on every fighter page in the mode answering a question nobody had put. */
-      booked={isPromoter ? bookedOnPlans(db, world.playerPromotionId, world.day).has(id) : false}
+      booked={isPromoter ? bookedOnPlans(db, world.playerPromotionId).has(id) : false}
       actions={
         isYours ? (
           <Button variant="primary" onClick={() => navigate({ name: 'calendar' })}>

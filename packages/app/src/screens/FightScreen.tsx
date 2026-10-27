@@ -32,7 +32,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Flag, Segmented } from '../ui';
-import { getLastBroadcast } from '../game/career';
+import { broadcastFor } from '../game/broadcasts';
 import { nightFor, positionLabel } from '../game/night';
 import './FightScreen.css';
 
@@ -62,12 +62,16 @@ type Stage = 'prefight' | 'fight';
  */
 export function FightScreen({ boutId }: { boutId?: string }) {
   const { db, world } = useGame();
-  const { navigate } = useRouter();
+  const { navigate, back } = useRouter();
   // Only shows the stored result if it is the bout that was asked for. Navigating back to an
   // older #/fight/<id> should not silently render a different fight’s scorecards.
-  const broadcast = useMemo(() => getLastBroadcast(), []);
-  const stored = broadcast?.result;
-  const result = boutId === undefined || stored?.boutId === boutId ? stored : undefined;
+  // The player-fighter's own bout, or one from the card a promoter just ran (`broadcasts.ts`).
+  const broadcast = useMemo(() => broadcastFor(boutId), [boutId]);
+  const result = broadcast?.result;
+  // A promoter came here from their card, and that is where "back" goes.
+  const promoter = world.playerRole === 'promoter';
+  const leave = () => (promoter ? back() : navigate({ name: 'hub' }));
+  const leaveLabel = promoter ? 'Back to the card' : 'Back to career';
 
   const commentator = broadcast?.commentatorId
     ? (db.commentators.findById(broadcast.commentatorId) as Commentator | undefined)
@@ -155,8 +159,8 @@ export function FightScreen({ boutId }: { boutId?: string }) {
   if (!result) {
     return (
       <Empty title="No fight to show">
-        <Button variant="primary" onClick={() => navigate({ name: 'hub' })}>
-          Back to career
+        <Button variant="primary" onClick={leave}>
+          {leaveLabel}
         </Button>
       </Empty>
     );
@@ -277,8 +281,8 @@ export function FightScreen({ boutId }: { boutId?: string }) {
 
       {finished && (
         <div className="row" style={{ flexWrap: 'wrap' }}>
-          <Button variant="primary" onClick={() => navigate({ name: 'hub' })}>
-            Back to career
+          <Button variant="primary" onClick={leave}>
+            {leaveLabel}
           </Button>
           <Button
             onClick={() => {
@@ -337,6 +341,8 @@ function PreFight({
   day: number;
   onWalkOut(): void;
 }) {
+  // A promoter is watching a bout on their card, not fighting in it.
+  const promoter = useGame().world.playerRole === 'promoter';
   /*
    * The night in the order it happened, not the order it was advertised in.
    *
@@ -439,7 +445,7 @@ function PreFight({
                   <span className="card-row__names">
                     {boutRed?.lastName ?? '—'} vs {boutBlue?.lastName ?? '—'}
                     {bout.isTitleFight && <span aria-hidden="true"> 🏆</span>}
-                    {isPlayer && <Chip tone="accent">You, next</Chip>}
+                    {isPlayer && <Chip tone="accent">{promoter ? 'Next' : 'You, next'}</Chip>}
                   </span>
                   <span className="card-row__result">
                     {isPlayer
@@ -800,6 +806,8 @@ function FightSummary({
   undercard: readonly { boutId: string; winnerName?: string; method: string; round: number }[];
   tactics?: TacticalPlan;
 }) {
+  // A promoter is watching a bout on their card, not fighting in it.
+  const promoter = useGame().world.playerRole === 'promoter';
   const methodLabel = isKoMethod(result.method)
     ? result.method === 'ko'
       ? 'Knockout'
@@ -896,7 +904,7 @@ function FightSummary({
                   <span className="card-row__names">
                     {boutRed?.lastName ?? '—'} vs {boutBlue?.lastName ?? '—'}
                     {bout.isTitleFight && <span aria-hidden="true"> 🏆</span>}
-                    {isPlayer && <Chip tone="accent">You</Chip>}
+                    {isPlayer && <Chip tone="accent">{promoter ? 'This fight' : 'You'}</Chip>}
                   </span>
                   <span className="card-row__result">
                     {isPlayer
