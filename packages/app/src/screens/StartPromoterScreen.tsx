@@ -25,7 +25,7 @@ import { useMemo, useState } from 'react';
 import { displayName, getDivision, isActive, type Fighter, type Promotion } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
-import { Button, Card, Chip, DataTable, MasterDetail, Panel, type Column } from '../ui';
+import { Button, Card, Chip, DataTable, MasterDetail, Panel, Segmented, type Column } from '../ui';
 import { Alert, Help } from '../ui/signals';
 import { AttentionRow, Ledger, LedgerRow } from '../ui/console';
 import { money } from '../ui/format';
@@ -33,9 +33,28 @@ import { attentionFor } from '../game/attention';
 import { describeRunway, financialSnapshot } from '../game/finances';
 import { clearTransientCareerState } from '../game/career';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
+import { SCENARIOS, applyScenario, scenarioBlocker, type ScenarioId } from '../game/scenario';
+import { DIFFICULTY_LEVELS } from '../game/difficulty';
+import type { DifficultyLevel } from '@mmasim/data';
+
+/** The start a player chooses before taking over: a scenario and three difficulty dials. */
+interface StartChoice {
+  scenario: ScenarioId;
+  purseInflation: DifficultyLevel;
+  rivalAggression: DifficultyLevel;
+  ownerPatience: DifficultyLevel;
+}
+
+const STANDARD_START: StartChoice = {
+  scenario: 'standard',
+  purseInflation: 'normal',
+  rivalAggression: 'normal',
+  ownerPatience: 'normal',
+};
 
 export function StartPromoterScreen() {
-  const { db, world, updateWorld } = useGame();
+  const { db, world, updateWorld, commit } = useGame();
+  const [start, setStart] = useState<StartChoice>(STANDARD_START);
   const { navigate } = useRouter();
   const [selectedId, setSelectedId] = useState<string | undefined>();
   const [confirming, setConfirming] = useState(false);
@@ -77,6 +96,9 @@ export function StartPromoterScreen() {
       playerPromotionId: promotion.id as string,
       playerFighterId: undefined,
     });
+    // The scenario and the dials, applied once on the day of the takeover (doc 34 B6).
+    applyScenario(db, promotion.id as string, start);
+    commit();
     navigate({ name: 'promotion' });
   };
 
@@ -207,6 +229,8 @@ export function StartPromoterScreen() {
               day={world.day}
               rosterSize={rosterSize.get(selected.id as string) ?? 0}
               confirming={confirming}
+              start={start}
+              onStart={setStart}
               onRequest={() => setConfirming(true)}
               onCancel={() => setConfirming(false)}
               onConfirm={() => takeControl(selected)}
@@ -232,6 +256,8 @@ function PromotionPreview({
   day,
   rosterSize,
   confirming,
+  start,
+  onStart,
   onRequest,
   onCancel,
   onConfirm,
@@ -241,14 +267,13 @@ function PromotionPreview({
   day: number;
   rosterSize: number;
   confirming: boolean;
+  start: StartChoice;
+  onStart(start: StartChoice): void;
   onRequest(): void;
   onCancel(): void;
   onConfirm(): void;
 }) {
-  const finances = useMemo(
-    () => financialSnapshot({ db, promotion }),
-    [db, promotion, day],
-  );
+  const finances = useMemo(() => financialSnapshot({ db, promotion }), [db, promotion, day]);
   /*
    * What you would inherit — minus the things that are true of every promotion in the world.
    *
@@ -294,12 +319,14 @@ function PromotionPreview({
           {promotion.prestige}
         </p>
 
+        <StartSettings db={db} promotion={promotion} start={start} onStart={onStart} />
+
         {confirming ? (
           <div className="stack" style={{ gap: 'var(--space-2)' }}>
             <p className="prose" style={{ fontSize: 'var(--text-sm)' }}>
               {money(finances.cash)} in the bank, {rosterSize} fighters on the books, and{' '}
-              {attention.length} thing{attention.length === 1 ? '' : 's'} already needing an
-              answer. From here it is your promotion and its problems.
+              {attention.length} thing{attention.length === 1 ? '' : 's'} already needing an answer.
+              From here it is your promotion and its problems.
             </p>
             <div className="row" style={{ flexWrap: 'wrap' }}>
               <Button variant="primary" onClick={onConfirm}>
@@ -339,7 +366,10 @@ function PromotionPreview({
           />
           <LedgerRow label="Minimum purse" value={money(promotion.minimumPurse)} />
         </Ledger>
-        <p className="prose muted" style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}>
+        <p
+          className="prose muted"
+          style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-3)' }}
+        >
           {describeRunway(finances)}
         </p>
       </Card>
@@ -348,8 +378,8 @@ function PromotionPreview({
         {vacant > 0 && (
           <div style={{ marginBottom: 'var(--space-3)' }}>
             <Alert tone="info" title={`${vacant} vacant`}>
-              A vacant belt is a tournament you can build a year around, and a division nobody has
-              a reason to care about yet.
+              A vacant belt is a tournament you can build a year around, and a division nobody has a
+              reason to care about yet.
             </Alert>
           </div>
         )}
@@ -383,8 +413,8 @@ function PromotionPreview({
       <Panel title={attention.length === 0 ? 'Nothing outstanding' : 'What you would inherit'}>
         {attention.length === 0 ? (
           <p className="muted prose" style={{ fontSize: 'var(--text-sm)' }}>
-            Nothing urgent on the books. A quiet promotion is a blank page, which is its own kind
-            of problem.
+            Nothing urgent on the books. A quiet promotion is a blank page, which is its own kind of
+            problem.
           </p>
         ) : (
           <div className="attention">
@@ -400,5 +430,61 @@ function PromotionPreview({
         )}
       </Panel>
     </>
+  );
+}
+
+/**
+ * How the save starts: a scenario, and the three dials. Doc 34 B6.
+ *
+ * Shown in the preview so the choice is made against the promotion it applies to — a "champion
+ * wants out" start is not on offer at a promotion with no champion, and says so.
+ */
+function StartSettings({
+  db,
+  promotion,
+  start,
+  onStart,
+}: {
+  db: ReturnType<typeof useGame>['db'];
+  promotion: Promotion;
+  start: StartChoice;
+  onStart(start: StartChoice): void;
+}) {
+  const blocker = scenarioBlocker(db, promotion, start.scenario);
+  const dials: { key: keyof Omit<StartChoice, 'scenario'>; label: string }[] = [
+    { key: 'purseInflation', label: 'Fighters’ asking prices' },
+    { key: 'rivalAggression', label: 'Rival promotions' },
+    { key: 'ownerPatience', label: 'Owner’s patience' },
+  ];
+
+  return (
+    <div className="stack" style={{ gap: 'var(--space-3)', marginBottom: 'var(--space-3)' }}>
+      <div>
+        <p className="section-title" style={{ marginTop: 0 }}>
+          How it starts
+        </p>
+        <Segmented
+          label="Scenario"
+          value={start.scenario}
+          onChange={(scenario) => onStart({ ...start, scenario })}
+          options={SCENARIOS.map((s) => ({ value: s.id, label: s.label, hint: s.blurb }))}
+        />
+        {/* Each option carries its own blurb; only a scenario this promotion cannot play needs a line. */}
+        {blocker && (
+          <p className="prose" style={{ fontSize: 'var(--text-sm)', margin: 'var(--space-1) 0 0' }}>
+            {blocker} It starts as it is instead.
+          </p>
+        )}
+      </div>
+      {dials.map((dial) => (
+        <Segmented
+          key={dial.key}
+          label={dial.label}
+          value={start[dial.key]}
+          onChange={(level) => onStart({ ...start, [dial.key]: level })}
+          options={DIFFICULTY_LEVELS.map((l) => ({ value: l.id, label: l.label }))}
+        />
+      ))}
+    </div>
   );
 }

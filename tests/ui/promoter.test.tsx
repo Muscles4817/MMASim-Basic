@@ -92,6 +92,34 @@ async function planACard(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: /Put it in the diary/i }));
 }
 
+describe('scenarios and standing orders', () => {
+  it('starts a promotion inside a scenario, chosen on the preview', async () => {
+    // Doc 34 B6.
+    const user = userEvent.setup();
+    goTo('#/start/promoter');
+    renderApp();
+    const rows = await screen.findAllByRole('button', { name: /./ });
+    await user.click(rows.find((r) => r.classList.contains('datatable__rowbutton'))!);
+    expect(await screen.findByText('How it starts')).toBeTruthy();
+    await user.click(screen.getByRole('radio', { name: /Bankrupt rescue/ }));
+    expect(screen.getAllByText(/Keep the doors open/).length).toBeGreaterThan(0);
+    await user.click(await screen.findByRole('button', { name: /^Run /i }));
+    await user.click(await screen.findByRole('button', { name: /^Yes — run /i }));
+    // The scenario's opening news is in the inbox, waiting.
+    await screen.findByText('Standing orders');
+    goTo('#/inbox');
+    expect(await screen.findByText(/nearly broke/)).toBeTruthy();
+  });
+
+  it('hands off the prelims from the dashboard, and says what that means', async () => {
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    expect(await screen.findByText('Standing orders')).toBeTruthy();
+    await user.click(screen.getByRole('radio', { name: 'The matchmaker does' }));
+    expect(await screen.findByText(/empty prelims are filled/)).toBeTruthy();
+  });
+});
+
 describe('choosing to run a promotion', () => {
   it('lands you on your own dashboard rather than a fighter’s', async () => {
     const user = userEvent.setup();
