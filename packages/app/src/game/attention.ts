@@ -31,6 +31,7 @@ import {
   isActive,
   overallRating,
   plannedBouts,
+  planProgress,
   rankDivision,
   rankOf,
   type EventPlan,
@@ -39,7 +40,9 @@ import {
   type PromotionalAgreement,
 } from '@mmasim/engine';
 import { getWorld, type GameDb } from '@mmasim/data';
-import { daysUnbookedBy, plansFor } from './plans';
+import { bookingsFor, daysUnbookedBy, plansFor } from './plans';
+import { walkDay } from './alerts';
+import type { InboxLink } from '@mmasim/engine';
 
 export type AttentionKind =
   'card' | 'title' | 'activity' | 'contract' | 'morale' | 'medical' | 'opportunity' | 'money';
@@ -56,8 +59,8 @@ export interface AttentionItem {
   title: string;
   /** One sentence: what is true, and what it costs if ignored. */
   detail: string;
-  /** What the player would do about it. */
-  action?: { label: string; route: string; id?: string };
+  /** What the player would do about it. Carries a slot when the problem is one bout. */
+  action?: { label: string } & InboxLink;
   fighterId?: string;
 }
 
@@ -79,14 +82,9 @@ export function attentionFor(db: GameDb, promotion: Promotion | undefined): Atte
   const plans = plansFor(db, promotion.id as string);
   const upcoming = plans.filter((p) => p.day >= day);
 
-  // Who is already on something, so "needs booking" means what it says.
-  const booked = new Set<string>();
-  for (const plan of upcoming) {
-    for (const bout of plannedBouts(plan)) {
-      booked.add(bout.redId as string);
-      booked.add(bout.blueId as string);
-    }
-  }
+  // Who is already on something, and where, so "needs booking" means what it says and a
+  // suspension can be measured against the bout rather than against today.
+  const booked = bookingsFor(db, promotion.id as string);
 
   const startedDay = world.startedDay ?? day;
 
@@ -119,22 +117,30 @@ function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
   for (const plan of plans) {
     const away = plan.day - day;
     const bouts = plannedBouts(plan);
-    const main = plan.slots.find((s) => s.position === 'mainEvent')?.bout;
+    const progress = planProgress(plan);
+    const mainSlot = plan.slots.find((s) => s.position === 'mainEvent');
     const empty = plan.slots.length - bouts.length;
 
     // The closer the card, the louder the same problem gets. A card in ten weeks with no main
     // event is a plan; the same card in ten days is an emergency.
     const pressure = away <= 21 ? 1 : away <= 56 ? 0.65 : 0.35;
 
-    if (!main) {
+    /*
+     * Signed, not merely pencilled. This used to ask whether the main slot held *anything*, while
+     * every other screen asked whether it was signed — so a card could read "Main event:
+     * Confirmed" on one row and "has no main event" on the next.
+     */
+    if (!progress.hasMainEvent) {
       items.push({
         id: `card:main:${plan.id}`,
         kind: 'card',
         tone: away <= 28 ? 'danger' : 'warn',
         urgency: Math.round(60 + 38 * pressure),
-        title: `${plan.name} has no main event`,
-        detail: `${away} days out and nothing is topping the card. The main event sells the night; everything else stops it being a discount.`,
-        action: { label: 'Book it', route: 'plan', id: plan.id },
+        title: mainSlot?.bout
+          ? `${plan.name}'s main event is not signed`
+          : `${plan.name} has no main event`,
+        detail: `${away} days out and nothing signed is topping the card. The main event sells the night; everything else stops it being a discount.`,
+        action: { label: 'Book it', route: 'plan', id: plan.id, slot: mainSlot?.id },
       });
     }
 
@@ -151,6 +157,7 @@ function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
     }
 
     const declined = bouts.filter((b) => b.status === 'declined').length;
+    const firstDeclined = plan.slots.find((s) => s.bout?.status === 'declined');
     if (declined > 0) {
       items.push({
         id: `card:declined:${plan.id}`,
@@ -160,7 +167,7 @@ function cardIssues(plans: readonly EventPlan[], day: number): AttentionItem[] {
         title: `${declined} bout${declined === 1 ? '' : 's'} turned down on ${plan.name}`,
         detail:
           'Those slots are still holding fights nobody agreed to. Replace them or send a better offer.',
-        action: { label: 'Fix the card', route: 'plan', id: plan.id },
+        action: { label: 'Fix the card', route: 'plan', id: plan.id, slot: firstDeclined?.id },
       });
     }
   }
@@ -177,7 +184,7 @@ function titleIssues(input: {
   upcoming: readonly EventPlan[];
   day: number;
   startedDay: number;
-  booked: Set<string>;
+  booked: ReadonlyMap<string, unknown>;
 }): AttentionItem[] {
   const { db, promotion, roster, upcoming, day, startedDay, booked } = input;
   const items: AttentionItem[] = [];
@@ -299,7 +306,7 @@ function rosterIssues(input: {
   roster: readonly Fighter[];
   day: number;
   startedDay: number;
-  booked: Set<string>;
+  booked: ReturnType<typeof bookingsFor>;
 }): AttentionItem[] {
   const { db, promotion, roster, day, startedDay, booked } = input;
   const items: AttentionItem[] = [];
@@ -338,23 +345,31 @@ function rosterIssues(input: {
 
     // --- The activity guarantee, which is a promise with a penalty attached --------------
     if (agreement) {
-      const boutsThisYear = fighter.record.filter((r) => day - r.day < 365).length;
-      const shortfall = agreement.activityGuarantee - boutsThisYear;
-      const contractAge = day - agreement.signedDay;
+      /*
+       * Measured from the day they can actually walk (`walkDay`), not from the contract's age.
+       * The old arithmetic was `365 - contractAge`, which reads zero for every deal older than a
+       * year — "put them on a card within 0 days", from the first day of a save, against a
+       * fourteen-day minimum lead.
+       */
+      const left = walkDay(db, fighter, agreement) - day;
+      const isChampion = promotion.champions[fighter.divisionId] === fighter.id;
 
-      if (shortfall > 0 && contractAge > 240 && !booked.has(id)) {
+      if (left <= 60 && !booked.has(id) && !isChampion) {
         owedSoon += 1;
-        if (contractAge > 300) {
+        if (left <= 30) {
           items.push({
             id: `activity:${id}`,
             kind: 'activity',
             tone: 'danger',
             urgency: 92,
-            title: `${displayName(fighter)} can walk for nothing`,
-            detail: `You owe them ${agreement.activityGuarantee} bouts a year and they have had ${boutsThisYear}. Put them on a card within ${Math.max(
-              0,
-              365 - contractAge,
-            )} days or the deal voids itself.`,
+            title:
+              left <= 0
+                ? `${displayName(fighter)} can walk for nothing`
+                : `${displayName(fighter)} can walk in ${left} days`,
+            detail:
+              left <= 0
+                ? `You owe them ${agreement.activityGuarantee} bouts a year and have not delivered. They are free to leave any day; a booking is the only thing that holds them.`
+                : `You owe them ${agreement.activityGuarantee} bouts a year and have not delivered. Book them before then and they stay.`,
             action: { label: 'Book them', route: 'fighter', id },
             fighterId: id,
           });
@@ -416,15 +431,27 @@ function rosterIssues(input: {
     }
 
     // --- Medical -----------------------------------------------------------------------------
-    if ((fighter.readyOnDay ?? 0) > day && booked.has(id)) {
+    /*
+     * Against the bout, not against today. Comparing with today flagged every fighter booked
+     * while still serving a suspension that would be long over by fight night — "suspended 27
+     * days" against a card 84 days away — which is most of why booking a card made the alert
+     * count jump.
+     */
+    const booking = booked.get(id);
+    if (booking && (fighter.readyOnDay ?? 0) > booking.plan.day) {
       items.push({
         id: `medical:${id}`,
         kind: 'medical',
         tone: 'danger',
         urgency: 90,
-        title: `${displayName(fighter)} is booked and not cleared`,
-        detail: `Suspended for another ${(fighter.readyOnDay ?? 0) - day} days, and on a card inside that. One of the two has to change.`,
-        action: { label: 'Look at the card', route: 'calendar' },
+        title: `${displayName(fighter)} is booked and will not be cleared`,
+        detail: `Suspended until ${(fighter.readyOnDay ?? 0) - booking.plan.day} days after ${booking.plan.name}. One of the two has to change.`,
+        action: {
+          label: 'Look at the bout',
+          route: 'plan',
+          id: booking.plan.id,
+          slot: booking.slotId,
+        },
         fighterId: id,
       });
     }

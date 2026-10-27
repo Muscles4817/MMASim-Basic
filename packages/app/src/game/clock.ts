@@ -33,7 +33,8 @@ import { advanceWorld, type WorldExclusion } from './world';
 import { getBooking } from './career';
 import { toll } from './contracts';
 import { readInbox, scanForInbox } from './inbox';
-import { fightNightOn, missPlans, nextCardDay, scanPromoterInbox } from './plans';
+import { bookingsFor, fightNightOn, missPlans, nextCardDay, scanPromoterInbox } from './plans';
+import { graceEnds } from './alerts';
 
 /*
  * There is no step any more, and that is the change.
@@ -177,10 +178,23 @@ function passTimeForPlayer(db: GameDb, from: number, to: number): PlayerElapsed 
 }
 
 /** What the world must leave alone, worked out from the role rather than passed in. */
-function exclusionFor(db: GameDb): WorldExclusion {
+function exclusionFor(db: GameDb, day: number): WorldExclusion {
   const world = getWorld(db);
   if (world.playerRole === 'promoter') {
-    return { promotionId: world.playerPromotionId as PromotionId | undefined };
+    const promotionId = world.playerPromotionId as PromotionId | undefined;
+    /*
+     * Who the walk-out rule must leave alone: everybody the promoter has booked, and — inside a
+     * new save's grace period — the whole roster they inherited. The alerts promise both
+     * (`walkDay` never falls inside the grace period, and a booked fighter is never warned
+     * about), so the rule they warn about has to keep the same promise.
+     */
+    const hold = new Set<string>(bookingsFor(db, promotionId).keys());
+    if (day < graceEnds(db)) {
+      for (const f of db.fighters.findAll() as Fighter[]) {
+        if (f.promotionId === promotionId) hold.add(f.id as string);
+      }
+    }
+    return { promotionId, activityHold: hold };
   }
   return {
     fighterId: world.playerFighterId as FighterId | undefined,
@@ -222,7 +236,13 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
   const cardDay = nextCardDay(db, promotionId, start, requestedDay);
   const targetDay = cardDay ?? requestedDay;
 
-  const exclusion = exclusionFor(db);
+  // A save that never recorded when its career began starts the clock on it now, so the grace
+  // period has something to count from.
+  if (getWorld(db).playerRole === 'promoter' && getWorld(db).startedDay === undefined) {
+    setWorld(db, { startedDay: start });
+  }
+
+  const exclusion = exclusionFor(db, start);
   let day = start;
   let fights = 0;
   let truncated = false;

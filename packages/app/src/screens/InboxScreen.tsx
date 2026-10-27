@@ -11,9 +11,9 @@
  */
 
 import { useMemo } from 'react';
-import { inboxOrder, isBlocking, type InboxItem } from '@mmasim/engine';
+import { inboxOrder, isBlocking, type InboxItem, type InboxLink } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
-import { useRouter } from '../state/router';
+import { routeOf, useRouter } from '../state/router';
 import { Button, Card, Chip, Empty } from '../ui';
 import { Alert } from '../ui/signals';
 import { formatGameDay } from '../shell/Shell';
@@ -24,10 +24,7 @@ export function InboxScreen() {
   const { db, world, commit, playerFighter } = useGame();
   const { navigate } = useRouter();
 
-  const items = useMemo(
-    () => readInbox(db).slice().sort(inboxOrder),
-    [db, world.day],
-  );
+  const items = useMemo(() => readInbox(db).slice().sort(inboxOrder), [db, world.day]);
 
   const decisions = items.filter(isBlocking);
   const rest = items.filter((i) => !isBlocking(i));
@@ -65,20 +62,20 @@ export function InboxScreen() {
      * fighter's page needs a subject, so "take me there" without the id lands on the wrong thing
      * or on nothing.
      */
-    if (item.link) {
-      navigate(
-        item.link.id
-          ? ({ name: item.link.route, id: item.link.id } as never)
-          : ({ name: item.link.route } as never),
-      );
-    }
+    if (item.link) navigate(routeOf(item.link));
+  };
+
+  /** One line of a digest or a grouped decision: straight to its own subject. */
+  const follow = (item: InboxItem, link: InboxLink) => {
+    markItemRead(db, item.id);
+    commit();
+    navigate(routeOf(link));
   };
 
   if (items.length === 0) {
     return (
       <Empty title="Nothing waiting">
-        Anything that needs an answer will arrive here, and time will stop rather than run past
-        it.
+        Anything that needs an answer will arrive here, and time will stop rather than run past it.
       </Empty>
     );
   }
@@ -99,6 +96,7 @@ export function InboxScreen() {
               {item.body}
             </p>
           )}
+          <Entries item={item} onFollow={follow} />
           <p className="faint" style={{ fontSize: 'var(--text-xs)' }}>
             {formatGameDay(item.day)}
           </p>
@@ -126,7 +124,10 @@ export function InboxScreen() {
             decision.
           */}
           {(item.actions ?? []).some((a) => a.detail) && (
-            <ul className="stack" style={{ listStyle: 'none', padding: 0, marginTop: 'var(--space-2)' }}>
+            <ul
+              className="stack"
+              style={{ listStyle: 'none', padding: 0, marginTop: 'var(--space-2)' }}
+            >
               {(item.actions ?? [])
                 .filter((a) => a.detail)
                 .map((a) => (
@@ -142,31 +143,88 @@ export function InboxScreen() {
       {rest.length > 0 && (
         <Card flush title="Everything else">
           <div className="list">
-            {rest.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="list__item"
-                onClick={() => open(item)}
-              >
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span
-                    className="list__primary"
-                    style={{ display: 'block', fontWeight: item.readDay === undefined ? 700 : 400 }}
-                  >
-                    {item.title}
+            {rest.map((item) =>
+              item.entries ? (
+                /*
+                 * A digest is a list of subjects, each with somewhere to go. Rendered open rather
+                 * than behind a tap, because the whole point of folding them together was to
+                 * read them in one look.
+                 */
+                <div key={item.id} className="list__item" style={{ cursor: 'default' }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span
+                      className="list__primary"
+                      style={{
+                        display: 'block',
+                        fontWeight: item.readDay === undefined ? 700 : 400,
+                      }}
+                    >
+                      {item.title}
+                    </span>
+                    <span className="list__secondary" style={{ display: 'block' }}>
+                      {formatGameDay(item.day)}
+                    </span>
+                    <Entries item={item} onFollow={follow} />
                   </span>
-                  <span className="list__secondary" style={{ display: 'block' }}>
-                    {formatGameDay(item.day)}
-                    {item.body ? ` · ${item.body}` : ''}
+                  {item.readDay === undefined && <Chip tone="accent">New</Chip>}
+                </div>
+              ) : (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="list__item"
+                  onClick={() => open(item)}
+                >
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span
+                      className="list__primary"
+                      style={{
+                        display: 'block',
+                        fontWeight: item.readDay === undefined ? 700 : 400,
+                      }}
+                    >
+                      {item.title}
+                    </span>
+                    <span className="list__secondary" style={{ display: 'block' }}>
+                      {formatGameDay(item.day)}
+                      {item.body ? ` · ${item.body}` : ''}
+                    </span>
                   </span>
-                </span>
-                {item.readDay === undefined && <Chip tone="accent">New</Chip>}
-              </button>
-            ))}
+                  {item.readDay === undefined && <Chip tone="accent">New</Chip>}
+                </button>
+              ),
+            )}
           </div>
         </Card>
       )}
     </div>
+  );
+}
+
+/** The subjects folded into one item, each a link to itself. */
+function Entries({
+  item,
+  onFollow,
+}: {
+  item: InboxItem;
+  onFollow(item: InboxItem, link: InboxLink): void;
+}) {
+  if (!item.entries || item.entries.length === 0) return null;
+  return (
+    <ul className="stack" style={{ listStyle: 'none', padding: 0, gap: 'var(--space-1)' }}>
+      {item.entries.map((entry) => (
+        <li key={entry.key}>
+          {entry.link ? (
+            <Button size="sm" variant="ghost" onClick={() => onFollow(item, entry.link!)}>
+              {entry.title}
+            </Button>
+          ) : (
+            <span className="prose" style={{ fontSize: 'var(--text-sm)' }}>
+              {entry.title}
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

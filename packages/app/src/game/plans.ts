@@ -87,6 +87,15 @@ import { getWorld, type Entity, type GameDb } from '@mmasim/data';
 import { appendNews, runCardBout } from './world';
 import { currentPurse } from './money';
 import { raise, recordOfferOutcome } from './inbox';
+import {
+  addToDigest,
+  graceEnds,
+  raiseDecisions,
+  settleDecisions,
+  stageFor,
+  walkDay,
+  type Alert,
+} from './alerts';
 
 /** How far ahead a brand-new card is pencilled in by default. Long enough to be a plan. */
 export const DEFAULT_LEAD_DAYS = 84;
@@ -119,6 +128,9 @@ export const nextPlan = (
 
 export function savePlan(db: GameDb, plan: EventPlan): EventPlan {
   db.plans.upsert(plan as StoredPlan);
+  // A card edit can answer an open decision — a counter paid, a main event signed, a fighter
+  // booked — and the badge should drop now, not on the next advance.
+  settleAlerts(db, getWorld(db).day);
   db.save();
   return plan;
 }
@@ -1661,11 +1673,87 @@ export { paperOdds };
 // --- What the promoter is told while time passes -------------------------------------------
 
 /**
+ * Where each of the player's fighters is booked: the soonest live card and the slot on it.
+ *
+ * One answer for every alert to share. "Booked" used to be worked out separately in three
+ * places, and the inbox's version did not exist at all — which is how a fighter already on a
+ * card kept being reported as about to walk for want of one.
+ */
+export function bookingsFor(
+  db: GameDb,
+  promotionId: string | undefined,
+): Map<string, { plan: EventPlan; slotId: string }> {
+  const out = new Map<string, { plan: EventPlan; slotId: string }>();
+  for (const plan of plansFor(db, promotionId)) {
+    for (const slot of plan.slots) {
+      const bout = slot.bout;
+      if (!bout || bout.status === 'declined') continue;
+      for (const id of [bout.redId as string, bout.blueId as string]) {
+        if (!out.has(id)) out.set(id, { plan, slotId: slot.id });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Whether the situation an alert key describes is still true. `undefined` for keys this does
+ * not own, which `settleDecisions` leaves alone.
+ */
+function alertStillTrue(
+  db: GameDb,
+  key: string,
+  booked: () => Map<string, { plan: EventPlan; slotId: string }>,
+): boolean | undefined {
+  const [kind, a, b, c] = key.split(':');
+
+  if (kind === 'activity') {
+    const fighter = db.fighters.findById(a!) as Fighter | undefined;
+    const agreement = fighter?.agreementId
+      ? (db.agreements.findById(fighter.agreementId as string) as PromotionalAgreement | undefined)
+      : undefined;
+    if (!fighter || !agreement || fighter.promotionId !== getWorld(db).playerPromotionId) {
+      return false;
+    }
+    return !booked().has(a!) && walkDay(db, fighter, agreement) === Number(b);
+  }
+
+  if (kind === 'mainevent') {
+    const plan = planById(db, a!);
+    return plan !== undefined && isLive(plan) && !planProgress(plan).hasMainEvent;
+  }
+
+  if (kind === 'counter') {
+    const plan = planById(db, a!);
+    const bout = plan?.slots.find((s) => s.id === b)?.bout;
+    void c;
+    return (
+      plan !== undefined &&
+      isLive(plan) &&
+      bout?.status === 'declined' &&
+      (bout.answers ?? []).some((x) => x.verdict === 'countered')
+    );
+  }
+
+  return undefined;
+}
+
+/** Resolve every decision that is no longer true. Run after each day and after each card edit. */
+export function settleAlerts(db: GameDb, day: number): void {
+  let cache: Map<string, { plan: EventPlan; slotId: string }> | undefined;
+  const booked = () => (cache ??= bookingsFor(db, getWorld(db).playerPromotionId));
+  settleDecisions(db, day, (key) => alertStillTrue(db, key, booked));
+}
+
+/**
  * Promoter-side situations, raised while time passes.
  *
  * Kept narrow on the same principle the fighter's half runs on: things that are **about the
  * player** and that they can do something about. A rival's contract trouble is news; a card of
  * yours three weeks out with nothing topping it is an inbox item.
+ *
+ * Every alert here goes through `alerts.ts`, which is what makes it fire once per subject per
+ * stage rather than once a day, and decides between stopping the clock and the week's digest.
  */
 export function scanPromoterInbox(db: GameDb, day: number): number {
   const world = getWorld(db);
@@ -1674,94 +1762,140 @@ export function scanPromoterInbox(db: GameDb, day: number): number {
   const promotion = db.promotions.findById(world.playerPromotionId) as Promotion | undefined;
   if (!promotion) return 0;
 
-  let raised = 0;
-  const plans = plansFor(db, promotion.id as string).filter((p) => p.day >= day);
+  settleAlerts(db, day);
 
-  const booked = new Set<string>();
-  for (const plan of plans) {
-    for (const bout of plannedBouts(plan)) {
-      booked.add(bout.redId as string);
-      booked.add(bout.blueId as string);
-    }
-  }
+  // Nothing about the inherited roster stops the clock in the first weeks of a save.
+  if (day < graceEnds(db)) return 0;
+
+  const plans = plansFor(db, promotion.id as string).filter((p) => p.day >= day);
+  const booked = bookingsFor(db, promotion.id as string);
+  const decisions: Alert[] = [];
+  const digest: Alert[] = [];
+  const mainEvents: Alert[] = [];
 
   for (const plan of plans) {
     const away = plan.day - day;
     const progress = planProgress(plan);
+    const stage = stageFor(away);
 
     /*
-     * A card inside a month with nothing topping it. A decision rather than a notice: the whole
-     * gate hangs off the main event, and finding out on the night is not a thing that should be
-     * possible.
+     * A card with nothing signed on top of it. A decision at both stages: the whole gate hangs
+     * off the main event, and even a week out a short-notice fight can still be made.
      */
-    if (away <= 28 && !progress.hasMainEvent) {
-      raised += raise(db, {
-        id: inboxId(Math.floor(day / 7) * 7, `mainevent:${plan.id}`),
-        day,
+    if (stage !== undefined && !progress.hasMainEvent) {
+      const main = plan.slots.find((s) => s.position === 'mainEvent');
+      mainEvents.push({
+        key: `mainevent:${plan.id}:${stage}`,
         kind: 'card',
-        priority: 'decision',
         title: `${plan.name} still has no main event`,
-        body: `${away} days out. The main event sells the night, and there is nothing on it.`,
-        actions: [
-          {
-            id: 'acknowledge',
-            label: 'Understood',
-            detail: 'Deal with it yourself.',
-            isDismiss: true,
-          },
-        ],
-        link: { route: 'plan', id: plan.id },
+        body: `${away} days out. The main event sells the night, and nothing is signed on top of it.`,
+        link: { route: 'plan', id: plan.id, slot: main?.id },
         promotionId: promotion.id,
-      })
-        ? 1
-        : 0;
+      });
     }
 
-    if (away <= 14 && progress.filled < progress.slots) {
-      raised += raise(db, {
-        id: inboxId(Math.floor(day / 7) * 7, `thin:${plan.id}`),
-        day,
+    if (away <= 14 && progress.agreed < progress.slots) {
+      digest.push({
+        key: `thin:${plan.id}`,
         kind: 'card',
-        priority: 'notable',
-        title: `${plan.name} is ${progress.slots - progress.filled} fights short`,
-        body: 'Two weeks out. What is not booked now is a short card, and a short card is worth less at the gate.',
-        link: { route: 'plan', id: plan.id },
+        title: `${plan.name} is ${progress.slots - progress.agreed} fights short, ${away} days out`,
+        link: {
+          route: 'plan',
+          id: plan.id,
+          slot: plan.slots.find((s) => s.bout?.status !== 'agreed')?.id,
+        },
         promotionId: promotion.id,
-      })
-        ? 1
-        : 0;
+      });
+    }
+  }
+
+  const roster = (db.fighters.findAll() as Fighter[]).filter(
+    (f) => f.promotionId === promotion.id && f.retiredDay === undefined,
+  );
+
+  for (const fighter of roster) {
+    const id = fighter.id as string;
+    const agreement = fighter.agreementId
+      ? (db.agreements.findById(fighter.agreementId as string) as PromotionalAgreement | undefined)
+      : undefined;
+    if (!agreement) continue;
+
+    /*
+     * About to walk over inactivity. A decision when booking them can still stop it — which, at
+     * thirty days, it always can. At seven it only can if there is a card of yours on or before
+     * the day to put them on; otherwise it is a last line in the digest rather than a stop the
+     * player can do nothing with.
+     */
+    const isChampion = promotion.champions[fighter.divisionId] === fighter.id;
+    if (!booked.has(id) && !isChampion) {
+      const deadline = walkDay(db, fighter, agreement);
+      const left = deadline - day;
+      const stage = stageFor(left);
+      if (stage !== undefined) {
+        const alert: Alert = {
+          key: `activity:${id}:${deadline}:${stage}`,
+          kind: 'roster',
+          title:
+            left <= 0
+              ? `${displayName(fighter)} can walk now`
+              : `${displayName(fighter)} can walk in ${left} days`,
+          body: `You owe them ${agreement.activityGuarantee} bouts a year and the last year has not delivered. Put them on a card or lose them for nothing.`,
+          link: { route: 'fighter', id },
+          fighterId: fighter.id,
+          promotionId: promotion.id,
+        };
+        const bookable = plans.some((p) => p.day <= Math.max(deadline, day + 7));
+        (stage === 30 || bookable ? decisions : digest).push(alert);
+      }
+    }
+
+    // A deal running out. Worth knowing, not an emergency — losing somebody at the end of their
+    // contract is a normal part of the sport.
+    const contractStage = stageFor(agreement.expiresDay - day);
+    if (contractStage !== undefined && agreement.expiresDay > day) {
+      digest.push({
+        key: `expiring:${id}:${agreement.expiresDay}:${contractStage}`,
+        kind: 'contract',
+        title: `${displayName(fighter)} is out of contract in ${agreement.expiresDay - day} days`,
+        link: { route: 'fighter', id },
+        fighterId: fighter.id,
+        promotionId: promotion.id,
+      });
     }
   }
 
   /*
-   * A contender who has earned the call and has nothing booked. The request a manager actually
-   * makes, and the sport's most recurring political problem: a #1 who keeps winning and keeps
-   * not being given the fight becomes somebody else's champion.
+   * A contender who has earned the call and has nothing booked. Asked once per run — keyed on
+   * the win count, so another win is another ask, and nothing short of one is.
    */
   const fighters = db.fighters.findAll() as Fighter[];
   for (const divisionId of promotion.divisions) {
     const championId = promotion.champions[divisionId];
     const ranked = rankDivision(fighters, divisionId, promotion.id, day, championId);
     const top = ranked.find((r) => r.position === 1);
-    if (!top) continue;
-    if (booked.has(top.fighter.id as string)) continue;
-    if (top.fighter.summary.streak < 3) continue;
+    if (!top || booked.has(top.fighter.id as string) || top.fighter.summary.streak < 3) continue;
 
-    raised += raise(db, {
-      id: inboxId(Math.floor(day / 30) * 30, `titleshot:${top.fighter.id}`),
-      day,
+    digest.push({
+      key: `titleshot:${top.fighter.id}:${top.fighter.summary.wins}`,
       kind: 'roster',
-      priority: 'notable',
-      title: `${displayName(top.fighter)} has asked for a title shot`,
-      body: `#1 at ${getDivision(divisionId).name} on a ${top.fighter.summary.streak}-fight run, and nothing booked. They have done what you asked of them.`,
+      title: `${displayName(top.fighter)} wants a title shot — #1 at ${getDivision(divisionId).name}, ${top.fighter.summary.streak} straight`,
       link: { route: 'fighter', id: top.fighter.id as string },
       fighterId: top.fighter.id,
       promotionId: promotion.id,
-      divisionId,
-    })
-      ? 1
-      : 0;
+    });
   }
 
-  return raised;
+  return (
+    raiseDecisions(db, day, mainEvents, {
+      kind: 'mainevent',
+      title: (n) => `${n} cards have no main event`,
+      body: 'Nothing is signed on top of them. The main event sells the night.',
+    }) +
+    raiseDecisions(db, day, decisions, {
+      kind: 'activity',
+      title: (n) => `${n} fighters can walk over inactivity`,
+      body: 'You owe each of them bouts this year and have not delivered. Put them on a card or lose them for nothing.',
+    }) +
+    addToDigest(db, day, digest)
+  );
 }

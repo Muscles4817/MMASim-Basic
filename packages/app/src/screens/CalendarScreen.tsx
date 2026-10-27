@@ -22,7 +22,7 @@ import { toCalendar } from '@mmasim/engine';
 import type { EventScale, Promotion } from '@mmasim/engine';
 import { EVENT_SCALES, describeHealth } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
-import { useRouter } from '../state/router';
+import { routeOf, useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
 import { Alert } from '../ui/signals';
 import { formatGameDay } from '../shell/Shell';
@@ -256,14 +256,7 @@ export function CalendarScreen() {
                 key={`${entry.day}-${entry.kind}-${i}`}
                 type="button"
                 className="list__item"
-                onClick={() =>
-                  entry.link &&
-                  navigate(
-                    entry.link.id
-                      ? ({ name: entry.link.route, id: entry.link.id } as never)
-                      : ({ name: entry.link.route } as never),
-                  )
-                }
+                onClick={() => entry.link && navigate(routeOf(entry.link))}
               >
                 {/* The date leads, because this is a calendar. Every other screen leads with a
                     name. */}
@@ -543,7 +536,7 @@ const toneFor = (entry: CalendarEntry): 'accent' | 'info' | 'warning' | 'neutral
   if (entry.kind === 'plan') {
     return entry.health === 'ready'
       ? 'positive'
-      : entry.health === 'atRisk' || entry.health === 'empty'
+      : entry.health === 'atRisk' || entry.health === 'turnedDown' || entry.health === 'empty'
         ? 'warning'
         : 'accent';
   }

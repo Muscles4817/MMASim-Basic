@@ -80,68 +80,11 @@ export function scanForInbox(db: GameDb, day: number): number {
   const world = getWorld(db);
   let raised = 0;
 
-  // --- Promoter: your own roster --------------------------------------------------------------
-  if (world.playerRole === 'promoter' && world.playerPromotionId) {
-    const promotion = db.promotions.findById(world.playerPromotionId) as Promotion | undefined;
-    const roster = (db.fighters.findAll() as Fighter[]).filter(
-      (f) => f.promotionId === world.playerPromotionId && f.retiredDay === undefined,
-    );
-
-    for (const fighter of roster) {
-      const agreement = fighter.agreementId
-        ? (db.agreements.findById(fighter.agreementId as string) as
-            | PromotionalAgreement
-            | undefined)
-        : undefined;
-      if (!agreement) continue;
-
-      /*
-       * A fighter about to walk over inactivity. A decision, not a notice: the player can still
-       * book them, and finding out from the news feed *after* they left is exactly the failure
-       * this system exists to fix.
-       */
-      const boutsThisYear = fighter.record.filter((r) => day - r.day < 365).length;
-      const owed = agreement.activityGuarantee - boutsThisYear;
-      const contractAge = day - agreement.signedDay;
-
-      if (contractAge > 300 && contractAge < 365 && owed > 0) {
-        raised += raise(db, {
-          id: inboxId(day, `activity:${fighter.id}`),
-          day,
-          kind: 'roster',
-          priority: 'decision',
-          title: `${displayName(fighter)} can walk in ${365 - contractAge} days`,
-          body: `You owe them ${agreement.activityGuarantee} bouts a year and they have had ${boutsThisYear}. Put them on a card or lose them for nothing.`,
-          actions: [
-            { id: 'acknowledge', label: 'Understood', detail: 'Deal with it yourself.', isDismiss: true },
-          ],
-          link: { route: 'promoterRoster' },
-          fighterId: fighter.id,
-          promotionId: promotion?.id,
-        })
-          ? 1
-          : 0;
-      }
-
-      // A deal running out. Notable rather than blocking — losing somebody at the end of their
-      // contract is a normal part of the sport, not an emergency.
-      const daysLeft = agreement.expiresDay - day;
-      if (daysLeft > 0 && daysLeft <= 60) {
-        raised += raise(db, {
-          id: inboxId(Math.floor(day / 30) * 30, `expiring:${fighter.id}`),
-          day,
-          kind: 'contract',
-          priority: 'notable',
-          title: `${displayName(fighter)} is out of contract soon`,
-          body: `${daysLeft} days left, ${agreement.fightsRemaining} fights owed.`,
-          link: { route: 'promoterRoster' },
-          fighterId: fighter.id,
-        })
-          ? 1
-          : 0;
-      }
-    }
-  }
+  /*
+   * The promoter's half lives in `scanPromoterInbox` (plans.ts), because every question it asks
+   * — is this fighter booked, is this card short — is a question about planned cards, and this
+   * module must not import the planner.
+   */
 
   // --- Fighter: your own career -----------------------------------------------------------------
   /*
@@ -202,7 +145,9 @@ export function scanForInbox(db: GameDb, day: number): number {
           day,
           kind: 'contract',
           priority: unattached ? 'decision' : 'notable',
-          title: promotion ? `You are out of contract at ${promotion.shortName}` : 'You have no promotion',
+          title: promotion
+            ? `You are out of contract at ${promotion.shortName}`
+            : 'You have no promotion',
           body: promotion
             ? `Your deal with ${promotion.shortName} is done. Nobody is obliged to book you, and every week without a fight is a week your name gets smaller. See who wants you.`
             : 'You are not signed to anybody. No promotion has to offer you a fight, and time out of the cage costs you.',
@@ -295,7 +240,6 @@ export function scanForInbox(db: GameDb, day: number): number {
   return raised;
 }
 
-
 // --- Offers, answered ---------------------------------------------------------------------------
 
 /**
@@ -351,7 +295,9 @@ export function recordOfferOutcome(input: {
 
   if (counter) {
     raise(db, {
-      id: inboxId(day, `offer:${plan.id}:${slotId}:counter`),
+      // Keyed as an alert so it settles itself once the price is paid or the slot changes,
+      // rather than blocking the badge after the money has gone out.
+      id: `alert:counter:${plan.id}:${slotId}:${day}`,
       day,
       kind: 'offer',
       // A counter is a decision with a price on it, and letting the clock run past one is how a
@@ -360,7 +306,12 @@ export function recordOfferOutcome(input: {
       title: `${nameOf(counter.fighterId as string)} wants ${money(counter.askingPurse ?? 0)}`,
       body: `${counter.note} The fight is ${red} vs ${blue} on ${plan.name}.`,
       actions: [
-        { id: 'acknowledge', label: 'Understood', detail: 'Settle it on the card.', isDismiss: true },
+        {
+          id: 'acknowledge',
+          label: 'Understood',
+          detail: 'Settle it on the card.',
+          isDismiss: true,
+        },
       ],
       link: { route: 'plan', id: plan.id },
       fighterId: counter.fighterId,
