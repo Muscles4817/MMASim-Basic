@@ -509,7 +509,7 @@ function Official({ role, name, note }: { role: string; name: string; note: stri
  * job of this table: a reach column both fighters can read as a number is a table; a reach
  * column that says *who is longer* is information.
  */
-function TaleOfTheTape({
+export function TaleOfTheTape({
   red,
   blue,
   day,

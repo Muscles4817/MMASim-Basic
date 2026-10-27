@@ -96,6 +96,7 @@ import {
 } from './world';
 import { rememberNight } from './broadcasts';
 import { currentPurse } from './money';
+import { money } from '../ui/format';
 import { raise, recordOfferOutcome } from './inbox';
 import {
   addToDigest,
@@ -894,6 +895,29 @@ export interface OfferOutcome {
 }
 
 /**
+ * What a corner that countered is asking for, in the words a promoter uses: "Wants £8.5k".
+ *
+ * A counter is a price, not a refusal, and the slot used to say "Turned down" either way — which
+ * hid the one answer the player can still do something about. Money is the only counter there is
+ * today; C4's negotiation adds the others (a better slot, five rounds, a different opponent), and
+ * this is where they get their words.
+ */
+export function counterLabel(answer: CornerAnswer): string | undefined {
+  if (answer.verdict !== 'countered') return undefined;
+  return answer.askingPurse !== undefined ? `Wants ${money(answer.askingPurse)}` : 'Wants more';
+}
+
+/** The slot-level read of a bout: what its chip says. A counter outranks a flat refusal. */
+export function boutStatusLabel(bout: PlannedBout): string {
+  if (bout.status === 'agreed') return 'Signed';
+  if (bout.status === 'offered') return 'Offered';
+  if (bout.status === 'draft') return 'Pencilled in';
+  const answers = bout.answers ?? [];
+  if (answers.some((a) => a.verdict === 'declined')) return 'Turned down';
+  return answers.map(counterLabel).find((l) => l !== undefined) ?? 'Turned down';
+}
+
+/**
  * Put an offer in front of both corners and find out.
  *
  * Seeded on the bout and the card day rather than on the call, so re-reading an offer cannot
@@ -1162,6 +1186,85 @@ export interface Suggestion {
   /** 0–1, before the offer goes out. */
   acceptance: number;
   cost: number;
+  /** Set when the suggestion is a championship bout — always, when a champion is in it. */
+  titleKind?: TitleKind;
+  /** Why the matchmaker reached for this one first, when it answers an open situation. */
+  because?: string;
+}
+
+/** Whether a fighter holds this promotion's belt in their division. */
+const isChampionHere = (ctx: PromoterContext, fighter: Fighter): boolean =>
+  ctx.promotion.champions[fighter.divisionId] === fighter.id;
+
+interface PriorityBout {
+  red: Fighter;
+  blue: Fighter;
+  titleKind: TitleKind;
+  because: string;
+}
+
+/**
+ * The fights the promotion's open situations are asking for, most pressing first.
+ *
+ * What the dashboard nags about, the matchmaker should reach for: a vacant belt with two
+ * contenders gets its vacant-title fight, and a champion gets a defence against the best-ranked
+ * contender who can make the date. Only fights `titleOptionsFor` says can legitimately be for
+ * the belt are proposed, so the autofill never invents a title fight the screen would refuse.
+ */
+function priorityBouts(ctx: PromoterContext, plan: EventPlan, taken: Set<string>): PriorityBout[] {
+  const free = (f: Fighter) =>
+    !taken.has(f.id as string) &&
+    f.promotionId === ctx.promotion.id &&
+    !blockerFor({ ctx, fighter: f, plan });
+  const vacant: PriorityBout[] = [];
+  const defences: { bout: PriorityBout; idle: number }[] = [];
+
+  for (const [divisionId, ranked] of ctx.ranks) {
+    const champion = championOfDivision(ctx, divisionId);
+    const contenders = ranked
+      .filter((r) => r.position > 0)
+      .map((r) => r.fighter)
+      .filter(free);
+
+    if (!champion) {
+      const [red, blue] = contenders;
+      if (!red || !blue) continue;
+      const vacantOption = titleOptionsFor({ ctx, red, blue, plan }).find(
+        (o) => o.kind === 'vacant' && o.available,
+      );
+      if (vacantOption) {
+        vacant.push({
+          red,
+          blue,
+          titleKind: 'vacant',
+          because: `The ${getDivision(divisionId as never).name} belt is vacant, and these are the top two.`,
+        });
+      }
+      continue;
+    }
+
+    if (!free(champion)) continue;
+    for (const challenger of contenders) {
+      const available = titleOptionsFor({ ctx, red: champion, blue: challenger, plan }).some(
+        (o) => o.kind === 'undisputed' && o.available,
+      );
+      if (!available) continue;
+      defences.push({
+        bout: {
+          red: champion,
+          blue: challenger,
+          titleKind: 'undisputed',
+          because: `${displayName(champion)} is owed a defence, and ${displayName(challenger)} is the best-placed contender who can make the date.`,
+        },
+        idle: daysUnbookedBy(champion, ctx.day, ctx.startedDay),
+      });
+      break;
+    }
+  }
+
+  // Vacancies first — a division with no champion has nothing to climb toward — then the
+  // longest-idle champion.
+  return [...vacant, ...defences.sort((a, b) => b.idle - a.idle).map((d) => d.bout)];
 }
 
 /**
@@ -1194,6 +1297,38 @@ export function suggestFills(input: {
     if (slot.bout || !scopeMatches(scope, slot.position)) continue;
 
     const purpose = intent ?? defaultIntentFor(slot.position);
+
+    /*
+     * The top of the card answers the open situations first: a vacant belt, a champion owed a
+     * defence. These are also the only way a champion reaches a card through autofill — always
+     * for the belt, never in a three-round bout they have nothing to gain from.
+     */
+    if (slot.position === 'mainEvent' || slot.position === 'coMain') {
+      const priority = priorityBouts(ctx, plan, taken)[0];
+      const option = priority
+        ? opponentsFor({ ctx, plan, slot, subject: priority.red, limit: 400 }).find(
+            (o) => o.fighter.id === priority.blue.id && !o.blocker,
+          )
+        : undefined;
+      if (priority && option) {
+        out.push({
+          slotId: slot.id,
+          position: slot.position,
+          redId: priority.red.id as string,
+          blueId: priority.blue.id as string,
+          divisionId: priority.red.divisionId as string,
+          appraisal: option.appraisal,
+          acceptance: option.acceptance,
+          cost: option.cost,
+          titleKind: priority.titleKind,
+          because: priority.because,
+        });
+        taken.add(priority.red.id as string);
+        taken.add(priority.blue.id as string);
+        continue;
+      }
+    }
+
     let best: { suggestion: Suggestion; score: number } | undefined;
 
     /*
@@ -1204,7 +1339,9 @@ export function suggestFills(input: {
      * for a convenience feature. Whoever has been waiting longest is also the *right* shortlist:
      * a matchmaker filling a card starts with the people owed a fight, not with the alphabet.
      */
-    const shortlist = shortlistFor(ctx, plan, taken);
+    // Champions are left to the title path above: a champion in an ordinary bout risks the belt's
+    // standing for nothing, and the screen would have asked whether it was for the title.
+    const shortlist = shortlistFor(ctx, plan, taken).filter((f) => !isChampionHere(ctx, f));
 
     for (const subject of shortlist) {
       const options = opponentsFor({
@@ -1214,7 +1351,9 @@ export function suggestFills(input: {
         subject,
         intent: purpose,
         limit: 4,
-      }).filter((o) => !o.blocker && !taken.has(o.fighter.id as string));
+      }).filter(
+        (o) => !o.blocker && !taken.has(o.fighter.id as string) && !isChampionHere(ctx, o.fighter),
+      );
 
       for (const option of options) {
         /*
@@ -1265,6 +1404,7 @@ export function applySuggestion(plan: EventPlan, suggestion: Suggestion): EventP
     redId: suggestion.redId,
     blueId: suggestion.blueId,
     divisionId: suggestion.divisionId,
+    titleKind: suggestion.titleKind,
   });
 }
 
