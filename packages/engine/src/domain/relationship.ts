@@ -153,3 +153,20 @@ export function boutMemories(input: {
   if (earlier[earlier.length - 1]?.outcome === 'loss') out.push('rematchGiven');
   return out;
 }
+
+/**
+ * How likely a fighter out of contract is to stay where they are, given what they remember.
+ *
+ * `base` is the world's ordinary loyalty to the incumbent (0.7). A grateful fighter is likelier to
+ * stay and a bitter one likelier to walk — the re-signing half of the relationship, which is where
+ * a promoter's history with somebody actually costs or saves them a fighter.
+ */
+export function stayChance(
+  fighter: { ledger?: readonly LedgerEntry[]; personality: Personality },
+  promotionId: PromotionId,
+  day: GameDay,
+  base = 0.7,
+): number {
+  if (!fighter.ledger?.length) return base;
+  return clamp(base + relationshipWith(fighter, promotionId, day).score / 200, 0.3, 0.92);
+}

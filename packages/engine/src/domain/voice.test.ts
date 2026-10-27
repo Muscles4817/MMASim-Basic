@@ -9,6 +9,7 @@ import {
   ledgerWeight,
   LEDGER_CAP,
   relationshipWith,
+  stayChance,
   withLedgerEntry,
   type LedgerEntry,
 } from './relationship.js';
@@ -195,5 +196,16 @@ describe('richer wants', () => {
   it('wants a superfight with the belt and a name', () => {
     const f = { ...makeFighter({ personality: { ambition: 85 } }), starPower: 70 };
     expect(wantsOf({ fighter: f, day: 0, rank: 0, daysIdle: 30 }).id).toBe('superfight');
+  });
+});
+
+describe('re-signing', () => {
+  it('stays more readily where they were treated well, and less where they were not', () => {
+    const p = uniformPersonality(50);
+    const at = (kind: LedgerEntry['kind']) =>
+      stayChance({ ledger: [{ day: 0, promotionId: P, kind }], personality: p }, P, 0);
+    expect(stayChance({ personality: p }, P, 0)).toBe(0.7);
+    expect(at('titleShotGiven')).toBeGreaterThan(0.7);
+    expect(at('cut')).toBeLessThan(0.7);
   });
 });

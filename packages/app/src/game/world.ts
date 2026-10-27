@@ -103,6 +103,7 @@ import {
   uniqueNickname,
   driftAfter,
   milestonesOf,
+  stayChance,
   trimFeed,
   type BoutSeed,
   type CardBout,
@@ -1899,7 +1900,10 @@ function resolveFreeAgency(
     const next =
       stepUp.length > 0 && fRng.chance(0.7)
         ? fRng.pickWeighted(stepUp, (p) => room(p) * Math.max(1, p.prestige) ** 1.4)
-        : promotion && pool.includes(promotion) && fRng.chance(0.7)
+        : // Stays more readily where they were treated well, less where they were not (doc 34 C3).
+          promotion &&
+            pool.includes(promotion) &&
+            fRng.chance(stayChance(fighter, promotion.id, day))
           ? promotion
           : whereThereIsRoom();
 
