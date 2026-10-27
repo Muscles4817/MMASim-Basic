@@ -159,7 +159,14 @@ describe('attention', () => {
     method,
     winnerId: asFighterId(winner),
   });
-  const zero: EventRevenue = { gate: 0, broadcast: 0, costs: 0, profit: 0, attendance: 0 };
+  const zero: EventRevenue = {
+    gate: 0,
+    broadcast: 0,
+    sponsorship: 0,
+    costs: 0,
+    profit: 0,
+    attendance: 0,
+  };
   const settle = (input: Partial<Parameters<typeof settleNight>[0]>) =>
     settleNight({
       promotion: regional({ buzz: BUZZ_BASELINE.regional }),

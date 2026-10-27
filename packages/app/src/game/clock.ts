@@ -29,7 +29,9 @@ import {
   type InboxItem,
   type PromotionId,
 } from '@mmasim/engine';
-import { advanceWorld, type WorldExclusion } from './world';
+import { advanceWorld, appendNews, type WorldExclusion } from './world';
+import { tickBoardroom } from './boardroom';
+import { settleJobChoices } from './jobs';
 import { getBooking } from './career';
 import { toll } from './contracts';
 import { readInbox, scanForInbox } from './inbox';
@@ -292,6 +294,9 @@ export function advanceTo(db: GameDb, requestedDay: number): AdvanceResult {
 
   // Once more on the day the clock stopped — fight night included — so nothing is left waiting.
   settleReplies(db, day);
+  // The broadcaster's renewal and the owner's verdict, for any year that ended (doc 34 B2).
+  settleJobChoices(db);
+  appendNews(db, tickBoardroom(db, day));
   const missed = missPlans(db, day);
   const fightNight = fightNightOn(db, promotionId, day);
   const stopped = { fights, truncated, player, fightNight, missed };

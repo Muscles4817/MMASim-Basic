@@ -37,7 +37,9 @@ export type NewsKind =
   | 'cancellation'
   | 'nickname'
   /** Something a fighter said: a callout, a complaint. Doc 34 C3. */
-  | 'voice';
+  | 'voice'
+  /** The business side: a television deal, a buyout, a promoter out of a job. Doc 34 B2. */
+  | 'business';
 
 /**
  * How loudly an item should be presented.

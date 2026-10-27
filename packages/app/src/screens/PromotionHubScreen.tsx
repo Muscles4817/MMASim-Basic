@@ -43,6 +43,7 @@ import { formatGameDay } from '../shell/Shell';
 import { money } from '../ui/format';
 import { attentionFor } from '../game/attention';
 import { describeRunway, financialSnapshot } from '../game/finances';
+import { boardroom, type Boardroom } from '../game/boardroom';
 import { fightNightOn, forecastPlan, planName, plansFor, promoterContext } from '../game/plans';
 import { PromoterSubNav } from './promoterNav';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
@@ -91,6 +92,11 @@ export function PromotionHubScreen() {
         ? financialSnapshot({ db, promotion, nextCardProfit: nextForecast?.projectedProfit })
         : undefined,
     [db, promotion, nextForecast, world.day],
+  );
+
+  const board = useMemo(
+    () => (promotion ? boardroom(db, promotion, world.day) : undefined),
+    [db, promotion, world.day],
   );
 
   const champions = useMemo(() => {
@@ -353,6 +359,8 @@ export function PromotionHubScreen() {
               />
             </Card>
 
+            {board && <BoardCard board={board} />}
+
             {/*
               The money, as an operating position rather than a balance. And in one notation:
               the header, this card and every figure on the card builder all render through the
@@ -429,5 +437,64 @@ export function PromotionHubScreen() {
         }
       />
     </div>
+  );
+}
+
+const DEAL_HEALTH: Readonly<
+  Record<Boardroom['deal']['health'], { label: string; tone: 'positive' | 'warning' | 'negative' }>
+> = {
+  healthy: { label: 'Happy', tone: 'positive' },
+  watching: { label: 'Watching', tone: 'warning' },
+  review: { label: 'Under review', tone: 'negative' },
+  streaming: { label: 'Streaming only', tone: 'negative' },
+};
+
+/**
+ * Who the promoter answers to (doc 34 B2): the owner's three objectives for the year and how the
+ * broadcaster feels about the deal. Between them they decide whether there is a job next year.
+ */
+function BoardCard({ board }: { board: Boardroom }) {
+  const { owner, deal } = board;
+  const health = DEAL_HEALTH[deal.health];
+  return (
+    <Card title="The board">
+      <div className="facts">
+        <Fact
+          label={`${owner.name}, ${owner.temperament.toLowerCase()}`}
+          value={`${Math.round(owner.confidence)} / 100`}
+          tone={owner.confidence < 25 ? 'bad' : owner.confidence < 45 ? 'warn' : undefined}
+          hint={`${owner.blurb} Confidence at zero and you are out. The year ends ${formatGameDay(owner.yearEndsDay)}.`}
+          emphasis="secondary"
+        />
+      </div>
+      <div className="list">
+        {owner.objectives.map((o) => (
+          <ListItem
+            key={o.label}
+            primary={o.label}
+            trailing={
+              <Chip tone={o.met ? 'positive' : 'neutral'}>{o.met ? 'On track' : 'Not yet'}</Chip>
+            }
+          />
+        ))}
+      </div>
+      <Ledger>
+        <LedgerRow
+          label={deal.broadcaster}
+          value={<Chip tone={health.tone}>{health.label}</Chip>}
+        />
+        <LedgerRow label="Satisfaction" value={`${Math.round(deal.satisfaction)} / 100`} />
+        <LedgerRow label="Fee a card" value={money(deal.feePerCard)} />
+        <LedgerRow
+          label="Cards this deal year"
+          value={`${deal.cardsThisYear} of ${deal.minimumCards}`}
+          tone={deal.cardsThisYear >= deal.minimumCards ? 'good' : undefined}
+        />
+        {deal.reviewCardsLeft !== undefined && (
+          <LedgerRow label="Cards to turn it round" value={deal.reviewCardsLeft} tone="bad" />
+        )}
+        <LedgerRow label="Renews" value={formatGameDay(deal.renewsDay)} />
+      </Ledger>
+    </Card>
   );
 }

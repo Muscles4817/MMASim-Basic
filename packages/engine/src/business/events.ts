@@ -301,7 +301,13 @@ export function awardBonuses(
 
 export interface EventRevenue {
   gate: number;
+  /** Television, streaming and pay-per-view. */
   broadcast: number;
+  /**
+   * Sponsors, banners, venue and betting partners. Was folded into `broadcast`, which is why a
+   * recap could only call that line "broadcast and sponsorship".
+   */
+  sponsorship: number;
   /** Purses, bonuses, production and marketing. */
   costs: number;
   profit: number;
@@ -482,13 +488,15 @@ export function eventRevenue(input: {
    * whatever was on the card was the other half of an empty card forecasting a profit.
    */
   const depth = depthMultiplier(bouts);
+  /*
+   * A pay-per-view sells itself, card by card. Every other night is carried under the
+   * promotion's rights deal when it has one (`business/rightsDeal.ts`), at the fee the deal sets.
+   */
   const broadcastRevenue = Math.round(
     depth *
       (broadcast === 'ppv'
         ? headlineDraw * PPV_PER_DRAW * (promotion.prestige / 100) ** 2
-        : broadcast === 'televised'
-          ? promotion.prestige * TV_FEE_PER_PRESTIGE
-          : promotion.prestige * STREAM_FEE_PER_PRESTIGE),
+        : (promotion.rightsDeal?.feePerCard ?? broadcastFee(promotion, broadcast))),
   );
 
   /*
@@ -549,7 +557,8 @@ export function eventRevenue(input: {
 
   return {
     gate,
-    broadcast: broadcastRevenue + sponsorship,
+    broadcast: broadcastRevenue,
+    sponsorship,
     costs,
     profit: gate + broadcastRevenue + sponsorship - costs,
     attendance,
@@ -573,13 +582,25 @@ const SPONSOR_PER_PRESTIGE = 0.12;
 const PPV_PER_DRAW = 15;
 const TV_FEE_PER_PRESTIGE = 10;
 
+/**
+ * What a full card's television or stream rights are worth to a promotion of this standing, per
+ * card, in thousands, with no deal in the way. What a rights deal opens at.
+ */
+export function broadcastFee(promotion: Promotion, broadcast: Broadcast): number {
+  return (
+    promotion.prestige * (broadcast === 'streamed' ? STREAM_FEE_PER_PRESTIGE : TV_FEE_PER_PRESTIGE)
+  );
+}
+
 /** A stream's rights fee per prestige point, in thousands. Was 2, on a card that did not have to exist. */
 const STREAM_FEE_PER_PRESTIGE = 2;
 
 /** Revenue points pay out on the *event*, which is why a promotion needs a platform. */
 export function revenueShareFor(points: number, revenue: EventRevenue): number {
   if (points <= 0) return 0;
-  return Math.round((revenue.gate + revenue.broadcast) * (points / 100) * 10) / 10;
+  return (
+    Math.round((revenue.gate + revenue.broadcast + revenue.sponsorship) * (points / 100) * 10) / 10
+  );
 }
 
 // --- Naming ------------------------------------------------------------------------------------
