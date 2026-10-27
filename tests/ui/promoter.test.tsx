@@ -128,10 +128,27 @@ describe('choosing to run a promotion', () => {
     await becomePromoter(user);
     const row = await screen.findByRole('navigation', { name: /Promotion sections/i });
     const chips = Array.from(row.querySelectorAll('a')).map((a) => a.textContent);
-    expect(chips).toEqual(['Dashboard', 'Championships']);
+    expect(chips).toEqual(['Dashboard', 'Championships', 'History']);
     goTo('#/calendar');
     await screen.findByTestId('clock');
     expect(screen.queryByRole('navigation', { name: /Promotion sections/i })).toBeNull();
+  });
+});
+
+describe('the history book', () => {
+  it('is one tap from the dashboard, with the belts, the timeline, the greats and the fighters let go', async () => {
+    // Doc 34 B6.
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    const row = await screen.findByRole('navigation', { name: /Promotion sections/i });
+    await user.click(
+      Array.from(row.querySelectorAll('a')).find((a) => a.textContent === 'History')!,
+    );
+    for (const tab of ['Belts', 'Timeline', 'Hall of fame', 'Where are they now']) {
+      expect(await screen.findByRole('radio', { name: tab })).toBeTruthy();
+    }
+    // The belts tab: every division, champion first.
+    expect((await screen.findAllByText('Champion')).length).toBeGreaterThan(0);
   });
 });
 

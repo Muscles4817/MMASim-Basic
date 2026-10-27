@@ -15,7 +15,7 @@
 import { useRouter, toHash, type Route } from '../state/router';
 import { SubNav } from '../ui/console';
 
-export type PromoterPlace = 'promotion' | 'calendar' | 'roster' | 'champions';
+export type PromoterPlace = 'promotion' | 'calendar' | 'roster' | 'champions' | 'history';
 
 /** Which tab a place sits under. Places sharing a tab are the row's siblings. */
 type Tab = 'promotion' | 'calendar' | 'roster';
@@ -23,6 +23,7 @@ type Tab = 'promotion' | 'calendar' | 'roster';
 const PLACES: readonly { id: PromoterPlace; tab: Tab; label: string; route: Route }[] = [
   { id: 'promotion', tab: 'promotion', label: 'Dashboard', route: { name: 'promotion' } },
   { id: 'champions', tab: 'promotion', label: 'Championships', route: { name: 'champions' } },
+  { id: 'history', tab: 'promotion', label: 'History', route: { name: 'history' } },
   { id: 'calendar', tab: 'calendar', label: 'Events', route: { name: 'calendar' } },
   { id: 'roster', tab: 'roster', label: 'Roster & contracts', route: { name: 'promoterRoster' } },
 ];
