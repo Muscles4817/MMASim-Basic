@@ -165,8 +165,8 @@ week, 4 fighters as people, 5 development over time.
 | C2 Star power surfaced          | 4     | C           | Done              | #51 |
 | C3 Memory, wants and voice      | 4     | C           | Done              | #52 |
 | C4 Negotiation                  | 4     | C           | Done              | #55 |
-| C5 Real careers over time       | 5     | C           | In progress       |     |
-| C6 Career events                | 5     | C           | Not started       |     |
+| C5 Real careers over time       | 5     | C           | In review         | #57 |
+| C6 Career events                | 5     | C           | In progress       |     |
 | B4 Rival promotions             | 5     | B           | Not started       |     |
 | B5 Investment and season        | 5     | B           | Not started       |     |
 | B6 History, scenarios, rankings | 5     | B           | Not started       |     |
@@ -210,3 +210,4 @@ week, 4 fighters as people, 5 development over time.
 | #56 report       | AI matchmaking still books by rankings; money-aware AI posture                                                                                                                          | B4                             |
 | #56 report       | Broke AI promotions stay at zero cash                                                                                                                                                   | B2 (buyout / recapitalisation) |
 | #55 review       | Stale `Fighter.talks` never pruned for unsigned fighters                                                                                                                                | C5                             |
+| #57 report       | Young share (≤23) ~7% vs ~16% in the hand-authored world; acceptable, could be pushed further                                                                                           | Later                          |
