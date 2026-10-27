@@ -1087,6 +1087,9 @@ export function runBookedFight(db: GameDb, booking: Booking): BookedFightOutcome
     submissionName: result.submissionName,
     divisionId: booking.bout.divisionId,
     promotionId: red.promotionId,
+    promotionName: (
+      db.promotions.findById(booking.bout.promotionId as string) as Promotion | undefined
+    )?.shortName,
     isTitleFight: booking.bout.isTitleFight,
     titleChangedHands: titleNotes.length > 0,
     involvesPlayer: true,

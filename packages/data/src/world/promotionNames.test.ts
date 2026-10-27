@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { PROMOTIONS_2026 } from '../seed/organisations-2026.js';
 import { SEED_PROMOTIONS } from '../seed/organisations.js';
 import {
+  FORMS,
   createPromotionNamer,
   type PromotionIdentity,
   type PyramidRung,
@@ -58,6 +59,71 @@ describe('generated promotion names', () => {
     const a = [small('local'), small('major')];
     const b = [big('local'), big('local'), big('local'), big('major')];
     expect(a[1]).toEqual(b[3]);
+  });
+
+  /** The pyramid shapes a Medium and a Large world actually build. */
+  const SHAPES: readonly (readonly [PyramidRung, number][])[] = [
+    [
+      ['apex', 1],
+      ['major', 3],
+      ['national', 11],
+      ['feeder', 22],
+      ['local', 75],
+    ],
+    [
+      ['apex', 1],
+      ['major', 4],
+      ['national', 15],
+      ['feeder', 29],
+      ['local', 126],
+    ],
+  ];
+
+  /** A name split into its place and its ending, longest ending first. */
+  const split = (rung: PyramidRung, name: string): { place: string; ending: string } => {
+    const endings = FORMS[rung]
+      .flatMap((f) => f.tails.map((tail) => tail.text))
+      .sort((a, b) => b.length - a.length);
+    const ending = endings.find((e) => name.endsWith(` ${e}`))!;
+    return { place: name.slice(0, -ending.length - 1), ending };
+  };
+
+  const nameShape = (seed: string, shape: (typeof SHAPES)[number]) => {
+    const nameFor = createPromotionNamer(seed);
+    return shape.flatMap(([rung, count]) =>
+      Array.from({ length: count }, () => ({ rung, ...nameFor(rung) })),
+    );
+  };
+
+  it('never names two town shows after the same place', () => {
+    // "Wichita Fighting Championship" beside "Wichita Falls Showdown" is one town counted twice.
+    for (const seed of SEEDS) {
+      for (const shape of SHAPES) {
+        const seen = new Map<string, string>();
+        for (const p of nameShape(seed, shape)) {
+          if (p.rung !== 'feeder' && p.rung !== 'local') continue;
+          const place = split(p.rung, p.name).place.split(' ');
+          for (const word of place) {
+            expect(seen.get(word), `${p.name} shares "${word}" with ${seen.get(word)}`).toBe(
+              undefined,
+            );
+          }
+          for (const word of place) seen.set(word, p.name);
+        }
+      }
+    }
+  });
+
+  it('gives a Medium world’s local shows endings that rarely repeat', () => {
+    for (const seed of SEEDS) {
+      const locals = nameShape(seed, SHAPES[0]!).filter((p) => p.rung === 'local');
+      const endings = new Map<string, number>();
+      for (const p of locals) {
+        const { ending } = split(p.rung, p.name);
+        endings.set(ending, (endings.get(ending) ?? 0) + 1);
+      }
+      expect(Math.max(...endings.values())).toBeLessThanOrEqual(6);
+    }
   });
 
   it('never leaks the pyramid rung into a name', () => {

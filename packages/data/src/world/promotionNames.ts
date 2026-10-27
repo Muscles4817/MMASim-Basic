@@ -31,13 +31,13 @@ export interface PromotionIdentity {
 }
 
 /** The second half of a name, and what it abbreviates to. */
-interface Tail {
+export interface Tail {
   text: string;
   abbr: string;
 }
 
 /** One way of building a name: any head, then any tail. */
-interface Form {
+export interface Form {
   heads: readonly string[];
   tails: readonly Tail[];
 }
@@ -75,7 +75,8 @@ const BRANDS = [
   'Paragon',
 ];
 
-const FORMS: Readonly<Record<PyramidRung, readonly Form[]>> = {
+/** Exported for the tests, which need to tell a place from its ending. */
+export const FORMS: Readonly<Record<PyramidRung, readonly Form[]>> = {
   apex: [
     { heads: ['World', 'Global', 'Premier', 'Universal', ...BRANDS], tails: CHAMPIONSHIP_TAILS },
   ],
@@ -337,8 +338,44 @@ const FORMS: Readonly<Record<PyramidRung, readonly Form[]>> = {
         'Farmington',
         'Santa Fe',
         'Carlsbad',
+        'Ames',
+        'Owensboro',
+        'Clarksville',
+        'Jonesboro',
+        'Hot Springs',
+        'Fort Smith',
+        'Pine Bluff',
+        'Ardmore',
+        'Bartlesville',
+        'Sedalia',
+        'Cape Girardeau',
+        'Carbondale',
+        'Quincy',
+        'Galesburg',
+        'Logansport',
+        'Muskegon',
+        'Marquette',
+        'Escanaba',
+        'Brainerd',
+        'Bemidji',
+        'Aberdeen',
+        'Dickinson',
+        'Williston',
+        'Sheridan',
+        'Gillette',
+        'Riverton',
+        'Ogden',
+        'Elko',
+        'Roseburg',
+        'Astoria',
+        'Walla Walla',
+        'Wenatchee',
+        'Kennewick',
+        'Pendleton',
+        'Hilo',
       ],
       tails: [
+        // Thirty-odd, so that a Medium world's seventy local shows rarely share an ending.
         t('Fight Night', 'FN'),
         t('Cage Classic', 'CC'),
         t('Throwdown', 'TD'),
@@ -348,6 +385,29 @@ const FORMS: Readonly<Record<PyramidRung, readonly Form[]>> = {
         t('Brawl', 'B'),
         t('Rumble', 'R'),
         t('Fight Factory', 'FF'),
+        t('Cage Wars', 'CW'),
+        t('Combat Series', 'CS'),
+        t('Fight Series', 'FS'),
+        t('Cage Fights', 'CF'),
+        t('Combat Club', 'CC'),
+        t('Fight League', 'FL'),
+        t('Cage Series', 'CS'),
+        t('Combat Night', 'CN'),
+        t('Knockout Night', 'KN'),
+        t('Combat Sports', 'CS'),
+        t('Cage Masters', 'CM'),
+        t('Cage Challenge', 'CC'),
+        t('Combat Challenge', 'CC'),
+        t('Fight Challenge', 'FC'),
+        t('Cage Showdown', 'CS'),
+        t('Combat Showcase', 'CS'),
+        t('Cage Invitational', 'CI'),
+        t('Combat Classic', 'CC'),
+        t('Cage Brawl', 'CB'),
+        t('Grudge Match', 'GM'),
+        t('Combat League', 'CL'),
+        t('Fighting Championship', 'FC'),
+        t('MMA', 'MMA'),
       ],
     },
   ],
@@ -360,12 +420,20 @@ const initials = (words: string): string =>
     .map((w) => w[0]!.toUpperCase())
     .join('');
 
-function candidate(rng: Rng, rung: PyramidRung): PromotionIdentity & { head: string } {
+function candidate(
+  rng: Rng,
+  rung: PyramidRung,
+): PromotionIdentity & { head: string; ending: string } {
   const forms = FORMS[rung];
   const form = rng.pickWeighted(forms, (f) => f.heads.length * f.tails.length);
   const head = rng.pick(form.heads);
   const tail = rng.pick(form.tails);
-  return { head, name: `${head} ${tail.text}`, shortName: initials(head) + tail.abbr };
+  return {
+    head,
+    ending: tail.text,
+    name: `${head} ${tail.text}`,
+    shortName: initials(head) + tail.abbr,
+  };
 }
 
 /**
@@ -398,6 +466,15 @@ const TAKEN_INITIALS = new Set([
   'WWE',
 ]);
 
+/**
+ * The rungs named after a town, which must not share a place word.
+ *
+ * "Wichita Fighting Championship" and "Wichita Falls Showdown", or "Sioux Falls" and "Twin Falls"
+ * in one world, read as one place counted twice — so a word of a place used by one feeder or local
+ * show is off the table for the rest.
+ */
+const PLACE_RUNGS: ReadonlySet<PyramidRung> = new Set(['feeder', 'local']);
+
 /** Enough draws that a clash on the last local show of a Large world is still vanishingly rare. */
 const ATTEMPTS = 400;
 
@@ -417,6 +494,12 @@ export function createPromotionNamer(seed: string): (rung: PyramidRung) => Promo
   const names = new Set<string>();
   const shortNames = new Set<string>(TAKEN_INITIALS);
   const heads = new Set<string>();
+  const placeWords = new Set<string>();
+  const uses = new Map<string, number>();
+  const leastUsed = (rung: PyramidRung): number =>
+    Math.min(
+      ...FORMS[rung].flatMap((f) => f.tails.map((tail) => uses.get(`${rung}:${tail.text}`) ?? 0)),
+    );
   for (const real of [...PROMOTIONS_2026, ...SEED_PROMOTIONS]) {
     names.add(real.name);
     shortNames.add(real.shortName);
@@ -428,13 +511,22 @@ export function createPromotionNamer(seed: string): (rung: PyramidRung) => Promo
       rng = root.fork(rung);
       streams.set(rung, rng);
     }
+    const isPlace = PLACE_RUNGS.has(rung);
     for (let i = 0; i < ATTEMPTS; i++) {
-      const { head, ...identity } = candidate(rng, rung);
+      const { head, ending, ...identity } = candidate(rng, rung);
       if (names.has(identity.name) || shortNames.has(identity.shortName)) continue;
-      if (heads.has(head) && i < ATTEMPTS / 2) continue;
+      const words = head.split(' ');
+      const reused = heads.has(head) || (isPlace && words.some((w) => placeWords.has(w)));
+      // Endings are dealt round evenly, so seventy local shows do not land on one word seven times.
+      const key = `${rung}:${ending}`;
+      const worn = (uses.get(key) ?? 0) > leastUsed(rung) + 1;
+      if (worn && i < ATTEMPTS / 4) continue;
+      if (reused && i < ATTEMPTS / 2) continue;
+      uses.set(key, (uses.get(key) ?? 0) + 1);
       names.add(identity.name);
       shortNames.add(identity.shortName);
       heads.add(head);
+      if (isPlace) for (const w of words) placeWords.add(w);
       return identity;
     }
     throw new Error(`Ran out of ${rung} promotion names for seed ${seed}`);
