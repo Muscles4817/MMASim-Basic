@@ -15,6 +15,7 @@ import { careerSummary, isDecisionMethod, isKoMethod } from '../domain/fighter.j
 import { starPowerGrowthMultiplier } from '../domain/personality.js';
 import { confidenceSwing } from '../domain/confidence.js';
 import { applyRingExperience } from '../progression/development.js';
+import { KO_LOSS_TRAUMA } from '../progression/retirement.js';
 import { lessonFrom } from './lessons.js';
 import { overallRating } from '../ratings/attributes.js';
 import { findTraitConflicts, traitMul, type TraitId } from '../domain/traits.js';
@@ -113,7 +114,9 @@ export function applyAftermath(input: AftermathInput): AftermathOutput {
 
     // --- Condition ---------------------------------------------------------------------
     const trauma = clamp(
-      fighter.condition.headTrauma + damage.traumaIncrement,
+      fighter.condition.headTrauma +
+        damage.traumaIncrement +
+        (!won && isKoMethod(result.method) ? KO_LOSS_TRAUMA : 0),
       0,
       100,
     );

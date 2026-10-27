@@ -23,7 +23,14 @@ import {
   walkingWeightOf,
 } from '@mmasim/engine';
 
-const PER_DIVISION = 6000;
+/*
+ * 12,000 rather than 6,000 (doc 34 C5). National distance runners are rare, so at 6,000 the
+ * per-division cardio lift rested on a few dozen of them and its minimum moved by a point or more
+ * with the stream assignment alone. Keying generation's forks by fighter id reshuffled it to a
+ * weakest +7.5 (LHW) against the +8 bound; at 12,000 the same streams give a weakest +8.9 and LHW
+ * +10.4. The bound is unchanged.
+ */
+const PER_DIVISION = 12000;
 
 const WORLD: readonly Fighter[] = (() => {
   const rng = createRng('backgrounds');

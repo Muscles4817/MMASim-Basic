@@ -16,7 +16,7 @@ import { createRng } from '../core/rng.js';
 import { asDivisionId } from '../core/ids.js';
 import { TRAITS, type TraitId } from '../domain/traits.js';
 import { uniformAttributes } from '../ratings/attributes.js';
-import { generateFighter, generateTraits, traitFit } from './generation.js';
+import { generateFighter, generateTraits, traitFit, withTraitsStillTrue } from './generation.js';
 
 /** A roster big enough for a correlation to mean something. */
 function roster(count: number) {
@@ -134,5 +134,38 @@ describe('generated fighters wear traits that describe them', () => {
     // yet — the editor's randomiser, fixtures — must not be forced to invent one.
     const rng = createRng('unweighted');
     expect(generateTraits(rng.fork('a'), 2)).toHaveLength(2);
+  });
+});
+
+describe('a trait the ratings stop bearing out', () => {
+  it('is dropped, and the fighter is untouched when every trait still holds', () => {
+    const f = roster(1)[0]!;
+    const machine = {
+      ...f,
+      traits: ['cardioMachine'] as TraitId[],
+      attributes: { ...f.attributes, cardio: 80 },
+    };
+    expect(withTraitsStillTrue(machine)).toBe(machine);
+    const gassed = { ...machine, attributes: { ...machine.attributes, cardio: 5 } };
+    expect(withTraitsStillTrue(gassed).traits).toEqual([]);
+  });
+});
+
+describe('fighters generated from one stream', () => {
+  it('are different people, not one background and body under several names', () => {
+    // Doc 34 C5: `Rng.fork` reads the seed, not the position, so unkeyed forks were shared.
+    const rng = createRng('shared-stream');
+    const [a, b] = ['twin_a', 'twin_b'].map((id) =>
+      generateFighter(rng, {
+        id,
+        divisionId: asDivisionId('mens-lightweight'),
+        sex: 'male',
+        day: 0,
+        age: 25,
+      }),
+    );
+    expect(a!.background).not.toEqual(b!.background);
+    expect(a!.physique).not.toEqual(b!.physique);
+    expect(a!.aptitudes).not.toEqual(b!.aptitudes);
   });
 });
