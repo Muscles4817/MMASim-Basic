@@ -206,6 +206,17 @@ describe('planning a card', () => {
     expect(await screen.findByText(/Nothing booked|Needs a main event/i)).toBeTruthy();
   });
 
+  it('says what calling a card off costs before it is called off', async () => {
+    // Calling a card off used to be free, and said nothing. Doc 34 A5.
+    const user = userEvent.setup();
+    await becomePromoter(user);
+    await planACard(user);
+    await user.click(await screen.findByRole('button', { name: 'Card settings' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel this card' }));
+    expect(screen.getByText(/buzz|barely notice/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Yes — cancel this card/ })).toBeTruthy();
+  });
+
   it('offers a market to run it in', async () => {
     const user = userEvent.setup();
     await becomePromoter(user);
