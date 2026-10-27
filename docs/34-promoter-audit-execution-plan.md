@@ -149,13 +149,13 @@ week, 4 fighters as people, 5 development over time.
 | Item                            | Phase | Lane        | Status      | PR  |
 | ------------------------------- | ----- | ----------- | ----------- | --- |
 | A1 Fight night unmissable       | 1     | A           | Done        | #47 |
-| A2 Alert hygiene                | 1     | A           | In progress |     |
+| A2 Alert hygiene                | 1     | A           | In review   | #50 |
 | B0 Generated names (content)    | 1     | B           | In review   | #48 |
 | C1 Identity on the page         | 4     | C           | In review   | #49 |
-| B1 Economy and buzz             | 2     | B           | Not started |     |
+| B1 Economy and buzz             | 2     | B           | In progress |     |
 | B2 Broadcaster and owner        | 2     | B           | Not started |     |
 | B3 Prestige and tiers           | 2     | B           | Not started |     |
-| A3 Fight-night show and recap   | 3     | A           | Not started |     |
+| A3 Fight-night show and recap   | 3     | A           | In progress |     |
 | A4 Matchmaking UX               | 3     | A           | Not started |     |
 | A5 Fight week                   | 3     | A           | Not started |     |
 | A6 Onboarding and readability   | 1/3   | A           | Not started |     |
@@ -187,3 +187,4 @@ week, 4 fighters as people, 5 development over time.
 | #49 report | ~3% of fighters carry a trait their ratings contradict after age drift; veto only acts at generation                                               | C5                     |
 | #49 report | Earned nicknames only from full-detail card bouts, not statistical cards or fighter-mode bouts                                                     | C3                     |
 | #49 report | Scouted error does not scale with scouting investment                                                                                              | B5                     |
+| #50 report | An open decision's title is fixed when raised, so an unanswered 7-day warning still says "in 7 days"                                               | A6                     |
