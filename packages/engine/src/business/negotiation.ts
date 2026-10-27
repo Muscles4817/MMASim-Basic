@@ -202,8 +202,10 @@ export function counterTerms(ctx: TableContext, offer: OfferTerms): OfferTerms {
   // Whatever is left of the gap goes on the purse, keeping the split the offer chose.
   const gap = reservation(ctx) * 1.04 - termsValue(fighter, out);
   if (gap > 0) {
-    const purse = out.showPurse + out.winBonus * 0.6;
-    const scale = 1 + gap / Math.max(0.1, purse);
+    // The purse's own worth to them, after what the clauses and the length cost, is what has to
+    // grow by the gap — so the scale divides by that, not by the bare purse.
+    const worth = termsValue(fighter, { ...out, signingBonus: 0, revenuePoints: 0 });
+    const scale = 1 + gap / Math.max(0.1, worth);
     out.showPurse = round1(out.showPurse * scale);
     out.winBonus = round1(out.winBonus * scale);
   }
