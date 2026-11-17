@@ -32,49 +32,15 @@ import {
 } from '@mmasim/engine';
 import { isDecisionMethod, isKoMethod } from '@mmasim/engine';
 import { bandColour } from './index';
+import { Icon, type IconName } from './icons';
 import './signals.css';
 
 // --- Icons -------------------------------------------------------------------------------
 //
-// A small, fixed vocabulary. Emoji rather than an icon font because they need no asset
-// pipeline, render everywhere, and scale with the text — and because every one of them is
-// always paired with a word, so their exact rendering never carries meaning on its own.
+// The vocabulary lives in ./icons. Re-exported here because every signal below is built from
+// it and most screens already import their signals from this file.
 
-export const ICON = {
-  champion: '🏆',
-  titleFight: '🏆',
-  knockout: '💥',
-  submission: '🔒',
-  decision: '📋',
-  draw: '🤝',
-  streak: '🔥',
-  skid: '🧊',
-  injury: '🩹',
-  trauma: '🧠',
-  rising: '▲',
-  falling: '▼',
-  level: '■',
-  star: '★',
-  camp: '🥊',
-  training: '📈',
-  warning: '⚠️',
-  /** Confirmation and information. A green ▲ meant nothing for either. */
-  success: '✓',
-  info: 'ℹ️',
-  locked: '🔒',
-  time: '⏱',
-} as const;
-
-export type IconName = keyof typeof ICON;
-
-/** An icon that is always decorative — the adjacent text carries the meaning. */
-export function Icon({ name, className }: { name: IconName; className?: string }) {
-  return (
-    <span className={className} aria-hidden="true">
-      {ICON[name]}
-    </span>
-  );
-}
+export { Icon, type IconName } from './icons';
 
 // --- Emphasis tiers ------------------------------------------------------------------------
 

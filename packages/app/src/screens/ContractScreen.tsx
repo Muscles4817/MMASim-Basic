@@ -36,7 +36,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, DataTable, Empty, Panel, type Column } from '../ui';
-import { Alert, Help, StateRow } from '../ui/signals';
+import { Alert, Help, StateRow, Icon } from '../ui/signals';
 import { Console, Ledger, LedgerRow } from '../ui/console';
 import { money } from '../ui/format';
 import { getLadderStatus } from '../game/progression';
@@ -640,13 +640,13 @@ function OfferDetail({
       */}
       <div className="stack" style={{ gap: 'var(--space-1)', marginTop: 'var(--space-3)' }}>
         <p style={{ fontSize: 'var(--text-sm)' }}>
-          <span aria-hidden="true">💷</span> <span className="muted">Money:</span> {offer.money}
+          <Icon name="money" /> <span className="muted">Money:</span> {offer.money}
         </p>
         <p style={{ fontSize: 'var(--text-sm)' }}>
-          <span aria-hidden="true">🪜</span> <span className="muted">Route:</span> {offer.route}
+          <Icon name="route" /> <span className="muted">Route:</span> {offer.route}
         </p>
         <p className="muted" style={{ fontSize: 'var(--text-sm)' }}>
-          <span aria-hidden="true">⚖️</span> Level: {offer.level}
+          <Icon name="balance" /> Level: {offer.level}
         </p>
       </div>
 

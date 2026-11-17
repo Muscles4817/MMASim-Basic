@@ -4,8 +4,9 @@
 
 .card {
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: var(--card-border);
   border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
   padding: var(--space-4);
 }
 
@@ -16,7 +17,20 @@
 
 .card--raised {
   background: var(--surface-raised);
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--card-raised-shadow);
+}
+
+/*
+ * The card a screen leads with — the situation that needs the player, the fight on the table.
+ *
+ * Heavier than raised, and the weight is the mode's: an ink border with a printed offset shadow on
+ * the poster, a lit plate in the studio. One per screen. Two of them is two primary messages, which
+ * is the old hub's failure in a new costume.
+ */
+.card--feature {
+  background: var(--surface-raised);
+  border: var(--feature-border);
+  box-shadow: var(--feature-shadow);
 }
 
 .card__header {
@@ -29,10 +43,10 @@
 
 .card__title {
   font-size: var(--text-sm);
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking);
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--label-color);
 }
 
 /* --- Button -------------------------------------------------------------------------- */
@@ -44,10 +58,14 @@
   gap: var(--space-2);
   min-height: var(--tap-target);
   padding: 0 var(--space-4);
-  border-radius: var(--radius);
-  border: 1px solid transparent;
-  font-size: var(--text-base);
-  font-weight: 600;
+  border-radius: var(--btn-radius);
+  border: var(--btn-border-width) solid transparent;
+  font-family: var(--btn-font);
+  font-size: var(--btn-size);
+  font-weight: var(--btn-weight);
+  font-style: var(--btn-style);
+  text-transform: var(--btn-transform);
+  letter-spacing: var(--btn-tracking);
   transition:
     background var(--transition-fast),
     border-color var(--transition-fast),
@@ -57,6 +75,7 @@
 .btn--primary {
   background: var(--accent);
   color: var(--on-accent);
+  box-shadow: var(--btn-primary-shadow);
 }
 
 .btn--primary:hover:not(:disabled) {
@@ -65,7 +84,7 @@
 
 .btn--secondary {
   background: var(--surface);
-  border-color: var(--border-strong);
+  border-color: var(--btn-secondary-border);
   color: var(--text);
 }
 
@@ -134,9 +153,11 @@
   align-items: center;
   gap: var(--space-1);
   padding: 0.15rem var(--space-2);
-  border-radius: var(--radius-full);
+  border-radius: var(--chip-radius);
   font-size: var(--text-xs);
   font-weight: 600;
+  text-transform: var(--chip-transform);
+  letter-spacing: var(--chip-tracking);
   background: var(--surface-sunken);
   color: var(--text-muted);
   border: 1px solid var(--border);
@@ -283,10 +304,10 @@
 .section-title {
   display: block;
   font-size: var(--text-sm);
-  font-weight: 700;
-  letter-spacing: 0.05em;
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking);
   text-transform: uppercase;
-  color: var(--text-faint);
+  color: var(--label-color);
   margin-bottom: var(--space-2);
 }
 

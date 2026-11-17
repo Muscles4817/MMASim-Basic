@@ -10,6 +10,7 @@
 
 import { drawRead, type DrawRead, type Fighter } from '@mmasim/engine';
 import { Chip, type ChipTone } from './index';
+import { Icon } from './icons';
 
 const TONE: Readonly<Record<DrawRead['klass'], ChipTone>> = {
   headliner: 'accent',
@@ -44,7 +45,7 @@ export function DrawBadge({
       title={`${r.blurb} ${r.trend.detail}`}
     >
       <Chip tone={TONE[r.klass]}>
-        <span aria-hidden="true">★</span>
+        <Icon name="star" />
         <span className="visually-hidden">{name}</span>
         <span aria-hidden="true">
           {r.label} {r.trend.arrow}

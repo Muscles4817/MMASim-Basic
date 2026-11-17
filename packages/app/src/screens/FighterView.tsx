@@ -71,7 +71,7 @@ import {
 } from '@mmasim/engine';
 import { getWorld, type GameDb } from '@mmasim/data';
 import { Button, Card, Chip, RatingRow } from '../ui';
-import { Alert, AttributeBadge, Fact, ICON, Icon, KeyStat } from '../ui/signals';
+import { Alert, AttributeBadge, Fact, Icon, KeyStat } from '../ui/signals';
 import { AbilityBand, Console, Ledger, LedgerRow, MiniRating, TabPanel, Tabs } from '../ui/console';
 import { FightRecordList, RecordSummaryBar } from '../ui/FightRecord';
 import { readMileage } from '../ui/mileage';
@@ -960,11 +960,17 @@ function CareerTab({
                       <Chip
                         tone={rivalry.isRivalry ? 'negative' : heat > 45 ? 'warning' : 'neutral'}
                       >
-                        {rivalry.isRivalry
-                          ? `${ICON.streak} Grudge`
-                          : heat > 45
-                            ? `${ICON.streak} Real interest`
-                            : 'Simmering'}
+                        {rivalry.isRivalry ? (
+                          <>
+                            <Icon name="streak" /> Grudge
+                          </>
+                        ) : heat > 45 ? (
+                          <>
+                            <Icon name="streak" /> Real interest
+                          </>
+                        ) : (
+                          'Simmering'
+                        )}
                       </Chip>
                     </div>
                   );

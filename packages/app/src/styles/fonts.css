@@ -1,0 +1,35 @@
+/*
+ * Typefaces.
+ *
+ * Self-hosted through @fontsource rather than linked from Google Fonts, for two reasons that are
+ * both about this being an installable game rather than a web page:
+ *
+ *   - Offline. The service worker caches same-origin assets as they are fetched, so a face that
+ *     has been seen once is available on the train. A cross-origin stylesheet would fall back to
+ *     the system font the first time the player is underground, and the whole mode identity with it.
+ *   - Privacy. A third-party font request leaks every launch of the game to someone else's server.
+ *
+ * The un-prefixed files (`400.css`, not `latin-400.css`) are deliberate: they declare every
+ * subset behind a `unicode-range`, so the browser downloads only what a page actually renders —
+ * and generated names like "Örebro" or "Wójcik" still get their glyphs from the display face.
+ *
+ * Only the weights a mode uses are imported. Each import is a handful of @font-face rules and
+ * costs nothing until the browser needs the face, so an unused mode costs no download at all.
+ *
+ * See docs/35-mode-identities.md.
+ */
+
+/* Fighter mode — the poster. A heavy condensed display face over a sturdy grotesque. */
+@import '@fontsource/anton/400.css';
+@import '@fontsource/archivo/400.css';
+@import '@fontsource/archivo/600.css';
+@import '@fontsource/archivo/800.css';
+
+/* Promoter mode — the broadcast package. Italic condensed for the graphics, plain for the reading. */
+@import '@fontsource/barlow-condensed/600.css';
+@import '@fontsource/barlow-condensed/700.css';
+@import '@fontsource/barlow-condensed/700-italic.css';
+@import '@fontsource/barlow-condensed/800-italic.css';
+@import '@fontsource/barlow/400.css';
+@import '@fontsource/barlow/500.css';
+@import '@fontsource/barlow/600.css';

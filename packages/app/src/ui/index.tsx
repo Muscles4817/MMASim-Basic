@@ -19,6 +19,7 @@ export function Card({
   action,
   flush,
   raised,
+  feature,
   children,
   className = '',
   role,
@@ -28,6 +29,11 @@ export function Card({
   action?: ReactNode;
   flush?: boolean;
   raised?: boolean;
+  /**
+   * The card this screen leads with. At most one per screen — see `.card--feature`. Wins over
+   * `raised` if both are passed, because a feature card already is raised.
+   */
+  feature?: boolean;
   children: ReactNode;
   className?: string;
   /** For the rare card whose *appearance* is the result of an action, e.g. a camp report. */
@@ -41,7 +47,12 @@ export function Card({
    */
   testId?: string;
 }) {
-  const classes = ['card', flush && 'card--flush', raised && 'card--raised', className]
+  const classes = [
+    'card',
+    flush && 'card--flush',
+    feature ? 'card--feature' : raised && 'card--raised',
+    className,
+  ]
     .filter(Boolean)
     .join(' ');
   return (

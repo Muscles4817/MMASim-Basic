@@ -70,7 +70,7 @@ import {
   Panel,
   type Column,
 } from '../ui';
-import { Fact, FighterRead, ICON, Icon, StateRow, StreakBadge } from '../ui/signals';
+import { Fact, FighterRead, Icon, StateRow, StreakBadge } from '../ui/signals';
 import { AbilityBand, AttentionRow } from '../ui/console';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
 import { careerAttention, dominantSituation, type CareerSituation } from '../game/careerAttention';
@@ -451,7 +451,11 @@ function NextFight({
       testId="next-fight"
     >
       <p style={{ fontSize: 'var(--text-xl)', fontWeight: 700, marginBottom: 'var(--space-1)' }}>
-        {booking.bout.isTitleFight && <span aria-hidden="true">🏆 </span>}
+        {booking.bout.isTitleFight && (
+              <>
+                <Icon name="champion" />{' '}
+              </>
+            )}
         vs {displayName(opponent)}
         {booking.bout.isTitleFight && <span className="visually-hidden"> for the title</span>}
       </p>
@@ -582,9 +586,13 @@ function ChooseFight({
         const rivalry = getRivalry(db, fighter.id, o.opponent.id, day);
         const heat = currentHeat(rivalry, day);
         return rivalry.isRivalry ? (
-          <Chip tone="negative">{ICON.streak} Grudge</Chip>
+          <Chip tone="negative">
+            <Icon name="streak" /> Grudge
+          </Chip>
         ) : heat >= 40 ? (
-          <Chip tone="warning">{ICON.streak} Heat</Chip>
+          <Chip tone="warning">
+            <Icon name="streak" /> Heat
+          </Chip>
         ) : (
           <span className="faint">—</span>
         );
@@ -604,9 +612,7 @@ function ChooseFight({
       {titleShot && (
         <Card title="Title fight" raised testId="title-fight">
           <div className="row" style={{ gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
-            <span aria-hidden="true" style={{ fontSize: '1.5rem' }}>
-              🏆
-            </span>
+            <Icon name="champion" className="title-fight__icon" />
             <p style={{ fontSize: 'var(--text-xl)', fontWeight: 700 }}>
               {titleShot.champion
                 ? `For the belt, against ${displayName(titleShot.champion)}`
@@ -782,7 +788,7 @@ function OfferDetail({
           className={`offer-advice ${advice.recommended ? '' : 'offer-advice--against'}`}
           style={{ marginTop: 'var(--space-3)' }}
         >
-          <span aria-hidden="true">{advice.recommended ? '👍' : '✋'}</span>{' '}
+          <Icon name={advice.recommended ? 'success' : 'warning'} />{' '}
           <strong>{managerName}:</strong> &ldquo;{advice.line}&rdquo;
         </p>
       )}

@@ -11,6 +11,7 @@ import {
 } from '@mmasim/engine';
 import { Chip, Empty } from './index';
 import './FightRecord.css';
+import { Icon } from './icons';
 
 /**
  * A fighter's results.
@@ -181,7 +182,7 @@ export function FightRecordList({
                 <span className="record-row__opponent">
                   {entry.wasTitleFight && (
                     <span title="Championship bout" aria-label="Championship bout">
-                      🏆{' '}
+                      <Icon name="champion" />{' '}
                     </span>
                   )}
                   {opponent && onOpponentClick ? (
