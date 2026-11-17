@@ -90,8 +90,8 @@
   --btn-size: 1.0625rem;
 
   --chip-radius: 2px;
-  --chip-transform: uppercase;
-  --chip-tracking: 0.06em;
+  --chip-transform: none;
+  --chip-tracking: 0.01em;
   --tag-clip: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
 
   /* Chrome: a control-room frame — darker than the floor, lit from the tab that is live. */

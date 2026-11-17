@@ -94,8 +94,8 @@
   --btn-secondary-border: var(--ink);
 
   --chip-radius: 2px;
-  --chip-transform: uppercase;
-  --chip-tracking: 0.08em;
+  --chip-transform: none;
+  --chip-tracking: 0.01em;
 
   /* Chrome: newsprint header under a heavy rule; the tab bar is the black band. */
   --title-size: 1.5rem;

@@ -468,8 +468,8 @@ button.attention__item:active {
   font-size: var(--text-sm);
   color: var(--text);
   margin-top: var(--space-2);
-  padding-left: var(--space-2);
-  border-left: 2px solid var(--accent);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--border);
 }
 
 .candidate__chips {

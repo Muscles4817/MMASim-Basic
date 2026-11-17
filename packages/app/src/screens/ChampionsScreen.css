@@ -1,0 +1,57 @@
+/*
+ * The belts.
+ *
+ * Each holder sits on a plate of the mode's slab — the broadcast package's title graphic in
+ * promoter mode, which is the only mode that reaches this screen — so the belt reads as the most
+ * important fact in its division rather than a bold line the weight of the queue under it.
+ */
+
+.belt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  background: var(--ink);
+  color: var(--on-ink);
+  border-radius: var(--masthead-radius);
+  border-top: var(--masthead-rule);
+}
+
+.belt__label {
+  font-size: var(--text-2xs);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--on-ink-accent);
+}
+
+.belt__name {
+  text-align: left;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-style: var(--display-style);
+  text-transform: var(--display-transform);
+  letter-spacing: var(--display-tracking);
+  font-size: var(--text-2xl);
+  line-height: 1;
+  color: var(--on-ink);
+}
+
+.belt__name:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.belt__reign {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--on-ink-muted);
+}
+
+.belt__status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
