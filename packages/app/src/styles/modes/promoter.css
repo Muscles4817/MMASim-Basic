@@ -92,6 +92,7 @@
   --chip-radius: 2px;
   --chip-transform: uppercase;
   --chip-tracking: 0.06em;
+  --tag-clip: polygon(8% 0, 100% 0, 92% 100%, 0 100%);
 
   /* Chrome: a control-room frame — darker than the floor, lit from the tab that is live. */
   --title-size: 1.625rem;
@@ -112,6 +113,17 @@
   --nav-weight-current: 700;
   --nav-transform: uppercase;
   --nav-tracking: 0.08em;
+
+  /* The masthead is a lower-third: a plate cut on the trailing edge, a gold rule across the top,
+     the status on a slanted tab. */
+  --on-ink-accent: #f2c14e;
+  --masthead-radius: 0;
+  --masthead-clip: polygon(0 0, 100% 0, calc(100% - 1.5rem) 100%, 0 100%);
+  --masthead-rule: 4px solid var(--accent);
+  --stamp-border: 0 solid transparent;
+  --stamp-bg: var(--accent);
+  --stamp-fg: var(--on-accent);
+  --stamp-transform: skewX(-10deg);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -154,6 +166,7 @@
     --shadow-lg: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 12px 28px rgb(0 0 0 / 0.6);
     --texture: repeating-linear-gradient(0deg, rgb(255 255 255 / 0.022) 0 1px, transparent 1px 3px);
     --nav-indicator-glow: 0 -2px 14px -4px var(--accent);
+    --on-ink-accent: #7f5700;
   }
 }
 
@@ -196,4 +209,5 @@
   --shadow-lg: inset 0 1px 0 rgb(255 255 255 / 0.08), 0 12px 28px rgb(0 0 0 / 0.6);
   --texture: repeating-linear-gradient(0deg, rgb(255 255 255 / 0.022) 0 1px, transparent 1px 3px);
   --nav-indicator-glow: 0 -2px 14px -4px var(--accent);
+  --on-ink-accent: #7f5700;
 }

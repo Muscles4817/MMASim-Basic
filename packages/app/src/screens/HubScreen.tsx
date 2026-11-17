@@ -70,7 +70,7 @@ import {
   Panel,
   type Column,
 } from '../ui';
-import { Fact, FighterRead, Icon, StateRow, StreakBadge } from '../ui/signals';
+import { Fact, FighterRead, Icon, StateRow } from '../ui/signals';
 import { AbilityBand, AttentionRow } from '../ui/console';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
 import { careerAttention, dominantSituation, type CareerSituation } from '../game/careerAttention';
@@ -80,6 +80,7 @@ import { getRivalry, previousMeetings } from '../game/rivalries';
 import { readNews } from '../game/world';
 import { NewsFeed } from '../ui/NewsFeed';
 import { ActionDock } from '../ui/ActionDock';
+import { Masthead } from '../ui/Masthead';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 import { currentPurse } from '../game/money';
 import { adviceOn, boutMerit, contractStanding } from '../game/contracts';
@@ -321,49 +322,64 @@ function IdentityBand({
 }) {
   const ability = abilityRead(fighter.attributes);
 
+  const streak = fighter.summary.streak;
+
+  /*
+   * Where the fighter stands, as the stamp across the corner — the thing a fight poster would
+   * print over the name. Only the two states worth stamping: a belt, and being next in line.
+   */
+  const stamp = ladder?.isChampion ? (
+    <>
+      <Icon name="champion" /> Champion
+    </>
+  ) : ladder?.position === 1 ? (
+    '#1 contender'
+  ) : undefined;
+
   return (
-    <section className="identity" aria-label="Who you are" data-testid="identity">
-      <div className="identity__who">
-        <h2 className="identity__name">{displayName(fighter)}</h2>
-        <p className="muted">
-          {divisionName} · {fighterAge(fighter, day)} · <Flag nationality={fighter.nationality} />
-        </p>
-      </div>
+    <div className="identity" data-testid="identity">
+      <Masthead
+        label="Who you are"
+        eyebrow={fighter.nickname ? `${fighter.firstName} “${fighter.nickname}”` : fighter.firstName}
+        title={fighter.lastName}
+        meta={
+          <>
+            {divisionName} · {fighterAge(fighter, day)} · <Flag nationality={fighter.nationality} />
+          </>
+        }
+        figures={[
+          { value: recordString(fighter.summary), label: 'Record', emphasis: true },
+          ...(streak !== 0
+            ? [{ value: streak > 0 ? `W${streak}` : `L${-streak}`, label: 'Streak' }]
+            : []),
+          {
+            value: ladder?.isChampion
+              ? 'C'
+              : ladder?.position !== undefined
+                ? `#${ladder.position}`
+                : '—',
+            label: ladder?.isChampion
+              ? 'Champion'
+              : ladder?.position !== undefined
+                ? `Of ${ladder.ranked.length}`
+                : 'Unranked',
+          },
+        ]}
+        stamp={stamp}
+      />
 
-      <div className="identity__record">
-        <span className="identity__record-value numeric">{recordString(fighter.summary)}</span>
-        <span className="identity__record-label">Professional record</span>
-        {fighter.summary.streak !== 0 && <StreakBadge streak={fighter.summary.streak} />}
-      </div>
-
-      <div className="identity__standing">
-        {ladder?.isChampion ? (
-          <Chip tone="accent" title="Reigning divisional champion">
-            <Icon name="champion" /> Champion
-          </Chip>
-        ) : ladder?.position !== undefined ? (
-          <Chip tone="info">
-            #{ladder.position} of {ladder.ranked.length}
-          </Chip>
-        ) : (
-          <Chip>Unranked</Chip>
-        )}
-        {/*
-          A class, never a number.
-
-          The hub used to print an exact overall for the same fighter whose profile argues at
-          length that it must never do so — `FighterScreen`'s header is explicit that anybody who
-          can compare 34 against 47 is not scouting, they are doing arithmetic. Two screens, one
-          fighter, two incompatible positions. The profile's reasoning is the better one, and
-          every underlying rating is still there for anyone who wants to form their own view.
-        */}
-        <AbilityBand label={ability.label} fill={ability.fill} note={ability.blurb} />
-      </div>
-
+      {/*
+        What kind of fighter this is, under the poster rather than on it: a class, never a
+        number. The hub used to print an exact overall for the same fighter whose profile argues
+        at length that it must never do so — anybody who can compare 34 against 47 is not
+        scouting, they are doing arithmetic. Every underlying rating is on the profile for
+        anyone who wants to form their own view.
+      */}
       <div className="identity__read">
+        <AbilityBand label={ability.label} fill={ability.fill} note={ability.blurb} />
         <FighterRead attributes={fighter.attributes} />
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -416,6 +432,7 @@ function NeedsYou({
                controls for one decision is the thing this screen exists to stop doing. */
             cue={situation.action && situation.id !== lead?.id ? situation.action.label : undefined}
             onClick={situation.action ? () => onAct(situation) : undefined}
+            lead={situation.id === lead?.id}
           />
         ))}
       </div>

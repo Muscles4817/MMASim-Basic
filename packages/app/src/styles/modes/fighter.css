@@ -115,6 +115,17 @@
   --nav-weight-current: 400;
   --nav-transform: uppercase;
   --nav-tracking: 0.08em;
+
+  /* The masthead is the poster itself: printed slightly off true, halftone on the right, a stamp
+     slapped across the corner. */
+  --on-ink-accent: #f04a3c;
+  --masthead-radius: 0;
+  --masthead-transform: rotate(-1.5deg);
+  --masthead-texture: radial-gradient(rgb(236 229 214 / 0.16) 1.1px, transparent 1.6px);
+  --masthead-texture-size: 7px 7px;
+  --stamp-border: 3px solid var(--on-ink-accent);
+  --stamp-fg: var(--on-ink-accent);
+  --stamp-transform: rotate(8deg);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -165,6 +176,8 @@
     --nav-fg: var(--text-faint);
     --nav-fg-current: var(--text);
     --nav-hover-bg: var(--surface-raised);
+    --on-ink-accent: #b3241b;
+    --masthead-texture: radial-gradient(rgb(20 18 16 / 0.12) 1.1px, transparent 1.6px);
   }
 }
 
@@ -215,4 +228,6 @@
   --nav-fg: var(--text-faint);
   --nav-fg-current: var(--text);
   --nav-hover-bg: var(--surface-raised);
+  --on-ink-accent: #b3241b;
+  --masthead-texture: radial-gradient(rgb(20 18 16 / 0.12) 1.1px, transparent 1.6px);
 }

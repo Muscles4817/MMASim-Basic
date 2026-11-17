@@ -23,85 +23,27 @@
   gap: var(--space-4);
 }
 
-/* --- Identity band ---------------------------------------------------------------------- */
-
-.identity {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-3);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--border);
-}
-
-.identity__name {
-  font-size: var(--text-2xl);
-  line-height: 1.15;
-  letter-spacing: -0.01em;
-}
-
-.identity__record {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
+/* --- Identity ----------------------------------------------------------------------------- */
 
 /*
- * The record, which is what a career *is*.
- *
- * Kept at display size — this is the one number on the page that earns it. Everything else that
- * used to compete with it at this weight is now either an interpreted state row or on the
- * profile.
+ * The poster (ui/Masthead) and, under it, what kind of fighter this is. The read sits beside the
+ * class on a wide screen and under it on a phone.
  */
-.identity__record-value {
-  font-size: var(--text-3xl);
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: -0.02em;
+.identity {
+  display: grid;
+  gap: var(--space-4);
 }
 
-.identity__record-label {
-  font-size: var(--text-xs);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.identity__standing {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  align-items: flex-start;
+.identity__read {
+  display: grid;
+  gap: var(--space-3);
 }
 
 @media (min-width: 62rem) {
-  .identity {
-    /* Who / record / standing across the top, with the attribute read spanning underneath it.
-       Four regions of one fact rather than three cards about a fighter. */
-    grid-template-columns: minmax(0, 2fr) auto minmax(0, 1.4fr);
-    grid-template-areas:
-      'who record standing'
-      'read read standing';
-    align-items: start;
-    gap: var(--space-4) var(--space-5);
-  }
-
-  .identity__who {
-    grid-area: who;
-  }
-  .identity__record {
-    grid-area: record;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: var(--space-1);
-  }
-  .identity__standing {
-    grid-area: standing;
-    align-items: flex-end;
-  }
   .identity__read {
-    grid-area: read;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    align-items: start;
+    gap: var(--space-5);
   }
 }
 

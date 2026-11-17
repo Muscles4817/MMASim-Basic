@@ -104,7 +104,7 @@
 
 /* --- Attention feed -------------------------------------------------------------------------
    The mode's most important list. Every row answers "why am I being shown this" in its own
-   second line, and carries a tone stripe so severity survives greyscale and a quick scan. */
+   second line, and leads with a tone *word* so severity survives greyscale and a quick scan. */
 
 .attention {
   display: flex;
@@ -113,43 +113,84 @@
 }
 
 .attention__item {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
   gap: var(--space-3);
   width: 100%;
   text-align: left;
   padding: var(--space-3);
-  border: 1px solid var(--border);
-  border-left-width: 3px;
+  border: var(--card-border);
   border-radius: var(--radius);
   background: var(--surface);
+  box-shadow: var(--card-shadow);
   color: var(--text);
   font: inherit;
   min-height: var(--tap-target);
   transition:
-    border-color var(--transition-fast),
-    background var(--transition-fast);
+    background var(--transition-fast),
+    transform var(--transition-fast);
 }
 
-.attention__item:hover {
+button.attention__item:hover {
   background: var(--surface-sunken);
 }
 
-.attention__item[data-tone='danger'] {
-  border-left-color: var(--negative);
-}
-.attention__item[data-tone='warn'] {
-  border-left-color: var(--warning);
-}
-.attention__item[data-tone='info'] {
-  border-left-color: var(--info);
-}
-.attention__item[data-tone='good'] {
-  border-left-color: var(--positive);
+button.attention__item:active {
+  transform: translateY(1px);
 }
 
-.attention__icon {
-  flex: 0 0 auto;
+/* The lead: the situation the screen is built around, at feature weight. */
+.attention__item[data-lead='true'] {
+  padding: var(--space-4);
+  border: var(--feature-border);
+  background: var(--surface-raised);
+  box-shadow: var(--feature-shadow);
+}
+
+.attention__item[data-lead='true'] .attention__title {
+  font-size: var(--text-lg);
+}
+
+/*
+ * The severity tag.
+ *
+ * A filled block, so it reads at arm's length — the colour is the second channel, the word the
+ * first. Its shape is the mode's (`--tag-clip`): square print on the poster, a slanted plate in
+ * the studio. Not focusable, so clipping it costs no focus ring.
+ */
+.attention__tag {
+  align-self: start;
+  min-width: 4.25rem;
+  margin-top: 0.1rem;
+  padding: 0.2rem var(--space-2);
+  border-radius: var(--chip-radius);
+  clip-path: var(--tag-clip);
+  font-size: var(--text-2xs);
+  font-weight: 800;
+  letter-spacing: 0.1em;
   line-height: 1.4;
+  text-align: center;
+  text-transform: uppercase;
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+.attention__tag[data-tone='danger'] {
+  background: var(--negative);
+  color: var(--text-inverse);
+}
+.attention__tag[data-tone='warn'] {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+.attention__tag[data-tone='info'] {
+  background: var(--info-soft);
+  color: var(--info);
+}
+.attention__tag[data-tone='good'] {
+  background: var(--positive-soft);
+  color: var(--positive);
 }
 
 .attention__title {

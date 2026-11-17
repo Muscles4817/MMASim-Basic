@@ -200,6 +200,21 @@
   --chip-radius: var(--radius-full);
   --chip-transform: none;
   --chip-tracking: 0;
+  /* Small status tags that are never focusable, so they may be clipped into a shape. */
+  --tag-clip: none;
+
+  /* The masthead: the slab a home screen leads with (ui/Masthead). */
+  --on-ink-accent: #f0736a;
+  --masthead-radius: var(--radius-lg);
+  --masthead-transform: none;
+  --masthead-clip: none;
+  --masthead-rule: 0 solid transparent;
+  --masthead-texture: none;
+  --masthead-texture-size: auto;
+  --stamp-border: 2px solid currentColor;
+  --stamp-bg: transparent;
+  --stamp-fg: var(--on-ink-accent);
+  --stamp-transform: none;
 
   /*
    * Chrome: the header and the tab bar. Their own tokens rather than `--surface`, because a mode's
@@ -292,6 +307,7 @@
     --ink: #eceef2;
     --on-ink: #0e0f12;
     --on-ink-muted: #3d424e;
+    --on-ink-accent: #b8342b;
   }
 }
 
@@ -344,6 +360,7 @@
   --ink: #eceef2;
   --on-ink: #0e0f12;
   --on-ink-muted: #3d424e;
+  --on-ink-accent: #b8342b;
 }
 
 /*
