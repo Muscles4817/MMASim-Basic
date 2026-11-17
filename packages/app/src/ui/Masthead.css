@@ -73,6 +73,10 @@
   overflow-wrap: anywhere;
 }
 
+.masthead__title[data-long='true'] {
+  font-size: clamp(2rem, 6vw + 0.75rem, 3.75rem);
+}
+
 .masthead__meta {
   font-size: var(--text-sm);
   font-weight: 600;

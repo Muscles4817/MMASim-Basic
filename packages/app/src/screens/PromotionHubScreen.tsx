@@ -39,12 +39,12 @@ import type { GameDb } from '@mmasim/data';
 import { useGame } from '../state/GameProvider';
 import { routeOf, useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, ListItem } from '../ui';
-import { Fact, KeyStat } from '../ui/signals';
+import { Fact } from '../ui/signals';
 import { AttentionRow, Console, Ledger, LedgerRow, LedgerRule, PipelineCard } from '../ui/console';
 import { NewsFeed } from '../ui/NewsFeed';
 import { formatGameDay } from '../shell/Shell';
 import { money } from '../ui/format';
-import { attentionFor } from '../game/attention';
+import { attentionFor, type AttentionKind } from '../game/attention';
 import { describeRunway, financialSnapshot } from '../game/finances';
 import {
   allPlans,
@@ -59,6 +59,8 @@ import { describeBuzz } from './NightScreen';
 import { FIRST_WEEK, dismiss, firstWeek, firstWeekOver } from '../game/onboarding';
 import { readNews } from '../game/world';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
+import { ActionDock } from '../ui/ActionDock';
+import { Masthead } from '../ui/Masthead';
 
 /** How many rows the dashboard shows before it stops being a dashboard. */
 const ATTENTION_SHOWN = 6;
@@ -149,8 +151,35 @@ export function PromotionHubScreen() {
   const tonight = fightNightOn(db, promotion.id as string, world.day) !== undefined;
   const last = lastNight(db, promotion.id as string, world.day);
 
+  /*
+   * The decision the dashboard leads with: the most urgent thing that can be acted on. The
+   * attention model already ranked everything on one scale, so the dock is its first actionable
+   * row rather than a second opinion.
+   */
+  const lead = attention.find((item) => item.action);
+  const leadAction = lead?.action;
+
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
+      {/*
+        The promotion, as a broadcast plate: the name, where it stands, and the number every
+        decision on this screen spends from. It replaces a cash card and a "The promotion" card
+        that said the same things in two places at the bottom of the side column.
+      */}
+      <Masthead
+        label="Your promotion"
+        eyebrow={`${PROMOTION_TIER_LABELS[promotion.tier]} · ${promotion.baseCountry}`}
+        title={promotion.name}
+        meta={finances ? describeRunway(finances) : undefined}
+        figures={[
+          { value: money(promotion.budget), label: 'Cash', emphasis: true },
+          ...(finances ? [{ value: money(finances.monthlyBurn), label: 'Burn / month' }] : []),
+          { value: roster.length, label: 'Under contract' },
+          { value: Math.round(promotion.buzz), label: 'Attention' },
+        ]}
+        stamp={tonight ? 'Fight night' : undefined}
+      />
+
       <Console
         main={
           <>
@@ -167,10 +196,16 @@ export function PromotionHubScreen() {
             */}
             <Card
               title={tonight ? 'Fight night' : next ? 'Next event' : 'Nothing booked'}
+              /*
+                Another card, once there is one. With nothing booked the card body below already
+                is the button, and a second "Plan a card" beside the first is noise.
+              */
               action={
-                <Button size="sm" onClick={() => navigate({ name: 'calendar', newCard: true })}>
-                  Plan a card
-                </Button>
+                next ? (
+                  <Button size="sm" onClick={() => navigate({ name: 'calendar', newCard: true })}>
+                    Plan a card
+                  </Button>
+                ) : undefined
               }
             >
               {next ? (
@@ -233,8 +268,9 @@ export function PromotionHubScreen() {
                     );
                   })()}
 
+                  {/* Secondary: the dock is this screen's one primary action. */}
                   <Button
-                    variant="primary"
+                    variant="secondary"
                     block
                     onClick={() => navigate({ name: 'plan', id: next.id })}
                   >
@@ -252,7 +288,7 @@ export function PromotionHubScreen() {
                     date months out, put your champion on it, and fill the rest as the year happens.
                   </p>
                   <Button
-                    variant="primary"
+                    variant="secondary"
                     block
                     onClick={() => navigate({ name: 'calendar', newCard: true })}
                   >
@@ -323,6 +359,7 @@ export function PromotionHubScreen() {
                         detail={item.detail}
                         cue={action?.label}
                         onClick={action ? () => navigate(routeOf(action)) : undefined}
+                        lead={item.id === lead?.id}
                       />
                     );
                   })}
@@ -370,16 +407,6 @@ export function PromotionHubScreen() {
         }
         side={
           <>
-            <Card raised>
-              <p className="section-title">{promotion.name}</p>
-              <KeyStat
-                value={money(promotion.budget)}
-                label="Cash on hand"
-                detail={finances ? describeRunway(finances) : undefined}
-                tone={promotion.budget <= 0 ? 'bad' : undefined}
-              />
-            </Card>
-
             {/*
               The money, as an operating position rather than a balance. And in one notation:
               the header, this card and every figure on the card builder all render through the
@@ -437,28 +464,32 @@ export function PromotionHubScreen() {
               </div>
             </Card>
 
-            <Card title="The promotion">
-              <div className="facts">
-                <Fact
-                  label="Under contract"
-                  value={roster.length}
-                  hint={`Across ${new Set(roster.map((f) => f.divisionId)).size} divisions.`}
-                  emphasis="secondary"
-                />
-                <Fact
-                  label="Standing"
-                  value={PROMOTION_TIER_LABELS[promotion.tier]}
-                  emphasis="tertiary"
-                  hint={`${promotion.baseCountry}. Attention sits at ${Math.round(promotion.buzz)} out of 100.`}
-                />
-              </div>
-            </Card>
           </>
         }
       />
+
+      {lead && leadAction && (
+        <ActionDock why={ATTENTION_LABEL[lead.kind]} testId="dominant-action">
+          <Button variant="primary" onClick={() => navigate(routeOf(leadAction))}>
+            {leadAction.label}
+          </Button>
+        </ActionDock>
+      )}
     </div>
   );
 }
+
+/** The word the dock uses for why its action leads. A category, never the headline again. */
+const ATTENTION_LABEL: Readonly<Record<AttentionKind, string>> = {
+  card: 'Your cards',
+  title: 'The belts',
+  activity: 'Owed a fight',
+  contract: 'Contracts',
+  morale: 'Morale',
+  medical: 'Medical',
+  opportunity: 'Opportunity',
+  money: 'Money',
+};
 
 /** How long the last show stays at the top of the dashboard. */
 const LAST_NIGHT_DAYS = 21;

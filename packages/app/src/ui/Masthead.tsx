@@ -1,6 +1,12 @@
 import type { ReactNode } from 'react';
 import './Masthead.css';
 
+/**
+ * Characters past which a title is set a size down. A surname fills a phone at full size; a
+ * promotion's name ("Gulf Coast Combat League") at that size runs to four lines.
+ */
+const LONG_TITLE = 12;
+
 export interface MastheadFigure {
   value: ReactNode;
   label: string;
@@ -52,7 +58,12 @@ export function Masthead({
             <span className="masthead__eyebrow">{eyebrow}</span>{' '}
           </>
         )}
-        <span className="masthead__title">{title}</span>
+        <span
+          className="masthead__title"
+          data-long={typeof title === 'string' && title.length > LONG_TITLE ? 'true' : undefined}
+        >
+          {title}
+        </span>
       </h2>
       {meta !== undefined && <p className="masthead__meta">{meta}</p>}
       {figures.length > 0 && (
