@@ -1,16 +1,30 @@
 /* Fight replay screen. */
 
+/*
+ * The VS header, on the slab.
+ *
+ * Fight night is the one screen every mode shares, and it is the loudest moment in all of them, so
+ * the two names go on the mode's `--ink` surface in its display face — the poster's band, the
+ * broadcast's plate — rather than on another white card. Each corner is named on a plate of its
+ * own colour; the colour is never the only channel, because the plate also says "Red corner".
+ */
 .fight-corners {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--ink);
+  color: var(--on-ink);
+  border-radius: var(--masthead-radius);
+  border-top: var(--masthead-rule);
 }
 
 .fight-corner {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: flex-start;
+  gap: var(--space-1);
   min-width: 0;
 }
 
@@ -20,31 +34,42 @@
 }
 
 .fight-corner__label {
-  font-size: var(--text-xs);
+  padding: 0.1rem var(--space-2);
+  border-radius: var(--chip-radius);
+  clip-path: var(--tag-clip);
+  font-size: var(--text-2xs);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-weight: 800;
+  color: var(--on-ink);
 }
 
 .fight-corner--red .fight-corner__label {
-  color: var(--corner-red);
+  background: var(--corner-red);
 }
 
 .fight-corner--blue .fight-corner__label {
-  color: var(--corner-blue);
+  background: var(--corner-blue);
 }
 
 .fight-corner__name {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  line-height: 1.2;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-style: var(--display-style);
+  text-transform: var(--display-transform);
+  letter-spacing: var(--display-tracking);
+  font-size: clamp(1.25rem, 4vw + 0.5rem, 2.25rem);
+  line-height: 1;
+  overflow-wrap: anywhere;
 }
 
 .fight-vs {
-  font-size: var(--text-sm);
-  color: var(--text-faint);
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-style: var(--display-style);
+  font-size: var(--text-xl);
+  color: var(--on-ink-accent);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
 }
 
 /* --- Feed ---------------------------------------------------------------------------- */
@@ -423,10 +448,13 @@
 }
 
 .prefight__name {
-  font-size: var(--text-2xl);
-  line-height: 1.15;
-  font-weight: 800;
-  letter-spacing: -0.01em;
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  line-height: 1;
+  font-weight: var(--display-weight);
+  font-style: var(--display-style);
+  text-transform: var(--display-transform);
+  letter-spacing: var(--display-tracking);
 }
 
 .prefight__house {
@@ -489,10 +517,10 @@
 @keyframes walkout-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgb(184 52 43 / 0.4);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 40%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 10px rgb(184 52 43 / 0);
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 0%, transparent);
   }
 }
 
@@ -632,8 +660,12 @@
 }
 
 .fight-result__method {
-  font-size: var(--text-xl);
-  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--display-weight);
+  font-style: var(--display-style);
+  text-transform: var(--display-transform);
+  letter-spacing: var(--display-tracking);
   animation: fight-rise 360ms cubic-bezier(0.2, 0, 0.2, 1) both;
 }
 
