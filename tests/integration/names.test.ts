@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 import { createNewGame } from '@mmasim/data';
 import {
   createRng,
+  feminineSurname,
   flagOf,
   findNationality,
   generateName,
@@ -110,6 +111,50 @@ describe('generating one name', () => {
   });
 });
 
+describe('surnames that change for a woman', () => {
+  it.each([
+    ['Volkov', 'russian', 'Volkova'],
+    ['Nikitin', 'russian', 'Nikitina'],
+    ['Aliyev', 'russian', 'Aliyeva'],
+    ['Kovalsky', 'russian', 'Kovalskaya'],
+    ['Kovalsky', 'ukrainian', 'Kovalska'],
+    ['Shevchenko', 'ukrainian', 'Shevchenko'],
+    ['Polishchuk', 'ukrainian', 'Polishchuk'],
+    ['Kowalski', 'polish', 'Kowalska'],
+    ['Wojcicki', 'polish', 'Wojcicka'],
+    ['Nowak', 'polish', 'Nowak'],
+    ['Novak', 'czech', 'Novakova'],
+    ['Cerny', 'czech', 'Cerna'],
+    ['Svoboda', 'czech', 'Svobodova'],
+    ['Jelinek', 'czech', 'Jelinkova'],
+    ['Nemec', 'czech', 'Nemcova'],
+    ['Krejci', 'czech', 'Krejci'],
+    ['Smith', undefined, 'Smith'],
+  ] as const)('%s (%s) is %s', (surname, form, expected) => {
+    expect(feminineSurname(surname, form)).toBe(expected);
+  });
+
+  it('gives a woman from a gendered-surname country the feminine form', () => {
+    // Every woman from these countries used to carry the masculine surname — "Anastasia Volkov".
+    for (const nationality of ['Russia', 'Poland', 'Czechia', 'Kazakhstan']) {
+      const pool = poolFor(nationality)!;
+      for (let i = 0; i < 40; i++) {
+        const woman = generateName(createRng(`fem:${nationality}:${i}`), 'female', nationality);
+        const stored = pool.surnames.find(
+          (s) => feminineSurname(s, pool.surnameForm) === woman.lastName,
+        );
+        expect(stored, `${woman.lastName} from ${nationality}`).toBeDefined();
+        if (nationality !== 'Poland') {
+          // Polish only changes -ski/-cki; the others change nearly every surname they hold.
+          expect(pool.surnames.includes(woman.lastName) && /(ov|ev|in)$/.test(woman.lastName)).toBe(
+            false,
+          );
+        }
+      }
+    }
+  });
+});
+
 describe('the world that comes out of it', () => {
   for (const era of ['2020', '2026'] as const) {
     it(`gives no man a woman's name in ${era}`, () => {
@@ -126,9 +171,9 @@ describe('the world that comes out of it', () => {
         return !own.includes(f.firstName) && other.includes(f.firstName);
       });
 
-      expect(
-        wrong.map((f) => `${f.firstName} ${f.lastName} (${f.sex}, ${f.nationality})`),
-      ).toEqual([]);
+      expect(wrong.map((f) => `${f.firstName} ${f.lastName} (${f.sex}, ${f.nationality})`)).toEqual(
+        [],
+      );
     });
 
     it(`keeps duplicate full names rare in ${era}`, () => {
@@ -169,7 +214,9 @@ describe('flags', () => {
   it('builds the tag sequence the home nations need', () => {
     // England is a black flag plus 'gbeng' in tag characters plus a cancel tag — the only way to
     // express it, and nothing like the two-letter form.
-    expect(flagOf('England')).toBe('\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}');
+    expect(flagOf('England')).toBe(
+      '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}',
+    );
   });
 
   it('returns nothing rather than a broken glyph for something it does not know', () => {

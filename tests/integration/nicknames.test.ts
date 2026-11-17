@@ -9,7 +9,17 @@
 
 import { describe, expect, it } from 'vitest';
 import { createNewGame, getWorld } from '@mmasim/data';
-import { fighterAge, type Fighter } from '@mmasim/engine';
+import {
+  ATTRIBUTE_KEYS,
+  createRng,
+  crossoverThemesOf,
+  fighterAge,
+  NICKNAME_SOURCES,
+  nicknamePoolOf,
+  rollNickname,
+  type Attributes,
+  type Fighter,
+} from '@mmasim/engine';
 import { generateWorld } from '../../packages/app/src/game/newWorld';
 
 const medium = await generateWorld({ size: 'medium', seed: 'nicknames-medium' });
@@ -59,5 +69,97 @@ describe('nicknames in the seeded eras', () => {
         [],
       );
     }
+  });
+});
+
+describe('the nickname tables', () => {
+  it('holds every name in exactly one place', () => {
+    // A name in two tables would be offered under a theme it does not describe. Names that fit
+    // several kinds of fighter are crossovers, which list their themes explicitly instead.
+    const seen = new Map<string, number>();
+    for (const name of NICKNAME_SOURCES) seen.set(name, (seen.get(name) ?? 0) + 1);
+    expect([...seen].filter(([, n]) => n > 1).map(([name]) => name)).toEqual([]);
+  });
+
+  it('stays clear of the sport’s famous real nicknames', () => {
+    const famous = [
+      'Bones',
+      'The Spider',
+      'Notorious',
+      'The Notorious',
+      'Rush',
+      'The Eagle',
+      'Stylebender',
+      'The Last Stylebender',
+      'Poatan',
+      'Blessed',
+      'The Great',
+      'Gamebred',
+      'Borrachinha',
+      'El Cucuy',
+      'The Predator',
+      'The Black Beast',
+      'Cyborg',
+      'The Iceman',
+      'Shogun',
+      'Minotauro',
+      'The Dragon',
+      'Suga',
+      'The Diamond',
+      'Cowboy',
+      'Jacare',
+      'The Reaper',
+      'The Korean Zombie',
+      'The Answer',
+      'Rowdy',
+      'The Natural',
+      'Chaos',
+      'Do Bronx',
+      'Bigi Boy',
+      'The Last Emperor',
+      'Mighty Mouse',
+      'Wonderboy',
+      'The Mauler',
+      'Bam Bam',
+      'Thugnasty',
+    ];
+    expect(NICKNAME_SOURCES.filter((name) => famous.includes(name))).toEqual([]);
+  });
+
+  it('gives every attribute a theme deep enough to share across a whole sport', () => {
+    for (const name of ['Lightning', 'The Python', 'The Sprawl', 'The Professor', 'Iron']) {
+      expect(nicknamePoolOf(name).length, name).toBeGreaterThanOrEqual(12);
+    }
+  });
+
+  it('offers a name that fits several kinds of fighter under each of them', () => {
+    // The Spider Monkey reads as a submission artist, a scrambler or just somebody very fast.
+    expect(crossoverThemesOf('The Spider Monkey')).toEqual(['submissions', 'scrambling', 'speed']);
+    const alternatives = nicknamePoolOf('The Spider Monkey');
+    expect(alternatives).toContain('Lightning'); // speed
+    expect(alternatives).toContain('The Python'); // submissions
+    expect(alternatives).toContain('The Eel'); // scrambling
+  });
+
+  it('only ever names a pure speedster after speed — crossovers included', () => {
+    const attributes = Object.fromEntries(ATTRIBUTE_KEYS.map((k) => [k, 50])) as Attributes;
+    const input = {
+      attributes: { ...attributes, speed: 85 },
+      heightInches: 70,
+      reachInches: 70,
+      muscleIndex: 50,
+      stance: 'orthodox' as const,
+      sex: 'male' as const,
+      age: 30,
+    };
+    const names = new Set<string>();
+    for (let i = 0; i < 600; i++) {
+      const name = rollNickname(createRng(`speedster:${i}`), input);
+      if (name) names.add(name);
+    }
+    const speed = nicknamePoolOf('Lightning');
+    expect([...names].filter((n) => !speed.includes(n))).toEqual([]);
+    // …and the crossovers are really in play, not just listed.
+    expect([...names].some((n) => crossoverThemesOf(n).length > 0)).toBe(true);
   });
 });
