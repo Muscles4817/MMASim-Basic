@@ -39,7 +39,6 @@ import {
   describeHeat,
   describeRust,
   displayName,
-  fighterAge,
   freshnessOf,
   getDivision,
   recordString,
@@ -64,7 +63,6 @@ import {
   Collapse,
   DataTable,
   Empty,
-  Flag,
   Grid,
   GridCell,
   Panel,
@@ -80,7 +78,7 @@ import { getRivalry, previousMeetings } from '../game/rivalries';
 import { readNews } from '../game/world';
 import { NewsFeed } from '../ui/NewsFeed';
 import { ActionDock } from '../ui/ActionDock';
-import { Masthead } from '../ui/Masthead';
+import { FighterMasthead } from './FighterMasthead';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 import { currentPurse } from '../game/money';
 import { adviceOn, boutMerit, contractStanding } from '../game/contracts';
@@ -322,50 +320,14 @@ function IdentityBand({
 }) {
   const ability = abilityRead(fighter.attributes);
 
-  const streak = fighter.summary.streak;
-
-  /*
-   * Where the fighter stands, as the stamp across the corner — the thing a fight poster would
-   * print over the name. Only the two states worth stamping: a belt, and being next in line.
-   */
-  const stamp = ladder?.isChampion ? (
-    <>
-      <Icon name="champion" /> Champion
-    </>
-  ) : ladder?.position === 1 ? (
-    '#1 contender'
-  ) : undefined;
-
   return (
     <div className="identity" data-testid="identity">
-      <Masthead
+      <FighterMasthead
         label="Who you are"
-        eyebrow={fighter.nickname ? `${fighter.firstName} “${fighter.nickname}”` : fighter.firstName}
-        title={fighter.lastName}
-        meta={
-          <>
-            {divisionName} · {fighterAge(fighter, day)} · <Flag nationality={fighter.nationality} />
-          </>
-        }
-        figures={[
-          { value: recordString(fighter.summary), label: 'Record', emphasis: true },
-          ...(streak !== 0
-            ? [{ value: streak > 0 ? `W${streak}` : `L${-streak}`, label: 'Streak' }]
-            : []),
-          {
-            value: ladder?.isChampion
-              ? 'C'
-              : ladder?.position !== undefined
-                ? `#${ladder.position}`
-                : '—',
-            label: ladder?.isChampion
-              ? 'Champion'
-              : ladder?.position !== undefined
-                ? `Of ${ladder.ranked.length}`
-                : 'Unranked',
-          },
-        ]}
-        stamp={stamp}
+        fighter={fighter}
+        ladder={ladder}
+        divisionName={divisionName}
+        day={day}
       />
 
       {/*

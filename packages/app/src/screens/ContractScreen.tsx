@@ -38,6 +38,7 @@ import { useRouter } from '../state/router';
 import { Button, Card, Chip, DataTable, Empty, Panel, type Column } from '../ui';
 import { Alert, Help, StateRow, Icon } from '../ui/signals';
 import { Console, Ledger, LedgerRow } from '../ui/console';
+import { Masthead } from '../ui/Masthead';
 import { money } from '../ui/format';
 import { getLadderStatus } from '../game/progression';
 import {
@@ -112,13 +113,16 @@ export function ContractScreen() {
   /*
    * Which half of the screen leads.
    *
-   * Not a fixed layout, because the question the screen answers changes with the situation. A
-   * free agent, or anybody with somebody calling, is here about the market — so the market takes
-   * the wide column and comes first on a phone. A contracted fighter with nobody calling is here
-   * about their own deal, and putting "Nobody is calling" above it would be answering a question
-   * they did not ask.
+   * Not a fixed layout, because the question the screen answers changes with the situation — but
+   * the question is "what can I act on", not "is anybody calling". A free agent, or a fighter on
+   * the last fight of their deal, can sign: the market leads. Anybody else is here about the deal
+   * they are on and the levers on it — reopening, release, a manager — and the market is "if you
+   * were free", which belongs beside it rather than above it. It used to lead whenever somebody
+   * was calling, which put four offers the player was not allowed to sign above the deal they
+   * came to read.
    */
-  const marketLeads = standing.freeAgent || offers.length > 0;
+  const fightsLeft = standing.status?.fightsRemaining ?? 0;
+  const marketLeads = standing.freeAgent || fightsLeft <= 1;
 
   const columns: Column<Offer>[] = [
     {
@@ -542,15 +546,42 @@ export function ContractScreen() {
     </Card>
   );
 
-  const lock = !standing.freeAgent && standing.agreement && (
-    <Alert tone="warn" title="You are under contract">
-      {standing.status?.summary} You can look, and until the deal is up you cannot sign anything.
-    </Alert>
-  );
+  /*
+   * The deal, as the masthead: the one fact about it that governs the year — how many fights are
+   * left — in the mode's loudest type, with what it pays beside it. Whether there are grounds to
+   * reopen it is the stamp, because it is the thing on this screen most worth noticing.
+   */
+  const headline =
+    standing.freeAgent || !standing.agreement ? (
+      <Masthead
+        label="Your deal"
+        eyebrow="Nobody holds your contract"
+        title="Free agent"
+        meta="You can sign with anybody who calls. Every week without a deal is a week of nothing."
+        figures={[{ value: offers.length, label: 'Calling', emphasis: true }]}
+      />
+    ) : (
+      <Masthead
+        label="Your deal"
+        eyebrow={standing.promotion?.name}
+        title={`${fightsLeft} ${fightsLeft === 1 ? 'fight' : 'fights'} left`}
+        meta={
+          <>
+            You are under contract. {standing.status?.summary} You can look, and until the deal is
+            up you cannot sign anything.
+          </>
+        }
+        figures={[
+          { value: money(standing.agreement.showPurse), label: 'To show', emphasis: true },
+          { value: money(standing.agreement.winBonus), label: 'To win' },
+        ]}
+        stamp={triggers.length > 0 ? 'Grounds to reopen' : undefined}
+      />
+    );
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }} data-testid="contract">
-      {lock}
+      {headline}
       <Console
         main={
           marketLeads ? (

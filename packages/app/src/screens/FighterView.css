@@ -154,3 +154,11 @@
   height: 100%;
   background: var(--accent);
 }
+
+/* What the career is doing, in a sentence, under the facts. It was the detail line of a KeyStat
+   that repeated the record the masthead now carries. */
+.fighter-view__arc {
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
