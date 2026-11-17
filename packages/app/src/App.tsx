@@ -221,7 +221,9 @@ export function App() {
       // --- Shared by every mode --------------------------------------------------------
       case 'calendar':
         return (
-          <Shell title="Calendar">
+          // Named for what each mode keeps on it, to match its tab: a promoter's calendar is the
+          // planning board for their shows (doc 35).
+          <Shell title={world.playerRole === 'promoter' ? 'Shows' : 'Calendar'}>
             <CalendarScreen key={route.newCard ? 'new' : 'diary'} newCard={route.newCard} />
           </Shell>
         );

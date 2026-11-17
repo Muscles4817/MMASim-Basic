@@ -53,7 +53,7 @@ import {
 import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
-import { Alert, Fact, KeyStat } from '../ui/signals';
+import { Alert, KeyStat } from '../ui/signals';
 import { Console, Ledger, LedgerRow, LedgerRule } from '../ui/console';
 import { formatGameDay } from '../shell/Shell';
 import { useToast } from '../ui/toast';
@@ -100,6 +100,7 @@ import {
   type Suggestion,
   type SubjectOption,
 } from '../game/plans';
+import { Masthead } from '../ui/Masthead';
 
 /** What the player is doing to one slot right now. */
 type SlotEditor =
@@ -271,34 +272,36 @@ export function PlanScreen({ id, slot: focus }: { id: string; slot?: string }) {
         </Card>
       )}
 
-      <Card raised>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
+      {/*
+        The card, as its own broadcast graphic: the name a promoter will be selling, when and
+        where, and how far it is from being a show. Agreed bouts are the figure in the accent,
+        because a pencilled fight is not a fight (doc 29 § 3).
+      */}
+      <Masthead
+        label="This card"
+        eyebrow={`${formatGameDay(plan.day)} · ${plan.city}, ${plan.country}`}
+        title={planName(db, plan)}
+        meta={`${eventScale(plan.scale).label}${isFightNight ? ' · tonight' : ` · in ${away} days`}`}
+        figures={[
+          {
+            value: `${progress.agreed} / ${progress.slots}`,
+            label: 'Agreed',
+            emphasis: true,
+          },
+          { value: progress.hasMainEvent ? 'Set' : 'Empty', label: 'Main event' },
+          { value: progress.offered, label: 'Offers out' },
+        ]}
+        stamp={isFightNight ? 'Tonight' : undefined}
+      />
+
+      <Card>
+        <div className="row" style={{ justifyContent: 'space-between' }}>
           <p className="section-title" style={{ margin: 0 }}>
-            {planName(db, plan)}
+            Date, market and size
           </p>
           <Button size="sm" variant="ghost" onClick={() => setSettings((s) => !s)}>
             {settings ? 'Done' : 'Card settings'}
           </Button>
-        </div>
-        <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
-          {formatGameDay(plan.day)} · {plan.city}, {plan.country} · {eventScale(plan.scale).label}
-          {isFightNight ? ' · tonight' : ` · in ${away} days`}
-        </p>
-
-        <div className="facts" style={{ marginTop: 'var(--space-3)' }}>
-          <Fact
-            label="Agreed"
-            value={`${progress.agreed} / ${progress.slots}`}
-            tone={progress.complete ? 'good' : 'warn'}
-            emphasis="secondary"
-          />
-          <Fact
-            label="Main event"
-            value={progress.hasMainEvent ? 'Set' : 'Empty'}
-            tone={progress.hasMainEvent ? 'good' : 'bad'}
-            emphasis="secondary"
-          />
-          <Fact label="Offers out" value={progress.offered} emphasis="tertiary" />
         </div>
 
         {settings && (
