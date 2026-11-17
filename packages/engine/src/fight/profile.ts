@@ -27,6 +27,8 @@ import { bodyOf } from '../progression/body.js';
 import { FRESH, freshnessOf } from '../health/freshness.js';
 import type { Corner, DamageRegion, FightStats, StrikeTarget } from './types.js';
 import { emptyStats, type GroundPosition, type Position } from './types.js';
+import { styleOf, type StyleProfile } from './style.js';
+import { createMemory, type FightMemory } from './memory.js';
 
 /**
  * Does this fighter reach for striking or for grappling first? 0.15 … 0.85.
@@ -138,6 +140,11 @@ export interface Combatant {
   stats: FightStats;
   /** Cumulative career trauma this fight has produced so far. */
   traumaIncrement: number;
+
+  /** What this fighter has drilled. Doc 36 phase 1. */
+  style: StyleProfile;
+  /** What this fighter remembers of the fight so far. Doc 36 phase 1. */
+  mem: FightMemory;
 }
 
 /**
@@ -247,6 +254,9 @@ export function createCombatant(corner: Corner, fighter: Fighter, plan: GamePlan
 
     stats: emptyStats(),
     traumaIncrement: 0,
+
+    style: styleOf(fighter),
+    mem: createMemory(),
   };
 }
 
@@ -362,7 +372,12 @@ export const CLINCH_HELD_COST = 1.4;
 
 /** Extra stamina cost for the fighter *underneath*: being controlled is exhausting. */
 export const GROUND_BOTTOM_COST: Readonly<Record<GroundPosition, number>> = {
+  // Attacking a leg is work, not survival.
+  legEntangle: 1.0,
+  openGuard: 1.1,
   guard: 1.1,
+  turtle: 1.45,
+  northSouth: 1.5,
   halfGuard: 1.3,
   sideControl: 1.5,
   mount: 1.7,

@@ -44,15 +44,49 @@ export const RANGE_SEPARATION: Readonly<Record<Range, number>> = {
   pocket: 0,
 };
 
-/** Ground sub-position ladder, ascending in dominance for the top fighter. */
-export const GROUND_POSITIONS = ['guard', 'halfGuard', 'sideControl', 'mount', 'back'] as const;
+/**
+ * Ground positions, roughly ascending in dominance for the top fighter.
+ *
+ * Doc 36 phase 6 widened this from a five-rung ladder to a graph. The four additions are the
+ * places the old ladder could not express and the sport is full of: `openGuard` (butterfly, De La
+ * Riva — the sweeping and leg-entry guards), `turtle` (the man who gave up his back to get up),
+ * `northSouth`, and `legEntangle`, where the man on "top" is the one in danger. Transitions between
+ * them live in `groundGraph.ts`; `GROUND_LADDER` keeps the classic order for the code that only
+ * wants "one rung better".
+ */
+export const GROUND_POSITIONS = [
+  'legEntangle',
+  'openGuard',
+  'guard',
+  'halfGuard',
+  'turtle',
+  'sideControl',
+  'northSouth',
+  'mount',
+  'back',
+] as const;
 export type GroundPosition = (typeof GROUND_POSITIONS)[number];
+
+/** The classic one-rung-at-a-time ladder. */
+export const GROUND_LADDER: readonly GroundPosition[] = [
+  'guard',
+  'halfGuard',
+  'sideControl',
+  'mount',
+  'back',
+];
 
 /** Dominance value of a ground position for the controlling fighter, 0–1. */
 export const GROUND_DOMINANCE: Readonly<Record<GroundPosition, number>> = {
+  // Nominally "top", and the most dangerous place on the floor to be the top man.
+  legEntangle: 0.15,
+  openGuard: 0.25,
   guard: 0.3,
   halfGuard: 0.5,
+  // Riding a turtle: the back is one hook away, but he is still on his base.
+  turtle: 0.62,
   sideControl: 0.7,
+  northSouth: 0.72,
   mount: 0.88,
   back: 1.0,
 };
@@ -412,4 +446,22 @@ export function emptyStats(): FightStats {
     topBeats: 0,
     damageDealt: 0,
   };
+}
+
+/** One rung better for the top fighter. Off-ladder positions step to their nearest better rung. */
+export function ladderStep(from: GroundPosition): GroundPosition {
+  switch (from) {
+    case 'legEntangle':
+      return 'guard';
+    case 'openGuard':
+      return 'halfGuard';
+    case 'turtle':
+      return 'back';
+    case 'northSouth':
+      return 'mount';
+    default: {
+      const i = GROUND_LADDER.indexOf(from);
+      return GROUND_LADDER[Math.min(i + 1, GROUND_LADDER.length - 1)]!;
+    }
+  }
 }

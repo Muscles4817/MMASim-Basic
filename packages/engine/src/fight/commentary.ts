@@ -76,7 +76,11 @@ const MISS_VERBS = [
   'has it slipped —',
 ];
 
-const GROUND_POSITION_NAMES: Readonly<Record<GroundPosition, string>> = {
+export const GROUND_POSITION_NAMES: Readonly<Record<GroundPosition, string>> = {
+  legEntangle: 'tangled in the legs',
+  openGuard: 'in open guard',
+  turtle: 'riding the turtle',
+  northSouth: 'in north-south',
   guard: 'in guard',
   halfGuard: 'in half guard',
   sideControl: 'in side control',
@@ -84,13 +88,6 @@ const GROUND_POSITION_NAMES: Readonly<Record<GroundPosition, string>> = {
   back: 'on the back',
 };
 
-export const SUBMISSIONS: Readonly<Record<GroundPosition, readonly string[]>> = {
-  guard: ['triangle', 'armbar', 'omoplata', 'guillotine'],
-  halfGuard: ['kimura', 'arm-triangle', 'D’Arce'],
-  sideControl: ['arm-triangle', 'kimura', 'north-south choke'],
-  mount: ['armbar', 'arm-triangle', 'mounted guillotine'],
-  back: ['rear-naked choke', 'body triangle to RNC', 'bulldog choke'],
-};
 
 export function strikeLanded(
   rng: Rng,

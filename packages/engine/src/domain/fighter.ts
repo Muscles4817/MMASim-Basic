@@ -23,6 +23,7 @@ import type { TraitId } from './traits.js';
 import type { Injury } from '../health/injuries.js';
 import type { Physique } from '../progression/body.js';
 import type { FighterBackground } from '../progression/background.js';
+import type { StyleOverride } from '../fight/style.js';
 import type { LedgerEntry } from './relationship.js';
 import type { Negotiation } from '../business/negotiation.js';
 
@@ -190,6 +191,16 @@ export interface Fighter {
    * second opinion about somebody we already know the answer for — see doc 31 § 22.5.
    */
   background?: FighterBackground;
+
+  /**
+   * What this fighter has drilled, where it differs from what their numbers and background imply.
+   *
+   * Doc 36 phase 1. Optional and usually absent: `styleOf` derives a full repertoire — stance
+   * style, combinations, submissions, clinch game — from attributes, background and traits. This
+   * holds only overrides: a seeded fighter whose signature is a matter of record, or a camp that
+   * drilled something new.
+   */
+  style?: StyleOverride;
 
   /** Division they currently compete in. Changing this changes no ratings. */
   divisionId: DivisionId;

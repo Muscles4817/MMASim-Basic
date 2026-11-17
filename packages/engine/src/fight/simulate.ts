@@ -59,6 +59,8 @@ import { defaultJudges, defaultReferee } from '../domain/officials.js';
 import { traitMul } from '../domain/traits.js';
 import { fatiguedEffect, repertoire } from '../ratings/curve.js';
 import * as say from './commentary.js';
+import { remember, resetRoundMemory } from './memory.js';
+import { chooseSubmission, submissionsFrom, SUBMISSIONS as SUBMISSION_META } from './submissions.js';
 import {
   applyStrike,
   decayHurt,
@@ -87,7 +89,7 @@ import { buildScorecards, emptyTally, readDecision, type RoundTally } from './sc
 import { accrueFatigue, recoverBetweenRounds, workRate } from './stamina.js';
 import {
   GROUND_DOMINANCE,
-  GROUND_POSITIONS,
+  ladderStep,
   OTHER_CORNER,
   STRIKE_TARGETS,
   emptyStats,
@@ -245,6 +247,8 @@ export function simulateFight(config: FightConfig): FightResult {
 
   for (let round = 1; round <= rounds && !ending; round++) {
     const roundRng = rng.fork(`round:${round}`);
+    resetRoundMemory(red);
+    resetRoundMemory(blue);
     const tally: Record<Corner, RoundTally> = { red: emptyTally(), blue: emptyTally() };
     tallies.push(tally);
 
@@ -287,6 +291,7 @@ export function simulateFight(config: FightConfig): FightResult {
         totalRounds: rounds,
         secondsRemaining: roundSeconds - clock,
         clockSeconds: clock,
+        roundSeconds,
         emit,
         scoreSoFar: tallies,
       });
@@ -457,6 +462,7 @@ interface ExchangeContext {
   secondsRemaining: number;
   /** Seconds elapsed in the current round. */
   clockSeconds: number;
+  roundSeconds: number;
   emit: (
     kind: FightEventKind,
     text: string,
@@ -465,6 +471,11 @@ interface ExchangeContext {
     fact?: { weapon?: Weapon; target?: StrikeTarget; takedown?: TakedownEntry },
   ) => void;
   scoreSoFar: readonly Record<Corner, RoundTally>[];
+}
+
+/** The fight clock in absolute seconds, for memory timestamps. */
+function nowOf(ctx: ExchangeContext): number {
+  return (ctx.round - 1) * ctx.roundSeconds + ctx.clockSeconds;
 }
 
 interface ExchangeOutcome {
@@ -1012,7 +1023,9 @@ function resolveRangeBeat(ctx: ExchangeContext, actor: Combatant, target: Combat
     denial: groundDenial(target, change === 'close' ? 'close' : 'retreat'),
   });
 
+  const rangeFamily = change === 'close' ? 'rangeClose' : 'rangeRetreat';
   if (rng.chance(chance)) {
+    remember(actor, target, rangeFamily, true, nowOf(ctx));
     const next = stepRange(state.range, change);
     state.range = next;
     state.rangeSettled = 1;
@@ -1027,6 +1040,7 @@ function resolveRangeBeat(ctx: ExchangeContext, actor: Combatant, target: Combat
    * look at you — and both are why trying to fight at a range you cannot hold is expensive rather
    * than merely futile.
    */
+  remember(actor, target, rangeFamily, false, nowOf(ctx));
   state.rangeSettled = clamp01(state.rangeSettled + 0.25);
   emit('range', say.rangeFailText(rng, actor, target, change), target.corner);
   // A counter is thrown at 0.55 of a full burst, so a caught entry takes it to most of one.
@@ -1463,7 +1477,9 @@ function resolveDistance(
       const attack = fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue);
       const defend =
         fatiguedEffect(target.derived.clinchDefence, 'strength', target.fatigue) * (1 + bonus);
-      if (rng.chance(attack / (attack + defend))) {
+      const tiedUp = rng.chance(attack / (attack + defend));
+      remember(actor, target, 'clinchEntry', tiedUp, nowOf(ctx));
+      if (tiedUp) {
         state.position = 'clinch';
         state.clinchControl = actor.corner;
         state.placedBy = actor.corner;
@@ -1681,7 +1697,9 @@ function throwBurst(
     actor.stats.significantStrikesAttempted++;
     tally[actor.corner].strikesAttempted++;
 
-    if (!rng.chance(offence / (offence + defence))) {
+    const connects = rng.chance(offence / (offence + defence));
+    remember(actor, target, isKick ? 'kick' : 'punch', connects, nowOf(ctx), strikeTarget, weapon);
+    if (!connects) {
       // A missed kick is now narrated as a missed kick. `strikeMissed` never received `isKick`,
       // so every miss in the game read as a missed punch.
       if (i === 0) {
@@ -1937,7 +1955,9 @@ function resolveTakedown(
   actor.stats.takedownsAttempted++;
   const entry = pickTakedownEntry(rng, actor, from);
 
-  if (rng.chance(offence / (offence + defence))) {
+  const lands = rng.chance(offence / (offence + defence));
+  remember(actor, target, 'takedown', lands, nowOf(ctx));
+  if (lands) {
     actor.stats.takedownsLanded++;
     tally[actor.corner].takedowns++;
     state.position = 'ground';
@@ -2011,7 +2031,9 @@ function throwClinchStrike(
   actor.stats.significantStrikesAttempted++;
   tally[actor.corner].strikesAttempted++;
 
-  if (!rng.chance(offence / (offence + defence))) return undefined;
+  const connects = rng.chance(offence / (offence + defence));
+  remember(actor, target, 'clinchStrike', connects, nowOf(ctx));
+  if (!connects) return undefined;
 
   // Clinch work is body-and-knees work; it is how you drain someone standing up.
   const strikeTarget: StrikeTarget = rng.chance(0.6) ? 'body' : 'head';
@@ -2202,7 +2224,9 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
       actor.stats.escapesAttempted++;
       const escape = fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue);
       const hold = fatiguedEffect(target.derived.clinchOffence, 'strength', target.fatigue);
-      if (rng.chance(escape / (escape + hold))) {
+      const out = rng.chance(escape / (escape + hold));
+      remember(actor, target, 'escape', out, nowOf(ctx));
+      if (out) {
         actor.stats.escapesLanded++;
         state.position = 'distance';
         state.clinchControl = undefined;
@@ -2351,7 +2375,9 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
       // What the man on top is doing with his weight. Hitting you is not holding you.
       topControlFocus(target);
 
-    if (rng.chance(escape / (escape + hold))) {
+    const out = rng.chance(escape / (escape + hold));
+    remember(actor, target, 'escape', out, nowOf(ctx));
+    if (out) {
       actor.stats.escapesLanded++;
       if (route === 'sweep') {
         state.groundTop = actor.corner;
@@ -2447,9 +2473,10 @@ function resolveGroundTop(
     const retain =
       fatiguedEffect(target.attrs.scrambling, 'scrambling', target.fatigue) * (1 + bonus);
 
-    if (rng.chance(pass / (pass + retain))) {
-      const idx = GROUND_POSITIONS.indexOf(state.groundPosition);
-      const next = GROUND_POSITIONS[Math.min(idx + 1, GROUND_POSITIONS.length - 1)]!;
+    const passes = rng.chance(pass / (pass + retain));
+    remember(actor, target, 'pass', passes, nowOf(ctx));
+    if (passes) {
+      const next = ladderStep(state.groundPosition);
       if (next !== state.groundPosition) {
         state.groundPosition = next;
         state.stalledSeconds = 0;
@@ -2476,7 +2503,9 @@ function resolveGroundTop(
     for (let i = 0; i < shots; i++) {
       actor.stats.significantStrikesAttempted++;
       tally[actor.corner].strikesAttempted++;
-      if (!rng.chance(offence / (offence + defence))) continue;
+      const connects = rng.chance(offence / (offence + defence));
+      remember(actor, target, 'groundStrike', connects, nowOf(ctx), undefined, undefined);
+      if (!connects) continue;
       landed++;
       /*
        * Punches and elbows, and the position decides which.
@@ -2549,7 +2578,14 @@ function resolveSubmission(
 ): ExchangeOutcome {
   const { rng, state, tally, emit } = ctx;
   const dominance = GROUND_DOMINANCE[state.groundPosition];
-  const name = rng.pick(say.SUBMISSIONS[state.groundPosition]);
+  const key =
+    chooseSubmission(
+      rng,
+      actor.style.subs,
+      submissionsFrom(state.groundPosition, !fromBottom),
+      actor.mem.lastSubFailed,
+    ) ?? 'guillotine';
+  const name = SUBMISSION_META[key].label;
 
   const reads: ReadKey[] = state.groundPosition === 'back' ? ['backTake'] : ['guillotine'];
   const bonus = prepBonus(target, actor, reads);
@@ -2566,6 +2602,7 @@ function resolveSubmission(
 
   const edge = clamp01(attack / (attack + defend));
   const deep = rng.chance(edge);
+  remember(actor, target, 'submission', deep, nowOf(ctx));
   emit('submissionAttempt', say.submissionAttemptText(actor, target, name, deep), actor.corner, deep ? 'major' : undefined);
 
   if (deep) {
@@ -2585,11 +2622,11 @@ function resolveSubmission(
     }
   }
 
+  actor.mem.lastSubFailed = key;
   emit('submissionEscape', say.submissionEscapeText(rng, target), target.corner);
   // A failed submission from the bottom often costs position; from the top it costs little.
   if (fromBottom && rng.chance(0.35)) {
-    const idx = GROUND_POSITIONS.indexOf(state.groundPosition);
-    state.groundPosition = GROUND_POSITIONS[Math.min(idx + 1, GROUND_POSITIONS.length - 1)]!;
+    state.groundPosition = ladderStep(state.groundPosition);
   }
   state.stalledSeconds = 0;
   return { seconds: rng.int(9, 18) };
