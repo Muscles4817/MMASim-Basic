@@ -16,7 +16,7 @@
  * arrives as a prop at the route boundary, never as a branch inside a shared component.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   displayBand,
   ratingBand,
@@ -43,74 +43,6 @@ export function Console({ main, side }: { main: ReactNode; side: ReactNode }) {
       <div className="console__main">{main}</div>
       <div className="console__side">{side}</div>
     </div>
-  );
-}
-
-// --- Sub-navigation -----------------------------------------------------------------------------
-
-export interface SubNavItem {
-  label: string;
-  href: string;
-  current?: boolean;
-  onClick?(): void;
-}
-
-/**
- * The places a promoter needs that the five tabs cannot hold.
- *
- * Real links so middle-click and the links rotor work, same as the shell's nav. A scroller
- * rather than a wrap, because these are peers and a second row reads as a hierarchy that is not
- * there.
- */
-export function SubNav({ items, label }: { items: readonly SubNavItem[]; label: string }) {
-  /*
-   * Whether there is more of the row off either edge, which the CSS turns into a fade. Read on
-   * scroll and on resize; a row that fits sets neither.
-   */
-  const ref = useRef<HTMLElement>(null);
-  const [more, setMore] = useState({ left: false, right: false });
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const read = () =>
-      setMore({
-        left: el.scrollLeft > 1,
-        right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
-      });
-    read();
-    el.addEventListener('scroll', read, { passive: true });
-    window.addEventListener('resize', read);
-    return () => {
-      el.removeEventListener('scroll', read);
-      window.removeEventListener('resize', read);
-    };
-  }, [items.length]);
-
-  return (
-    <nav
-      ref={ref}
-      className="subnav"
-      aria-label={label}
-      data-more-left={more.left ? 'true' : undefined}
-      data-more-right={more.right ? 'true' : undefined}
-    >
-      {items.map((item) => (
-        <a
-          key={item.label}
-          className="subnav__item"
-          href={item.href}
-          aria-current={item.current ? 'page' : undefined}
-          onClick={(e) => {
-            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-            if (!item.onClick) return;
-            e.preventDefault();
-            item.onClick();
-          }}
-        >
-          {item.label}
-        </a>
-      ))}
-    </nav>
   );
 }
 

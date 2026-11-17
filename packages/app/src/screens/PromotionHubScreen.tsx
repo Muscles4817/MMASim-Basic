@@ -58,7 +58,6 @@ import {
 import { describeBuzz } from './NightScreen';
 import { FIRST_WEEK, dismiss, firstWeek, firstWeekOver } from '../game/onboarding';
 import { readNews } from '../game/world';
-import { PromoterSubNav } from './promoterNav';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 
 /** How many rows the dashboard shows before it stops being a dashboard. */
@@ -152,8 +151,6 @@ export function PromotionHubScreen() {
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
-      <PromoterSubNav current="promotion" />
-
       <Console
         main={
           <>

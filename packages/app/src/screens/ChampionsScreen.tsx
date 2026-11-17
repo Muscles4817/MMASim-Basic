@@ -31,7 +31,6 @@ import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, ListItem } from '../ui';
 import { Alert } from '../ui/signals';
 import { bookedOnPlans } from '../game/finances';
-import { PromoterSubNav } from './promoterNav';
 
 export function ChampionsScreen() {
   const { db, world } = useGame();
@@ -100,8 +99,6 @@ export function ChampionsScreen() {
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
-      <PromoterSubNav current="champions" />
-
       {vacant > 0 && (
         <Alert tone="warn" title={`${vacant} ${vacant === 1 ? 'belt is' : 'belts are'} vacant`}>
           A division without a champion has nothing to climb toward, and the contenders in it stop

@@ -18,7 +18,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { StrictMode } from 'react';
 import { App } from '../../packages/app/src/App';
@@ -114,23 +114,26 @@ describe('choosing to run a promotion', () => {
   });
 
   it('puts the promotion’s other systems one tap away rather than burying them', async () => {
-    // Five tabs cannot name events, championships, contracts and the world at once, and the old
-    // answer — hide them inside Roster and Calendar — is where nobody found them.
+    // Five tabs cannot name events, championships, contracts and the world at once. The belts
+    // were a chip row on the dashboard, which is where nobody found them; they are a tab now.
     const user = userEvent.setup();
     await becomePromoter(user);
-    expect(await screen.findByRole('link', { name: /Championships/i })).toBeTruthy();
+    const nav = await screen.findByRole('navigation', { name: /Main/i });
+    const tabs = within(nav)
+      .getAllByRole('link')
+      .map((a) => a.textContent?.trim());
+    expect(tabs).toEqual(['Promotion', 'Shows', 'Roster', 'Belts', 'Inbox']);
+    expect(within(nav).getByRole('link', { name: /Belts/i }).getAttribute('href')).toBe(
+      '#/champions',
+    );
   });
 
-  it('does not repeat the tab bar in the chip row', async () => {
-    // The chip row named Dashboard, Events and Roster & contracts beside the tab bar's own
-    // Promotion, Calendar and Roster: the same places twice, under different names.
+  it('does not repeat the tab bar in a second row of places', async () => {
+    // The chip row used to name Dashboard, Events and Roster & contracts beside the tab bar's
+    // own Promotion, Calendar and Roster: the same places twice, under different names.
     const user = userEvent.setup();
     await becomePromoter(user);
-    const row = await screen.findByRole('navigation', { name: /Promotion sections/i });
-    const chips = Array.from(row.querySelectorAll('a')).map((a) => a.textContent);
-    expect(chips).toEqual(['Dashboard', 'Championships']);
-    goTo('#/calendar');
-    await screen.findByTestId('clock');
+    await screen.findByRole('heading', { name: /Needs you/i });
     expect(screen.queryByRole('navigation', { name: /Promotion sections/i })).toBeNull();
   });
 });

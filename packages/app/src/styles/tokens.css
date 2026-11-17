@@ -110,8 +110,7 @@
 
   /* --- Type ------------------------------------------------------------------------ */
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    sans-serif;
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
 
   /* Table micro-labels and column headers only. Never body copy — it is below the floor. */
@@ -201,6 +200,29 @@
   --chip-radius: var(--radius-full);
   --chip-transform: none;
   --chip-tracking: 0;
+
+  /*
+   * Chrome: the header and the tab bar. Their own tokens rather than `--surface`, because a mode's
+   * frame is often not its page — the poster's tab bar is the black band, not more newsprint.
+   */
+  --title-size: var(--text-lg);
+  --header-bg: var(--surface);
+  --header-rule: 1px solid var(--border);
+  --nav-bg: var(--surface);
+  --nav-rule: 1px solid var(--border);
+  --nav-fg: var(--text-faint);
+  --nav-fg-current: var(--accent);
+  --nav-indicator: var(--accent);
+  --nav-indicator-glow: 0 0 0 transparent;
+  --nav-hover-bg: var(--surface-sunken);
+  --nav-rail-current-bg: var(--accent-soft);
+  --nav-rail-current-fg: var(--accent);
+  --nav-font: var(--font-sans);
+  --nav-size: var(--text-xs);
+  --nav-weight: 600;
+  --nav-weight-current: 800;
+  --nav-transform: none;
+  --nav-tracking: 0;
 
   /* Surface texture: newsprint grain, scanlines. A background-image, never a colour. */
   --texture: none;

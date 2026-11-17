@@ -1,25 +1,14 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, type MouseEvent, type ReactNode } from 'react';
 import { gameDayToIso, toCalendar, type Fighter, type Promotion } from '@mmasim/engine';
 import { useGame } from '../state/GameProvider';
 import { toHash, useRouter, type Route } from '../state/router';
 import { inboxCount } from '../game/inbox';
 import { isOverdrawn, money } from '../ui/format';
+import { Icon, type IconName } from '../ui/icons';
+import { useDocumentMode, visualModeFor } from '../state/mode';
 import './Shell.css';
 
-const MONTHS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** Human-readable game date. Formatting lives in the UI; the engine only knows day indices. */
 export function formatGameDay(day: number): string {
@@ -32,18 +21,22 @@ export { gameDayToIso };
 interface NavItem {
   route: Route;
   label: string;
-  icon: string;
+  icon: IconName;
   /** Route names that should also light this tab up. */
   matches?: readonly Route['name'][];
 }
 
 /*
- * Five tabs, and the clock and the inbox now take two of them.
+ * Five tabs per mode, and they are not the same five.
  *
- * Rankings and Editor moved out. Rankings was already on the hub's own "everywhere else" grid,
- * so the tab was a second door to the same room; the editor is a power tool that nobody reaches
- * for mid-career. Time and the things waiting on you are what a player needs from anywhere,
- * which is what a tab bar is for.
+ * The modes are different games (doc 35), so their tab bars name different places rather than
+ * relabelling one set. What they share is the shell around them: the rail/tab-bar breakpoint, the
+ * safe-area insets, the skip link, focus-on-navigate and the route announcement — the parts that
+ * would otherwise be fixed twice.
+ *
+ * Settings is not a tab in either. It is somewhere a player goes once, and it was spending a fifth
+ * of the thumb's reach on every screen; it lives behind the gear in the header instead, which
+ * freed a tab for the place each mode was missing.
  */
 const FIGHTER_NAV: readonly NavItem[] = [
   // `start` belongs to Career: picking a fighter is the first step of the career flow, and
@@ -51,49 +44,58 @@ const FIGHTER_NAV: readonly NavItem[] = [
   {
     route: { name: 'hub' },
     label: 'Career',
-    icon: '🥊',
+    icon: 'person',
     matches: ['hub', 'me', 'camp', 'fight', 'start', 'create', 'training'],
   },
-  { route: { name: 'calendar' }, label: 'Calendar', icon: '📅' },
-  { route: { name: 'inbox' }, label: 'Inbox', icon: '📥' },
+  { route: { name: 'calendar' }, label: 'Calendar', icon: 'calendar' },
+  /*
+   * The deal, as a place. Doc 32 § 3.2 moved the whole negotiation onto the contract screen and
+   * noted there was then "no route in fighter mode that means *my deal*" other than a tile on
+   * the hub. A fighter's contract decides more about their year than anything but the next
+   * fight; it earns a tab.
+   */
+  { route: { name: 'contract' }, label: 'Deal', icon: 'money' },
+  { route: { name: 'inbox' }, label: 'Inbox', icon: 'inbox' },
   {
     route: { name: 'roster' },
-    label: 'Roster',
-    icon: '👥',
+    label: 'World',
+    icon: 'rankings',
     matches: ['roster', 'fighter', 'rankings', 'editor', 'editorFighter'],
   },
-  { route: { name: 'settings' }, label: 'Settings', icon: '⚙️' },
 ];
 
 /**
- * The same five tabs, pointed at the promoter's places.
+ * The promoter's places.
  *
- * The shell is shared rather than forked, and the tab array is the only thing that changes.
- * Forking would mean reimplementing the rail/tab-bar breakpoint, the safe-area insets, the
- * skip link, focus-on-navigate and the live route announcement — and then fixing every future
- * accessibility bug in two places. Roster, Rankings, Editor and Settings are genuinely the same
- * screens in both modes; only the first tab differs.
+ * Belts promoted from a chip row on the dashboard to a tab: who holds each title and who has
+ * earned a shot at it is half of every booking decision, and a row of chips under one tab is
+ * where the previous review found nobody looking.
  */
 const PROMOTER_NAV: readonly NavItem[] = [
   {
     route: { name: 'promotion' },
     label: 'Promotion',
-    icon: '🎪',
-    matches: ['promotion', 'card', 'hub', 'start', 'champions'],
+    icon: 'promotion',
+    matches: ['promotion', 'hub', 'start'],
   },
-  // Cards live under the calendar, because a card *is* a date with fights on it and the whole
-  // point of the rework is that a promoter plans months ahead rather than generating one now.
-  { route: { name: 'calendar' }, label: 'Calendar', icon: '📅', matches: ['calendar', 'plan'] },
-  { route: { name: 'inbox' }, label: 'Inbox', icon: '📥' },
+  // Cards live under Shows, because a card *is* a date with fights on it and the whole point of
+  // the rework is that a promoter plans months ahead rather than generating one now.
+  {
+    route: { name: 'calendar' },
+    label: 'Shows',
+    icon: 'calendar',
+    matches: ['calendar', 'plan', 'card'],
+  },
   // A promoter's "roster" is their own stable with contracts attached, not the world's fighter
   // list — which is reachable through it.
   {
     route: { name: 'promoterRoster' },
     label: 'Roster',
-    icon: '👥',
+    icon: 'roster',
     matches: ['promoterRoster', 'fighter', 'roster', 'rankings', 'editor', 'editorFighter'],
   },
-  { route: { name: 'settings' }, label: 'Settings', icon: '⚙️' },
+  { route: { name: 'champions' }, label: 'Belts', icon: 'champion' },
+  { route: { name: 'inbox' }, label: 'Inbox', icon: 'inbox' },
 ];
 
 export function Shell({
@@ -121,6 +123,7 @@ export function Shell({
   const { route, navigate, back } = useRouter();
   const { db, world } = useGame();
   const NAV_ITEMS = world.playerRole === 'promoter' ? PROMOTER_NAV : FIGHTER_NAV;
+  useDocumentMode(visualModeFor(world.playerRole, route));
   // Unread rather than blocking: a player should see that something arrived, not only that
   // something is stopping them.
   const waiting = inboxCount(db).unread;
@@ -167,6 +170,19 @@ export function Shell({
       : undefined;
   })();
 
+  /**
+   * A click handler for a real link to an in-app route.
+   *
+   * Real links, not buttons: the router is hash-based and already has a URL for each place, so
+   * a button would throw away middle-click, open-in-new-tab and the screen-reader links rotor.
+   * Modified clicks are left to the browser so "open in new tab" still works.
+   */
+  const followLink = (target: Route) => (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    navigate(target);
+  };
+
   const isCurrent = (item: NavItem) =>
     item.matches ? item.matches.includes(route.name) : route.name === item.route.name;
 
@@ -176,23 +192,15 @@ export function Shell({
         MMA<span>SIM</span>
       </div>
       {NAV_ITEMS.map((item) => (
-        // Real links, not buttons: the router is hash-based and already has a URL for each
-        // of these, so rendering buttons would throw away middle-click, open-in-new-tab and
-        // the screen-reader links rotor for nothing.
         <a
           key={item.label}
           className="shell__nav-item"
           href={toHash(item.route)}
           aria-current={isCurrent(item) ? 'page' : undefined}
-          onClick={(e) => {
-            // Let the browser handle modified clicks so "open in new tab" still works.
-            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-            e.preventDefault();
-            navigate(item.route);
-          }}
+          onClick={followLink(item.route)}
         >
           <span className="shell__nav-icon" aria-hidden="true">
-            {item.icon}
+            <Icon name={item.icon} />
             {/*
               The count, on the icon.
 
@@ -264,6 +272,16 @@ export function Shell({
             </div>
           )}
           {actions}
+          {route.name !== 'settings' && (
+            <a
+              className="shell__settings"
+              href={toHash({ name: 'settings' })}
+              aria-label="Settings"
+              onClick={followLink({ name: 'settings' })}
+            >
+              <Icon name="settings" />
+            </a>
+          )}
         </header>
 
         {/* tabIndex -1 makes this focusable programmatically without adding a tab stop. */}

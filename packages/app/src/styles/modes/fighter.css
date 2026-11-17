@@ -96,6 +96,25 @@
   --chip-radius: 2px;
   --chip-transform: uppercase;
   --chip-tracking: 0.08em;
+
+  /* Chrome: newsprint header under a heavy rule; the tab bar is the black band. */
+  --title-size: 1.5rem;
+  --header-bg: var(--bg);
+  --header-rule: 3px solid var(--ink);
+  --nav-bg: var(--ink);
+  --nav-rule: 0 solid transparent;
+  --nav-fg: var(--on-ink-muted);
+  --nav-fg-current: var(--on-ink);
+  --nav-indicator: var(--accent);
+  --nav-hover-bg: rgb(255 255 255 / 0.08);
+  --nav-rail-current-bg: var(--accent);
+  --nav-rail-current-fg: var(--on-accent);
+  --nav-font: var(--font-display);
+  --nav-size: 0.8125rem;
+  --nav-weight: 400;
+  --nav-weight-current: 400;
+  --nav-transform: uppercase;
+  --nav-tracking: 0.08em;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -140,6 +159,12 @@
 
     --card-raised-shadow: 3px 3px 0 var(--accent);
     --feature-shadow: 6px 6px 0 var(--accent);
+    /* At night the band would be a slab of paper under the thumb; it goes dark instead and the rule
+       above the content carries the inversion. */
+    --nav-bg: var(--surface-sunken);
+    --nav-fg: var(--text-faint);
+    --nav-fg-current: var(--text);
+    --nav-hover-bg: var(--surface-raised);
   }
 }
 
@@ -184,4 +209,10 @@
 
   --card-raised-shadow: 3px 3px 0 var(--accent);
   --feature-shadow: 6px 6px 0 var(--accent);
+  /* At night the band would be a slab of paper under the thumb; it goes dark instead and the rule
+     above the content carries the inversion. */
+  --nav-bg: var(--surface-sunken);
+  --nav-fg: var(--text-faint);
+  --nav-fg-current: var(--text);
+  --nav-hover-bg: var(--surface-raised);
 }

@@ -56,10 +56,12 @@ async function becomePromoter(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('the calendar is reachable and shows the clock', () => {
-  it('is a tab in promoter mode', async () => {
+  it('is a tab in promoter mode, named for what a promoter keeps on it', async () => {
+    // A promoter's calendar is the planning board for their shows, so the tab says so (doc 35).
     const user = userEvent.setup();
     await becomePromoter(user);
-    expect(await screen.findByRole('link', { name: /Calendar/i })).toBeTruthy();
+    const shows = await screen.findByRole('link', { name: /Shows/i });
+    expect(shows.getAttribute('href')).toBe('#/calendar');
     expect(screen.getByRole('link', { name: /Inbox/i })).toBeTruthy();
   });
 

@@ -79,6 +79,7 @@ import { playerCardPosition } from '../game/night';
 import { getRivalry, previousMeetings } from '../game/rivalries';
 import { readNews } from '../game/world';
 import { NewsFeed } from '../ui/NewsFeed';
+import { ActionDock } from '../ui/ActionDock';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 import { currentPurse } from '../game/money';
 import { adviceOn, boutMerit, contractStanding } from '../game/contracts';
@@ -295,14 +296,11 @@ export function HubScreen() {
         with room to spare is noise.
       */}
       {lead && (
-        <div className="career__action" data-testid="dominant-action">
-          <div className="career__action-inner">
-            <span className="career__action-why">{SITUATION_LABEL[lead.kind]}</span>
-            <Button variant="primary" onClick={() => act(lead)}>
-              {lead.action?.label}
-            </Button>
-          </div>
-        </div>
+        <ActionDock why={SITUATION_LABEL[lead.kind]} testId="dominant-action">
+          <Button variant="primary" onClick={() => act(lead)}>
+            {lead.action?.label}
+          </Button>
+        </ActionDock>
       )}
     </div>
   );
@@ -452,10 +450,10 @@ function NextFight({
     >
       <p style={{ fontSize: 'var(--text-xl)', fontWeight: 700, marginBottom: 'var(--space-1)' }}>
         {booking.bout.isTitleFight && (
-              <>
-                <Icon name="champion" />{' '}
-              </>
-            )}
+          <>
+            <Icon name="champion" />{' '}
+          </>
+        )}
         vs {displayName(opponent)}
         {booking.bout.isTitleFight && <span className="visually-hidden"> for the title</span>}
       </p>
@@ -620,8 +618,8 @@ function ChooseFight({
             </p>
           </div>
           <p className="muted prose" style={{ marginBottom: 'var(--space-3)' }}>
-            Five rounds, a ten-week camp, and the {divisionName} title on the line. This is what
-            the climb was for.
+            Five rounds, a ten-week camp, and the {divisionName} title on the line. This is what the
+            climb was for.
           </p>
           <Button onClick={onTakeTitle}>Take the title fight</Button>
         </Card>
@@ -788,8 +786,8 @@ function OfferDetail({
           className={`offer-advice ${advice.recommended ? '' : 'offer-advice--against'}`}
           style={{ marginTop: 'var(--space-3)' }}
         >
-          <Icon name={advice.recommended ? 'success' : 'warning'} />{' '}
-          <strong>{managerName}:</strong> &ldquo;{advice.line}&rdquo;
+          <Icon name={advice.recommended ? 'success' : 'warning'} /> <strong>{managerName}:</strong>{' '}
+          &ldquo;{advice.line}&rdquo;
         </p>
       )}
 
@@ -845,7 +843,9 @@ function ConditionPanel({
         <span>
           Condition{' '}
           <span
-            className={read.tone === 'good' ? 'positive' : read.tone === 'bad' ? 'negative' : 'muted'}
+            className={
+              read.tone === 'good' ? 'positive' : read.tone === 'bad' ? 'negative' : 'muted'
+            }
             style={{ fontWeight: 700 }}
           >
             · {read.label}
