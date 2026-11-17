@@ -1,0 +1,169 @@
+# 36 — The combat simulation plan
+
+**Status:** in progress. This is the implementation plan that follows the audit in
+`docs/reviews/19-fight-engine-audit.md`. Each phase lists what it changes, why, how we'll know it worked, and what it costs.
+Phases are ordered so each one leaves the game shippable and calibrated. The "Progress log" at the
+bottom says what has actually landed.
+
+---
+
+## 0. The goal, stated as testable claims
+
+A fight should be **the product of two specific people and what they've trained**, unfolding
+through time. Concretely, a finished engine passes these claims (each becomes a statistical test):
+
+1. **Sequence matters.** What a fighter just did changes what they do next and how well it works: combinations, setups, chain wrestling, submission chains.
+2. **Fighters learn during the fight.** A smart fighter defends better against what the opponent keeps doing, and a dull one does not. A corner can change the plan between rounds.
+3. **Mental attributes are visible.**
+   - `fightIq` → reads, adjustments, shot selection, pacing.
+   - `composure` → performance hurt, behind or late.
+   - Personality: `aggression` → pressure and willingness to trade; `ego` → plan abandonment and coachability; `resilience` → comebacks, rallies, breaking; `discipline` → sticking to the plan and pacing.
+4. **Training is visible.** A fighter's *repertoire* (what they have drilled: signature submissions, favourite combinations, stance style, entries) shapes what they throw and attempt. It is derived from attributes and background, and sharpened in camp.
+5. **Every phase has depth.** Distance (already good), clinch positions, chain wrestling and scrambles, a ground *graph* (not a ladder), and a real submission catalogue with leg locks and chains.
+6. **Damage creates stories.** Body and leg damage can finish a fight. In-fight injuries happen and carry into the post-fight report. Hurt fighters try to survive in character, and comebacks and rallies happen.
+7. **Fights ebb and flow.** Output fades realistically (about 10–20 % by R3, not 50 %), momentum swings, and a round can turn.
+8. **Stances have trade-offs.** Open vs closed stance changes what lands. Stance *styles* (bladed, square, crouched, standard) each buy something and cost something. Switch-stance fighters switch on purpose.
+9. **The sport's numbers stay right.** Finish rates, KO:sub ratio, round distribution, accuracy and volume stay at or move *toward* real-sport values. Every existing statistical bound either still holds or is consciously re-baselined, with the reason recorded.
+
+## 1. Constraints
+
+- **Determinism.** Same seed, same fight. All new randomness comes from the exchange RNG.
+- **No allocation in the fight loop.** New per-fight state lives on `Combatant` or in fixed-size records allocated once per fight. The statistical tier runs millions of exchanges.
+- **Saves stay compatible.** No new rated attributes. New per-fighter data is optional, with a derived default (the same pattern as `background` and `aptitudes`).
+- **The Reduced resolver (`round.ts`) is re-fitted to the full engine at the end of any phase that moves population outcomes.** Use `tools/reduced-refit.ts`; the `reduced-fidelity` suite holds it.
+- **Narration reports, it never decides.** Every new technique is resolved first and then narrated, which preserves the guarantee in `commentary-parity.test.ts`.
+
+### Why no new attributes
+
+The 15-attribute block is hand-authored on 139 seed fighters, generated, trained, aged, scouted and
+rendered. Adding a 16th touches roughly 40 files and every save. The depth the audit asks for is
+mostly about **what a fighter has drilled** and **how they think**, and neither needs a new rating:
+
+- *Thinking*: `fightIq`, `composure` and five relevant personality axes already exist and are under-read. This plan gives each of them specific jobs.
+- *Drilling* is a **repertoire**: a small optional `Fighter.style` block (§ Phase 1). It is derived when absent and refined by camp focus.
+
+---
+
+## Phase 1 — Style profile and fight memory (the foundation)
+
+**New module `fight/style.ts`.**
+- `StyleProfile` holds:
+  - `stanceStyle`: `standard | bladed | square | crouched`
+  - `combos`: weights over combination families
+  - `subs`: weights over submission families
+  - `entries`: shot preferences
+  - `signature?`: an optional named favourite
+- `styleOf(fighter)` derives it deterministically from attributes, background and traits.
+- `Fighter.style?` overrides the derived profile when present (authored fighters, camp-trained fighters).
+
+**New per-fight memory on `Combatant` (`fight/memory.ts`).**
+- `last`: the last beat's action, family, target, weapon, result and timestamp.
+- `ledger`: attempts and successes per action family, both for the fight and for the current round.
+- `seen`: what the opponent has done, counted per family. This feeds reads.
+- Everything is preallocated and mutated in place.
+
+**Tests:** `memory.test.ts` (unit); determinism unchanged.
+
+## Phase 2 — Combinations, setups and pacing
+
+- **Bursts become combinations.** A burst is drawn as a combination family from the repertoire: jab-cross, cross-hook, double jab, punches-to-low-kick, body-head, head-body, level-change feint, counter-hook off a slip. Each shot after the first gets a *setup bonus* if it fits the pattern (for example, body then head: the guard drops). Feints are free beats that raise the next shot's landing chance, scaled by `fightIq`.
+- The setup bonus is **level-neutral**. It is offset by a lower base landing chance, so it changes *who* lands and *what*, not the sport's accuracy.
+- Emit `combination` when two or more shots in a pattern land.
+- Each line gets its own timestamp (offset within the exchange).
+- **Output fade fix.** `workRate` falls off more slowly. Fatigue moves into accuracy, speed and power rather than volume alone (≈15 % fade by R3).
+- **Pacing.** Fighters with high `fightIq` and `discipline` bank a little energy early and surge late. Low-discipline, high-aggression fighters start hot and fade.
+
+**Tests:** combination share by style; R1/R3 output ratio in [0.78, 0.92]; setups move win rate only through repertoire.
+
+## Phase 3 — Damage stories and highs and lows
+
+- **Body.** A body hazard (liver), mainly from kicks, knees and hooks, scales with body damage and opens a `hurtBody` window: the fighter folds, can't move and gives up position. Rare body-shot KO/TKOs follow.
+- **Legs.** Past a threshold, leg damage compromises the stance: the fighter switches stance, stops kicking and gets slower. At extreme damage it can end the fight as a TKO ("can't stand on it").
+- **In-fight injuries** (`fight/injuryEvents.ts`):
+  - broken hand: a hard punch landing on the skull or elbow
+  - foot: a checked kick
+  - rib: body damage
+  - shoulder or elbow: a survived kimura, armbar or Americana
+  - knee: a survived heel hook or kneebar
+  - eye swelling: from accumulated head damage
+
+  Each sets an in-fight multiplier, is narrated, and is returned on `FightResult.injuries` so `health/injuries.ts` can make the same injury official.
+- **Hurt behaviour.** A hurt fighter chooses a survival route by character: tie up, shoot, shell, run, or fire back (`composure`, `aggression`). Firing back is high-variance, and that variance is where comebacks come from.
+- **Rally / second wind.** Resilience and composure can trigger a surge after a bad stretch (momentum floor, round break).
+- **Corner stoppage.** Between rounds, a corner can retire a badly damaged fighter (`'retirement'`).
+
+**Tests:** body and leg finishes become a small, non-zero share of finishes; injury events match the post-fight roll; hurt survival routes vary with personality.
+
+## Phase 4 — Reads, adjustments and the mental layer
+
+- **In-fight reads.** From `seen`, a fighter with high `fightIq` builds a defensive read against the opponent's most-used family. This works like a camp `preppedRead` but is earned during the fight, smaller, and grows over time. Counter timing improves against a predictable opponent.
+- **Feedback.** The ledger feeds back into choices: repeated failure in a family lowers its intent, and success raises it. The size of that shift scales with `fightIq`, and *ego* slows it. A dull fighter keeps doing what isn't working.
+- **Corner adjustments between rounds.** A rule-based "corner brain" reads round tallies and the ledger and makes one adjustment: change range, abandon takedowns, start wrestling, attack the body, protect the lead leg, or go for the finish. The fighter accepts it according to coachability (inverse `ego`) and `discipline`. It is narrated as a corner line.
+- **Composure under pressure.** Performance penalties when behind, hurt or in late rounds are scaled by composure. They hit decision quality (bias noise) more than physical output.
+- **Aggression** sets willingness to stay in the pocket and to trade when hurt. **Resilience** sets how fast plan integrity and momentum recover.
+
+**Tests:** a stuffed wrestler shoots less later in proportion to IQ; reads cut opponent accuracy in the favoured family; corner adjustments are visible and change round tallies.
+
+## Phase 5 — Chain wrestling, scrambles and the front headlock
+
+- **Chains.** After a stuffed shot, the shooter can *chain*: single → double, run the pipe, or switch to a body lock. Likelihood scales with `proactiveWrestling`, the wrestling repertoire, cardio and `wrestling`. Each link is cheaper in time and slightly more likely to land against a defender who is tired or worn on the legs.
+- **The defender's side.** A sprawl leads to a **front headlock** (new transient state): a snap-down to go-behind (back), a guillotine or D'Arce, or a reset. This gives strikers with good wrestling defence a weapon.
+- **Mat returns.** When the bottom fighter stands up, a top fighter with high `wrestling` can return them to the mat instead of letting them go.
+- **Scrambles.** Failed sweeps and stand-ups resolve through a scramble that can end in several positions (top, bottom, standing, back) on `scrambling` vs `scrambling`.
+
+**Tests:** P(another shot | stuffed) ≥ base rate for chain wrestlers; front-headlock submissions appear for wrestlers with strong submission repertoires.
+
+## Phase 6 — The ground graph and the submission catalogue
+
+- **Positions.**
+  - **Guards:** `closedGuard`, `openGuard` (butterfly, De La Riva and similar), `halfGuard`.
+  - **Top control:** `sideControl`, `northSouth`, `kneeOnBelly`, `mount`.
+  - **Back:** `back` (hooks or body triangle), `turtle`.
+  - **Leg entanglement:** `legEntangle`, `ashi` positions.
+
+  Moves form a **transition graph** with weights: passes skip rungs (from open guard straight to mount is rare but possible), back-takes come from turtle, half guard and scrambles, guard recovery lets the bottom fighter regress the top, and a stand-up attempt can expose the back.
+- **Submissions.** A catalogue with family (choke, arm lock, shoulder lock, leg lock), positions, attack and defence attributes, an injury mode, and *partner* submissions (armbar ↔ triangle ↔ omoplata, kimura → back, guillotine ↔ D'Arce/anaconda, heel hook ↔ kneebar). The submission is **chosen before the contest**, from the repertoire. A failed attempt can chain into its partner.
+- Leg locks are entered from open guard and scrambles. Failing one costs position.
+- The `GroundPosition` type widens. The old five values remain valid, so old results still render.
+
+**Tests:** signature subs dominate a specialist's attempts; leg locks appear for leg-lock specialists only; sub rate stays within bounds.
+
+## Phase 7 — The clinch, filled out
+
+- **Clinch positions** (a sub-state): `collarTie` (Thai plum), `overUnder`, `doubleUnders`, `bodyLock`, `fence` vs `open`. Underhook battles shift position before control changes hands.
+- **Weapons by position:**
+  - plum: knees to the head
+  - over-under: dirty boxing, uppercuts and short elbows
+  - double unders and body lock: throws and trips
+  - on the fence: knees to the thigh and stomps
+- **Breaks with strikes:** an elbow on the exit, or a shot as they separate.
+
+**Tests:** clinch strike share rises toward the real range (5–10 % of landed); knees concentrate in Muay Thai backgrounds.
+
+## Phase 8 — Stances as styles
+
+- **Open vs closed matchup.** Rear straight and lead-leg body kick to the liver suit the open stance; jab and lead hook suit the closed stance. Applied through `SUITABILITY` modifiers per matchup.
+- **Stance styles:**
+  - `bladed`: better at distance and with linear attacks, worse calf-kick defence, weaker takedown defence
+  - `square`: checks kicks and clinches well, open to the jab and straight shots
+  - `crouched`: strong takedown defence and power hooks, open to knees and uppercuts
+  - `standard`: no modifiers
+- **Switch-stance fighters** switch tactically, which nullifies an opponent's open-stance edge or opens a new angle. Everyone switches when the lead leg is compromised.
+
+**Tests:** each stance style has a measurable pro and con; southpaw edge preserved.
+
+## Phase 9 — Presentation and calibration
+
+- Commentary: technique names drawn from the *resolved* technique and the fighter's repertoire (no spinning back kicks from kicking-50 wrestlers), corner lines, read and adjustment lines, injury lines, stance switches.
+- Re-fit the Reduced resolver. Re-baseline any statistical bounds that should move, with recorded reasons.
+- Update the audit harness and re-run the full audit.
+
+---
+
+## Performance budget
+
+Measured with `tools/audit/fight-engine-audit.ts` at N=300 (9 matchups, 2,700 fights): **≈3.0 s** before this work. Budget: **≤ 2×** after all phases. Every phase records its number in the progress log.
+
+## Progress log
+
+_(appended as phases land)_
