@@ -37,8 +37,10 @@ function renderApp() {
 
 /** The error boundary rendering means something threw during a render we care about. */
 function expectNoCrash() {
-  expect(screen.queryByText(/Something went wrong/i), 'the app crashed into its error boundary')
-    .toBeNull();
+  expect(
+    screen.queryByText(/Something went wrong/i),
+    'the app crashed into its error boundary',
+  ).toBeNull();
 }
 
 beforeEach(() => {
@@ -78,9 +80,7 @@ describe('the game is playable', () => {
   it('reaches the roster through the fighter mode, not before it', async () => {
     const user = userEvent.setup();
     renderApp();
-    await user.click(
-      within(await screen.findByTestId('mode-fighter')).getByRole('button'),
-    );
+    await user.click(within(await screen.findByTestId('mode-fighter')).getByRole('button'));
     // The seeded roster is actually on screen, not an empty list.
     //
     // `findAll`: `DataTable` renders both of its compositions into the DOM and lets CSS pick one
@@ -307,9 +307,7 @@ describe('the error boundary catches a corrupt save', () => {
     localStorage.setItem('mmasim:fighters', '{ this is not json');
     renderApp();
     expect(await screen.findByText(/Something went wrong/i)).toBeTruthy();
-    expect(
-      screen.getByRole('button', { name: /Clear saved data and start again/i }),
-    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Clear saved data and start again/i })).toBeTruthy();
   });
 });
 
@@ -320,6 +318,21 @@ describe('accessibility basics hold on the rendered app', () => {
     const links = within(nav).getAllByRole('link');
     expect(links.length).toBeGreaterThanOrEqual(5);
     expect(links.some((l) => l.getAttribute('aria-current') === 'page')).toBe(true);
+  });
+
+  it('gives a fighter their own places, with the deal as one of them', async () => {
+    // Doc 32 § 3.2: there was no route in fighter mode that meant "my deal" except a tile on
+    // the hub. Settings moved to the header to make the room (doc 35).
+    renderApp();
+    const nav = await screen.findByRole('navigation', { name: /Main/i });
+    const tabs = within(nav)
+      .getAllByRole('link')
+      .map((a) => a.textContent?.trim());
+    expect(tabs).toEqual(['Career', 'Calendar', 'Deal', 'Inbox', 'World']);
+    expect(within(nav).getByRole('link', { name: /Deal/i }).getAttribute('href')).toBe(
+      '#/contract',
+    );
+    expect(screen.getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('#/settings');
   });
 
   it('provides a skip link and a focusable main region', async () => {
@@ -475,8 +488,9 @@ describe('the interface says what matters', () => {
     // it now leads the condition block rather than sitting below thirty ratings.
     window.location.hash = '#/fighter/f_arlovski';
     renderApp();
-    expect((await screen.findAllByText(/chin has gone|Wearing|Heavy mileage/i)).length)
-      .toBeGreaterThan(0);
+    expect(
+      (await screen.findAllByText(/chin has gone|Wearing|Heavy mileage/i)).length,
+    ).toBeGreaterThan(0);
     expect(screen.getByText(/Head trauma/i)).toBeTruthy();
     expectNoCrash();
   });
@@ -501,7 +515,10 @@ describe('the interface says what matters', () => {
     // And the band word beside the number, so the signal is not carried by colour alone.
     const bands = [...document.querySelectorAll('.mini-rating__band')].map((el) => el.textContent);
     expect(bands.length).toBeGreaterThan(0);
-    expect(bands.every((b) => (b ?? '').length > 0), 'a compact row with no band word').toBe(true);
+    expect(
+      bands.every((b) => (b ?? '').length > 0),
+      'a compact row with no band word',
+    ).toBe(true);
   });
 
   it('shows a title fight and a champion with more than a word', async () => {

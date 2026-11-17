@@ -1,0 +1,143 @@
+/*
+ * The masthead. See Masthead.tsx.
+ *
+ * Everything that differs between modes is a token: the angle (`--masthead-transform`), the cut
+ * (`--masthead-clip`), the overlay (`--masthead-texture`) and the stamp. The neutral voice draws a
+ * plain dark band, which is what a masthead outside any career should look like.
+ */
+
+.masthead {
+  --focus-ring: var(--on-ink-accent);
+  position: relative;
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-5) var(--space-5);
+  background: var(--ink);
+  color: var(--on-ink);
+  border-radius: var(--masthead-radius);
+  transform: var(--masthead-transform);
+  clip-path: var(--masthead-clip);
+  border-top: var(--masthead-rule);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* Halftone, scanlines — whatever the mode prints on its slab. Decorative, behind the text. */
+.masthead::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 60%;
+  z-index: -1;
+  background-image: var(--masthead-texture);
+  background-size: var(--masthead-texture-size);
+  pointer-events: none;
+}
+
+/*
+ * Bleed to the screen edge on a phone. A slab that stops a gutter short of the glass reads as a
+ * card; one that runs off the edge reads as print. The shell clips horizontal overflow, so an
+ * angled slab never makes the page scroll sideways.
+ */
+@media (max-width: 47.99rem) {
+  .masthead {
+    /* A few pixels past the glass, so a rotated slab leaves no slivers of page at its corners. */
+    margin-inline: calc(var(--space-3) * -1 - 6px);
+    padding-inline: calc(var(--space-3) + var(--space-3) + 6px);
+  }
+}
+
+.masthead__name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Room for the stamp, which sits rotated in the top corner — only when there is one. */
+.masthead[data-stamped='true'] .masthead__name {
+  padding-right: 8rem;
+}
+
+.masthead__eyebrow {
+  font-size: var(--text-sm);
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--on-ink-muted);
+}
+
+.masthead__title {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-style: var(--display-style);
+  text-transform: var(--display-transform);
+  letter-spacing: var(--display-tracking);
+  /* Fluid, so a short surname fills a phone and a long one still fits on it. */
+  font-size: clamp(2.75rem, 9vw + 1rem, 5.25rem);
+  line-height: 0.9;
+  overflow-wrap: anywhere;
+}
+
+.masthead__title[data-long='true'] {
+  font-size: clamp(2rem, 6vw + 0.75rem, 3.75rem);
+}
+
+.masthead__meta {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--on-ink-muted);
+}
+
+.masthead__figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin-top: var(--space-2);
+}
+
+.masthead__figure {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.masthead__figure-value {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-style: var(--display-style);
+  letter-spacing: var(--display-tracking);
+  font-size: var(--text-3xl);
+  line-height: 1;
+}
+
+.masthead__figure[data-emphasis='true'] .masthead__figure-value {
+  color: var(--on-ink-accent);
+}
+
+.masthead__figure-label {
+  font-size: var(--text-2xs);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--on-ink-muted);
+}
+
+.masthead__stamp {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  max-width: 7rem;
+  padding: var(--space-1) var(--space-2);
+  border: var(--stamp-border);
+  background: var(--stamp-bg);
+  color: var(--stamp-fg);
+  transform: var(--stamp-transform);
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-style: var(--display-style);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: var(--text-base);
+  line-height: 1.1;
+  text-align: center;
+}

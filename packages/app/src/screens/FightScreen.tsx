@@ -30,6 +30,7 @@ import { Button, Card, Chip, Empty, Segmented } from '../ui';
 import { broadcastFor } from '../game/broadcasts';
 import { nightFor, positionLabel } from '../game/night';
 import { TaleOfTheTape } from '../ui/TaleOfTheTape';
+import { Icon } from '../ui/icons';
 import './FightScreen.css';
 
 const SPEEDS = [
@@ -390,7 +391,11 @@ function PreFight({
                 unless it is for a title, so the card's number is not the number that happened.
               */}
               {rounds !== undefined && <Chip tone="neutral">{rounds} rounds</Chip>}
-              {mine.isTitleFight && <Chip tone="accent">🏆 For the title</Chip>}
+              {mine.isTitleFight && (
+                <Chip tone="accent">
+                  <Icon name="champion" /> For the title
+                </Chip>
+              )}
             </div>
           )}
         </Card>
@@ -440,7 +445,12 @@ function PreFight({
                   <span className="card-row__position">{positionLabel(bout.position)}</span>
                   <span className="card-row__names">
                     {boutRed?.lastName ?? '—'} vs {boutBlue?.lastName ?? '—'}
-                    {bout.isTitleFight && <span aria-hidden="true"> 🏆</span>}
+                    {bout.isTitleFight && (
+                      <>
+                        {' '}
+                        <Icon name="champion" />
+                      </>
+                    )}
                     {isPlayer && <Chip tone="accent">{promoter ? 'Next' : 'You, next'}</Chip>}
                   </span>
                   <span className="card-row__result">
@@ -624,7 +634,7 @@ function FeedLine({ event }: { event: FightEvent }) {
         // A symbol *and* a colour *and* a label: the stoppage is the one thing in the feed
         // a reader must not skim past, and colour alone would fail anyone who cannot see it.
         <span className="fight-line__flag" aria-hidden="true">
-          {event.kind === 'pointDeduction' ? '⊖' : '⚠'}
+          <Icon name={event.kind === 'pointDeduction' ? 'cross' : 'warning'} />
         </span>
       )}
       <span>
@@ -757,7 +767,12 @@ function FightSummary({
                   <span className="card-row__position">{positionLabel(bout.position)}</span>
                   <span className="card-row__names">
                     {boutRed?.lastName ?? '—'} vs {boutBlue?.lastName ?? '—'}
-                    {bout.isTitleFight && <span aria-hidden="true"> 🏆</span>}
+                    {bout.isTitleFight && (
+                      <>
+                        {' '}
+                        <Icon name="champion" />
+                      </>
+                    )}
                     {isPlayer && <Chip tone="accent">{promoter ? 'This fight' : 'You'}</Chip>}
                   </span>
                   <span className="card-row__result">

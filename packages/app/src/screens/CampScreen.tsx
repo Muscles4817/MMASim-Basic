@@ -62,7 +62,7 @@ import { useGame } from '../state/GameProvider';
 import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, Segmented } from '../ui';
 import { money, spendLine } from '../ui/format';
-import { Alert, FighterRead, KeyStat } from '../ui/signals';
+import { Alert, FighterRead, KeyStat, Icon } from '../ui/signals';
 import {
   forecastCampDevelopment,
   getBooking,
@@ -468,11 +468,21 @@ export function CampScreen() {
           decides how hard to prepare mentioned none of them.
         */}
         <div className="row" style={{ flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
-          {booking.bout.isTitleFight && <Chip tone="accent">🏆 Championship bout</Chip>}
+          {booking.bout.isTitleFight && (
+            <Chip tone="accent">
+              <Icon name="champion" /> Championship bout
+            </Chip>
+          )}
           {rivalry.isRivalry ? (
-            <Chip tone="negative">🔥 Grudge — he wants this one badly</Chip>
+            <Chip tone="negative">
+              <Icon name="streak" /> Grudge — he wants this one badly
+            </Chip>
           ) : (
-            heat >= 40 && <Chip tone="warning">🔥 The audience wants this</Chip>
+            heat >= 40 && (
+              <Chip tone="warning">
+                <Icon name="streak" /> The audience wants this
+              </Chip>
+            )
           )}
           {purse && (
             <Chip tone="info" title="Show money is paid win or lose; the win bonus is not">
@@ -703,7 +713,9 @@ export function CampScreen() {
                 <ExposureLine phase={READ_META[r.read].phase} attributes={playerFighter.attributes} />
                 {atLimit && (
                   <span style={{ display: 'block', marginTop: 'var(--space-2)' }}>
-                    <Chip tone="warning">⚠ Camp is full — drop one of your reads first</Chip>
+                    <Chip tone="warning">
+                      <Icon name="warning" /> Camp is full — drop one of your reads first
+                    </Chip>
                   </span>
                 )}
               </button>
@@ -1264,7 +1276,7 @@ function ExposureLine({
       className={`exposure ${exposed ? 'exposure--weak' : ''}`}
       style={{ display: 'block', fontSize: 'var(--text-xs)', marginTop: 4 }}
     >
-      <span aria-hidden="true">{exposed ? '⚠' : '✓'}</span> Your {defence.label} is{' '}
+      <Icon name={exposed ? 'warning' : 'success'} /> Your {defence.label} is{' '}
       <strong>{band.label.toLowerCase()}</strong> ({value})
       {exposed ? ' — this one will hurt you.' : ' — you can live with this.'}
     </span>

@@ -31,7 +31,7 @@ import { useRouter } from '../state/router';
 import { Button, Card, Chip, Empty, ListItem } from '../ui';
 import { Alert } from '../ui/signals';
 import { bookedOnPlans } from '../game/finances';
-import { PromoterSubNav } from './promoterNav';
+import './ChampionsScreen.css';
 
 export function ChampionsScreen() {
   const { db, world } = useGame();
@@ -100,8 +100,6 @@ export function ChampionsScreen() {
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
-      <PromoterSubNav current="champions" />
-
       {vacant > 0 && (
         <Alert tone="warn" title={`${vacant} ${vacant === 1 ? 'belt is' : 'belts are'} vacant`}>
           A division without a champion has nothing to climb toward, and the contenders in it stop
@@ -127,28 +125,25 @@ export function ChampionsScreen() {
             <Card key={divisionId} title={getDivision(divisionId).name}>
               <div className="stack" style={{ gap: 'var(--space-3)' }}>
                 {champion ? (
-                  <div>
+                  /*
+                    The holder, on a plate of the mode's slab: the belt is the most important
+                    fact in the division, and it was a line of bold text the same weight as the
+                    contenders under it.
+                  */
+                  <div className="belt">
+                    <span className="belt__label">Champion</span>
                     <button
                       type="button"
-                      className="record-row__link"
-                      style={{ fontSize: 'var(--text-lg)', fontWeight: 800, textAlign: 'left' }}
+                      className="belt__name"
                       onClick={() => navigate({ name: 'fighter', id: champion.id as string })}
                     >
                       {displayName(champion)}
                     </button>
-                    <p className="muted" style={{ fontSize: 'var(--text-sm)', margin: 0 }}>
+                    <p className="belt__reign">
                       {recordString(champion.summary)}
                       {title ? ` · ${describeReign(title, world.day)}` : ''}
                     </p>
-                    <span
-                      className="row"
-                      style={{
-                        gap: 'var(--space-1)',
-                        marginTop: 'var(--space-2)',
-                        flexWrap: 'wrap',
-                      }}
-                    >
-                      <Chip tone="accent">Champion</Chip>
+                    <span className="belt__status">
                       {booked.has(champion.id as string) ? (
                         <Chip tone="positive">Defence booked</Chip>
                       ) : (

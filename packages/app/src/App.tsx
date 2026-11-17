@@ -177,8 +177,9 @@ export function App() {
       case 'contract':
         return (
           // Wide: the whole point of the screen is comparing offers against the deal you are
-          // already on, and a 56rem column puts those two things a scroll apart.
-          <Shell title="Your deal" showBack wide>
+          // already on, and a 56rem column puts those two things a scroll apart. No back button:
+          // the deal is a tab now (doc 35), a place rather than somewhere you were sent.
+          <Shell title="Your deal" wide>
             <ContractScreen />
           </Shell>
         );
@@ -220,7 +221,9 @@ export function App() {
       // --- Shared by every mode --------------------------------------------------------
       case 'calendar':
         return (
-          <Shell title="Calendar">
+          // Named for what each mode keeps on it, to match its tab: a promoter's calendar is the
+          // planning board for their shows (doc 35).
+          <Shell title={world.playerRole === 'promoter' ? 'Shows' : 'Calendar'}>
             <CalendarScreen key={route.newCard ? 'new' : 'diary'} newCard={route.newCard} />
           </Shell>
         );

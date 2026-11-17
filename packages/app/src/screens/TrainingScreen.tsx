@@ -43,7 +43,7 @@ import {
   runTraining,
   type TrainingOutcome,
 } from '../game/progression';
-import { Alert, FighterRead, KeyStat } from '../ui/signals';
+import { Alert, FighterRead, KeyStat, Icon } from '../ui/signals';
 import { getBooking } from '../game/career';
 import { formatGameDay } from '../shell/Shell';
 import { campCostFor, solvencyOf } from '../game/money';
@@ -452,7 +452,9 @@ export function TrainingScreen() {
                 */}
                 {atFocusLimit && !selected && (
                   <span style={{ display: 'block', marginTop: 'var(--space-2)' }}>
-                    <Chip tone="warning">⚠ Two at most — drop one first</Chip>
+                    <Chip tone="warning">
+                      <Icon name="warning" /> Two at most — drop one first
+                    </Chip>
                   </span>
                 )}
               </button>
@@ -852,7 +854,7 @@ function DivisionPicker() {
                       </Chip>
                       {appraisal.severity >= DANGEROUS_SEVERITY && (
                         <Chip tone="warning" title="A cut this size is genuinely risky">
-                          ⚠ Hard cut
+                          <Icon name="warning" /> Hard cut
                         </Chip>
                       )}
                     </span>

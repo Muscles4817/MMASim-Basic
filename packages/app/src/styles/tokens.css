@@ -110,8 +110,7 @@
 
   /* --- Type ------------------------------------------------------------------------ */
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
-    sans-serif;
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --font-mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
 
   /* Table micro-labels and column headers only. Never body copy — it is below the floor. */
@@ -146,8 +145,111 @@
   --text-body: var(--text-base);
   --gutter: var(--space-3);
 
+  /*
+   * --- Voice --------------------------------------------------------------------------------
+   *
+   * What a game mode is allowed to restyle without touching a component.
+   *
+   * The three modes are different games (doc 35), and most of their screens are bespoke. The
+   * primitives underneath them — a card, a button, a chip, a tab bar — are not: the same
+   * accessible button is right in all of them. So a primitive reads its *voice* from these
+   * tokens, and `styles/modes/*.css` re-declares them. A button is written once; whether it is
+   * a stamped poster label or a broadcast plate is a stylesheet's decision.
+   *
+   * The defaults below are the neutral voice: the menu, new game and the editor, which belong to
+   * no mode. They reproduce the look those screens already had.
+   */
+
+  /* Display type: screen titles, hero names, the big numbers. */
+  --font-display: var(--font-sans);
+  --display-weight: 800;
+  --display-style: normal;
+  --display-transform: none;
+  --display-tracking: -0.01em;
+  /* Labels: section titles and card headings. Small, tracked, and meant to be skimmed. */
+  --label-weight: 700;
+  --label-tracking: 0.05em;
+  --label-color: var(--text-faint);
+
+  /*
+   * The slab. Every mode has one surface that is the inverse of the page — the poster's black
+   * band, the broadcast's white plate — and it is where a screen puts the one thing that matters.
+   * Named for what it does rather than its colour, because in dark themes it inverts.
+   */
+  --ink: #16171a;
+  --on-ink: #ffffff;
+  --on-ink-muted: #c9ccd3;
+
+  /* Shape. */
+  --card-border: 1px solid var(--border);
+  --card-shadow: none;
+  --card-raised-shadow: var(--shadow-sm);
+  /* The one card a screen leads with. Heavier than raised; there should only ever be one. */
+  --feature-border: 1px solid var(--border-strong);
+  --feature-shadow: var(--shadow);
+  --btn-radius: var(--radius);
+  --btn-font: var(--font-sans);
+  --btn-weight: 600;
+  --btn-style: normal;
+  --btn-size: var(--text-base);
+  --btn-border-width: 1px;
+  --btn-secondary-border: var(--border-strong);
+  --btn-transform: none;
+  --btn-tracking: 0;
+  --btn-primary-shadow: none;
+  --chip-radius: var(--radius-full);
+  --chip-transform: none;
+  --chip-tracking: 0;
+  /* Small status tags that are never focusable, so they may be clipped into a shape. */
+  --tag-clip: none;
+  /* The keyboard focus ring. Surfaces that invert the page (the slab) re-point it at a colour
+     that contrasts with them — gold on a white plate is 1.4:1, which is not a ring. */
+  --focus-ring: var(--accent);
+
+  /* The masthead: the slab a home screen leads with (ui/Masthead). */
+  --on-ink-accent: #f0736a;
+  --masthead-radius: var(--radius-lg);
+  --masthead-transform: none;
+  --masthead-clip: none;
+  --masthead-rule: 0 solid transparent;
+  --masthead-texture: none;
+  --masthead-texture-size: auto;
+  --stamp-border: 2px solid currentColor;
+  --stamp-bg: transparent;
+  --stamp-fg: var(--on-ink-accent);
+  --stamp-transform: none;
+
+  /*
+   * Chrome: the header and the tab bar. Their own tokens rather than `--surface`, because a mode's
+   * frame is often not its page — the poster's tab bar is the black band, not more newsprint.
+   */
+  --title-size: var(--text-lg);
+  --header-bg: var(--surface);
+  --header-rule: 1px solid var(--border);
+  --nav-bg: var(--surface);
+  --nav-rule: 1px solid var(--border);
+  --nav-fg: var(--text-faint);
+  --nav-fg-current: var(--accent);
+  --nav-indicator: var(--accent);
+  --nav-indicator-glow: 0 0 0 transparent;
+  --nav-hover-bg: var(--surface-sunken);
+  --nav-rail-current-bg: var(--accent-soft);
+  --nav-rail-current-fg: var(--accent);
+  --nav-font: var(--font-sans);
+  --nav-size: var(--text-xs);
+  --nav-weight: 600;
+  --nav-weight-current: 800;
+  --nav-transform: none;
+  --nav-tracking: 0;
+
+  /* Surface texture: newsprint grain, scanlines. A background-image, never a colour. */
+  --texture: none;
+  --texture-size: auto;
+
   /* --- Layout --------------------------------------------------------------------- */
   --nav-height: 3.75rem;
+  /* The left rail at ≥48rem. A token because the action dock has to clear it too. */
+  --rail-width: 13rem;
   --header-height: 3.25rem;
   --content-max: 56rem;
   /* Consoles: dashboards and master/detail, where two regions sit side by side. */
@@ -206,6 +308,11 @@
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow: 0 2px 10px rgb(0 0 0 / 0.5);
     --shadow-lg: 0 10px 32px rgb(0 0 0 / 0.6);
+
+    --ink: #eceef2;
+    --on-ink: #0e0f12;
+    --on-ink-muted: #3d424e;
+    --on-ink-accent: #b8342b;
   }
 }
 
@@ -254,6 +361,11 @@
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow: 0 2px 10px rgb(0 0 0 / 0.5);
   --shadow-lg: 0 10px 32px rgb(0 0 0 / 0.6);
+
+  --ink: #eceef2;
+  --on-ink: #0e0f12;
+  --on-ink-muted: #3d424e;
+  --on-ink-accent: #b8342b;
 }
 
 /*

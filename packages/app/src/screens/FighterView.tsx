@@ -51,11 +51,9 @@ import {
   describeInjury,
   dispositionsOf,
   displayName,
-  fighterAge,
   getDivision,
   isPhysical,
   marketValue,
-  recordString,
   scoutedAttributes,
   scoutedRating,
   scoutingRead,
@@ -71,7 +69,7 @@ import {
 } from '@mmasim/engine';
 import { getWorld, type GameDb } from '@mmasim/data';
 import { Button, Card, Chip, RatingRow } from '../ui';
-import { Alert, AttributeBadge, Fact, ICON, Icon, KeyStat } from '../ui/signals';
+import { Alert, AttributeBadge, Fact, Icon, KeyStat } from '../ui/signals';
 import { AbilityBand, Console, Ledger, LedgerRow, MiniRating, TabPanel, Tabs } from '../ui/console';
 import { FightRecordList, RecordSummaryBar } from '../ui/FightRecord';
 import { readMileage } from '../ui/mileage';
@@ -83,6 +81,7 @@ import { currentPurse, promotionOf } from '../game/money';
 import { GROUP_LABELS } from '../game/labels';
 import { daysUnbookedBy } from '../game/plans';
 import { IdentityStrip } from './FighterIdentity';
+import { FighterMasthead } from './FighterMasthead';
 import { DrawBadge } from '../ui/DrawBadge';
 import './FighterView.css';
 
@@ -249,25 +248,26 @@ export function FighterView({
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }} data-testid="fighter-view">
-      {/* Identity, always visible above the tabs. Who this is never belongs behind one. */}
-      <Card raised>
-        <h2 style={{ fontSize: 'var(--text-2xl)', lineHeight: 1.15 }}>{displayName(fighter)}</h2>
-        <p className="muted">
-          {division.name} · {fighterAge(fighter, day)} · {fighter.stance}
-        </p>
+      {/*
+        Identity, always visible above the tabs. Who this is never belongs behind one.
 
+        The name, record and standing are the masthead — the same object the career hub leads
+        with, in the current mode's voice. The card under it holds the person: where they are
+        from, who trains them, the body, and what their career is doing.
+      */}
+      <FighterMasthead
+        label="Who this is"
+        fighter={fighter}
+        ladder={ladder}
+        divisionName={division.name}
+        day={day}
+        extra={fighter.stance}
+      />
+
+      <Card>
         <IdentityStrip db={db} fighter={fighter} />
 
-        <div style={{ marginTop: 'var(--space-4)' }}>
-          <KeyStat
-            value={recordString(fighter.summary)}
-            label="Professional record"
-            detail={arc.blurb}
-            tone={
-              fighter.summary.streak > 0 ? 'good' : fighter.summary.streak < 0 ? 'bad' : 'neutral'
-            }
-          />
-        </div>
+        <p className="fighter-view__arc">{arc.blurb}</p>
 
         <div className="row" style={{ marginTop: 'var(--space-3)', flexWrap: 'wrap' }}>
           {/* A champion's arc *is* "Champion", and the belt chip below says it with the icon. */}
@@ -960,11 +960,17 @@ function CareerTab({
                       <Chip
                         tone={rivalry.isRivalry ? 'negative' : heat > 45 ? 'warning' : 'neutral'}
                       >
-                        {rivalry.isRivalry
-                          ? `${ICON.streak} Grudge`
-                          : heat > 45
-                            ? `${ICON.streak} Real interest`
-                            : 'Simmering'}
+                        {rivalry.isRivalry ? (
+                          <>
+                            <Icon name="streak" /> Grudge
+                          </>
+                        ) : heat > 45 ? (
+                          <>
+                            <Icon name="streak" /> Real interest
+                          </>
+                        ) : (
+                          'Simmering'
+                        )}
                       </Chip>
                     </div>
                   );

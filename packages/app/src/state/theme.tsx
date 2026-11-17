@@ -16,6 +16,7 @@ import {
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
+import { syncThemeColor } from './mode';
 
 export type ThemeChoice = 'system' | 'light' | 'dark';
 
@@ -75,17 +76,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   /*
    * Keep the browser chrome in step with an explicit in-app choice.
    *
-   * index.html now ships a single *unscoped* theme-color and stamps it before first paint. It
-   * used to ship a media-scoped pair, which meant this selector never matched: the tag
-   * appended here landed at the end of <head> and the UA took the first matching tag in tree
-   * order instead, so this had no effect at all.
-   *
-   * The colours are duplicated from `--bg` in tokens.css because a meta tag cannot read a CSS
-   * custom property. Change one, change all three (here, index.html, tokens.css).
+   * index.html ships a single *unscoped* theme-color and stamps it before first paint; this keeps
+   * it in step afterwards. The colour is read back from the resolved `--bg` (see `syncThemeColor`)
+   * rather than duplicated here, because the background now depends on the game mode as well as
+   * the theme.
    */
   useEffect(() => {
-    const tag = document.querySelector('meta[name="theme-color"]');
-    tag?.setAttribute('content', resolved === 'dark' ? '#0e0f12' : '#f6f6f7');
+    syncThemeColor();
   }, [resolved]);
 
   const value = useMemo<ThemeContextValue>(

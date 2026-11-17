@@ -39,7 +39,6 @@ import {
   describeHeat,
   describeRust,
   displayName,
-  fighterAge,
   freshnessOf,
   getDivision,
   recordString,
@@ -64,13 +63,12 @@ import {
   Collapse,
   DataTable,
   Empty,
-  Flag,
   Grid,
   GridCell,
   Panel,
   type Column,
 } from '../ui';
-import { Fact, FighterRead, ICON, Icon, StateRow, StreakBadge } from '../ui/signals';
+import { Fact, FighterRead, Icon, StateRow } from '../ui/signals';
 import { AbilityBand, AttentionRow } from '../ui/console';
 import { bookFight, clearBooking, getBooking, getOffers } from '../game/career';
 import { careerAttention, dominantSituation, type CareerSituation } from '../game/careerAttention';
@@ -79,6 +77,8 @@ import { playerCardPosition } from '../game/night';
 import { getRivalry, previousMeetings } from '../game/rivalries';
 import { readNews } from '../game/world';
 import { NewsFeed } from '../ui/NewsFeed';
+import { ActionDock } from '../ui/ActionDock';
+import { FighterMasthead } from './FighterMasthead';
 import { PROMOTION_TIER_LABELS } from '../game/labels';
 import { currentPurse } from '../game/money';
 import { adviceOn, boutMerit, contractStanding } from '../game/contracts';
@@ -295,14 +295,11 @@ export function HubScreen() {
         with room to spare is noise.
       */}
       {lead && (
-        <div className="career__action" data-testid="dominant-action">
-          <div className="career__action-inner">
-            <span className="career__action-why">{SITUATION_LABEL[lead.kind]}</span>
-            <Button variant="primary" onClick={() => act(lead)}>
-              {lead.action?.label}
-            </Button>
-          </div>
-        </div>
+        <ActionDock why={SITUATION_LABEL[lead.kind]} testId="dominant-action">
+          <Button variant="primary" onClick={() => act(lead)}>
+            {lead.action?.label}
+          </Button>
+        </ActionDock>
       )}
     </div>
   );
@@ -324,48 +321,27 @@ function IdentityBand({
   const ability = abilityRead(fighter.attributes);
 
   return (
-    <section className="identity" aria-label="Who you are" data-testid="identity">
-      <div className="identity__who">
-        <h2 className="identity__name">{displayName(fighter)}</h2>
-        <p className="muted">
-          {divisionName} · {fighterAge(fighter, day)} · <Flag nationality={fighter.nationality} />
-        </p>
-      </div>
+    <div className="identity" data-testid="identity">
+      <FighterMasthead
+        label="Who you are"
+        fighter={fighter}
+        ladder={ladder}
+        divisionName={divisionName}
+        day={day}
+      />
 
-      <div className="identity__record">
-        <span className="identity__record-value numeric">{recordString(fighter.summary)}</span>
-        <span className="identity__record-label">Professional record</span>
-        {fighter.summary.streak !== 0 && <StreakBadge streak={fighter.summary.streak} />}
-      </div>
-
-      <div className="identity__standing">
-        {ladder?.isChampion ? (
-          <Chip tone="accent" title="Reigning divisional champion">
-            <Icon name="champion" /> Champion
-          </Chip>
-        ) : ladder?.position !== undefined ? (
-          <Chip tone="info">
-            #{ladder.position} of {ladder.ranked.length}
-          </Chip>
-        ) : (
-          <Chip>Unranked</Chip>
-        )}
-        {/*
-          A class, never a number.
-
-          The hub used to print an exact overall for the same fighter whose profile argues at
-          length that it must never do so — `FighterScreen`'s header is explicit that anybody who
-          can compare 34 against 47 is not scouting, they are doing arithmetic. Two screens, one
-          fighter, two incompatible positions. The profile's reasoning is the better one, and
-          every underlying rating is still there for anyone who wants to form their own view.
-        */}
-        <AbilityBand label={ability.label} fill={ability.fill} note={ability.blurb} />
-      </div>
-
+      {/*
+        What kind of fighter this is, under the poster rather than on it: a class, never a
+        number. The hub used to print an exact overall for the same fighter whose profile argues
+        at length that it must never do so — anybody who can compare 34 against 47 is not
+        scouting, they are doing arithmetic. Every underlying rating is on the profile for
+        anyone who wants to form their own view.
+      */}
       <div className="identity__read">
+        <AbilityBand label={ability.label} fill={ability.fill} note={ability.blurb} />
         <FighterRead attributes={fighter.attributes} />
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -418,6 +394,7 @@ function NeedsYou({
                controls for one decision is the thing this screen exists to stop doing. */
             cue={situation.action && situation.id !== lead?.id ? situation.action.label : undefined}
             onClick={situation.action ? () => onAct(situation) : undefined}
+            lead={situation.id === lead?.id}
           />
         ))}
       </div>
@@ -451,7 +428,11 @@ function NextFight({
       testId="next-fight"
     >
       <p style={{ fontSize: 'var(--text-xl)', fontWeight: 700, marginBottom: 'var(--space-1)' }}>
-        {booking.bout.isTitleFight && <span aria-hidden="true">🏆 </span>}
+        {booking.bout.isTitleFight && (
+          <>
+            <Icon name="champion" />{' '}
+          </>
+        )}
         vs {displayName(opponent)}
         {booking.bout.isTitleFight && <span className="visually-hidden"> for the title</span>}
       </p>
@@ -582,9 +563,13 @@ function ChooseFight({
         const rivalry = getRivalry(db, fighter.id, o.opponent.id, day);
         const heat = currentHeat(rivalry, day);
         return rivalry.isRivalry ? (
-          <Chip tone="negative">{ICON.streak} Grudge</Chip>
+          <Chip tone="negative">
+            <Icon name="streak" /> Grudge
+          </Chip>
         ) : heat >= 40 ? (
-          <Chip tone="warning">{ICON.streak} Heat</Chip>
+          <Chip tone="warning">
+            <Icon name="streak" /> Heat
+          </Chip>
         ) : (
           <span className="faint">—</span>
         );
@@ -604,9 +589,7 @@ function ChooseFight({
       {titleShot && (
         <Card title="Title fight" raised testId="title-fight">
           <div className="row" style={{ gap: 'var(--space-2)', marginBottom: 'var(--space-2)' }}>
-            <span aria-hidden="true" style={{ fontSize: '1.5rem' }}>
-              🏆
-            </span>
+            <Icon name="champion" className="title-fight__icon" />
             <p style={{ fontSize: 'var(--text-xl)', fontWeight: 700 }}>
               {titleShot.champion
                 ? `For the belt, against ${displayName(titleShot.champion)}`
@@ -614,8 +597,8 @@ function ChooseFight({
             </p>
           </div>
           <p className="muted prose" style={{ marginBottom: 'var(--space-3)' }}>
-            Five rounds, a ten-week camp, and the {divisionName} title on the line. This is what
-            the climb was for.
+            Five rounds, a ten-week camp, and the {divisionName} title on the line. This is what the
+            climb was for.
           </p>
           <Button onClick={onTakeTitle}>Take the title fight</Button>
         </Card>
@@ -782,8 +765,8 @@ function OfferDetail({
           className={`offer-advice ${advice.recommended ? '' : 'offer-advice--against'}`}
           style={{ marginTop: 'var(--space-3)' }}
         >
-          <span aria-hidden="true">{advice.recommended ? '👍' : '✋'}</span>{' '}
-          <strong>{managerName}:</strong> &ldquo;{advice.line}&rdquo;
+          <Icon name={advice.recommended ? 'success' : 'warning'} /> <strong>{managerName}:</strong>{' '}
+          &ldquo;{advice.line}&rdquo;
         </p>
       )}
 
@@ -839,7 +822,9 @@ function ConditionPanel({
         <span>
           Condition{' '}
           <span
-            className={read.tone === 'good' ? 'positive' : read.tone === 'bad' ? 'negative' : 'muted'}
+            className={
+              read.tone === 'good' ? 'positive' : read.tone === 'bad' ? 'negative' : 'muted'
+            }
             style={{ fontWeight: 700 }}
           >
             · {read.label}

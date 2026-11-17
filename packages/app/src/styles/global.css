@@ -1,4 +1,9 @@
 @import './tokens.css';
+@import './fonts.css';
+/* Mode layers after the base palette — the order matters, see modes/fighter.css. They only
+   re-declare tokens; they add no rules of their own. See docs/35. */
+@import './modes/fighter.css';
+@import './modes/promoter.css';
 
 /* --- Reset ------------------------------------------------------------------------- */
 
@@ -26,7 +31,10 @@ body {
   font-size: var(--text-body);
   line-height: 1.5;
   color: var(--text);
-  background: var(--bg);
+  background-color: var(--bg);
+  /* A mode's surface texture — newsprint grain, scanlines. `none` in the neutral voice. */
+  background-image: var(--texture);
+  background-size: var(--texture-size);
   min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
   /* Stops the whole page bouncing on iOS while inner scrollers still work. */
@@ -79,7 +87,7 @@ ol {
    Note the absence of border-radius: setting one here reshapes the *element*, which turns
    pill-shaped chips into rectangles the moment they take focus. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -163,6 +171,15 @@ ol {
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum';
 }
+
+/* Icons sit in a line of text. `img, svg { display: block }` above is right for pictures and
+   wrong for these. */
+.icon {
+  display: inline-block;
+  flex: none;
+  vertical-align: -0.125em;
+}
+
 
 /* Prose blocks cap at a readable measure. Without this, explanatory paragraphs run the full
    896px content width on desktop -- around 130 characters, roughly twice comfortable. */

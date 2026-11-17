@@ -1,0 +1,112 @@
+/*
+ * The docked action. See ActionDock.tsx for why it exists.
+ *
+ * `position: fixed` rather than sticky: the home screens are short enough that a sticky element
+ * would spend most of its life in the flow anyway, and the point is that the answer is reachable
+ * without scrolling to find it.
+ */
+
+.action-dock {
+  position: fixed;
+  inset-inline: 0;
+  bottom: calc(var(--nav-height) + env(safe-area-inset-bottom));
+  z-index: 25;
+  padding: var(--space-2) var(--gutter);
+  background: color-mix(in srgb, var(--header-bg) 94%, transparent);
+  backdrop-filter: blur(12px);
+  border-top: var(--header-rule);
+}
+
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .action-dock {
+    background: var(--header-bg);
+  }
+}
+
+.action-dock__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  max-width: var(--content-max-wide);
+  margin: 0 auto;
+}
+
+/* The reason, as a label: the claim the situation model already made, named in a word. */
+.action-dock__why {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-xs);
+  font-weight: var(--label-weight);
+  letter-spacing: var(--label-tracking);
+  text-transform: uppercase;
+  color: var(--label-color);
+}
+
+/* The action takes the room: on a phone it is the biggest target on the screen, deliberately. */
+.action-dock__inner > .btn {
+  flex: 1 1 auto;
+  max-width: 22rem;
+  min-height: 3.25rem;
+  font-size: calc(var(--btn-size) * 1.15);
+}
+
+/*
+ * Clear the dock, so it never covers the last thing on the page.
+ *
+ * The shell already reserves room for the nav; this is the extra strip on top of it. Scoped with
+ * :has() so a screen without a dock pays nothing.
+ */
+.shell:has(.action-dock) .shell__main {
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + var(--space-5) + 4.5rem);
+}
+
+/*
+ * An update waiting. The prompt docks in the same place (UpdatePrompt.css) and sits above
+ * everything, so the dock steps up over it and the page clears both — this selector out-ranks
+ * the one above, which would otherwise reserve room for the dock alone.
+ */
+body:has(.update-prompt) .action-dock {
+  bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 5.5rem);
+}
+
+body:has(.update-prompt) .shell:has(.action-dock) .shell__main {
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + var(--space-5) + 10rem);
+}
+
+@media (min-width: 48rem) {
+  /* The rail replaces the tab bar here, so the dock sits on the bottom edge itself — and starts
+     where the rail ends, or its reason is hidden under the rail. */
+  .action-dock {
+    bottom: 0;
+    inset-inline-start: var(--rail-width);
+    padding-inline: var(--space-5);
+  }
+}
+
+@media (min-width: 62rem) {
+  /*
+   * In the flow, not over it. At this width the whole decision is on screen at once, so there is
+   * nothing to scroll back to.
+   */
+  .action-dock {
+    position: static;
+    padding: 0;
+    background: none;
+    backdrop-filter: none;
+    border-top: none;
+  }
+
+  .action-dock__inner {
+    justify-content: flex-start;
+    flex-direction: row-reverse;
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+
+  .shell:has(.action-dock) .shell__main {
+    padding-bottom: var(--space-7);
+  }
+}

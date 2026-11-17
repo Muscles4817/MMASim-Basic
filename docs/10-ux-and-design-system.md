@@ -63,6 +63,10 @@ own test enforces, not a lint rule over every screen in the app.
 
 ## Theming
 
+> Theme (light/dark) and **mode identity** are independent switches. Each game mode re-declares
+> the palette and the voice tokens for both themes under `data-mode`; see
+> [35 — Mode identities](./35-mode-identities.md). The table below is the theme switch only.
+
 Three states, not two:
 
 | Choice   | `data-theme` | Behaviour                                       |
@@ -85,6 +89,9 @@ Duplicating the dark block is deliberate. A shared class or a CSS-nesting trick 
 lines and reintroduces exactly the bug this structure exists to prevent.
 
 ## The signal vocabulary
+
+> Icons are drawn (`ui/icons.tsx`), not emoji, and severity is a word in a tag rather than a
+> coloured stripe — doc 35.
 
 The most common failure in a stats-heavy game is a screen where every number is the same
 size, weight and colour — which makes the *player* do the sorting. Three rules, applied

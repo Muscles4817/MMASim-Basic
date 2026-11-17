@@ -41,7 +41,6 @@ import { Alert, Fact } from '../ui/signals';
 import { money } from '../ui/format';
 import { bookedOnPlans } from '../game/finances';
 import { daysUnbookedBy } from '../game/plans';
-import { PromoterSubNav } from './promoterNav';
 
 /** What is wrong with this fighter's situation, if anything. Drives the whole sort. */
 interface Attention {
@@ -223,8 +222,6 @@ export function PromoterRosterScreen() {
 
   return (
     <div className="stack" style={{ gap: 'var(--space-4)' }}>
-      <PromoterSubNav current="roster" />
-
       <Card raised>
         <div className="facts">
           <Fact

@@ -25,23 +25,29 @@
   min-height: var(--header-height);
   padding: 0 var(--space-3);
   padding-top: env(safe-area-inset-top);
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  background: color-mix(in srgb, var(--header-bg) 90%, transparent);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--header-rule);
 }
 
 /* color-mix is widely supported but not universal; an opaque fallback prevents unreadable
    text on browsers that ignore the mix. */
 @supports not (background: color-mix(in srgb, red 50%, blue)) {
   .shell__header {
-    background: var(--surface);
+    background: var(--header-bg);
   }
 }
 
+/* The screen's name, in the mode's display voice — the first thing on every screen that says
+   which game this is. */
 .shell__title {
-  font-size: var(--text-lg);
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-family: var(--font-display);
+  font-size: var(--title-size);
+  font-weight: var(--display-weight);
+  font-style: var(--display-style);
+  text-transform: var(--display-transform);
+  letter-spacing: var(--display-tracking);
+  line-height: 1.1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -85,6 +91,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+  /* A mode may print a slab at an angle or bleed it to the glass (ui/Masthead). Clip rather than
+     hidden: clip creates no scroll container, so sticky panels inside still stick. */
+  overflow-x: clip;
 }
 
 /*
@@ -112,15 +121,15 @@ body:has(.update-prompt) .shell__main {
   z-index: 30;
   display: flex;
   justify-content: space-around;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  background: color-mix(in srgb, var(--nav-bg) 96%, transparent);
   backdrop-filter: blur(12px);
-  border-top: 1px solid var(--border);
+  border-top: var(--nav-rule);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
 @supports not (background: color-mix(in srgb, red 50%, blue)) {
   .shell__nav {
-    background: var(--surface);
+    background: var(--nav-bg);
   }
 }
 
@@ -134,9 +143,12 @@ body:has(.update-prompt) .shell__main {
   gap: 2px;
   min-height: var(--nav-height);
   padding: var(--space-1) var(--space-1);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-faint);
+  font-family: var(--nav-font);
+  font-size: var(--nav-size);
+  font-weight: var(--nav-weight);
+  text-transform: var(--nav-transform);
+  letter-spacing: var(--nav-tracking);
+  color: var(--nav-fg);
   transition: color var(--transition-fast);
 }
 
@@ -150,13 +162,15 @@ body:has(.update-prompt) .shell__main {
   matters for a mobile game was the one that failed.
 */
 .shell__nav-item[aria-current='page'] {
-  color: var(--accent);
-  font-weight: 800;
-  box-shadow: inset 0 3px 0 0 var(--accent);
+  color: var(--nav-fg-current);
+  font-weight: var(--nav-weight-current);
+  box-shadow:
+    inset 0 4px 0 0 var(--nav-indicator),
+    var(--nav-indicator-glow);
 }
 
 .shell__nav-icon {
-  font-size: 1.15rem;
+  font-size: 1.35rem;
   line-height: 1;
 }
 
@@ -178,12 +192,12 @@ body:has(.update-prompt) .shell__main {
     flex-direction: column;
     justify-content: flex-start;
     gap: var(--space-1);
-    width: 13rem;
-    flex: 0 0 13rem;
+    width: var(--rail-width);
+    flex: 0 0 var(--rail-width);
     padding: var(--space-4) var(--space-2);
     padding-top: calc(env(safe-area-inset-top) + var(--space-4));
     border-top: none;
-    border-inline-end: 1px solid var(--border);
+    border-inline-end: var(--nav-rule);
   }
 
   .shell__nav-item {
@@ -198,13 +212,14 @@ body:has(.update-prompt) .shell__main {
   }
 
   .shell__nav-item:hover {
-    background: var(--surface-sunken);
-    color: var(--text);
+    background: var(--nav-hover-bg);
+    color: var(--nav-fg-current);
   }
 
   .shell__nav-item[aria-current='page'] {
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--nav-rail-current-bg);
+    color: var(--nav-rail-current-fg);
+    box-shadow: none;
   }
 
   .shell__body {
@@ -231,13 +246,16 @@ body:has(.update-prompt) .shell__main {
   .shell__brand {
     display: block;
     padding: 0 var(--space-3) var(--space-4);
-    font-size: var(--text-lg);
-    font-weight: 800;
-    letter-spacing: -0.02em;
+    font-family: var(--font-display);
+    font-size: var(--text-xl);
+    font-weight: var(--display-weight);
+    font-style: var(--display-style);
+    letter-spacing: var(--display-tracking);
+    color: var(--nav-fg-current);
   }
 
   .shell__brand span {
-    color: var(--accent);
+    color: var(--nav-indicator);
   }
 }
 
@@ -297,7 +315,10 @@ body:has(.update-prompt) .shell__main {
 }
 
 .shell__funds-value {
-  font-weight: 650;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
@@ -305,4 +326,29 @@ body:has(.update-prompt) .shell__main {
 /* In the red is a state, not a smaller number, and it has to read as one at a glance. */
 .shell__funds-value[data-negative='true'] {
   color: var(--negative);
+}
+
+/*
+ * Settings, behind a gear.
+ *
+ * Out of the tab bar (see Shell.tsx) but never more than one tap from anywhere, and on the right of
+ * the header where a phone's settings conventionally are.
+ */
+.shell__settings {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tap-target);
+  height: var(--tap-target);
+  margin-right: calc(var(--space-2) * -1);
+  border-radius: var(--radius);
+  font-size: 1.25rem;
+  color: var(--text-muted);
+}
+
+.shell__settings:hover {
+  /* Not --surface-sunken: that is the promoter's header colour, so a hover there was invisible. */
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
 }

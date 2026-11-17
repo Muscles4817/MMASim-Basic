@@ -16,7 +16,7 @@
  * arrives as a prop at the route boundary, never as a branch inside a shared component.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import {
   displayBand,
   ratingBand,
@@ -25,7 +25,6 @@ import {
   type Rating,
 } from '@mmasim/engine';
 import { bandKeyColour } from './index';
-import { Icon, type IconName } from './signals';
 import './console.css';
 
 // --- Layout ------------------------------------------------------------------------------------
@@ -46,82 +45,29 @@ export function Console({ main, side }: { main: ReactNode; side: ReactNode }) {
   );
 }
 
-// --- Sub-navigation -----------------------------------------------------------------------------
-
-export interface SubNavItem {
-  label: string;
-  href: string;
-  current?: boolean;
-  onClick?(): void;
-}
-
-/**
- * The places a promoter needs that the five tabs cannot hold.
- *
- * Real links so middle-click and the links rotor work, same as the shell's nav. A scroller
- * rather than a wrap, because these are peers and a second row reads as a hierarchy that is not
- * there.
- */
-export function SubNav({ items, label }: { items: readonly SubNavItem[]; label: string }) {
-  /*
-   * Whether there is more of the row off either edge, which the CSS turns into a fade. Read on
-   * scroll and on resize; a row that fits sets neither.
-   */
-  const ref = useRef<HTMLElement>(null);
-  const [more, setMore] = useState({ left: false, right: false });
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const read = () =>
-      setMore({
-        left: el.scrollLeft > 1,
-        right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1,
-      });
-    read();
-    el.addEventListener('scroll', read, { passive: true });
-    window.addEventListener('resize', read);
-    return () => {
-      el.removeEventListener('scroll', read);
-      window.removeEventListener('resize', read);
-    };
-  }, [items.length]);
-
-  return (
-    <nav
-      ref={ref}
-      className="subnav"
-      aria-label={label}
-      data-more-left={more.left ? 'true' : undefined}
-      data-more-right={more.right ? 'true' : undefined}
-    >
-      {items.map((item) => (
-        <a
-          key={item.label}
-          className="subnav__item"
-          href={item.href}
-          aria-current={item.current ? 'page' : undefined}
-          onClick={(e) => {
-            if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-            if (!item.onClick) return;
-            e.preventDefault();
-            item.onClick();
-          }}
-        >
-          {item.label}
-        </a>
-      ))}
-    </nav>
-  );
-}
-
 // --- Attention ------------------------------------------------------------------------------------
 
+/** The word each tone is announced with. Severity is never carried by colour alone. */
+const TONE_WORD: Readonly<Record<AttentionTone, string>> = {
+  danger: 'Urgent',
+  warn: 'Soon',
+  info: 'Note',
+  good: 'Good',
+};
+
+export type AttentionTone = 'danger' | 'warn' | 'info' | 'good';
+
 /**
- * One thing that needs the promoter.
+ * One thing that needs the player.
  *
  * The rule the component enforces: a row without a `detail` is a notification, and a
- * notification is what the old dashboard was made of. Every row says what is true, what it
+ * notification is what the old dashboards were made of. Every row says what is true, what it
  * costs, and what to do about it.
+ *
+ * Severity is a word in a tag at the head of the row — Urgent, Soon, Note, Good — rather than a
+ * coloured stripe down its edge. The stripe failed greyscale and a quick scan alike, and it is the
+ * most recognisable mark of a template nobody designed. The tag is the mode's: a printed block on
+ * the poster, a slanted plate in the studio.
  */
 export function AttentionRow({
   tone,
@@ -130,8 +76,9 @@ export function AttentionRow({
   cue,
   onClick,
   kind,
+  lead,
 }: {
-  tone: 'danger' | 'warn' | 'info' | 'good';
+  tone: AttentionTone;
   title: string;
   detail: string;
   cue?: string;
@@ -145,16 +92,19 @@ export function AttentionRow({
    * that the hub must never advertise interest the contract screen lacks.
    */
   kind?: string;
+  /**
+   * The situation the screen leads with. Drawn at feature weight — the ticket on the poster, the
+   * lit plate in the studio — so the ranking the model already did is visible without reading.
+   * One per list.
+   */
+  lead?: boolean;
 }) {
-  const icon: IconName =
-    tone === 'danger' || tone === 'warn' ? 'warning' : tone === 'good' ? 'success' : 'info';
-
   const body = (
     <>
-      <span className="attention__icon">
-        <Icon name={icon} />
+      <span className="attention__tag" data-tone={tone}>
+        {TONE_WORD[tone]}
       </span>
-      <span style={{ minWidth: 0 }}>
+      <span className="attention__body">
         <span className="attention__title">{title}</span>
         <span className="attention__detail">{detail}</span>
         {cue && <span className="attention__cue">{cue} →</span>}
@@ -162,22 +112,17 @@ export function AttentionRow({
     </>
   );
 
-  if (!onClick) {
-    return (
-      <div className="attention__item" data-tone={tone} data-kind={kind}>
-        {body}
-      </div>
-    );
-  }
+  const shared = {
+    className: 'attention__item',
+    'data-tone': tone,
+    'data-kind': kind,
+    'data-lead': lead ? 'true' : undefined,
+  };
+
+  if (!onClick) return <div {...shared}>{body}</div>;
 
   return (
-    <button
-      type="button"
-      className="attention__item"
-      data-tone={tone}
-      data-kind={kind}
-      onClick={onClick}
-    >
+    <button type="button" {...shared} onClick={onClick}>
       {body}
     </button>
   );

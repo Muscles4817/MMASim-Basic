@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { NewsItem, NewsKind, NewsWeight } from '@mmasim/engine';
 import { formatGameDay } from '../shell/Shell';
 import './NewsFeed.css';
+import { Icon, type IconName } from './icons';
 
 /**
  * The feed.
@@ -22,21 +23,21 @@ import './NewsFeed.css';
  * what happened when `release` was added: every release item rendered "release" in a column
  * where every other row read "Title change" or "Injury".
  */
-const KIND_ICON: Readonly<Record<NewsKind, string>> = {
-  titleChange: '🏆',
-  titleDefence: '🏆',
-  upset: '⚡',
-  retirement: '🎬',
-  signing: '✍️',
-  streak: '🔥',
-  rivalry: '🔥',
-  result: '·',
-  injury: '🩹',
-  debut: '✍️',
-  release: '✂️',
-  cancellation: '✖',
-  nickname: '🏷️',
-  voice: '💬',
+const KIND_ICON: Readonly<Record<NewsKind, IconName>> = {
+  titleChange: 'champion',
+  titleDefence: 'champion',
+  upset: 'bolt',
+  retirement: 'exit',
+  signing: 'pen',
+  streak: 'streak',
+  rivalry: 'streak',
+  result: 'level',
+  injury: 'injury',
+  debut: 'pen',
+  release: 'cut',
+  cancellation: 'cross',
+  nickname: 'tag',
+  voice: 'speech',
 };
 
 const KIND_LABEL: Readonly<Record<NewsKind, string>> = {
@@ -127,7 +128,7 @@ function NewsRow({ item, onFighterClick }: { item: NewsItem; onFighterClick?(id:
     >
       {/* Icon, tier and a word: the kind is never carried by the glyph alone. */}
       <span className="news__icon" aria-hidden="true">
-        {KIND_ICON[item.kind] ?? '·'}
+        <Icon name={KIND_ICON[item.kind]} />
       </span>
       <span className="news__body">
         <span className="news__meta">
