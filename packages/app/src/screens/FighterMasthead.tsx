@@ -44,9 +44,9 @@ export function FighterMasthead({
   if (streak !== 0) {
     figures.push({ value: streak > 0 ? `W${streak}` : `L${-streak}`, label: 'Streak' });
   }
-  if (ladder?.isChampion) {
-    figures.push({ value: 'C', label: 'Champion' });
-  } else if (ladder?.position !== undefined) {
+  // A champion's standing is the stamp, not a figure — "C / Champion" beside a "Champion" stamp
+  // said the one thing twice.
+  if (!ladder?.isChampion && ladder?.position !== undefined) {
     figures.push({ value: `#${ladder.position}`, label: `Of ${ladder.ranked.length}` });
   }
 

@@ -156,7 +156,7 @@ export function PromotionHubScreen() {
    * attention model already ranked everything on one scale, so the dock is its first actionable
    * row rather than a second opinion.
    */
-  const lead = attention.find((item) => item.action);
+  const lead = attention.slice(0, ATTENTION_SHOWN).find((item) => item.action);
   const leadAction = lead?.action;
 
   return (
@@ -172,7 +172,8 @@ export function PromotionHubScreen() {
         title={promotion.name}
         meta={finances ? describeRunway(finances) : undefined}
         figures={[
-          { value: money(promotion.budget), label: 'Cash', emphasis: true },
+          // The accent means "this is the number"; an overdraft is not a number to celebrate.
+          { value: money(promotion.budget), label: 'Cash', emphasis: promotion.budget > 0 },
           ...(finances ? [{ value: money(finances.monthlyBurn), label: 'Burn / month' }] : []),
           { value: roster.length, label: 'Under contract' },
           { value: Math.round(promotion.buzz), label: 'Attention' },
@@ -357,7 +358,9 @@ export function PromotionHubScreen() {
                         tone={item.tone}
                         title={item.title}
                         detail={item.detail}
-                        cue={action?.label}
+                        /* The lead's cue is omitted: its button is docked, and two controls
+                           for one decision is the thing the dock exists to stop. */
+                        cue={item.id === lead?.id ? undefined : action?.label}
                         onClick={action ? () => navigate(routeOf(action)) : undefined}
                         lead={item.id === lead?.id}
                       />

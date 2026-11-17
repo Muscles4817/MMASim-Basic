@@ -192,8 +192,8 @@ body:has(.update-prompt) .shell__main {
     flex-direction: column;
     justify-content: flex-start;
     gap: var(--space-1);
-    width: 13rem;
-    flex: 0 0 13rem;
+    width: var(--rail-width);
+    flex: 0 0 var(--rail-width);
     padding: var(--space-4) var(--space-2);
     padding-top: calc(env(safe-area-inset-top) + var(--space-4));
     border-top: none;
@@ -348,6 +348,7 @@ body:has(.update-prompt) .shell__main {
 }
 
 .shell__settings:hover {
-  background: var(--surface-sunken);
+  /* Not --surface-sunken: that is the promoter's header colour, so a hover there was invisible. */
+  background: color-mix(in srgb, var(--text) 8%, transparent);
   color: var(--text);
 }

@@ -453,8 +453,8 @@ export function TrainingScreen() {
                 {atFocusLimit && !selected && (
                   <span style={{ display: 'block', marginTop: 'var(--space-2)' }}>
                     <Chip tone="warning">
-                <Icon name="warning" /> Two at most — drop one first
-              </Chip>
+                      <Icon name="warning" /> Two at most — drop one first
+                    </Chip>
                   </span>
                 )}
               </button>

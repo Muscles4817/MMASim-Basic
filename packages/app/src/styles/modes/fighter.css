@@ -10,8 +10,11 @@
  * ink, so `--ink` inverts and every slab in the mode inverts with it.
  *
  * Selector shape mirrors tokens.css: the light palette on the attribute, the dark one under both
- * the media query and the explicit toggle. The mode selectors carry one more attribute than the
- * base palette's, so a mode always wins over the neutral voice whatever the theme.
+ * the media query and the explicit toggle. Why a mode always wins: the light block
+ * (`:root[data-mode]`, 0,2,0) beats the base light palette (0,1,0) and comes after the base dark
+ * media block it ties with (0,2,0 — `:not()` counts its argument), and both dark blocks here
+ * (0,3,0) beat both of the base's. Every token the base dark block sets is re-declared in the
+ * mode's dark blocks, so the source-order tie never decides a colour.
  *
  * Contrast: every text/surface pair below was checked at 4.5:1 or better, and `--text-faint`
  * at 4.5:1 on `--surface-sunken`, the darkest surface it sits on.

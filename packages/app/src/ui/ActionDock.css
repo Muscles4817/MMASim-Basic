@@ -63,10 +63,25 @@
   padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + var(--space-5) + 4.5rem);
 }
 
+/*
+ * An update waiting. The prompt docks in the same place (UpdatePrompt.css) and sits above
+ * everything, so the dock steps up over it and the page clears both — this selector out-ranks
+ * the one above, which would otherwise reserve room for the dock alone.
+ */
+body:has(.update-prompt) .action-dock {
+  bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + 5.5rem);
+}
+
+body:has(.update-prompt) .shell:has(.action-dock) .shell__main {
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom) + var(--space-5) + 10rem);
+}
+
 @media (min-width: 48rem) {
-  /* The rail replaces the tab bar here, so the dock sits on the bottom edge itself. */
+  /* The rail replaces the tab bar here, so the dock sits on the bottom edge itself — and starts
+     where the rail ends, or its reason is hidden under the rail. */
   .action-dock {
     bottom: 0;
+    inset-inline-start: var(--rail-width);
     padding-inline: var(--space-5);
   }
 }

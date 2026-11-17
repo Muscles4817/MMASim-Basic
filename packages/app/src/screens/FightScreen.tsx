@@ -392,10 +392,10 @@ function PreFight({
               */}
               {rounds !== undefined && <Chip tone="neutral">{rounds} rounds</Chip>}
               {mine.isTitleFight && (
-          <Chip tone="accent">
-            <Icon name="champion" /> For the title
-          </Chip>
-        )}
+                <Chip tone="accent">
+                  <Icon name="champion" /> For the title
+                </Chip>
+              )}
             </div>
           )}
         </Card>
@@ -446,11 +446,11 @@ function PreFight({
                   <span className="card-row__names">
                     {boutRed?.lastName ?? '—'} vs {boutBlue?.lastName ?? '—'}
                     {bout.isTitleFight && (
-                  <>
-                    {' '}
-                    <Icon name="champion" />
-                  </>
-                )}
+                      <>
+                        {' '}
+                        <Icon name="champion" />
+                      </>
+                    )}
                     {isPlayer && <Chip tone="accent">{promoter ? 'Next' : 'You, next'}</Chip>}
                   </span>
                   <span className="card-row__result">
@@ -768,11 +768,11 @@ function FightSummary({
                   <span className="card-row__names">
                     {boutRed?.lastName ?? '—'} vs {boutBlue?.lastName ?? '—'}
                     {bout.isTitleFight && (
-                  <>
-                    {' '}
-                    <Icon name="champion" />
-                  </>
-                )}
+                      <>
+                        {' '}
+                        <Icon name="champion" />
+                      </>
+                    )}
                     {isPlayer && <Chip tone="accent">{promoter ? 'This fight' : 'You'}</Chip>}
                   </span>
                   <span className="card-row__result">

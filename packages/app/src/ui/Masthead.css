@@ -7,6 +7,7 @@
  */
 
 .masthead {
+  --focus-ring: var(--on-ink-accent);
   position: relative;
   display: grid;
   gap: var(--space-2);
@@ -40,8 +41,9 @@
  */
 @media (max-width: 47.99rem) {
   .masthead {
-    margin-inline: calc(var(--space-3) * -1);
-    padding-inline: calc(var(--space-3) + var(--space-3));
+    /* A few pixels past the glass, so a rotated slab leaves no slivers of page at its corners. */
+    margin-inline: calc(var(--space-3) * -1 - 6px);
+    padding-inline: calc(var(--space-3) + var(--space-3) + 6px);
   }
 }
 
@@ -49,8 +51,11 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  /* Room for the stamp, which sits in the top corner. */
-  padding-right: 5.5rem;
+}
+
+/* Room for the stamp, which sits rotated in the top corner — only when there is one. */
+.masthead[data-stamped='true'] .masthead__name {
+  padding-right: 8rem;
 }
 
 .masthead__eyebrow {

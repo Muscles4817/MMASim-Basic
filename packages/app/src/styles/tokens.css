@@ -202,6 +202,9 @@
   --chip-tracking: 0;
   /* Small status tags that are never focusable, so they may be clipped into a shape. */
   --tag-clip: none;
+  /* The keyboard focus ring. Surfaces that invert the page (the slab) re-point it at a colour
+     that contrasts with them — gold on a white plate is 1.4:1, which is not a ring. */
+  --focus-ring: var(--accent);
 
   /* The masthead: the slab a home screen leads with (ui/Masthead). */
   --on-ink-accent: #f0736a;
@@ -245,6 +248,8 @@
 
   /* --- Layout --------------------------------------------------------------------- */
   --nav-height: 3.75rem;
+  /* The left rail at ≥48rem. A token because the action dock has to clear it too. */
+  --rail-width: 13rem;
   --header-height: 3.25rem;
   --content-max: 56rem;
   /* Consoles: dashboards and master/detail, where two regions sit side by side. */

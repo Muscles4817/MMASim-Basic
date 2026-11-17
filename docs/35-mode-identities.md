@@ -84,8 +84,10 @@ defaults:
 | Texture | `--texture`, `--texture-size` | Newsprint grain vs. scanlines; a background image, never a colour |
 
 `styles/modes/fighter.css` and `styles/modes/promoter.css` re-declare those for light and dark.
-Their selectors carry one more attribute than the base palette's, so a mode always wins whatever
-the theme. Every text/surface pair in both was checked at 4.5:1.
+Their light block outranks the base light palette and follows the base dark block it ties with;
+their dark blocks outrank both of the base's; and every token the base dark block sets is
+re-declared in each mode's dark blocks — so a mode wins in all three theme states (the cascade
+is spelled out at the top of `modes/fighter.css`). Every text/surface pair in both was checked at 4.5:1.
 
 `theme-color` is read back from the resolved `--bg` rather than duplicated, because the
 background now depends on two switches.
@@ -128,8 +130,9 @@ for what each mode was missing.
 
 ## Screen changes that are UX rather than paint
 
-- **The deal leads with the deal.** The market leads only when the fighter can act on it — a free
-  agent, or the last fight on a deal. It used to lead whenever anybody was calling.
+- **The deal leads with the deal.** The market leads only when the fighter can act on it — as a
+  free agent, which is the same gate the signing panel uses. It used to lead whenever anybody was
+  calling, including for champions the belt holds in place.
 - **One primary action per home screen.** The promotion dashboard's three "Plan a card" buttons
   became one docked action; the rest are secondary.
 - **The belt is the headline of its division**, on a title plate, rather than a bold line the

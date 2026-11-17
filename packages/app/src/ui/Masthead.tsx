@@ -51,7 +51,12 @@ export function Masthead({
   testId?: string;
 }) {
   return (
-    <section className="masthead" aria-label={label} data-testid={testId}>
+    <section
+      className="masthead"
+      aria-label={label}
+      data-testid={testId}
+      data-stamped={stamp !== undefined ? 'true' : undefined}
+    >
       <h2 className="masthead__name">
         {eyebrow !== undefined && (
           <>

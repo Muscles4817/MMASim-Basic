@@ -46,6 +46,7 @@ export function useDocumentMode(mode: VisualMode): void {
     syncThemeColor();
     return () => {
       root.removeAttribute('data-mode');
+      syncThemeColor();
     };
   }, [mode]);
 }

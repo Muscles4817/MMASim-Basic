@@ -1,17 +1,8 @@
 /*
  * The career dashboard.
  *
- * Three things this file does that the old screen could not, and each is a layout decision
- * rather than a styling one.
- *
- * The identity band is a *band*, not a card — a strip that reflows into four regions on a wide
- * screen and stacks on a phone, so who you are takes one horizontal line of a desktop instead of
- * a full card of it.
- *
- * The pinned action is pinned only where pinning helps. On a phone it floats above the tab bar,
- * because the old screen's worst property was that the decision sat three screens below the
- * state. On a desktop the decision is already on screen beside everything else, so a floating bar
- * over a page with room to spare is noise and it settles into the flow.
+ * Who you are is the poster (ui/Masthead, via FighterMasthead), with the kind of fighter under it.
+ * The one decision is docked by ui/ActionDock, which owns where it sits on each width.
  *
  * The page itself uses `--gutter`, which steps at 62rem — so the desktop rhythm lives in the
  * token rather than in a media query here.
@@ -76,3 +67,8 @@
 /* --- The one action ---------------------------------------------------------------------- */
 
 /* Docked by `ActionDock` (ui/ActionDock.css), which owns its placement and the space it clears. */
+
+/* The belt beside the title-fight heading, at heading size. */
+.title-fight__icon {
+  font-size: 1.5rem;
+}

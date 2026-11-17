@@ -1,7 +1,7 @@
 @import './tokens.css';
 @import './fonts.css';
-/* Mode layers after the base palette: they re-declare tokens, they add no rules of their own
-   beyond the mode-specific flourishes at the end of each file. See docs/35. */
+/* Mode layers after the base palette — the order matters, see modes/fighter.css. They only
+   re-declare tokens; they add no rules of their own. See docs/35. */
 @import './modes/fighter.css';
 @import './modes/promoter.css';
 
@@ -87,7 +87,7 @@ ol {
    Note the absence of border-radius: setting one here reshapes the *element*, which turns
    pill-shaped chips into rectangles the moment they take focus. */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -172,21 +172,6 @@ ol {
   font-feature-settings: 'tnum';
 }
 
-/*
- * Display type, in whatever voice the current mode speaks.
- *
- * For a name, a record, a big number — never for a sentence. Anton and Barlow Condensed are
- * built for six words at a time and become hard work at twenty.
- */
-.display {
-  font-family: var(--font-display);
-  font-weight: var(--display-weight);
-  font-style: var(--display-style);
-  text-transform: var(--display-transform);
-  letter-spacing: var(--display-tracking);
-  line-height: 0.95;
-}
-
 /* Icons sit in a line of text. `img, svg { display: block }` above is right for pictures and
    wrong for these. */
 .icon {
@@ -195,14 +180,6 @@ ol {
   vertical-align: -0.125em;
 }
 
-/* The label voice: section titles, eyebrows above a hero name. */
-.label {
-  font-size: var(--text-xs);
-  font-weight: var(--label-weight);
-  letter-spacing: var(--label-tracking);
-  text-transform: uppercase;
-  color: var(--label-color);
-}
 
 /* Prose blocks cap at a readable measure. Without this, explanatory paragraphs run the full
    896px content width on desktop -- around 130 characters, roughly twice comfortable. */

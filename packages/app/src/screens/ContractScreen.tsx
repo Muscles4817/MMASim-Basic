@@ -114,15 +114,16 @@ export function ContractScreen() {
    * Which half of the screen leads.
    *
    * Not a fixed layout, because the question the screen answers changes with the situation — but
-   * the question is "what can I act on", not "is anybody calling". A free agent, or a fighter on
-   * the last fight of their deal, can sign: the market leads. Anybody else is here about the deal
-   * they are on and the levers on it — reopening, release, a manager — and the market is "if you
-   * were free", which belongs beside it rather than above it. It used to lead whenever somebody
-   * was calling, which put four offers the player was not allowed to sign above the deal they
-   * came to read.
+   * the question is "what can I act on", not "is anybody calling". Only a free agent can sign (the
+   * signing panel below is gated on exactly this, and the engine's `signingEligibility` refuses a
+   * fighter with fights still owed or a belt still held), so only a free agent gets the market
+   * first. Anybody else is here about the deal they are on and the levers on it — reopening,
+   * release, a manager — and the market is "if you were free", which belongs beside it rather
+   * than above it. It used to lead whenever somebody was calling, which put offers the player was
+   * not allowed to sign above the deal they came to read.
    */
   const fightsLeft = standing.status?.fightsRemaining ?? 0;
-  const marketLeads = standing.freeAgent || fightsLeft <= 1;
+  const marketLeads = standing.freeAgent;
 
   const columns: Column<Offer>[] = [
     {

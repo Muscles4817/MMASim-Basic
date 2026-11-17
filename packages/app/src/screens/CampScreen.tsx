@@ -469,18 +469,20 @@ export function CampScreen() {
         */}
         <div className="row" style={{ flexWrap: 'wrap', marginTop: 'var(--space-3)' }}>
           {booking.bout.isTitleFight && (
-          <Chip tone="accent">
-            <Icon name="champion" /> Championship bout
-          </Chip>
-        )}
+            <Chip tone="accent">
+              <Icon name="champion" /> Championship bout
+            </Chip>
+          )}
           {rivalry.isRivalry ? (
             <Chip tone="negative">
-            <Icon name="streak" /> Grudge — he wants this one badly
-          </Chip>
-          ) : (
-            heat >= 40 && <Chip tone="warning">
-              <Icon name="streak" /> The audience wants this
+              <Icon name="streak" /> Grudge — he wants this one badly
             </Chip>
+          ) : (
+            heat >= 40 && (
+              <Chip tone="warning">
+                <Icon name="streak" /> The audience wants this
+              </Chip>
+            )
           )}
           {purse && (
             <Chip tone="info" title="Show money is paid win or lose; the win bonus is not">
@@ -712,8 +714,8 @@ export function CampScreen() {
                 {atLimit && (
                   <span style={{ display: 'block', marginTop: 'var(--space-2)' }}>
                     <Chip tone="warning">
-              <Icon name="warning" /> Camp is full — drop one of your reads first
-            </Chip>
+                      <Icon name="warning" /> Camp is full — drop one of your reads first
+                    </Chip>
                   </span>
                 )}
               </button>

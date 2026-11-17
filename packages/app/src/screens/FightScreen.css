@@ -9,6 +9,7 @@
  * own colour; the colour is never the only channel, because the plate also says "Red corner".
  */
 .fight-corners {
+  --focus-ring: var(--on-ink-accent);
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
