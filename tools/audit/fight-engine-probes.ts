@@ -29,9 +29,9 @@ const pct = (x: number) => (100 * x).toFixed(1) + '%';
     if (r.roundStats?.length !== 3 || !r.method.startsWith('decision')) continue;
     n++;
     r.roundStats.forEach((t, k) => {
-      att[k] += t.red.strikesAttempted + t.blue.strikesAttempted;
-      lnd[k] += t.red.significantStrikes + t.blue.significantStrikes;
-      ctrl[k] += t.red.controlSeconds + t.blue.controlSeconds;
+      att[k]! += t.red.strikesAttempted + t.blue.strikesAttempted;
+      lnd[k]! += t.red.significantStrikes + t.blue.significantStrikes;
+      ctrl[k]! += t.red.controlSeconds + t.blue.controlSeconds;
     });
   }
   console.log(
