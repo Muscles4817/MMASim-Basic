@@ -269,3 +269,28 @@ Failing after phase 8, all calibration (see phase 9):
 - `intent-authority` golden ×3
 - `broadcast` read
 - `attribute-economy` record
+
+### Phase 9 — calibration, narration, drilling
+- **Skill balance, found by ablation.** Every new mechanism was switched off one at a time and the G4 swings re-measured.
+  - Survival routes and stories were the largest equalisers. A hurt man who ties up no longer takes clinch *control*. His strikes (composure-scaled) and his shots (×0.6) are worse. Hand breaks were halved.
+  - Kicks were over-priced in the tank and their patterns pulled kicks off the head. `anyKick` slots now keep the fighter's own targeting, and the kick profile is 1.4 damage / 1.7 hazard.
+  - Wrestling sequences were trimmed. Prepared takedown reads blunt the chain. Shot defence depends on the starting range (shape-only table). Strength takes a 20–25 % share of shots, passes and escapes.
+- **Visible adjustment.** A line is narrated the first time a read forms or a fighter abandons a failing family ("X is timing Y's shot now", "X has stopped shooting").
+- **Drilling** (`drillStyle`). Every camp nudges the repertoire by focus:
+  - Boxing and kicking camps reinforce the best pattern.
+  - Strategy camps reinforce the feint.
+  - Wrestling camps raise the chain.
+  - Submissions camps sharpen the signature, or create one for a fighter with submissions ≥ 62.
+  - The override is stored compactly; the save-size test passes.
+- **Booth fixes.** Hurt lines are credited to the striker; misses are flagged (`FightEvent.missed`) and ignored.
+- **Re-baselined with reasons** recorded in each test: the prep fixture, tactics ×2, the grinder's submissions, booth agreement, the functional-rating fence, the `cardioMachine` tripwire (inverted as it instructed), and the intent-authority golden.
+- **New tests.** `tests/statistical/combat-depth.test.ts` covers the § 0 claims; `fight/depth.test.ts` covers the pure modules.
+- **Results.**
+  - Unit + UI: 1409/1409. Integration: 557/557. Statistical: all but the Reduced-agreement checks, which need the re-fit.
+  - Performance: audit harness 4.2 s against 3.0 s (budget 6.0 s).
+
+**Open, for the next pass:**
+- Re-fit `functionalRating`'s weights to this engine.
+- Cage geography: fence position, cutting off the cage.
+- A late-fight payoff for body work beyond fatigue.
+- Wrestling is the most valuable attribute by a wide margin (≈22 pp swing against striking ≈8): defensible for the sport, but worth a deliberate decision.
