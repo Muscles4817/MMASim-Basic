@@ -12,6 +12,7 @@
  *   decay     — out of camp, driven by Discipline
  */
 
+import { drillStyle } from '../fight/style.js';
 import { ageOn, type GameDay } from '../core/clock.js';
 import {
   DEFAULT_INTENSITY,
@@ -780,8 +781,11 @@ export function applyTraining(input: TrainingInput): TrainingResult {
     freshness: duringTraining(freshnessOf(fighter) - spent),
   };
 
+  // What was drilled becomes more of the fighter's repertoire (doc 36 phase 9, `drillStyle`).
+  const style = drillStyle(fighter, focuses, weeks);
+
   return {
-    fighter: { ...fighter, attributes, trainingCarry: carry, lastTrained, condition },
+    fighter: { ...fighter, attributes, trainingCarry: carry, lastTrained, condition, ...(style ? { style } : {}) },
     gains,
     notes,
   };

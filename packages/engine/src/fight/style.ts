@@ -118,7 +118,10 @@ export interface StyleProfile {
 }
 
 /** What a stored override may set. Anything absent is derived. */
-export type StyleOverride = Partial<StyleProfile>;
+export type StyleOverride = Partial<Omit<StyleProfile, 'combos' | 'subs'>> & {
+  combos?: Partial<Record<ComboKey, number>>;
+  subs?: Partial<Record<SubmissionKey, number>>;
+};
 
 /**
  * Derive the full repertoire for a fighter.
@@ -135,7 +138,7 @@ export function styleOf(fighter: Fighter): StyleProfile {
     ? {
         ...derived,
         ...o,
-        combos: { ...derived.combos, ...(o.combos ?? {}) },
+        combos: { ...derived.combos, ...(o.combos ?? {}) } as Record<ComboKey, number>,
         subs: { ...derived.subs, ...(o.subs ?? {}) },
       }
     : derived;
@@ -147,7 +150,7 @@ export function styleOf(fighter: Fighter): StyleProfile {
     merged.combos = {
       ...merged.combos,
       [o.signatureCombo]: Math.max(merged.combos[o.signatureCombo], SIGNATURE_WEIGHT),
-    };
+    } as Record<ComboKey, number>;
   }
   CACHE.set(fighter, merged);
   return merged;
@@ -280,4 +283,77 @@ function argmaxStable<K extends string>(weights: Readonly<Record<K, number>>, ma
     } else if (v > second) second = v;
   }
   return best && bestW >= second * margin ? best : undefined;
+}
+
+// --- Drilling ---------------------------------------------------------------------------------
+
+/** The training focuses that drill a repertoire, by name; kept structural to avoid a cycle. */
+export type DrillFocus = 'boxing' | 'kicking' | 'wrestling' | 'submissions' | 'conditioning' | 'strategy';
+
+const HAND_PATTERNS: readonly ComboKey[] = ['oneTwo', 'doubleJab', 'oneTwoHook', 'bodyHead', 'headBody', 'single'];
+const KICK_PATTERNS: readonly ComboKey[] = ['punchesToKick', 'kickToPunches', 'lowHigh', 'kickFlurry'];
+
+const r2 = (x: number) => Math.round(x * 100) / 100;
+
+/**
+ * What a camp does to a repertoire: the thing drilled becomes more of who the fighter is.
+ *
+ * Doc 36 phase 9 — the half of "what they've trained" that ratings cannot hold. A boxing camp makes
+ * the fighter's best hand pattern more his; a wrestling camp links his shots; a submissions camp
+ * sharpens his signature or, for a fighter good enough, gives him one; a strategy camp teaches the
+ * feint. Small per camp and capped, so a career shapes a style and one camp does not.
+ *
+ * Returns the new stored override, compact — only what drilling has moved — or the old one unchanged
+ * when nothing applies. Deterministic for a given fighter and focus set.
+ */
+export function drillStyle(fighter: Fighter, focuses: readonly DrillFocus[], weeks: number): StyleOverride | undefined {
+  const current = styleOf(fighter);
+  const o: StyleOverride = { ...(fighter.style ?? {}) };
+  const dose = clamp(weeks / 8, 0.25, 1.5);
+  let moved = false;
+  const best = (keys: readonly ComboKey[]) =>
+    keys.reduce((a, k) => (current.combos[k] > current.combos[a] ? k : a), keys[0]!);
+  const bump = (k: ComboKey) => {
+    o.combos = { ...(o.combos ?? {}), [k]: r2(Math.min(SIGNATURE_WEIGHT, current.combos[k] * (1 + 0.06 * dose))) };
+    moved = true;
+  };
+
+  for (const focus of focuses) {
+    switch (focus) {
+      case 'boxing':
+        bump(best(HAND_PATTERNS));
+        break;
+      case 'kicking':
+        bump(best(KICK_PATTERNS));
+        break;
+      case 'strategy':
+        bump('feintShot');
+        break;
+      case 'wrestling':
+        o.chainWrestling = r2(Math.min(1, current.chainWrestling + 0.02 * dose));
+        moved = true;
+        break;
+      case 'submissions': {
+        const sig = current.signatureSub;
+        if (sig) {
+          o.subs = { ...(o.subs ?? {}), [sig]: r2(Math.min(SIGNATURE_WEIGHT * 1.4, (current.subs[sig] ?? 0) * (1 + 0.05 * dose))) };
+          moved = true;
+        } else if (fighter.attributes.submissions >= 62) {
+          // Good enough to own one now: the hold he already reaches for most becomes his.
+          const top = (Object.keys(current.subs) as SubmissionKey[]).reduce(
+            (a, k) => ((current.subs[k] ?? 0) > (current.subs[a] ?? 0) ? k : a),
+            Object.keys(current.subs)[0] as SubmissionKey,
+          );
+          if (top) {
+            o.signatureSub = top;
+            moved = true;
+          }
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return moved ? o : fighter.style;
 }

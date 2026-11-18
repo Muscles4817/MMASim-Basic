@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ARCHETYPES, makeFighter } from '../testing/fixtures.js';
-import { styleOf } from './style.js';
+import { drillStyle, styleOf } from './style.js';
 import { chooseSubmission, submissionsFrom, SUBMISSIONS } from './submissions.js';
 import { createMemory, remember, resetRoundMemory, successRate } from './memory.js';
 import { createRng } from '../core/rng.js';
@@ -77,5 +77,33 @@ describe('memory', () => {
     expect(a.mem.roundTried.takedown).toBe(0);
     expect(a.mem.tried.takedown).toBe(2);
     expect(successRate(a.mem, 'takedown')).toBeCloseTo((1 + 1.2) / 5);
+  });
+});
+
+describe('drilling', () => {
+  it('makes what a camp drilled more of the repertoire, a little at a time', () => {
+    const f = makeFighter({ id: 'fighter_drill', attributes: { strikingOffence: 80 } });
+    const before = styleOf(f);
+    const drilled = { ...f, style: drillStyle(f, ['boxing'], 8) };
+    const after = styleOf(drilled);
+    const changed = (Object.keys(after.combos) as (keyof typeof after.combos)[]).filter(
+      (k) => after.combos[k] !== before.combos[k],
+    );
+    expect(changed.length).toBe(1);
+    expect(after.combos[changed[0]!]).toBeGreaterThan(before.combos[changed[0]!]);
+    expect(after.combos[changed[0]!]).toBeLessThan(before.combos[changed[0]!] * 1.1);
+  });
+
+  it('links a wrestler’s shots and gives a good grappler a signature', () => {
+    const w = makeFighter({ id: 'fighter_dw', attributes: { wrestling: 70 } });
+    expect(styleOf({ ...w, style: drillStyle(w, ['wrestling'], 8) }).chainWrestling).toBeGreaterThan(styleOf(w).chainWrestling);
+    const g = makeFighter({ id: 'fighter_dg', attributes: { submissions: 64 } });
+    expect(styleOf(g).signatureSub).toBeUndefined();
+    expect(drillStyle(g, ['submissions'], 8)?.signatureSub).toBeDefined();
+  });
+
+  it('leaves the style alone when the camp drilled nothing it can hold', () => {
+    const f = makeFighter({ id: 'fighter_dc' });
+    expect(drillStyle(f, ['conditioning'], 8)).toBeUndefined();
   });
 });
