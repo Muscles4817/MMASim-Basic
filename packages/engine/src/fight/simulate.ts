@@ -67,6 +67,20 @@ import { defaultJudges, defaultReferee } from '../domain/officials.js';
 import { traitMul } from '../domain/traits.js';
 import { fatiguedEffect, repertoire } from '../ratings/curve.js';
 import * as say from './commentary.js';
+import {
+  ON_FENCE,
+  RETREAT_COST,
+  centre,
+  circleOut,
+  depthOf,
+  fenceClinchEase,
+  fenceDefence,
+  onFence,
+  push,
+  pushOnClose,
+  wallWalkEase,
+  type CageState,
+} from './cage.js';
 import { remember, resetRoundMemory } from './memory.js';
 import {
   LEAD_DISCOUNT,
@@ -197,6 +211,10 @@ interface FightState {
   rangeSettled: number;
   /** Corner controlling the clinch, if either. */
   clinchControl?: Corner;
+  /** Where in the cage the fight is. See `cage.ts`. */
+  cage: CageState;
+  /** Whether the fight hit the floor against the fence — the man underneath has a wall to walk. */
+  groundNearFence: boolean;
   /**
    * Who put the fight in its current position.
    *
@@ -256,6 +274,9 @@ function resetToStanding(state: FightState): void {
   state.groundPosition = 'guard';
   state.clinchControl = undefined;
   state.stalledSeconds = 0;
+  // The bell and the referee both restart the fight in the centre of the cage.
+  centre(state.cage);
+  state.groundNearFence = false;
   // Nobody put anybody here: a reset is the referee's, and `policy.ts` reads `placedBy` to ask
   // whether a fighter chose to be where they are.
   state.placedBy = undefined;
@@ -291,6 +312,8 @@ export function simulateFight(config: FightConfig): FightResult {
     deductions: { red: 0, blue: 0 },
     fouls: [],
     foulsCalled: { red: 0, blue: 0 },
+    cage: { backed: undefined, depth: 0 },
+    groundNearFence: false,
   };
   resetToStanding(state);
 
@@ -812,6 +835,9 @@ function applyPassiveEffects(
       ctx.emit('recovered', `${c.fighter.lastName} has recovered and is fighting back.`, corner);
     }
 
+    if (start.position !== 'ground' && depthOf(state.cage, corner) >= ON_FENCE) {
+      c.stats.fenceSeconds += seconds;
+    }
     if (start.position === 'distance') {
       c.stats.distanceSeconds += seconds;
       // The breakdown that makes a failed game plan diagnosable without reading the play-by-play.
@@ -1127,6 +1153,27 @@ function resolveRangeBeat(ctx: ExchangeContext, actor: Combatant, target: Combat
 
   actor.stats.rangeChangesAttempted++;
 
+  /*
+   * With his back near the fence a fighter cannot step straight back; the retreat becomes a lateral
+   * escape against a man cutting the angle (`cage.ts`). Getting off it is its own small victory and
+   * the beat; not getting off it is the cage being cut off, and the man cutting it gets his look.
+   */
+  if (change === 'retreat' && depthOf(state.cage, actor.corner) >= 0.45) {
+    const wasOn = onFence(state.cage, actor.corner);
+    if (circleOut(rng, actor, target, state.cage)) {
+      remember(actor, target, 'rangeRetreat', true, nowOf(ctx));
+      actor.stats.rangeChangesLanded++;
+      state.range = stepRange(state.range, 'retreat');
+      state.rangeSettled = 0.6;
+      if (wasOn) emit('range', say.circleOutText(rng, actor), actor.corner);
+      return 1;
+    }
+    remember(actor, target, 'rangeRetreat', false, nowOf(ctx));
+    push(state.cage, actor.corner, 0.1);
+    emit('range', say.cutOffText(rng, target, actor), target.corner);
+    return 1.3;
+  }
+
   const chance = rangeChangeChance({
     mover: actor,
     holder: target,
@@ -1153,6 +1200,14 @@ function resolveRangeBeat(ctx: ExchangeContext, actor: Combatant, target: Combat
     state.rangeSettled = 1;
     actor.stats.rangeChangesLanded++;
     emit('range', say.rangeChangeText(rng, actor, target, change, next), actor.corner);
+    // Closing drives him back; backing straight out spends your own cage (a mover circles, and
+    // spends half).
+    const before = onFence(state.cage, target.corner);
+    if (change === 'close') push(state.cage, target.corner, pushOnClose(actor));
+    else push(state.cage, actor.corner, RETREAT_COST * (actor.plan.tactics.entry === 'movement' ? 0.5 : 1));
+    if (!before && onFence(state.cage, target.corner)) {
+      emit('range', say.fenceText(rng, actor, target), actor.corner);
+    }
     return 1;
   }
 
@@ -1603,12 +1658,16 @@ function resolveDistance(
       return resolveTakedown(ctx, actor, target, 'distance');
     case 'clinchUp': {
       const bonus = prepBonus(target, actor, ['fenceClinch']) + inFightRead(target, 'clinchEntry');
-      const attack = fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue);
+      const attack =
+        fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) *
+        fenceClinchEase(state.cage, target.corner);
       const defend =
         fatiguedEffect(target.derived.clinchDefence, 'strength', target.fatigue) * (1 + bonus);
       const tiedUp = rng.chance(attack / (attack + defend));
       remember(actor, target, 'clinchEntry', tiedUp, nowOf(ctx));
       if (tiedUp) {
+        // He walks them onto the fence with the tie-up, as the prose has always said.
+        push(state.cage, target.corner, 0.35);
         state.position = 'clinch';
         state.clinchControl = actor.corner;
         state.placedBy = actor.corner;
@@ -1963,6 +2022,7 @@ function throwBurst(
       (1 + bonus) *
       (target.hurtSeconds > 0 ? hurtDefence(target) : 1) *
       defenceScale *
+      fenceDefence(ctx.state.cage, target.corner) *
       stanceStyleDefence(target, weapon, strikeTarget, ctx.state.range) *
       legImpairment(target);
 
@@ -2309,6 +2369,7 @@ function resolveTakedown(
     state.groundTop = actor.corner;
     state.placedBy = actor.corner;
     state.groundPosition = landingPosition(rng, actor, entry);
+    state.groundNearFence = depthOf(state.cage, target.corner) >= 0.6;
     state.stalledSeconds = 0;
     shiftMomentum(actor, target, 0.25);
     actor.mem.chainDepth = 0;
@@ -2704,6 +2765,8 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
         state.clinchControl = undefined;
         state.placedBy = undefined;
         state.range = TRANSITION_RANGE.refSeparation!;
+        centre(state.cage);
+    centre(state.cage);
         state.rangeSettled = 0;
         state.stalledSeconds = 0;
         emit('refStandUp', say.clinchSeparationText());
@@ -2750,6 +2813,7 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
     state.placedBy = undefined;
     // The referee steps between them and waves them on: that *is* a neutral reset.
     state.range = TRANSITION_RANGE.refSeparation!;
+    centre(state.cage);
     state.rangeSettled = 0;
     state.stalledSeconds = 0;
     emit('refStandUp', say.clinchSeparationText());
@@ -2808,6 +2872,7 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
       fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) ** 0.8 *
       fatiguedEffect(actor.attrs.strength, 'strength', actor.fatigue) ** 0.2 *
       legImpairment(actor) *
+      (route === 'standUp' ? wallWalkEase(state.groundNearFence) : 1) *
       (1 - GROUND_DOMINANCE[state.groundPosition] * 0.5);
     const hold =
       fatiguedEffect(target.attrs.groundControl, 'groundControl', target.fatigue) ** 0.8 *
@@ -3209,6 +3274,7 @@ function maybeRefStandUp(ctx: ExchangeContext, seconds: number): ExchangeOutcome
   // The referee's decision, so a neutral restart like the bell.
   state.range = TRANSITION_RANGE.neutral!;
   state.rangeSettled = 0;
+  centre(state.cage);
   emit('refStandUp', say.refStandUpText());
   return { seconds };
 }

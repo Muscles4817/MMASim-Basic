@@ -316,6 +316,8 @@ export interface FightStats {
   topBeats: number;
   /** Cumulative damage dealt, in the same units as the opponent's damage meters. */
   damageDealt: number;
+  /** Seconds spent standing with his back on the fence. Doc 36, cage geography. */
+  fenceSeconds: number;
 }
 
 /** Damage a fighter leaves the cage with. Feeds injuries and permanent career wear. */
@@ -454,6 +456,7 @@ export function emptyStats(): FightStats {
     clinchExitsLanded: 0,
     topBeats: 0,
     damageDealt: 0,
+    fenceSeconds: 0,
   };
 }
 

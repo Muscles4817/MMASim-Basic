@@ -253,7 +253,7 @@ function deriveStyle(f: Fighter): StyleProfile {
 
   // ---- Stance switching
   const stanceSwitching = clamp01(
-    (f.stance === 'switch' ? 0.75 : 0.08) + remap(iq, 50, 95, 0, 0.15) + (art('karate') ? 0.1 : 0),
+    (f.stance === 'switch' ? 0.75 : 0) + remap(iq, 50, 95, 0, 0.15) + (art('karate') ? 0.1 : 0),
   );
 
   return {
