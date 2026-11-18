@@ -624,3 +624,27 @@ export function stanceSwitchText(rng: Rng, c: Combatant, now: string): string {
     `${surname(c)} changes stance — fighting ${now} now.`,
   ]);
 }
+
+// --- The cage (doc 36, cage geography) ---------------------------------------------------------
+
+export function fenceText(rng: Rng, presser: Combatant, victim: Combatant): string {
+  return rng.pick([
+    `${surname(presser)} walks ${surname(victim)} back onto the fence.`,
+    `${surname(victim)} is out of room — ${surname(presser)} has them on the cage.`,
+    `${surname(presser)} keeps coming and ${surname(victim)}'s back touches the fence.`,
+  ]);
+}
+
+export function circleOutText(rng: Rng, escaper: Combatant): string {
+  return rng.pick([
+    `${surname(escaper)} circles off the fence and back to the centre.`,
+    `Nice footwork from ${surname(escaper)}, pivoting off the cage.`,
+  ]);
+}
+
+export function cutOffText(rng: Rng, presser: Combatant, victim: Combatant): string {
+  return rng.pick([
+    `${surname(presser)} cuts off the cage — ${surname(victim)} has nowhere to go.`,
+    `${surname(victim)} tries to circle out and ${surname(presser)} steps across to cut it off.`,
+  ]);
+}

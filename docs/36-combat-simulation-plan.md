@@ -303,3 +303,31 @@ The real gap was one number. Full's volume fell by `VOLUME_LEVEL` 0.8 in phase 2
 ### Final state
 - `npm test`: **171 files, 2,421 tests, all passing.** Typecheck and lint clean.
 - The long-sim tier was verified before the Reduced change (20-year world: KO/TKO 31.0 %, SUB 19.9 %, DEC 47.0 %) and re-run after it.
+
+## Cage geography
+
+`fight/cage.ts`. The fight now knows **whose back is nearest the fence, and how near** (0 is the centre, 1 is pinned).
+
+- **Closing pushes.** A successful step in drives the other man back. A pressure plan pushes ×1.6, and aggression scales it 0.75–1.3.
+- **Retreating straight back spends cage.** A movement plan spends half, because it circles.
+- **Cutting off the cage.** From depth 0.45, a retreat becomes a lateral escape. It is contested on footwork (`distanceControl`'s speed / fight IQ / cardio mix) against the presser's footwork, fight IQ and aggression, and deeper is harder. Failing to escape is narrated as the cage being cut off and gives the presser his look.
+- **What the fence changes:**
+  - Striking defence drops up to 7 %.
+  - Tie-ups are up to 30 % easier, and a successful clinch entry walks the man onto the fence.
+  - A takedown taken against the fence lands there, and the bottom man's stand-up is 25 % easier (the wall-walk).
+- **Resets.** The bell and every referee restart return the fighters to the centre.
+- **New stat:** `FightStats.fenceSeconds`. **New lines:** backed onto the fence, circled off, cage cut off.
+- **Tactical stance switching** now comes only from IQ, a karate background or switch-stance identity. Plain orthodox fighters no longer switch, which keeps the stance test's paired-seed identity.
+
+**Measured** (`tools/audit/fight-engine-cage.ts`, 600 fights per row):
+
+| Matchup | Fence time for the pressed fighter |
+|---|---|
+| Even, no plans | ~10 s |
+| Pocket pressure v outside movement | 84 s; the presser wins 60 % |
+| Pocket pressure v outside lead | 103 s |
+| Pressure v a quick, high-IQ mover | 41 s; the mover wins 68 % |
+
+Calibration-neutral: the whole statistical tier passes except the intent-authority golden, which is re-recorded. Tests: `fight/cage.test.ts` and the cage block of `combat-depth.test.ts`.
+
+Not modelled: two-dimensional position (circling is a contest, not a coordinate), cage control as a judging criterion, and the cage in the Reduced resolver.

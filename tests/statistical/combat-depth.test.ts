@@ -9,6 +9,9 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   ARCHETYPES,
+  convictionFor,
+  defaultGamePlan,
+  defaultTactics,
   makeFighter,
   planFor,
   simulateFight,
@@ -342,5 +345,51 @@ describe('claim 5 — every phase has depth', () => {
       ).length;
     }
     expect(backs / 300).toBeGreaterThan(0.2);
+  });
+});
+
+describe('cage geography — pressure traps, footwork escapes', async () => {
+  const plan = (state: 'pocket' | 'outside', entry: 'pressure' | 'movement') => ({
+    ...defaultGamePlan(),
+    tactics: {
+      ...defaultTactics(),
+      preferredState: state,
+      entry,
+      conviction: convictionFor(state),
+    },
+  });
+  const fence = async (pressed: Fighter, seed: string) => {
+    const presser = makeFighter({ id: 'fighter_presser', lastName: 'P' });
+    let s = 0;
+    for (let i = 0; i < 400; i++) {
+      if (i % 50 === 0) await breathe();
+      const r = simulateFight({
+        boutId: `${seed}-${i}`,
+        red: { fighter: presser, plan: plan('pocket', 'pressure') },
+        blue: { fighter: pressed, plan: plan('outside', 'movement') },
+      });
+      s += r.stats.blue.fenceSeconds;
+    }
+    return s / 400;
+  };
+
+  it('puts an outside fighter on the fence against a pressure fighter, and a quick smart one less', async () => {
+    const plain = await fence(makeFighter({ id: 'fighter_b', lastName: 'B' }), 'depth-cage-plain');
+    const quick = await fence(
+      makeFighter({ id: 'fighter_q', lastName: 'Q', attributes: { speed: 85, fightIq: 80 } }),
+      'depth-cage-quick',
+    );
+    expect(plain, `plain ${plain.toFixed(0)}s`).toBeGreaterThan(30);
+    expect(quick, `quick ${quick.toFixed(0)}s vs plain ${plain.toFixed(0)}s`).toBeLessThan(
+      plain * 0.75,
+    );
+  });
+
+  it('leaves two fighters with no plan mostly in the open', async () => {
+    let s = 0;
+    const [a, b] = even();
+    for (const r of await run(a, b, 200, 'depth-cage-even', false))
+      s += r.stats.red.fenceSeconds + r.stats.blue.fenceSeconds;
+    expect(s / 200).toBeLessThan(60);
   });
 });
