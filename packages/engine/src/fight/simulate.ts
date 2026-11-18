@@ -100,7 +100,6 @@ import {
   maybeSecondWind,
   survivalRoute,
   survivedLock,
-  type InFightInjury,
   type StoryContext,
 } from './stories.js';
 import {

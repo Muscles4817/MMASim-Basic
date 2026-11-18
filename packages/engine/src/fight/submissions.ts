@@ -103,7 +103,7 @@ export const SUBMISSIONS: Readonly<Record<SubmissionKey, SubmissionMeta>> = {
     fromTop: ['turtle'],
     fromBottom: ['guard', 'openGuard', 'halfGuard'],
     frontHeadlock: true,
-    commonness: 1.5,
+    commonness: 1.0,
     technicality: 0.45,
     finishing: 1.05,
     injury: 'neck',

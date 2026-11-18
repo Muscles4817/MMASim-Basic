@@ -66,10 +66,7 @@ for (const [name, mkR, mkB] of pairs) {
   const weapons: Record<string, number> = {};
   const burst: Record<string, number> = {};
   let fights5 = 0;
-  let decisions = 0,
-    splitRounds = 0,
-    roundsScored = 0,
-    swingFights = 0,
+  let swingFights = 0,
     comebackWins = 0,
     r1Losers = 0;
   let bothDropped = 0,
@@ -109,7 +106,7 @@ for (const [name, mkR, mkB] of pairs) {
     ['legEntry', /dives on a leg|entangles the legs/],
     ['combination', /./],
   ];
-  let phaseTime = { distance: 0, clinch: 0, ground: 0 } as Record<string, number>;
+  const phaseTime = { distance: 0, clinch: 0, ground: 0 } as Record<string, number>;
 
   for (let i = 0; i < N; i++) {
     const r = simulateFight({
@@ -178,7 +175,6 @@ for (const [name, mkR, mkB] of pairs) {
 
     // Ebb and flow
     const rw = roundWinners(r);
-    roundsScored += rw.length;
     if (rw.length >= 2) {
       if (new Set(rw.filter((x) => x !== 'even')).size > 1) swingFights++;
       const winner = r.winnerId === red.id ? 'red' : r.winnerId === blue.id ? 'blue' : undefined;
@@ -187,9 +183,6 @@ for (const [name, mkR, mkB] of pairs) {
         if (winner && winner !== rw[0]) comebackWins++;
       }
     }
-    for (const c of r.scorecards)
-      for (const rr of c.rounds) if (Math.abs(rr.red - rr.blue) === 0) splitRounds++;
-    if (r.method.startsWith('decision')) decisions++;
     // knockdowns
     const kdBy = { red: 0, blue: 0 } as Record<string, number>;
     const hurtVictim = { red: 0, blue: 0 } as Record<string, number>;

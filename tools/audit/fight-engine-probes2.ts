@@ -1,5 +1,4 @@
 import {
-  ARCHETYPES,
   makeFighter,
   simulateFight,
   planFor,

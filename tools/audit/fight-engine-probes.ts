@@ -5,7 +5,6 @@ import {
   simulateFight,
   planFor,
   defaultGamePlan,
-  type Fighter,
   type GamePlan,
 } from '@mmasim/engine';
 
@@ -122,9 +121,7 @@ const pct = (x: number) => (100 * x).toFixed(1) + '%';
     ['legs-first', { head: 0.3, body: 0.1, legs: 0.6 }],
   ] as const) {
     const plan: GamePlan = { ...planFor(s, j), targeting: { ...targeting } };
-    let r3HeadL = 0,
-      r3HeadA = 0,
-      wins = 0,
+    let wins = 0,
       ko = 0,
       n = 0;
     for (let i = 0; i < N / 2; i++) {
@@ -136,11 +133,6 @@ const pct = (x: number) => (100 * x).toFixed(1) + '%';
       n++;
       if (r.winnerId === s.id) wins++;
       if (r.winnerId === s.id && (r.method === 'ko' || r.method === 'tko')) ko++;
-      for (const e of r.events)
-        if (e.round === 3 && e.corner === 'red' && e.target === 'head' && e.weapon === 'punch') {
-          r3HeadA++;
-          if (!/swings|short|countered|slipped/.test(e.text)) r3HeadL++;
-        }
     }
     console.log(`[targeting] striker ${label}: win ${pct(wins / n)}, KO/TKO ${pct(ko / n)}`);
   }
@@ -169,7 +161,6 @@ const pct = (x: number) => (100 * x).toFixed(1) + '%';
   const gp = ARCHETYPES.guardPlayer(),
     gr = ARCHETYPES.grinder();
   const names: Record<string, number> = {};
-  const fromBottom = { b: 0, t: 0 };
   for (let i = 0; i < 400; i++) {
     const r = simulateFight({
       boutId: `sb-${i}`,
