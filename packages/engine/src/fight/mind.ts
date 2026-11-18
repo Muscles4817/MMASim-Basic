@@ -202,7 +202,7 @@ function retarget(c: Combatant, region: 'legs' | 'body', factor: number): void {
 const READ_LINES: Partial<Record<Family, (me: string, him: string) => string>> = {
   takedown: (me, him) => `${me} is timing ${him}'s shot now — the sprawl is arriving before the shot does.`,
   punch: (me, him) => `${me} has ${him}'s hands figured out, slipping and making them miss.`,
-  kick: (me, him) => `${me} is reading the kicks now, stepping out of range of every one.`,
+  kick: (me) => `${me} is reading the kicks now, stepping out of range of every one.`,
   clinchEntry: (me, him) => `${me} sees ${him} coming for the clinch and is circling off before the tie-up.`,
 };
 

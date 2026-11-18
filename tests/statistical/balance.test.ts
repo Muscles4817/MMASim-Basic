@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   ARCHETYPES,
   MAX_PREPPED_READS,
-  convictionFor,
   defaultGamePlan,
   defaultTactics,
   makeFighter,
@@ -287,10 +286,16 @@ describe('preparation is worth more than a few rating points', () => {
      * failure this test was rewritten to avoid — an absolute bound silently becoming a demand for a
      * larger relative swing — and the fix for both is to state the claim twice.
      */
+    /*
+     * 1.25 → 1.15 by doc 36, for exactly the reason the paragraph above gives. The underdog's
+     * unprepared base doubled (≈10 % → 20.5 %: a slower tank means the grinder no longer runs a
+     * smaller man out of gas by the third), and the camp still buys +4.3 points — comfortably over
+     * the absolute bar below — which now reads as 1.21×. The absolute bound is the one doing the work.
+     */
     expect(
       prepared.redWinRate / base.redWinRate,
       `unprepared ${describeSummary(base)} vs prepared ${describeSummary(prepared)}`,
-    ).toBeGreaterThan(1.25);
+    ).toBeGreaterThan(1.15);
     expect(
       (prepared.redWinRate - base.redWinRate) * 100,
       `prep bought ${((prepared.redWinRate - base.redWinRate) * 100).toFixed(1)} points`,

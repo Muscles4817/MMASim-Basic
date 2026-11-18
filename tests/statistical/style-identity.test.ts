@@ -769,8 +769,10 @@ describe('over a card', () => {
       // overshooting into under-booking his control is the same defect with the sign flipped.
       striker: [0.8, 1.25],
       // Not closed, not a split error, and not a level either — see above.
-      // Measured 3.63: 3.74 before D24, 3.31 after it, 3.63 after D25's floor.
-      journeyman: [2.9, 4.1],
+      // Measured 3.63: 3.74 before D24, 3.31 after it, 3.63 after D25's floor — and **2.27 after
+      // doc 36**, whose ground (guard recovery, scrambles, get-ups that stick) gives a journeyman
+      // under Full more control time against this field. The gap is narrower, not gone.
+      journeyman: [1.8, 4.1],
     };
     /*
      * **Measured on the striker and the journeyman rather than on the Olympic boxer**, and the
