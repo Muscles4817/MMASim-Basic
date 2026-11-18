@@ -30,6 +30,40 @@ import type { GroundPosition, Position, Range, Weapon } from './types.js';
  */
 const BASE_FATIGUE_PER_SECOND = 0.0011;
 
+/**
+ * How strongly `cardio` governs the tank, as an exponent on its effect curve. Doc 36, the
+ * wrestling-economy pass.
+ *
+ * At 1 an elite tank tired about two and a half times slower than a poor one on every charge in the
+ * fight — time, strikes, shots, get-ups — and recovered faster on the stool too, which made cardio
+ * worth 75 points of win rate from 38 to 98 on the G4 probe: three times wrestling, nine times
+ * striking offence. Cardio is the most load-bearing physical in the sport; it is not three skills.
+ */
+export const CARDIO_GRIP = 0.3;
+/**
+ * And below an average tank, how hard a poor one bites. Asymmetric on purpose: a bad gas tank is a
+ * fight-losing hole — the man is visibly empty by the third — while the difference between a very
+ * good tank and an elite one is real and smaller. Meets `CARDIO_GRIP` at Cardio 50, where the effect
+ * curve is 1, so the average fighter is untouched.
+ */
+export const POOR_TANK_GRIP = 0.85;
+
+/**
+ * Trait multipliers on the tank (`cardioMachine`, `chainWrestler`, ...) go through the same flattening,
+ * or a trait would keep the full force the attribute just lost: `cardioMachine` read 22.8 points of
+ * win rate against wrestling's 21 once `CARDIO_GRIP` landed — the defect `trait-cost.test.ts` guards.
+ */
+export const TRAIT_TANK_GRIP = 0.6;
+
+export function tankTraitMul(c: Combatant): number {
+  return traitMul(c.fighter.traits, 'fatigueRate') ** TRAIT_TANK_GRIP;
+}
+
+export function tankEffect(c: Combatant): number {
+  const e = effect(c.attrs.cardio, 1.2);
+  return e ** (e < 1 ? POOR_TANK_GRIP : CARDIO_GRIP);
+}
+
 /** How much of output is tied to the tank. See `workRate`. */
 export const WORK_RATE_GAS = 0.5;
 
@@ -50,7 +84,7 @@ export interface FatigueContext {
 
 /** Accrue fatigue for one exchange. Mutates the combatant. */
 export function accrueFatigue(c: Combatant, ctx: FatigueContext): void {
-  const cardio = effect(c.attrs.cardio, 1.2);
+  const cardio = tankEffect(c);
 
   let positionCost = POSITION_COST[ctx.position];
   /*
@@ -82,7 +116,7 @@ export function accrueFatigue(c: Combatant, ctx: FatigueContext): void {
     positionCost *
     cutDrag *
     bodyDrag(c) *
-    traitMul(c.fighter.traits, 'fatigueRate') *
+    tankTraitMul(c) *
     // Swinging hard is expensive. The third leg of the `riskLevel` trade: recklessness buys
     // power now and pays for it in the championship rounds.
     riskProfile(c.plan.riskLevel).exertion *
@@ -93,7 +127,7 @@ export function accrueFatigue(c: Combatant, ctx: FatigueContext): void {
 
 /** Recover between rounds. Mutates the combatant. */
 export function recoverBetweenRounds(c: Combatant, restSeconds = 60): void {
-  const cardio = effect(c.attrs.cardio, 1.2);
+  const cardio = tankEffect(c);
   const recovery = effect(c.fighter.naturals.recovery, 0.9);
 
   const fraction =
@@ -173,7 +207,7 @@ const STRIKE_COST: Readonly<Record<Weapon, number>> = {
 };
 
 export function chargeStrike(c: Combatant, weapon: Weapon): void {
-  const cardio = effect(c.attrs.cardio, 1.2);
+  const cardio = tankEffect(c);
   c.fatigue = clamp01(
     c.fatigue +
       (STRIKE_COST[weapon] *
@@ -181,7 +215,41 @@ export function chargeStrike(c: Combatant, weapon: Weapon): void {
         riskProfile(c.plan.riskLevel).commitment ** 3 *
         (1 + c.cutPenalty * 0.45) *
         bodyDrag(c) *
-        traitMul(c.fighter.traits, 'fatigueRate')) /
+        tankTraitMul(c)) /
+        cardio,
+  );
+}
+
+/**
+ * What a grappling effort costs the tank, for Cardio 50. Doc 36, the wrestling-economy pass.
+ *
+ * Before this, a stuffed shot cost the *defender* a little and the shooter nothing, a chained second
+ * and third link cost nothing at all, and a failed get-up was free. The sport runs the other way:
+ * driving through a sprawl with the other man's weight on your head is the most expensive thing in
+ * the fight, a chain wrestler spends his tank to spend yours, and fighting your way up a wall over
+ * and over empties the man underneath. Every figure here goes through the same cardio, body-damage
+ * and weight-cut terms as everything else, so a body-shot game makes a wrestler pay more for each.
+ */
+export const EFFORT = {
+  /** Shooting at all: level change, penetration step. */
+  shot: 0.005,
+  /** On top of `shot` when it is stuffed: the sprawl lands on him. */
+  stuffed: 0.009,
+  /** Each further link of a chain, on top of the above. */
+  chainLink: 0.004,
+  /** Sprawling and whizzering a shot. Less than the shooter pays, which is why sprawl-and-brawl works. */
+  sprawl: 0.005,
+  /** A get-up attempt that fails: wall-walk, hand-fight, and back down. */
+  failedGetUp: 0.009,
+  /** A get-up that works. Still work. */
+  getUp: 0.005,
+} as const;
+
+export function chargeEffort(c: Combatant, amount: number): void {
+  const cardio = tankEffect(c);
+  c.fatigue = clamp01(
+    c.fatigue +
+      (amount * (1 + c.cutPenalty * 0.45) * bodyDrag(c) * tankTraitMul(c)) /
         cardio,
   );
 }

@@ -620,7 +620,9 @@ describe('the fight a player asked for is the fight they got', () => {
     // And he does it by closing, not by standing at boxing range hoping.
     // 1.4 → 1.3 by doc 36 phase 4: both fighters now adjust in the fight and between rounds, so a
     // striker being walked down works harder at the range he wants than one with a static plan did.
-    expect(wrestle.rangeAttempts, message).toBeGreaterThan(strike.rangeAttempts * 1.3);
+    // 1.3 → 1.25 by cage geography: circling off the fence is a range attempt, and an outside
+    // fighter being walked down now has to make it (measured 1.27).
+    expect(wrestle.rangeAttempts, message).toBeGreaterThan(strike.rangeAttempts * 1.25);
   });
 
   it('makes the clinch grinder tie up rather than settle for standing near somebody', () => {

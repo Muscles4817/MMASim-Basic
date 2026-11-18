@@ -190,8 +190,12 @@ describe('calibration fixtures span the rates a refit has to fit', () => {
    * rounded down hard, so a real narrowing trips this long before the set becomes unusable.
    */
   const DECLARED_SPREAD: Readonly<Record<Rate, number>> = {
-    volume: 20, // measured 35.3x
-    control: 15, // measured 23.9x, and 20.1x on the worst of three fight blocks
+    // measured 35.3x; 15.6x after doc 36's wrestling-economy pass, whose flatter cardio curve shrinks
+    // the extremes the `grapplerNoGas` fixtures were built to reach. Still an observable span.
+    volume: 12,
+    // measured 23.9x, and 20.1x on the worst of three fight blocks; 13.1x after the same pass, for
+    // the same reason — a gassed grappler no longer collapses as completely under control.
+    control: 10,
     hazard: 60, // measured 159.1x
     // measured 43.8x; 15.3x after doc 36, whose submission contest reads each hold's technicality
     // (part `strength` for pressure holds) and lets a failed hold chain into its partner — so a

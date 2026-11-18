@@ -331,3 +331,47 @@ The real gap was one number. Full's volume fell by `VOLUME_LEVEL` 0.8 in phase 2
 Calibration-neutral: the whole statistical tier passes except the intent-authority golden, which is re-recorded. Tests: `fight/cage.test.ts` and the cage block of `combat-depth.test.ts`.
 
 Not modelled: two-dimensional position (circling is a contest, not a coordinate), cage control as a judging criterion, and the cage in the Reduced resolver.
+
+## The wrestling economy and the cardio curve
+
+**The question:** is wrestling really as dominant as the engine made it? Measured with the G4 probe (`tools/audit/attribute-swings.ts`: one attribute moved from 38 to 98 on the contender archetype, against the contender), the honest answer was that wrestling was not the outlier:
+
+| Attribute | Before | After |
+|---|---|---|
+| Wrestling | 22.0 pp | 21.2 pp |
+| Takedown defence | 20.8 pp | 19.5 pp |
+| Striking offence | 7.8 pp | 12.3 pp |
+| Kicking | 3.0 pp | 9.4 pp |
+| Striking defence | 19.5 pp | 17.6 pp |
+| Scrambling | 19.0 pp | 18.5 pp |
+| **Cardio** | **74.6 pp** | **52.0 pp** |
+
+A good sprawl already cancelled a good shot almost one-for-one. The distortions were **cardio**, at three times any skill, and **striking offence**, at a third of striking defence.
+
+- **Grappling effort costs gas** (`EFFORT`, `chargeEffort` in `stamina.ts`). The shooter pays for every shot, more when it is stuffed (the sprawl lands on him) and more on each link of a chain. The man sprawling pays less than the shooter, which is why sprawl-and-brawl works. A failed get-up costs the man underneath, and a successful one still costs something. Every charge goes through cardio, body damage and the weight cut, so a body-shot game makes a wrestler pay more for each.
+- **The cardio curve.** `CARDIO_GRIP` is 0.3 above an average tank and `POOR_TANK_GRIP` is 0.85 below it, so a bad tank still gasses visibly while elite cardio has diminishing returns. Trait multipliers on the tank go through `TRAIT_TANK_GRIP`. Cardio's marginal value at a fixed budget fell from +59 to about +25, level with power and speed.
+- **Craft volume** (`craftVolume` in `combos.ts`). A better striker throws more of what works, by up to ±30 % around a 60 in the relevant weapon. The Reduced resolver mirrors it over the round's weapon mix.
+
+Wrestling now leads striking offence about 1.7 : 1. That is close to my reading of the real sport: wrestling is the most valuable base, but not by three times.
+
+**Re-baselined with reasons in each test:**
+- C1 now asserts on the fade ratio, because high-cardio pairs wrestle more through `chainWrestling`.
+- The attribute-economy bounds are inverted, as that test instructed.
+- The foul-rate ceiling goes 40 → 45.
+- The tactics range ratio goes 1.3 → 1.25.
+- The fixture spans for volume and control are lowered.
+- The `functionalRating` fence is back at its original value.
+
+`functionalRating` was re-fitted against this engine; see below.
+
+### `functionalRating` after the cardio change: the constants stand, and a structural finding
+
+`tools/functional-refit.ts` was re-run against this engine. It gained two flags: `--planned` gives every fighter the plan `planFor` would, and `contextPower` is now capped below zero, because charging a fighter for his holes is what the rating is for.
+
+- **Fitted on the unplanned populations the test uses:** the matched-mean score rises to 0.67 (hold-out 0.66). But every such fit breaks `functional.test.ts`'s design claims: an exploitable striker reads above an all-rounder, and a hole stops costing more against the opponent who can put you in it.
+- **Why that happens:** without plans nobody targets a hole on purpose. Measured head to head, an exploitable striker beats a level-70 all-rounder **59 % unplanned** and loses **60 % planned**. The unplanned round robin is teaching the rating that holes are cheap.
+- **Fitted on planned fights, the world the game actually runs:** the current constants score only 0.10 on matched means (the flat average scores 0.12). The best fit reaches 0.40 with nearly every constant pinned against its bounds.
+
+**The structure, not the weights, is what doesn't describe planned fights.** That is a redesign, and it is logged here rather than forced into this pass. The constants stay, keeping every design claim. On the unplanned populations the rating still beats the flat average on all three measures (general 0.951 vs 0.928, matched means 0.471 vs 0.331, orthogonal 0.368 vs 0.356). The matched-mean margin in the statistical test drops from +0.2 to +0.1, with the reason recorded there.
+
+**Open:** rebuild `functionalRating` to predict *planned* fights, and move `functional-rating.test.ts` onto planned round robins when it is.

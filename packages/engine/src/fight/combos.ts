@@ -218,3 +218,19 @@ export function setupMultiplier(input: {
 export function shotSeconds(rng: Rng): number {
   return 0.4 + rng.next() * 0.9;
 }
+
+/**
+ * A better striker throws more of what works: longer combinations, more of them, with less hesitation.
+ * Doc 36, the wrestling-economy pass. Striking offence used to buy accuracy alone — the same number of
+ * shots, landed a little more often — and was worth a third of what striking defence was on the G4
+ * probe. Centred so a 60 in the relevant weapon throws exactly what it did.
+ *
+ * `kickShare` is how much of the volume is kicks: 0 or 1 for one exchange in the full engine, and the
+ * fighter's `kickLean` in the round-level resolver, which sees a round's striking as one mix.
+ */
+export const CRAFT_VOLUME_SPAN = 0.3;
+
+export function craftVolume(c: { attrs: { strikingOffence: number; kicking: number } }, kickShare: number): number {
+  const skill = c.attrs.strikingOffence * (1 - kickShare) + c.attrs.kicking * kickShare;
+  return 1 + clamp((skill - 60) / 35, -1, 1) * CRAFT_VOLUME_SPAN;
+}
