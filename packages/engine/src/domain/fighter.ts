@@ -409,7 +409,12 @@ export function freshCondition(): Condition {
   };
 }
 
-const KO_METHODS: ReadonlySet<FinishMethod> = new Set(['ko', 'tko', 'doctorStoppage']);
+/*
+ * `retirement` is the corner pulling a fighter out on the stool — officially a TKO (corner
+ * stoppage), and from doc 36 phase 3 something the engine actually produces. It belongs with the
+ * strike stoppages for every reader that asks "was he stopped".
+ */
+const KO_METHODS: ReadonlySet<FinishMethod> = new Set(['ko', 'tko', 'doctorStoppage', 'retirement']);
 const DECISION_METHODS: ReadonlySet<FinishMethod> = new Set([
   'decisionUnanimous',
   'decisionSplit',
