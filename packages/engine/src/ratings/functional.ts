@@ -19,9 +19,9 @@
  * ## The shape
  *
  * ```
- *   functional = base · (1 − wCardio − wDurability)
- *              + cardio      · wCardio
- *              + durability  · wDurability
+ *   functional = powerMean( base       @ (1 − wCardio − wDurability),
+ *                           cardio     @ wCardio,
+ *                           durability @ wDurability;  BILL_POWER )
  *
  *   base = control · imposed  +  (1 − control) · exposed
  * ```
@@ -349,11 +349,12 @@ export function contextScores(attrs: Attributes): Record<FightContext, number> {
 /**
  * How sharply a fighter's preferences concentrate, in rating points.
  *
- * A fighter whose best place is ten points clear of the next one wants it about 2.3× as much. Much
+ * A fighter whose best place is ten points clear of the next one wants it about 6× as much. Much
  * tighter than this and every fighter reads as a pure specialist; much looser and Khabib wants to
- * kickbox as much as he wants to wrestle.
+ * kickbox as much as he wants to wrestle. Fitted to planned fights (doc 36; was 10): fighters in a
+ * planned world commit to their best place harder than the first cut assumed.
  */
-const WANT_TAU = 10;
+const WANT_TAU = 5.4;
 
 /**
  * What fight this fighter is looking for: a distribution over the six places.
@@ -398,8 +399,11 @@ export function fightStyleOf(attrs: Attributes): Record<FightContext, number> {
  * fighter owns together. At 12 an elite mover beat an ordinary one 90–10 on footwork alone, which
  * cut the whole takedown chain to 0.17 before the wrestling contest even ran and made 42 takedown
  * defence cost nothing. Real wrestlers close on better movers; they just pay for it.
+ *
+ * Fitted to 30 on planned fights (doc 36; was 18): a planned wrestler closes on a better mover more
+ * often still, and the top-wrestler shape that read at its level was winning 60–63 % of its bouts.
  */
-const RANGE_GATE_SCALE = 18;
+const RANGE_GATE_SCALE = 30;
 
 export function impositionProfile(
   attrs: Attributes,
@@ -423,11 +427,12 @@ export function impositionProfile(
 /**
  * How much of a fighter's weakest places the opponent can actually reach, in rating points.
  *
- * Ten points means a context five points worse than another is picked about 1.6× as often. This is
- * the knob that decides how brutally a hole is punished, and it is the one most worth being
- * nervous about: at 4 the rating is almost a minimum over contexts, and at 30 it is almost a mean.
+ * At 14 a context five points worse than another is picked about 1.4× as often. This is the knob
+ * that decides how brutally a hole is punished, and it is the one most worth being nervous about: at
+ * 4 the rating is almost a minimum over contexts, and at 30 it is almost a mean. Fitted on planned
+ * fights (doc 36; was 10).
  */
-const TARGET_TAU = 10;
+const TARGET_TAU = 14.2;
 
 // --- The rating ------------------------------------------------------------------------------
 
@@ -510,27 +515,29 @@ export interface FunctionalBreakdown {
  * a reading of a particular simulator at a particular calibration, not a constant of nature.
  */
 /*
- * **Re-measured after doc 36, and left as they are** (`tools/functional-refit.ts`). The engine was
- * reworked under these constants, so they were re-fitted: the three populations of
- * `functional-rating.test.ts` (plus three more divisions) simulated once, the eight constants
- * searched, and every candidate checked on a hold-out set simulated on different seeds.
+ * First re-measured after doc 36 against *unplanned* round robins, where, held to the design claims,
+ * nothing beat the old constants out of sample — so they were kept. That turned out to be the wrong
+ * ground truth:
+ */
+/*
+ * **Re-fitted to game-planned fights, doc 36.** Every fighter in the game fights to a plan
+ * (`planFor`), so the ground truth is planned round robins, and on them the constants above — fitted
+ * to unplanned fights — predicted matched-mean cohorts *worse* than `overallRating` (0.10 against
+ * 0.12; 0.05 against 0.15 on the hold-out seeds). Two things were wrong, and the fit found both:
  *
- *  - **Left free, the search does two things this module refuses.** It runs `CARDIO_WEIGHT_MAX` to
- *    its upper bound — the imbalance described above, still about +59 points in the new engine —
- *    and it drops `GAME_PLANNING` from 0.45 to 0.15, at which point a specialist who cannot impose
- *    reads *above* an all-rounder and `functional.test.ts`'s design claims fail. Both are the
- *    engine's economy talking, not a description of fighters.
- *  - **Held to those claims, nothing beats the current vector out of sample.** The best constrained
- *    fit read general 0.9446 / matched 0.6986 / orthogonal 0.3096 on the hold-out against the
- *    current constants' 0.9433 / 0.7096 / 0.2934 — noise, in both directions.
+ *  - **The bill was linear** (`BILL_POWER`), so a deep hole in the chin or the tank was charged a
+ *    tenth of its weight. That alone takes the matched cohort to 0.37–0.43.
+ *  - **The range gate and the panel were too sharp.** `RANGE_GATE_SCALE` 18 → 30 and `PANEL_TAU`
+ *    12 → 24: in planned fights wrestlers close on better movers far more often than the old gate
+ *    allowed, and the top-wrestler shape — which reads at its level — wins 60–63 %.
  *
- * So the constants stand, re-validated rather than re-tuned, and the tool is there for the next
- * engine change. The orthogonal cohort also turned out to be the noisiest of the three — 0.146 on the
- * test's seeds and 0.293 on the hold-out for the same vector — which is worth knowing before reading
- * much into its fence.
+ * Fitted: general 0.932 / matched 0.564; hold-out seeds 0.945 / 0.554, against `overallRating`'s
+ * 0.920 / 0.154. `CARDIO_WEIGHT_MAX` stays at its principled cap and every design claim in
+ * `functional.test.ts` holds. A fighter who rises is a grappler who imposes (Chimaev, Pantoja,
+ * Harrison, Brady, Evloev); the top of the shipped roster moves by about a point.
  */
 const CARDIO_WEIGHT_MAX = 0.4;
-const DURABILITY_WEIGHT_MAX = 0.18;
+const DURABILITY_WEIGHT_MAX = 0.3;
 
 /**
  * How much of an opponent's drive is scouting rather than taste.
@@ -540,7 +547,22 @@ const DURABILITY_WEIGHT_MAX = 0.18;
  * hopes nobody notices. Not 1, because a fighter is still himself: a kickboxer who finds a
  * wrestler's chin does not become a wrestler for the night.
  */
-const GAME_PLANNING = 0.45;
+const GAME_PLANNING = 0.356;
+
+/**
+ * **How much worse a deep hole in the tank or the chin is than its weight.**
+ *
+ * The route bill used to be a linear blend — `base · (1 − w) + cardio · wc + durability · wd` — and
+ * that is the same mistake `CONTEXT_POWER` exists to undo, one level up. In game-planned fights a
+ * 24 chin is not a 24 for a tenth of the fight; it is the fight. Measured on matched-mean cohorts,
+ * the no-chin shape won **32–42 %** of its bouts while reading *above* its level, and the no-cardio
+ * shape won 30–39 % while reading a few points below it.
+ *
+ * A power mean with a negative exponent is the honest fix: a uniformly `v`-rated fighter still reads
+ * exactly `v`, an ordinary tank or chin costs about what it did, and a hole costs what it costs.
+ * Fitted at −1.8 (doc 36, `tools/functional-refit.ts --planned`).
+ */
+const BILL_POWER = -1.8;
 
 /**
  * **How much worse a bad context is than its share of the clock.**
@@ -554,7 +576,7 @@ const GAME_PLANNING = 0.45;
  * cannot wrestle at all. Nineteen per cent of a fight on the bottom is not nineteen per cent of a
  * cost, and no amount of re-weighting a linear average says so.
  *
- * A negative power mean does. At −2 the same striker reads **66.9** against the wrestler and
+ * A negative power mean does. At −2 (the first cut) the same striker reads **66.9** against the wrestler and
  * **72.5** against the kickboxer — a 5.6-point spread where the arithmetic mean produced 0.9 — on
  * 17% of the fight spent on the bottom at a context score of 48 against his 87 at long range. It
  * is the same move `ATTRIBUTE_META.convexity` makes on a single attribute, applied to a
@@ -563,8 +585,14 @@ const GAME_PLANNING = 0.45;
  * **The anchor is exact at any exponent**, which is why this is safe: a power mean of identical
  * values is that value, so a uniformly `v`-rated fighter still reads exactly `v`. The exponent
  * changes how holes are charged and nothing about the scale.
+ *
+ * **Fitted to −0.56 on planned fights (doc 36; was −2), and still negative on purpose.** Once
+ * `BILL_POWER` charged the chin and the tank for their holes, part of what −2 was doing — punishing
+ * the fighter who gets stopped wherever he is put — moved there, and the fit relaxed this. The
+ * refit bounds it at −0.5: at or above zero the rating stops charging a hole in a *place*, and
+ * `functional.test.ts`'s "charges a hole to whoever can put you in it" fails.
  */
-const CONTEXT_POWER = -2;
+const CONTEXT_POWER = -0.556;
 
 /**
  * The share-weighted power mean of a fighter's context scores.
@@ -579,6 +607,18 @@ function contextMean(
   let acc = 0;
   for (const c of FIGHT_CONTEXTS) acc += share[c] * Math.pow(Math.max(scores[c], 1), CONTEXT_POWER);
   return Math.pow(acc, 1 / CONTEXT_POWER);
+}
+
+/** A weighted power mean; the arithmetic mean at 1, the geometric at 0. */
+function powerMean(terms: readonly (readonly [number, number])[], p: number): number {
+  if (Math.abs(p) < 1e-9) {
+    let log = 0;
+    for (const [x, w] of terms) log += w * Math.log(Math.max(x, 1));
+    return Math.exp(log);
+  }
+  let acc = 0;
+  for (const [x, w] of terms) acc += w * Math.pow(Math.max(x, 1), p);
+  return Math.pow(acc, 1 / p);
 }
 
 function normalise(values: Record<FightContext, number>): Record<FightContext, number> {
@@ -671,10 +711,14 @@ export function functionalBreakdown(attrs: Attributes, against: Attributes): Fun
     clamp01(remap(exposure, 0.6, 1.3, 0.15, 1)) *
     (0.45 + 0.55 * (1 - control));
 
-  const rating =
-    base * (1 - cardioWeight - durabilityWeight) +
-    attrs.cardio * cardioWeight +
-    attrs.durability * durabilityWeight;
+  const rating = powerMean(
+    [
+      [base, 1 - cardioWeight - durabilityWeight],
+      [attrs.cardio, cardioWeight],
+      [attrs.durability, durabilityWeight],
+    ],
+    BILL_POWER,
+  );
 
   return {
     rating,
@@ -801,12 +845,13 @@ export const REFERENCE_PANEL: Readonly<Record<ReferenceStyle, Attributes>> = Obj
 /**
  * How pessimistically the panel is combined, in rating points.
  *
- * A soft minimum: at 12, a fighter who reads 85 against four styles and 60 against the fifth comes
- * out at 68 — elite, and discounted hard for the one matchup that beats him. Much tighter and the
- * rating *is* the worst matchup, which punishes every specialist out of existence; much looser and
- * it is a mean of the panel, which is the flat average this module exists to replace, one level up.
+ * A soft minimum: at 24, a fighter who reads 85 against four styles and 60 against the fifth comes
+ * out at about 75 — very good, and discounted hard for the one matchup that beats him. Much tighter
+ * and the rating *is* the worst matchup, which punishes every specialist out of existence; much
+ * looser and it is a mean of the panel, which is the flat average this module exists to replace,
+ * one level up. Fitted on planned fights (doc 36; was 12, which read that fighter at 68).
  */
-const PANEL_TAU = 12;
+const PANEL_TAU = 23.8;
 
 /** A fighter's reading against each style, and the pessimistic combination of them. */
 export interface FunctionalProfile {

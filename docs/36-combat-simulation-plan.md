@@ -374,4 +374,25 @@ Wrestling now leads striking offence about 1.7 : 1. That is close to my reading 
 
 **The structure, not the weights, is what doesn't describe planned fights.** That is a redesign, and it is logged here rather than forced into this pass. The constants stay, keeping every design claim. On the unplanned populations the rating still beats the flat average on all three measures (general 0.951 vs 0.928, matched means 0.471 vs 0.331, orthogonal 0.368 vs 0.356). The matched-mean margin in the statistical test drops from +0.2 to +0.1, with the reason recorded there.
 
-**Open:** rebuild `functionalRating` to predict *planned* fights, and move `functional-rating.test.ts` onto planned round robins when it is.
+**Done (the follow-up pass):** `functionalRating` now predicts planned fights, and `functional-rating.test.ts` runs planned round robins.
+
+On planned fights the matched-mean shapes showed two misreadings:
+- **The no-chin shape** read above its level and won 32–42 %. **The no-cardio shape** read a little below its level and won 30–39 %.
+- **The top-wrestler shape** read at its level and won 60–63 %.
+
+The structural fix is `BILL_POWER`. The cardio/durability bill was a linear blend; it is now a power mean, so a deep hole in the tank or the chin costs what it costs in a planned fight. A uniformly `v`-rated fighter still reads exactly `v`.
+
+A refit on planned populations then set the other constants:
+- `RANGE_GATE_SCALE` 18 → 30 and `PANEL_TAU` 12 → 24: planned wrestlers close on better movers far more than the old gate allowed.
+- `WANT_TAU` 10 → 5.4, `TARGET_TAU` 10 → 14.2, `DURABILITY_WEIGHT_MAX` 0.18 → 0.3, `GAME_PLANNING` 0.45 → 0.36, `CONTEXT_POWER` −2 → −0.56.
+- `CARDIO_WEIGHT_MAX` stays at its principled 0.4 cap.
+- A symmetric "own corner plans too" term was also tried. The fit gave it zero weight, so it was dropped.
+
+| Spearman vs win rate | general | matched means | orthogonal |
+| --- | --- | --- | --- |
+| old constants, planned | 0.933 | 0.10 | 0.18 |
+| refit, planned | 0.932 | **0.56** | 0.16 |
+| refit, planned hold-out seeds | 0.945 | **0.55** | 0.08 |
+| `overallRating`, planned | 0.910 | 0.12 | 0.34 |
+
+Every design claim in `functional.test.ts` holds. On the shipped roster the top moves by about a point, and imposing grapplers rise (Chimaev, Pantoja, Harrison, Brady, Evloev). The orthogonal cohort is still where the rating loses to the flat average: it is built out of the engine's attribute imbalance (power +34, cardio +31, speed +23 marginal; kicking −18, composure and striking defence −10), which the rating deliberately does not fit.

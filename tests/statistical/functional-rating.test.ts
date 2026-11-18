@@ -36,6 +36,7 @@ import {
   generateFighter,
   makeFighter,
   overallRating,
+  planFor,
   simulateFight,
   type Attributes,
   type BandContext,
@@ -82,8 +83,11 @@ async function roundRobin(label: string, fighters: readonly Fighter[], fights: n
           boutId: seed,
           seed,
           rounds: 3,
-          red: { fighter: fighters[i]! },
-          blue: { fighter: fighters[j]! },
+          // Game-planned, as every fighter in the game is: an opponent's camp targets the hole,
+          // which is the world the rating describes. Unplanned round robins under-charge
+          // exploitability (doc 36).
+          red: { fighter: fighters[i]!, plan: planFor(fighters[i]!, fighters[j]!) },
+          blue: { fighter: fighters[j]!, plan: planFor(fighters[j]!, fighters[i]!) },
         });
         bouts[i]++;
         bouts[j]++;
@@ -154,7 +158,8 @@ const DIVISIONS: readonly (readonly [string, 'male' | 'female'])[] = [
 
 describe('a general population', () => {
   /**
-   * **Measured: functional 0.943, overall 0.897, flat unweighted mean 0.892** over these five
+   * **Planned, after doc 36's refit: functional 0.941, overall 0.917, flat mean 0.920.** First cut,
+   * unplanned: **functional 0.943, overall 0.897, flat unweighted mean 0.892** over these five
    * divisions and 13,000 fights, with functional ahead in all five. A wider sweep over eight
    * divisions and ~34,800 fights gave 0.930 against 0.902, ahead in seven and level in the eighth;
    * this run is the subset that fits the tier's time budget.
@@ -347,7 +352,8 @@ function withShape(level: number, shape: Partial<Record<keyof Attributes, number
 
 describe('fighters a flat average cannot tell apart', () => {
   /**
-   * **The claim.** Measured over three levels and 13,050 fights: functional **0.68**, overall
+   * **The claim.** Planned, after doc 36's refit: functional **0.56**, overall **0.12**, flat mean
+   * −0.19 (ties ranked arbitrarily). First cut, unplanned, over three levels and 13,050 fights: functional **0.68**, overall
    * **0.34**, and the flat unweighted mean **0.06** — near zero, as it must be when every fighter
    * has the same average. Functional is ahead at every level (0.82/0.25, 0.55/0.22, 0.67/0.56).
    *
@@ -389,8 +395,14 @@ describe('fighters a flat average cannot tell apart', () => {
      * the fits that clear the old bar break the module's own design claims in `functional.test.ts`, so
      * they were not taken. See doc 36 for the planned-world finding this led to.
      */
-    expect(result.functional).toBeGreaterThan(result.overall + 0.1);
-    expect(result.functional).toBeGreaterThan(0.4);
+    /*
+     * Planned round robins since doc 36's refit, the world every fighter in the game fights in. On
+     * them the old constants read 0.10 against `overallRating`'s 0.12; the refit (`BILL_POWER` and
+     * the constants beside it) reads **0.56 against 0.12** here and 0.55 against 0.15 on hold-out
+     * seeds, ahead at every level (0.53/0.05, 0.57/0.09, 0.59/0.22).
+     */
+    expect(result.functional).toBeGreaterThan(result.overall + 0.3);
+    expect(result.functional).toBeGreaterThan(0.45);
     // The control: a flat average of a matched-mean cohort carries no information at all.
     expect(Math.abs(result.flatMean)).toBeLessThan(0.2);
   });
