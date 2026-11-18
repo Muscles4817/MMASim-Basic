@@ -509,6 +509,26 @@ export interface FunctionalBreakdown {
  * **If the engine's cardio dependence is ever retuned, this constant must be re-measured.** It is
  * a reading of a particular simulator at a particular calibration, not a constant of nature.
  */
+/*
+ * **Re-measured after doc 36, and left as they are** (`tools/functional-refit.ts`). The engine was
+ * reworked under these constants, so they were re-fitted: the three populations of
+ * `functional-rating.test.ts` (plus three more divisions) simulated once, the eight constants
+ * searched, and every candidate checked on a hold-out set simulated on different seeds.
+ *
+ *  - **Left free, the search does two things this module refuses.** It runs `CARDIO_WEIGHT_MAX` to
+ *    its upper bound — the imbalance described above, still about +59 points in the new engine —
+ *    and it drops `GAME_PLANNING` from 0.45 to 0.15, at which point a specialist who cannot impose
+ *    reads *above* an all-rounder and `functional.test.ts`'s design claims fail. Both are the
+ *    engine's economy talking, not a description of fighters.
+ *  - **Held to those claims, nothing beats the current vector out of sample.** The best constrained
+ *    fit read general 0.9446 / matched 0.6986 / orthogonal 0.3096 on the hold-out against the
+ *    current constants' 0.9433 / 0.7096 / 0.2934 — noise, in both directions.
+ *
+ * So the constants stand, re-validated rather than re-tuned, and the tool is there for the next
+ * engine change. The orthogonal cohort also turned out to be the noisiest of the three — 0.146 on the
+ * test's seeds and 0.293 on the hold-out for the same vector — which is worth knowing before reading
+ * much into its fence.
+ */
 const CARDIO_WEIGHT_MAX = 0.4;
 const DURABILITY_WEIGHT_MAX = 0.18;
 
