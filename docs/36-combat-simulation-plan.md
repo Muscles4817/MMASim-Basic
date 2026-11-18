@@ -239,3 +239,33 @@ Open, carried to phase 9:
 
 Measured, P(re-shot | stuffed) against the baseline takedown share: grinder **59 % vs 17 %** (was 2.9 % vs 17.8 %), even pair 17 % vs 13 % (was 4 % vs 13 %).
 The submission contest now reads the hold's technicality (submissions against strength), its finishing factor and a small signature bonus.
+
+### Phases 6–8 — landed (calibration open)
+- **Ground graph** (`groundGraph.ts`):
+  - Passes land on weighted targets; skilled passers skip rungs.
+  - Back-takes come from half guard, side control, north-south, turtle and scrambles.
+  - Working framing recovers guard.
+  - A closed guard that holds often opens.
+  - Leg-lock players dive on legs from the guards into `legEntangle`; a failed leg lock gives up position.
+  - The catalogue's 20 holds are all reachable: rear-naked chokes come from the new back routes, and the guillotine was trimmed.
+- **Clinch** (`clinch.ts`): weapons by clinch game.
+  - Thai: knees to the head and body, elbows.
+  - Dirty boxing: short hooks, uppercuts, elbows.
+  - Greco: thigh knees, short shots, stomps.
+  - Greco games take people down from the tie-up more; Thai games less.
+- **Stance styles** (`stance.ts`): bladed, square, crouched, each with a measurable pro and con (`tools/audit/fight-engine-stances.ts`). A shape is only assigned from a recorded background or an authored style, apart from unmistakable wrestlers. Tactical stance switching is driven by `stanceSwitching`. A hurt fighter's offence now drops too, scaled by composure.
+- Parity test made whole-word ("kneebar" is not a knee).
+
+Failing after phase 8, all calibration (see phase 9):
+- G4 striking and kicking swings
+- Prep ×3
+- Upsets
+- `transition-intent` ×3
+- `range` wrestler distance
+- `mass-experiments` S1 and C1
+- `over-a-card` ×2
+- `trait-cost` chainWrestler
+- `reduced-fidelity` ×3
+- `intent-authority` golden ×3
+- `broadcast` read
+- `attribute-economy` record

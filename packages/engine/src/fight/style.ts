@@ -175,11 +175,13 @@ function deriveStyle(f: Fighter): StyleProfile {
   if (art('karate')) stanceStyle = 'bladed';
   else if (art('kickboxing')) stanceStyle = 'square';
   else if (art('wrestling') && a.wrestling >= 60) stanceStyle = 'crouched';
-  else if (!disc) {
-    // No recorded background: read it off the numbers, conservatively. Most fighters are standard.
-    if (a.wrestling >= 75 && a.wrestling > hands + 12) stanceStyle = 'crouched';
-    else if (feet >= 72 && feet > hands + 8 && a.strikingDefence >= 60) stanceStyle = 'bladed';
-    else if (feet >= 70 && a.strength >= 65 && feet >= hands) stanceStyle = 'square';
+  else if (!disc && a.wrestling >= 80 && a.wrestling > hands + 15) {
+    /*
+     * No recorded background: a shape is a fact about how somebody learned to fight, and the numbers
+     * alone are a weak witness to it. Only an unmistakable wrestler is read as crouched; everybody
+     * else stands standard until a background or an authored style says otherwise.
+     */
+    stanceStyle = 'crouched';
   }
 
   // ---- Combos

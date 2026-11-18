@@ -220,7 +220,9 @@ describe('the play-by-play describes the fight that happened', () => {
               // reaches `strikesByWeapon`. The claim being checked is about *scored* strikes.
               e.kind !== 'foul' &&
               e.kind !== 'pointDeduction' &&
-              description(e, NAMES).includes(weapon),
+              // Whole words: a "kneebar" is a leg lock, not a knee (doc 36 phase 6 put leg locks in
+              // the catalogue, and a substring match read every one of them as a strike).
+              new RegExp(`\\b${weapon}s?\\b`).test(description(e, NAMES)),
           );
           for (const event of claimed) {
             offences.push(`${corner} landed no ${weapon} but the prose says: ${event.text}`);

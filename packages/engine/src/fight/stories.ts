@@ -260,10 +260,10 @@ export function afterStrikeStory(
  */
 export function checkedKick(ctx: StoryContext, kicker: Combatant, checker: Combatant): boolean {
   const style = checker.style.stanceStyle;
-  const base = style === 'square' ? 0.42 : style === 'bladed' ? 0.12 : style === 'crouched' ? 0.18 : 0.24;
+  const base = style === 'square' ? 0.3 : style === 'bladed' ? 0.06 : style === 'crouched' ? 0.1 : 0.12;
   const skill = remap((checker.attrs.kicking + checker.attrs.strikingDefence) / 2, 30, 95, 0.6, 1.35);
   if (!ctx.rng.chance(clamp01(base * skill * (checker.legsCompromised ? 0.5 : 1)))) return false;
-  kicker.damage.legs = clamp(kicker.damage.legs + 3 + ctx.rng.next() * 4, 0, 100);
+  kicker.damage.legs = clamp(kicker.damage.legs + 2 + ctx.rng.next() * 2.5, 0, 100);
   if (ctx.rng.chance(0.02)) {
     if (injure(kicker, 'foot', 0.4 + ctx.rng.next() * 0.5, ctx.round)) {
       ctx.emit('note', injuryText(kicker, 'foot'), kicker.corner, 'minor');

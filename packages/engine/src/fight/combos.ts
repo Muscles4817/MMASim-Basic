@@ -45,12 +45,14 @@ export const TECHNIQUES = [
   'bodyKick',
   'headKick',
   'teep',
+  /** A kick aimed wherever this fighter would aim one: the plan and the range choose the target. */
+  'anyKick',
   'feint',
 ] as const;
 export type Technique = (typeof TECHNIQUES)[number];
 
 export const TECHNIQUE_SHAPE: Readonly<
-  Record<Exclude<Technique, 'feint'>, { weapon: Weapon; target: StrikeTarget }>
+  Record<Exclude<Technique, 'feint' | 'anyKick'>, { weapon: Weapon; target: StrikeTarget }>
 > = {
   jab: { weapon: 'punch', target: 'head' },
   straight: { weapon: 'punch', target: 'head' },
@@ -76,8 +78,8 @@ export const PATTERNS: Readonly<Record<ComboKey, readonly (Technique | undefined
   oneTwoHook: ['jab', 'straight', 'hook'],
   bodyHead: ['bodyHook', 'hook'],
   headBody: ['jab', 'straight', 'bodyHook'],
-  punchesToKick: ['jab', 'straight', 'lowKick'],
-  kickToPunches: ['bodyKick', 'straight', 'hook'],
+  punchesToKick: ['jab', 'straight', 'anyKick'],
+  kickToPunches: ['anyKick', 'straight', 'hook'],
   feintShot: ['feint', undefined],
   // As a burst it is the hands; the level change itself is resolved by the takedown that follows.
   strikeToShot: ['jab', 'straight'],
@@ -163,6 +165,10 @@ export function choosePattern(
     let legs = 0;
     for (const t of techs) {
       if (!t || t === 'feint') continue;
+      if (t === 'anyKick') {
+        kicks++;
+        continue;
+      }
       const shape = TECHNIQUE_SHAPE[t];
       fit *= strikeSuitability(shape.weapon, shape.target, range) ** 0.5;
       if (shape.weapon === 'kick') kicks++;
@@ -173,15 +179,12 @@ export function choosePattern(
     // itself be a kick. The hand patterns are mostly a punching exchange's.
     const free = techs.every((t) => t === undefined);
     if (free && techs.length > 1 && !prefersKick) return 0;
-    const kickFit = prefersKick
-      ? kicks > 0
-        ? 2
-        : free
-          ? 2.5
-          : 0.12
-      : kicks > 0
-        ? 0.15 + lean * 1.4
-        : 1;
+    // A kicking exchange is led by the feet, in proportion to how much of the pattern is kicks; free
+    // slots in a kicking exchange are kicks. In a punching exchange the kick patterns follow how much
+    // of this fighter's striking goes to the feet at all.
+    const thrown = techs.filter((t) => t !== 'feint').length;
+    const kickShare = free ? 1 : thrown > 0 ? kicks / thrown : 0;
+    const kickFit = prefersKick ? 0.1 + 2.6 * kickShare : kicks > 0 ? 0.15 + lean * 1.4 : 1;
     // A plan that wants the body throws body patterns; one that wants the legs throws leg patterns.
     const planFit =
       (body > 0 ? remap(targeting.body, 0.1, 0.6, 0.6, 2.2) : 1) *

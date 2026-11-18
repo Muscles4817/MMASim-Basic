@@ -105,6 +105,8 @@ for (const [name, mkR, mkB] of pairs) {
     ['backExposed', /gives up the back|turtles to get up|turns away to stand/],
     ['scramble', /scramble/i],
     ['corner', /^In .* corner:/],
+    ['guardRecovery', /shrimps out|works back to/],
+    ['legEntry', /dives on a leg|entangles the legs/],
     ['combination', /./],
   ];
   let phaseTime = { distance: 0, clinch: 0, ground: 0 } as Record<string, number>;

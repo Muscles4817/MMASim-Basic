@@ -98,7 +98,7 @@ export const GROUND_POSITION_NAMES: Readonly<Record<GroundPosition, string>> = {
  * from an orthodox fighter is a jab. Free shots still draw from `VOCABULARY`, filtered below.
  */
 const TECHNIQUE_WORDS: Readonly<
-  Record<Exclude<Technique, 'feint'>, (southpaw: boolean) => readonly string[]>
+  Record<Exclude<Technique, 'feint' | 'anyKick'>, (southpaw: boolean) => readonly string[]>
 > = {
   jab: () => ['a stiff jab', 'a snapping jab', 'a jab'],
   straight: (sp) =>
@@ -142,7 +142,7 @@ function wordsFor(
   target: StrikeTarget,
   technique?: Technique,
 ): readonly string[] {
-  if (technique && technique !== 'feint') {
+  if (technique && technique !== 'feint' && technique !== 'anyKick') {
     return TECHNIQUE_WORDS[technique](attacker.fighter.stance === 'southpaw');
   }
   return freeWords(attacker, weapon, target);
@@ -199,8 +199,28 @@ export function combinationText(rng: Rng, attacker: Combatant, pattern: string, 
  * Every clinch strike in the game used to be the same hardcoded sentence, built in `simulate.ts`
  * where no other line lives. It is prose, so it belongs here, and it varies like everything else.
  */
-export function clinchStrikeText(rng: Rng, attacker: Combatant, target: StrikeTarget): string {
-  return `${surname(attacker)} ${rng.pick(['digs', 'drives', 'thuds'])} ${rng.pick(VOCABULARY.knee[target])} in against the fence.`;
+export function clinchStrikeText(
+  rng: Rng,
+  attacker: Combatant,
+  target: StrikeTarget,
+  weapon: Weapon = 'knee',
+): string {
+  if (weapon === 'knee') {
+    return `${surname(attacker)} ${rng.pick(['digs', 'drives', 'thuds'])} ${rng.pick(VOCABULARY.knee[target])} in against the fence.`;
+  }
+  const words: Readonly<Record<'punch' | 'elbow' | 'kick', Readonly<Partial<Record<StrikeTarget, readonly string[]>>>>> = {
+    punch: {
+      head: ['a short uppercut inside', 'a dirty-boxing hook off the collar tie', 'short punches in the tie-up'],
+      body: ['short hooks to the body in the tie-up', 'a digging uppercut to the body'],
+    },
+    elbow: {
+      head: ['a short elbow in the clinch', 'an elbow as they break'],
+      body: ['an elbow to the ribs'],
+    },
+    kick: { legs: ['a stomp to the foot'] },
+  };
+  const list = words[weapon as 'punch' | 'elbow' | 'kick'][target] ?? VOCABULARY[weapon][target];
+  return `${surname(attacker)} lands ${rng.pick(list)}.`;
 }
 
 export function knockdownText(rng: Rng, attacker: Combatant, defender: Combatant): string {
@@ -377,6 +397,28 @@ export function rangeFailText(
     `${surname(mover)} wants out and ${surname(other)} will not let him go.`,
     `${surname(mover)} tries to step off; ${surname(other)} stays glued to him.`,
     `No escape — ${surname(other)} cuts the angle off and keeps him there.`,
+  ]);
+}
+
+export function legEntryText(rng: Rng, attacker: Combatant): string {
+  return rng.pick([
+    `${surname(attacker)} dives on a leg — they are hunting a leg lock!`,
+    `${surname(attacker)} spins underneath and entangles the legs.`,
+  ]);
+}
+
+export function guardRecoveryText(rng: Rng, defender: Combatant, to: GroundPosition): string {
+  const BOTTOM_NAMES: Partial<Record<GroundPosition, string>> = {
+    guard: 'closed guard',
+    openGuard: 'open guard',
+    halfGuard: 'half guard',
+    turtle: 'the turtle',
+    sideControl: 'side control',
+  };
+  const where = BOTTOM_NAMES[to] ?? 'a better position';
+  return rng.pick([
+    `${surname(defender)} shrimps out and recovers to ${where}.`,
+    `Good hips from ${surname(defender)}, who works back to ${where}.`,
   ]);
 }
 
@@ -574,4 +616,11 @@ export function scrambleText(
     case 'backTaken':
       return `${surname(bottom)} tries to come up and ${surname(top)} wins the scramble — taking the back!`;
   }
+}
+
+export function stanceSwitchText(rng: Rng, c: Combatant, now: string): string {
+  return rng.pick([
+    `${surname(c)} switches to ${now}.`,
+    `${surname(c)} changes stance — fighting ${now} now.`,
+  ]);
 }
