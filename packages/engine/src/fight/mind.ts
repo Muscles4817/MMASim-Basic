@@ -196,3 +196,38 @@ function retarget(c: Combatant, region: 'legs' | 'body', factor: number): void {
   const sum = next.head + next.body + next.legs;
   c.plan = { ...c.plan, targeting: { head: next.head / sum, body: next.body / sum, legs: next.legs / sum } };
 }
+
+// --- Making the head visible -----------------------------------------------------------------
+
+const READ_LINES: Partial<Record<Family, (me: string, him: string) => string>> = {
+  takedown: (me, him) => `${me} is timing ${him}'s shot now — the sprawl is arriving before the shot does.`,
+  punch: (me, him) => `${me} has ${him}'s hands figured out, slipping and making them miss.`,
+  kick: (me, him) => `${me} is reading the kicks now, stepping out of range of every one.`,
+  clinchEntry: (me, him) => `${me} sees ${him} coming for the clinch and is circling off before the tie-up.`,
+};
+
+const ABANDON_LINES: Partial<Record<Family, (me: string) => string>> = {
+  takedown: (me) => `${me} has stopped shooting — the takedowns were not working.`,
+  kick: (me) => `${me} has gone back to the hands; the kicks were not landing.`,
+  clinchEntry: (me) => `${me} has given up on the tie-up.`,
+};
+
+/**
+ * A line, once per family per fight, when a read has formed or a fighter has visibly given up on
+ * something. What makes adjustment legible: without it, a smart fighter's learning happens and the
+ * player never knows. Returns the text and records that it was told.
+ */
+export function adjustmentLine(defender: Combatant, attacker: Combatant, family: Family): string | undefined {
+  const told = defender.mem.told[family];
+  const readFormed = inFightRead(defender, family) >= IN_FIGHT_READ_MAX * 0.45;
+  if (readFormed && told !== 'read' && told !== 'both') {
+    defender.mem.told[family] = told === 'abandoned' ? 'both' : 'read';
+    return READ_LINES[family]?.(defender.fighter.lastName, attacker.fighter.lastName);
+  }
+  const mine = attacker.mem.told[family];
+  if (selfAdjustment(attacker, family) <= 0.72 && mine !== 'abandoned' && mine !== 'both') {
+    attacker.mem.told[family] = mine === 'read' ? 'both' : 'abandoned';
+    return ABANDON_LINES[family]?.(attacker.fighter.lastName);
+  }
+  return undefined;
+}

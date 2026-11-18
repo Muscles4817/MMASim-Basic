@@ -250,3 +250,55 @@ Each recommendation stays inside the existing architecture. Every phase so far h
    - Make the vocabulary weight technique names by the fighter (no spinning back kicks from kicking-50 wrestlers).
    - Give `ARCHETYPES.southpawSniper` the southpaw stance.
    - Make a hurt fighter's default include a survival tie-up even without a situational rule.
+
+---
+
+## Addendum: after the doc 36 work (2026-11-18)
+
+The recommendations above were implemented as `docs/36-combat-simulation-plan.md` phases 1–9. Each row below was re-measured with the same harnesses, seeds and matchups as the audit.
+
+| Finding | Before | After |
+|---|---|---|
+| Strikes attempted per round, R1 / R2 / R3 (even pair, decision fights) | 41 / 25 / 20 | **39 / 30 / 27** |
+| Average fatigue through R2 / R3 (50-cardio fighters) | 0.77 / 0.91 | ≈0.45 / 0.65 |
+| Re-shot after a stuffed takedown, grinder v striker (baseline takedown share in brackets) | 2.9 % (17.8 %) | **43.6 % (18.1 %)** |
+| R3 takedown attempts: wrestler stuffed on every R1 shot v landed every R1 shot | 2.63 v 2.46 (backwards) | **2.48 v 3.17** |
+| Guard specialist's submission attempts | four holds at ~20 % each | a signature hold dominates, ~17 holds used, leg locks only for leg-lock players |
+| Submission catalogue | 16 names drawn at random after the fact | 20 holds with families, positions, injuries and chain partners, chosen before the contest |
+| Clinch strikes | knees only | knees, dirty boxing, elbows and stomps, by clinch game |
+| `combination` events | never emitted | 1–6 per fight |
+| Body-shot and leg-kick stoppages | impossible | body folds in 1–9 of every 100 fights; leg-kick TKOs rare |
+| In-fight injuries | none | 2–10 per 100 fights, carried into the post-fight medical |
+| What a hurt fighter does next | stands and takes it | ties up, shoots, shells, fires back or runs, by character |
+| Corner | none | one instruction between rounds, heard according to ego and discipline; retirements 0.3–2.7 % |
+| Back-takes | from mount only | from half guard, side control, north-south, turtle, front headlock, failed get-ups and scrambles |
+| Stance | flat southpaw bonus | southpaw edge kept; bladed, square and crouched shapes, each with a measured pro and con; tactical switching; a compromised lead leg forces a switch |
+| Booth | credited hurt lines to the fighter hurt, counted misses as offence | both fixed |
+
+**Population calibration still holds.** `roster-profile` passes on finish rate, decisions, KO:submission ratio and first-round share. Striking (8.4 pp), kicking (>4 pp) and wrestling swings all clear their floors.
+
+**Re-baselined claims, each with its reason recorded in the test.**
+- The prep fixture's plan half.
+- Two tactics ratios.
+- The grinder's submission count.
+- The booth agreement floor.
+- The functional-rating fence.
+- The inverted `cardioMachine` tripwire.
+- The intent-authority golden.
+
+**Grades, revised.**
+- Ebb and flow: **B**
+- Highs and lows: **B**
+- Tactical adjustments and setups: **B−**
+- Chain wrestling: **B+**
+- Submissions: **B+**
+- Clinch: **B−**
+- Stances: **B−**
+- Minor injuries: **B−**
+- Combinations: **B**
+
+**Still open:**
+- There is no cage geography, so no back to the fence and no cutting off the cage.
+- Body work still pays off mostly through fatigue rather than as a late-fight story.
+- Wrestling is now the most valuable attribute by a wide margin (a 22 pp swing).
+- `functionalRating` needs re-fitting to the new engine.

@@ -93,6 +93,8 @@ export interface FightMemory {
   chainDepth: number;
   /** How many times the opponent has thrown each combination pattern at this fighter. */
   patternsSeen: Record<ComboKey, number>;
+  /** Families whose read or abandonment has already been narrated, so each is told once. */
+  told: Partial<Record<Family, 'read' | 'abandoned' | 'both'>>;
 }
 
 export function createMemory(): FightMemory {
@@ -111,6 +113,7 @@ export function createMemory(): FightMemory {
     lastSubFailed: undefined,
     chainDepth: 0,
     patternsSeen: Object.fromEntries(COMBO_KEYS.map((k) => [k, 0])) as Record<ComboKey, number>,
+    told: {},
   };
 }
 

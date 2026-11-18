@@ -78,7 +78,14 @@ import {
   shotSeconds,
   type Technique,
 } from './combos.js';
-import { cornerAdvice, familyLean, inFightRead, notePattern, patternFamiliarity } from './mind.js';
+import {
+  adjustmentLine,
+  cornerAdvice,
+  familyLean,
+  inFightRead,
+  notePattern,
+  patternFamiliarity,
+} from './mind.js';
 import { clinchShot, clinchStyleDefence, clinchStyleOffence, clinchTakedownEdge } from './clinch.js';
 import { GUARD_OPENS, legEntryChance, passTarget, recoverGuard } from './groundGraph.js';
 import {
@@ -2039,6 +2046,9 @@ function throwBurst(
     }
   }
 
+  const strikeRead = adjustmentLine(target, actor, prefersKick ? 'kick' : 'punch');
+  if (strikeRead) emit('note', strikeRead, strikeRead.startsWith(target.fighter.lastName) ? target.corner : actor.corner);
+
   if (bestRun >= 2 && thrownInPattern >= 2) {
     emit('combination', say.combinationText(rng, actor, PATTERN_NAMES[pattern], bestRun), actor.corner);
   }
@@ -2290,6 +2300,8 @@ function resolveTakedown(
 
   const lands = rng.chance(offence / (offence + defence));
   remember(actor, target, 'takedown', lands, nowOf(ctx));
+  const adjusted = adjustmentLine(target, actor, 'takedown');
+  if (adjusted) emit('note', adjusted, adjusted.startsWith(target.fighter.lastName) ? target.corner : actor.corner);
   if (lands) {
     actor.stats.takedownsLanded++;
     tally[actor.corner].takedowns++;
