@@ -396,3 +396,42 @@ A refit on planned populations then set the other constants:
 | `overallRating`, planned | 0.910 | 0.12 | 0.34 |
 
 Every design claim in `functional.test.ts` holds. On the shipped roster the top moves by about a point, and imposing grapplers rise (Chimaev, Pantoja, Harrison, Brady, Evloev). The orthogonal cohort is still where the rating loses to the flat average: it is built out of the engine's attribute imbalance (power +34, cardio +31, speed +23 marginal; kicking −18, composure and striking defence −10), which the rating deliberately does not fit.
+
+### The attribute economy: measured, and the cause is the plans
+
+**Goal:** flatten what each attribute is worth at a fixed budget. Power, cardio and speed dominated; composure and kicking were worth *less* than the points they cost elsewhere.
+
+**Two instruments:**
+- `tools/audit/attribute-economy.ts` measures each attribute in planned fights. One attribute moves ±24 against an even spread of the other fourteen, versus a uniform opponent at levels 52 and 70 (N=600 per side, standard error about 3 points). `--no-tax` moves the attribute on its own instead, which asks the player's question: is more of this ever worse?
+- `tools/audit/plan-parity.ts` asks whether any game plan wins between two identical fighters.
+
+**What the economy says on master:**
+- At a fixed budget: power +34, cardio +33, speed +28, fight IQ +16, wrestling +8; composure −14 and kicking −15.
+- With no tax, every attribute helps except kicking (−4.8, a little over one standard error). Training kicking alone can make a fighter slightly worse.
+
+**Why tuning attributes does not fix it.** Each lever was tried and measured, and none survived:
+- **A gentler power curve (convexity 1.6 → 1.3)** took power to +21, but broke design pillar 3 ("Power 99 is categorically different"), knockout fidelity and the calibration fixtures.
+- **A composure "rattle"** (everyone performs worse while momentum runs against them; composure decides how much) took composure from −14 to −3. But momentum moves every exchange, so the rattle compounds: whoever lands first rattles the other into landing less. That made reckless fighting the correct answer (`risk.test.ts`) and tipped the stance tests even at a third of the strength.
+- **Initiative leaning less on hand speed** (`speed ** 0.75`) took speed to +17 and is neutral on the rest. It is held back to land with the plan fix below, which will move the same calibration bars.
+- **Cardio's top-end grip 0.3 → 0.22** moved nothing measurable.
+- **Kicking in `distanceControl`** moved nothing.
+- **A floor on control and takedowns in decision scoring** moves value from wrestlers to strikers but drives takedown defence negative.
+
+**The cause: the top-position game wins at parity.** Between identical all-60 fighters, against the top plan `planFor` gives an all-rounder:
+
+| plan | wins | by decision | by finish |
+| --- | --- | --- | --- |
+| top | 51 % | 305 | 73 |
+| clinch | 45 % | 262 | 59 |
+| submission | 45 % | 278 | 45 |
+| boxing | 41 % | 216 | 91 |
+| pocket | 38 % | 198 | 77 |
+| outside | 35 % | 161 | 106 |
+
+Level 72 is similar (outside 39 %, boxing 37 %, pocket 41 %). The striking plans finish more often and lose the decisions.
+
+**The mechanism:** committing to a striking plan buys almost no striking edge. A boxing-plan fighter against an equal top-plan fighter out-lands him only 16 to 15 and out-damages him 39 to 37, while losing control 185 to 322 seconds. With the striking even, grappling decides the round, which is realistic judging.
+
+**Why that sinks striking attributes:** more kicking makes the planner choose an outside striking game (`pickPreferredState`), which leaves the game that wins. More submissions does the same with submission hunting. The attribute is fine; the plan it buys loses. It is the same imbalance the functional rating saw, with the top-wrestler shape winning 60–63 %.
+
+**Open, and next:** a fighter who commits to a striking plan should out-strike an equal grappler who spends his beats shooting. Then a striking plan becomes a real alternative at parity. The stand-up fighter's work rate, the cost a shooter pays in the standing exchange, and how much a stuffed shot gives away are the places to look. `plan-parity.ts` is the acceptance instrument: every row within a few points of 50 %, with style diversity intact.
