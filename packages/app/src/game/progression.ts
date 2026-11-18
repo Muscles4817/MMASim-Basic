@@ -11,6 +11,7 @@ import {
   DEFAULT_INTENSITY,
   INTENSITY_META,
   applyTraining,
+  describeDrilling,
   type TrainingIntensity,
   campImpairment,
   campInjuryChance,
@@ -164,6 +165,8 @@ export interface TrainingOutcome {
   /** Age on the way in and on the way out. A long camp can cross a birthday. */
   ageBefore?: number;
   ageAfter?: number;
+  /** What drilling changed in the repertoire (doc 36 phase 9): patterns, signatures, linked shots. */
+  drilled?: readonly string[];
   /** What the camp cost and what is left, kept structured so the screen can format it. */
   cost?: number;
   bankAfter?: number;
@@ -302,6 +305,7 @@ export function runTraining(
     after,
     headroom,
     healed: healedNow,
+    drilled: describeDrilling(fighter, trained.fighter),
     ageBefore: Math.floor((world.day - fighter.birthDay) / 365),
     ageAfter: Math.floor((toDay - fighter.birthDay) / 365),
     cost,

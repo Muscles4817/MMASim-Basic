@@ -393,3 +393,21 @@ describe('cage geography — pressure traps, footwork escapes', async () => {
     expect(s / 200).toBeLessThan(60);
   });
 });
+
+describe('the fight statistics count the new depth', () => {
+  it('credits chained re-shots to the chain wrestler and combinations to the striker', async () => {
+    let chainG = 0;
+    let chainS = 0;
+    let combosG = 0;
+    let combosS = 0;
+    for (const r of await run(ARCHETYPES.grinder(), ARCHETYPES.striker(), 200, 'depth-stats')) {
+      chainG += r.stats.red.chainLinks;
+      chainS += r.stats.blue.chainLinks;
+      combosG += r.stats.red.combinationsLanded;
+      combosS += r.stats.blue.combinationsLanded;
+    }
+    expect(chainG, `grinder ${chainG} vs striker ${chainS}`).toBeGreaterThan(chainS * 3);
+    expect(combosS, `striker ${combosS} vs grinder ${combosG}`).toBeGreaterThan(combosG);
+    expect(combosS / 200).toBeGreaterThan(1);
+  });
+});

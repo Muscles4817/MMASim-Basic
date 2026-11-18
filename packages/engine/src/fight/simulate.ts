@@ -2112,6 +2112,7 @@ function throwBurst(
   if (strikeRead) emit('note', strikeRead, strikeRead.startsWith(target.fighter.lastName) ? target.corner : actor.corner);
 
   if (bestRun >= 2 && thrownInPattern >= 2) {
+    actor.stats.combinationsLanded++;
     emit('combination', say.combinationText(rng, actor, PATTERN_NAMES[pattern], bestRun), actor.corner);
   }
   notePattern(actor, target, pattern);
@@ -2411,6 +2412,7 @@ function resolveTakedown(
   const drilledSprawl = prepBonus(target, actor, ['singleLeg', 'doubleLeg', 'bodyLock']) / PREP_MAX_BONUS;
   if (depth < MAX_CHAIN && rng.chance(chainChance(actor, depth) * (1 - drilledSprawl * 0.9))) {
     actor.mem.chainDepth = depth + 1;
+    actor.stats.chainLinks++;
     const next = chainedEntry(rng, entry);
     emit('note', say.chainText(rng, actor, next), actor.corner);
     const link = resolveTakedown(ctx, actor, target, from === 'clinch' || next === 'bodyLock' || next === 'trip' ? 'clinch' : 'distance', next);
