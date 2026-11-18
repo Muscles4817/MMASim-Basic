@@ -167,3 +167,36 @@ Measured with `tools/audit/fight-engine-audit.ts` at N=300 (9 matchups, 2,700 fi
 ## Progress log
 
 _(appended as phases land)_
+
+### Phase 1 — landed
+Style profile (`style.ts`), submission catalogue (`submissions.ts`), fight memory (`memory.ts`),
+widened `GroundPosition`. Submissions are chosen from the repertoire before the contest. Population
+unchanged apart from RNG draw order. `intent-authority` golden re-recorded.
+
+### Phase 2 — landed (calibration items open)
+- Bursts are drilled **patterns** (`combos.ts`): one-two, one-two-hook, body-head, head-body, hands to
+  the low kick, kick into the hands, low-high, kick flurry, feint-and-shot, single shot. Each link after
+  the first gets a setup bonus (bigger for a level change, and bigger after a feint). The bonus is scaled by how
+  drilled the pattern is and by the attacker's `fightIq`, and reduced by the defender's `fightIq` and by how
+  often he has already seen the pattern tonight. The lead shot pays `LEAD_DISCOUNT`. `combination` is emitted.
+- Every burst line has its own timestamp; technique names follow the resolved technique and lead foot.
+  Showpiece names need the skill to back them.
+- **Fatigue reworked.**
+  - Base per-second rate 0.0016 → 0.0011, round recovery 0.28 → 0.34.
+  - A per-strike cost (kicks cost most; commitment³ prices sitting down on shots).
+  - `FATIGUE_BITE` 1.25 makes a tired fighter worse at everything.
+  - `workRate` ties only 40 % of volume to the tank.
+  - `VOLUME_LEVEL` 0.8 restores the sport's total volume.
+  - Even pair, decision fights, strikes attempted per round: **41 / 25 / 20 → 39 / 32 / 29**.
+- Pacing: high-IQ, disciplined fighters bank early and surge in the last round; hot-headed ones start fast.
+- Bursts use stochastic rounding.
+
+**Open after phase 2 (for the phase 9 calibration pass):**
+- `balance` prep ×2: contender v grinder is now 27 % rather than 11 %, and the outside plan no longer helps.
+- `risk` at 8.03 against an 8.00 bound.
+- `transition-intent` wrestler closing distance.
+- `over-a-card` ×2.
+- `broadcast` even-handed read.
+- `mass-experiments` C1.
+- `reduced-fidelity` ×3 (needs the Reduced refit).
+- `intent-authority` golden (re-record at the end).

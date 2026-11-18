@@ -77,6 +77,10 @@ export const COMBO_KEYS = [
   'strikeToShot',
   /** Single heavy shot: the power puncher's one-and-done. */
   'single',
+  /** Low kick, then high: the kicker's classic — the hands drop to the leg and the head is open. */
+  'lowHigh',
+  /** Kick after kick: a karateka or Thai fighter's feet doing the talking. */
+  'kickFlurry',
 ] as const;
 export type ComboKey = (typeof COMBO_KEYS)[number];
 
@@ -192,6 +196,8 @@ function deriveStyle(f: Fighter): StyleProfile {
     feintShot: w(remap(iq, 40, 95, 0.1, 1.3)),
     strikeToShot: w(remap(a.wrestling - 20, 20, 80, 0.05, 1.2)),
     single: w(remap(a.power, 50, 99, 0.3, 1.4)),
+    lowHigh: w(remap(feet, 45, 95, 0.02, 1.5) * (art('kickboxing') ? 1.5 : 1)),
+    kickFlurry: w(remap(feet, 40, 95, 0.05, 1.9) * (art('karate') || art('kickboxing') ? 1.4 : 1)),
   };
   if (hasTrait(f.traits, 'headhunter')) combos.single *= 1.3;
   if (hasTrait(f.traits, 'volumeMachine')) {

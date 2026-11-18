@@ -23,6 +23,7 @@
 
 import type { StrikeTarget, Weapon } from './types.js';
 import type { SubmissionKey } from './submissions.js';
+import { COMBO_KEYS, type ComboKey } from './style.js';
 
 export const FAMILIES = [
   'punch',
@@ -90,6 +91,8 @@ export interface FightMemory {
   lastSubFailed: SubmissionKey | undefined;
   /** Consecutive linked wrestling attempts in the current chain. */
   chainDepth: number;
+  /** How many times the opponent has thrown each combination pattern at this fighter. */
+  patternsSeen: Record<ComboKey, number>;
 }
 
 export function createMemory(): FightMemory {
@@ -107,6 +110,7 @@ export function createMemory(): FightMemory {
     last: { family: undefined, landed: false, target: undefined, weapon: undefined, at: -1 },
     lastSubFailed: undefined,
     chainDepth: 0,
+    patternsSeen: Object.fromEntries(COMBO_KEYS.map((k) => [k, 0])) as Record<ComboKey, number>,
   };
 }
 

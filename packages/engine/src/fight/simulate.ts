@@ -60,12 +60,25 @@ import { traitMul } from '../domain/traits.js';
 import { fatiguedEffect, repertoire } from '../ratings/curve.js';
 import * as say from './commentary.js';
 import { remember, resetRoundMemory } from './memory.js';
+import {
+  LEAD_DISCOUNT,
+  PATTERN_NAMES,
+  PATTERNS,
+  TECHNIQUE_SHAPE,
+  choosePattern,
+  setupMultiplier,
+  shotSeconds,
+  type Technique,
+} from './combos.js';
+import { inFightRead, notePattern, patternFamiliarity } from './mind.js';
+import { afterStrikeStory } from './stories.js';
 import { chooseSubmission, submissionsFrom, SUBMISSIONS as SUBMISSION_META } from './submissions.js';
 import {
   applyStrike,
   decayHurt,
   legImpairment,
   shouldRefereeStop,
+  type StrikeOutcome,
 } from './damage.js';
 import {
   createCombatant,
@@ -86,7 +99,7 @@ import {
   type FoulIncident,
 } from './fouls.js';
 import { buildScorecards, emptyTally, readDecision, type RoundTally } from './scoring.js';
-import { accrueFatigue, recoverBetweenRounds, workRate } from './stamina.js';
+import { accrueFatigue, chargeStrike, paceMultiplier, recoverBetweenRounds, workRate } from './stamina.js';
 import {
   GROUND_DOMINANCE,
   ladderStep,
@@ -240,6 +253,7 @@ export function simulateFight(config: FightConfig): FightResult {
   resetToStanding(state);
 
   const events: FightEvent[] = [];
+  const beat = { offset: 0 };
   const tallies: Record<Corner, RoundTally>[] = [];
   let ending: Ending | undefined;
   let endRound: number = rounds;
@@ -270,7 +284,7 @@ export function simulateFight(config: FightConfig): FightResult {
       ) => {
         events.push({
           round,
-          timeSeconds: Math.round(clock),
+          timeSeconds: Math.min(roundSeconds, Math.round(clock + beat.offset)),
           kind,
           text,
           corner,
@@ -281,6 +295,7 @@ export function simulateFight(config: FightConfig): FightResult {
         });
       };
 
+      beat.offset = 0;
       const exchange = resolveExchange({
         rng: roundRng,
         corners,
@@ -292,6 +307,7 @@ export function simulateFight(config: FightConfig): FightResult {
         secondsRemaining: roundSeconds - clock,
         clockSeconds: clock,
         roundSeconds,
+        beat,
         emit,
         scoreSoFar: tallies,
       });
@@ -463,6 +479,8 @@ interface ExchangeContext {
   /** Seconds elapsed in the current round. */
   clockSeconds: number;
   roundSeconds: number;
+  /** Seconds into the current exchange, so each line of a burst carries its own time. */
+  beat: { offset: number };
   emit: (
     kind: FightEventKind,
     text: string,
@@ -474,6 +492,11 @@ interface ExchangeContext {
 }
 
 /** The fight clock in absolute seconds, for memory timestamps. */
+function stochasticRound(rng: Rng, value: number): number {
+  const floor = Math.floor(value);
+  return floor + (rng.next() < value - floor ? 1 : 0);
+}
+
 function nowOf(ctx: ExchangeContext): number {
   return (ctx.round - 1) * ctx.roundSeconds + ctx.clockSeconds;
 }
@@ -1641,6 +1664,17 @@ interface BurstOutcome {
   ending?: Ending;
 }
 
+/**
+ * The sport's striking volume, as a level.
+ *
+ * Doc 36 phase 2 moved the fade out of volume and into quality (`workRate`, the fatigue rates), which
+ * left rounds two and three throwing far more than they did — an even pair went from 86 strikes
+ * attempted across three rounds to 113, and every finish rate in the roster profile went with it.
+ * Volume is load-bearing for calibration (see `shouldRefereeStop`), so the *total* is put back here
+ * and only the *shape* across rounds changes: the same fight, spread evenly instead of front-loaded.
+ */
+const VOLUME_LEVEL = 0.8;
+
 function throwBurst(
   ctx: ExchangeContext,
   actor: Combatant,
@@ -1659,11 +1693,65 @@ function throwBurst(
         riskProfile(actor.plan.riskLevel).output,
     ),
   );
-  const burst = Math.max(1, Math.round(base * scale * workRate(actor, false)));
+  // Stochastic rather than nearest rounding: bursts are small integers, and rounding 1.4 down every
+  // time throws away exactly the proportional differences `riskLevel` and fatigue exist to make.
+  const burst = Math.max(
+    1,
+    stochasticRound(
+      rng,
+      base *
+        scale *
+        VOLUME_LEVEL *
+        workRate(actor, false) *
+        paceMultiplier(actor, ctx.round, ctx.totalRounds),
+    ),
+  );
   let landedAny = false;
 
+  /*
+   * What he throws is a pattern, not a list of independent shots (doc 36 phase 2, `combos.ts`).
+   * Slots past the end of the pattern are free shots, chosen exactly as they always were, so a
+   * long burst from a volume puncher is a combination and then whatever he has left.
+   */
+  const pattern = choosePattern(
+    rng,
+    actor.style,
+    prefersKick,
+    ctx.state.range,
+    actor.plan.targeting,
+    kickLean(actor),
+  );
+  const techniques = PATTERNS[pattern];
+  const drilled = actor.style.combos[pattern];
+  const familiar = patternFamiliarity(target, pattern);
+  let slot = 0;
+  let prev: StrikeTarget | 'feint' | undefined;
+  let run = 0;
+  let bestRun = 0;
+  let thrownInPattern = 0;
+
   for (let i = 0; i < burst; i++) {
-    const { target: strikeTarget, weapon } = pickShot(rng, actor, prefersKick, ctx.state.range);
+    let technique: Technique | undefined = slot < techniques.length ? techniques[slot] : undefined;
+    const inPattern = slot < techniques.length;
+    slot++;
+    if (technique === 'feint') {
+      // A feint costs a beat and throws nothing; what it buys is the next shot.
+      prev = 'feint';
+      technique = slot < techniques.length ? techniques[slot] : undefined;
+      slot++;
+    }
+
+    let strikeTarget: StrikeTarget;
+    let weapon: Weapon;
+    const shape = technique ? TECHNIQUE_SHAPE[technique as Exclude<Technique, 'feint'>] : undefined;
+    // A drilled technique the range will not allow is not thrown; he improvises instead.
+    if (shape && strikeSuitability(shape.weapon, shape.target, ctx.state.range) >= 0.45) {
+      strikeTarget = shape.target;
+      weapon = shape.weapon;
+    } else {
+      technique = undefined;
+      ({ target: strikeTarget, weapon } = pickShot(rng, actor, prefersKick, ctx.state.range));
+    }
     const isKick = weapon === 'kick';
     const reads: ReadKey[] = isKick
       ? strikeTarget === 'legs'
@@ -1675,7 +1763,22 @@ function throwBurst(
         ? ['bodyWork', 'highVolume']
         : ['leadHook', 'counterRight', 'highVolume'];
 
-    const bonus = prepBonus(target, actor, reads);
+    const bonus = prepBonus(target, actor, reads) + inFightRead(target, isKick ? 'kick' : 'punch');
+
+    // The setup: a shot thrown into a reacting defence. The lead of a multi-shot pattern pays for it.
+    const setup =
+      inPattern && prev !== undefined
+        ? setupMultiplier({
+            prev,
+            next: strikeTarget,
+            drilled,
+            actorIq: actor.attrs.fightIq,
+            defenderIq: target.attrs.fightIq,
+            familiar,
+          })
+        : inPattern && techniques.length > 1
+          ? LEAD_DISCOUNT
+          : 1;
 
     const offence =
       fatiguedEffect(
@@ -1686,6 +1789,7 @@ function throwBurst(
       (isKick ? legImpairment(actor) : 1) *
       momentumMultiplier(actor) *
       stanceEdge(actor, target) *
+      setup *
       traitMul(actor.fighter.traits, 'strikeAccuracy');
 
     const defence =
@@ -1696,19 +1800,33 @@ function throwBurst(
 
     actor.stats.significantStrikesAttempted++;
     tally[actor.corner].strikesAttempted++;
+    ctx.beat.offset += shotSeconds(rng);
+    chargeStrike(actor, weapon);
 
     const connects = rng.chance(offence / (offence + defence));
     remember(actor, target, isKick ? 'kick' : 'punch', connects, nowOf(ctx), strikeTarget, weapon);
+    const wasFeint = prev === 'feint';
+    // Thrown into the guard, landed or not: either way he made the other man react.
+    prev = strikeTarget;
+    if (inPattern) thrownInPattern++;
     if (!connects) {
+      run = 0;
       // A missed kick is now narrated as a missed kick. `strikeMissed` never received `isKick`,
       // so every miss in the game read as a missed punch.
       if (i === 0) {
-        emit('strike', say.strikeMissed(rng, actor, strikeTarget, weapon), actor.corner, undefined, {
-          weapon,
-          target: strikeTarget,
-        });
+        emit(
+          'strike',
+          say.strikeMissed(rng, actor, strikeTarget, weapon, technique),
+          actor.corner,
+          undefined,
+          { weapon, target: strikeTarget },
+        );
       }
       continue;
+    }
+    if (inPattern) {
+      run++;
+      if (run > bestRun) bestRun = run;
     }
 
     landedAny = true;
@@ -1724,7 +1842,7 @@ function throwBurst(
 
     emit(
       isKick ? 'kick' : 'strike',
-      say.strikeLanded(rng, actor, strikeTarget, weapon, result.flushness),
+      say.strikeLanded(rng, actor, strikeTarget, weapon, result.flushness, technique, wasFeint),
       actor.corner,
       result.flushness >= 2 ? 'major' : undefined,
       { weapon, target: strikeTarget },
@@ -1741,6 +1859,9 @@ function throwBurst(
       break;
     }
 
+    const story = afterStrike(ctx, actor, target, strikeTarget, weapon, result);
+    if (story) return { landedAny: true, ending: story };
+
     if (result.hurt) {
       shiftMomentum(actor, target, 0.35);
       emit('hurt', say.hurtText(rng, target), target.corner, 'major');
@@ -1753,6 +1874,11 @@ function throwBurst(
       }
     }
   }
+
+  if (bestRun >= 2 && thrownInPattern >= 2) {
+    emit('combination', say.combinationText(rng, actor, PATTERN_NAMES[pattern], bestRun), actor.corner);
+  }
+  notePattern(actor, target, pattern);
 
   if (landedAny) {
     shiftMomentum(actor, target, 0.12);
@@ -1830,6 +1956,19 @@ function resolveKnockdown(
     emit('recovered', say.recoveredText(target), target.corner);
   }
   return undefined;
+}
+
+/** What a landed strike does beyond its damage. See `stories.ts`. */
+function afterStrike(
+  ctx: ExchangeContext,
+  actor: Combatant,
+  target: Combatant,
+  strikeTarget: StrikeTarget,
+  weapon: Weapon,
+  result: StrikeOutcome,
+): Ending | undefined {
+  const method = afterStrikeStory({ round: ctx.round }, actor, target, strikeTarget, weapon, result);
+  return method ? { method, winner: actor.corner } : undefined;
 }
 
 function shiftMomentum(gainer: Combatant, loser: Combatant, amount: number): void {

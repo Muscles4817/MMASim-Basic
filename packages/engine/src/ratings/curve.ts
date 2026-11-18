@@ -83,9 +83,21 @@ export const FATIGUE_SENSITIVITY: Readonly<Record<AttributeKey, number>> = {
   composure: 0.15,
 };
 
+/**
+ * How hard fatigue bites, as a scale on every sensitivity above.
+ *
+ * Doc 36 phase 2 slowed the tank — an average fighter was all but empty halfway through a
+ * three-round fight — and moved the fade from *volume* to *quality*. A slower tank on its own made
+ * cardio worth less (the grinder archetype fell from a winning record against the striker to 35 %),
+ * because the gap between a fresh fighter and a tired one is what cardio buys. This puts the gap back
+ * where it belongs: in how much worse a tired fighter is at everything, rather than in how early he
+ * gets tired.
+ */
+export const FATIGUE_BITE = 1.25;
+
 export function fatigued(rating: Rating, key: AttributeKey, fatigue: number): number {
   const f = fatigue < 0 ? 0 : fatigue > 1 ? 1 : fatigue;
-  return rating * (1 - FATIGUE_SENSITIVITY[key] * f);
+  return rating * (1 - Math.min(0.85, FATIGUE_SENSITIVITY[key] * FATIGUE_BITE * f));
 }
 
 /** Fatigue-adjusted effect multiplier — the form the simulator uses most. */
