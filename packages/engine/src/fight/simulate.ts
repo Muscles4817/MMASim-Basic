@@ -70,7 +70,7 @@ import {
   shotSeconds,
   type Technique,
 } from './combos.js';
-import { inFightRead, notePattern, patternFamiliarity } from './mind.js';
+import { cornerAdvice, familyLean, inFightRead, notePattern, patternFamiliarity } from './mind.js';
 import {
   afterStrikeStory,
   checkedKick,
@@ -263,6 +263,8 @@ export function simulateFight(config: FightConfig): FightResult {
 
   const events: FightEvent[] = [];
   const beat = { offset: 0 };
+  // Lines from the stool — the corner, a second wind — told after the next bell rather than before it.
+  const fromTheCorner: FightEvent[] = [];
   const tallies: Record<Corner, RoundTally>[] = [];
   let ending: Ending | undefined;
   let endRound: number = rounds;
@@ -282,6 +284,8 @@ export function simulateFight(config: FightConfig): FightResult {
       kind: 'roundStart',
       text: say.roundStartText(round, rounds),
     });
+    events.push(...fromTheCorner);
+    fromTheCorner.length = 0;
 
     while (clock < roundSeconds) {
       const emit = (
@@ -408,13 +412,27 @@ export function simulateFight(config: FightConfig): FightResult {
         round: round + 1,
         rng: rng.fork(`secondWind:${round}`),
         emit: (kind, text, corner, emphasis) =>
-          events.push({ round: round + 1, timeSeconds: 0, kind, text, corner, emphasis }),
+          fromTheCorner.push({ round: round + 1, timeSeconds: 0, kind, text, corner, emphasis }),
       };
       for (const corner of ['red', 'blue'] as const) {
         const mine = tally[corner];
         const theirs = tally[OTHER_CORNER[corner]];
         const of = (t: RoundTally) => t.damageDealt + t.significantStrikes + t.controlSeconds * 0.15;
         maybeSecondWind(story, corners[corner], of(theirs) > of(mine) * 1.5);
+      }
+      // And the one instruction the corner gets to give. See `mind.ts`.
+      const adviceRng = rng.fork(`advice:${round}`);
+      for (const corner of ['red', 'blue'] as const) {
+        const advice = cornerAdvice(
+          adviceRng,
+          corners[corner],
+          corners[OTHER_CORNER[corner]],
+          tally[corner],
+          tally[OTHER_CORNER[corner]],
+        );
+        if (advice) {
+          fromTheCorner.push({ round: round + 1, timeSeconds: 0, kind: 'note', text: advice.text, corner });
+        }
       }
       state.unanswered = { red: 0, blue: 0 };
       // Every round starts standing, in the centre. Carrying position across the bell is a
@@ -1135,7 +1153,7 @@ export function distanceCandidates(
     {
       key: 'strike',
       capability: fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue),
-      intent: standingBias(stance, 'strike', finishOpportunity(actor, target)),
+      intent: standingBias(stance, 'strike', finishOpportunity(actor, target)) * familyLean(actor, 'punch'),
       opportunity: exploitFactor(actor, actor.attrs.strikingOffence, target.attrs.strikingDefence),
       /*
        * **No gate, because this is the list's residual** — see `Candidate.repertoire`. Throwing
@@ -1148,7 +1166,7 @@ export function distanceCandidates(
       key: 'kick',
       capability:
         fatiguedEffect(actor.attrs.kicking, 'kicking', actor.fatigue) * legImpairment(actor),
-      intent: standingBias(stance, 'kick'),
+      intent: standingBias(stance, 'kick') * familyLean(actor, 'kick'),
       opportunity: exploitFactor(actor, actor.attrs.kicking, target.attrs.strikingDefence),
       /*
        * The gate that makes a boxer a boxer. `kicking: 30` is doc 02's *genuine liability* band,
@@ -1160,7 +1178,7 @@ export function distanceCandidates(
     {
       key: 'takedown',
       capability: fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue),
-      intent: standingBias(stance, 'takedown'),
+      intent: standingBias(stance, 'takedown') * familyLean(actor, 'takedown'),
       /*
        * Read off the derived rating the capability reads, not off `wrestling` — the two say
        * different things and the derived one is the honest answer here. `chainWrestling` averages
@@ -1185,7 +1203,7 @@ export function distanceCandidates(
     {
       key: 'clinchUp',
       capability: fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue),
-      intent: standingBias(stance, 'clinchUp'),
+      intent: standingBias(stance, 'clinchUp') * familyLean(actor, 'clinchEntry'),
       repertoire: repertoire(actor.derived.clinchOffence),
       opportunity:
         entryWeight(actor, 'clinch') *
@@ -1543,7 +1561,7 @@ function resolveDistance(
     case 'takedown':
       return resolveTakedown(ctx, actor, target, 'distance');
     case 'clinchUp': {
-      const bonus = prepBonus(target, actor, ['fenceClinch']);
+      const bonus = prepBonus(target, actor, ['fenceClinch']) + inFightRead(target, 'clinchEntry');
       const attack = fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue);
       const defend =
         fatiguedEffect(target.derived.clinchDefence, 'strength', target.fatigue) * (1 + bonus);
@@ -1890,7 +1908,7 @@ function throwBurst(
     const defence =
       fatiguedEffect(target.attrs.strikingDefence, 'strikingDefence', target.fatigue) *
       (1 + bonus) *
-      (target.hurtSeconds > 0 ? 0.45 : 1) *
+      (target.hurtSeconds > 0 ? hurtDefence(target) : 1) *
       defenceScale *
       legImpairment(target);
 
@@ -2057,6 +2075,15 @@ function resolveKnockdown(
   return undefined;
 }
 
+/**
+ * How much of his defence a hurt fighter keeps. Was a flat 0.45 for everybody; composure is
+ * exactly the attribute for this — "performing hurt" is its blurb — and it now decides it, around
+ * the old value for an average fighter.
+ */
+function hurtDefence(c: Combatant): number {
+  return remap(effectiveComposure(c), 30, 95, 0.36, 0.58);
+}
+
 function storyOf(ctx: ExchangeContext): StoryContext {
   return { round: ctx.round, rng: ctx.rng, emit: ctx.emit };
 }
@@ -2180,7 +2207,7 @@ function resolveTakedown(
   const { rng, state, tally, emit } = ctx;
 
   const reads: ReadKey[] = from === 'clinch' ? ['bodyLock', 'fenceClinch'] : ['singleLeg', 'doubleLeg'];
-  const bonus = prepBonus(target, actor, reads);
+  const bonus = prepBonus(target, actor, reads) + inFightRead(target, 'takedown');
 
   const offence =
     fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
@@ -2599,7 +2626,7 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
    * had no way to say he was still fighting. That is doc 01 § 8 and it is the whole of F1.
    */
   const exits = bottomExits(actor, stance, state.groundPosition);
-  const goingForIt = rng.chance(bottomExitUrgency(stance));
+  const goingForIt = rng.chance(clamp01(bottomExitUrgency(stance) * actor.mem.lean.escape));
 
   let escaping = false;
   if (goingForIt) {

@@ -214,3 +214,17 @@ unchanged apart from RNG draw order. `intent-authority` golden re-recorded.
 In-fight injuries are returned on `FightResult.injuries` and made official by
 `app/game/fightInjuries.ts`. Combatants carry their own attribute copy, so tonight's injuries never
 touch the stored fighter.
+
+### Phase 4 — landed
+`mind.ts`:
+- **Reads.** Earned in-fight defence against the families an opponent *leans on* relative to an ordinary fighter. Built from what was actually seen, scaled by `fightIq`, up to half a camp read. Applies to strikes, takedowns and clinch entries. Mixing it up defeats it.
+- **Self-adjustment.** Leaning away from failing families and into working ones, scaled by `fightIq` and damped by `ego`. Measured: a stuffed-every-shot wrestler shoots 2.1–2.2 times in R3, against 2.7–2.9 for one who landed everything. Before, this ran backwards.
+- **Corner advice.** One instruction between rounds, picked from the round's evidence: stop shooting / defend the takedown / take him down / keep doing it / chop the leg / go to the body / let your hands go. Whether it lands depends on coachability (ego, discipline), and how often anything useful is said depends on camp quality. It is narrated after the bell.
+- **Composure** now sets how much defence a hurt fighter keeps (0.36–0.58, previously a flat 0.45).
+
+Open, carried to phase 9:
+- G4 kicking value (≈2 pp against 4).
+- Prep ×2.
+- Upsets at 54.7 % against 55 %.
+- C1 round-three volume.
+- `calibration-fixtures` confound canary.
