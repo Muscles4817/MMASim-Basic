@@ -333,7 +333,10 @@ describe('how it ends', () => {
       even.reduced.draw,
       describeGap('even', 'draw', even.full.draw, even.reduced.draw),
     ).toBeGreaterThan(0.02);
-    expect(even.reduced.draw).toBeLessThan(even.full.draw * 1.5);
+    expect(
+      even.reduced.draw,
+      describeGap('even', 'draw', even.full.draw, even.reduced.draw),
+    ).toBeLessThan(even.full.draw * 1.5);
   });
 });
 

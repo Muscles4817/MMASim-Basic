@@ -143,7 +143,20 @@ function compare(
   return {
     functional: spearman(pooled.f, pooled.w),
     overall: spearman(pooled.o, pooled.w),
-    flatMean: spearman(pooled.m, pooled.w),
+    /*
+     * A rating that is the same number for every fighter in a cohort carries no information, and
+     * scores zero. Ranked as-is it does not: `ranksOf` breaks ties by position, so a matched-mean
+     * cohort's "flat mean" correlation was the correlation between the order the shapes are listed
+     * in and who won — 0.06, then −0.19, then 0.28 as the engine moved, none of it about fighters.
+     */
+    flatMean: cohorts.every((c) => {
+      const means = c.attributes.map(
+        (a) => ATTRIBUTE_KEYS.reduce((acc, k) => acc + a[k], 0) / ATTRIBUTE_KEYS.length,
+      );
+      return Math.max(...means) - Math.min(...means) < 1e-9;
+    })
+      ? 0
+      : spearman(pooled.m, pooled.w),
     perCohort,
   };
 }
