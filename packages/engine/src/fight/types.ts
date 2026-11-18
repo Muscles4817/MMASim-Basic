@@ -318,6 +318,10 @@ export interface FightStats {
   damageDealt: number;
   /** Seconds spent standing with his back on the fence. Doc 36, cage geography. */
   fenceSeconds: number;
+  /** Extra takedown attempts chained off a stuffed one. Doc 36 phase 5. */
+  chainLinks: number;
+  /** Drilled combinations landed two or more shots deep. Doc 36 phase 2. */
+  combinationsLanded: number;
 }
 
 /** Damage a fighter leaves the cage with. Feeds injuries and permanent career wear. */
@@ -457,6 +461,8 @@ export function emptyStats(): FightStats {
     topBeats: 0,
     damageDealt: 0,
     fenceSeconds: 0,
+    chainLinks: 0,
+    combinationsLanded: 0,
   };
 }
 

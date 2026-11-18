@@ -29,6 +29,7 @@
 import { useState, type ReactNode } from 'react';
 import {
   ATTRIBUTES_BY_GROUP,
+  describeFightingStyle,
   ATTRIBUTE_GROUPS,
   ATTRIBUTE_META,
   DERIVED_META,
@@ -109,6 +110,7 @@ const VOCAB: Record<
     wants: string;
     fairness: string;
     form: string;
+    style: string;
     /** Whether the page may show things only this fighter would know about themselves. */
     intimate: boolean;
   }
@@ -122,6 +124,7 @@ const VOCAB: Record<
     wants: 'What you want next',
     fairness: 'How you see it',
     form: 'Your recent form',
+    style: 'How you fight',
     intimate: true,
   },
   coach: {
@@ -133,6 +136,7 @@ const VOCAB: Record<
     wants: 'What they want',
     fairness: 'How they see their deal',
     form: 'Recent form',
+    style: 'How they fight',
     intimate: true,
   },
   promoter: {
@@ -144,6 +148,7 @@ const VOCAB: Record<
     wants: 'What they want',
     fairness: 'How they see it',
     form: 'Recent form',
+    style: 'How they fight',
     intimate: false,
   },
   none: {
@@ -155,6 +160,7 @@ const VOCAB: Record<
     wants: 'What they want',
     fairness: 'How they see their deal',
     form: 'Recent form',
+    style: 'How they fight',
     intimate: false,
   },
 };
@@ -379,6 +385,8 @@ export function FighterView({
                     <AbilityBand label={ability.label} fill={ability.fill} note={ability.blurb} />
                   </div>
                 </Card>
+
+                <StyleCard fighter={fighter} title={words.style} />
 
                 <Card title={words.condition}>
                   <ConditionBlock fighter={fighter} day={day} />
@@ -1266,5 +1274,46 @@ function ContractTab({
         </>
       }
     />
+  );
+}
+
+/**
+ * The repertoire: how they stand and what it costs, what they throw, what they finish with, what
+ * they do in the clinch. Ratings say how good somebody is; this says who they are when the cage
+ * door shuts (doc 36). Facts derived from background and training, so every viewer sees them.
+ */
+function StyleCard({ fighter, title }: { fighter: Fighter; title: string }) {
+  const style = describeFightingStyle(fighter);
+  return (
+    <Card title={title}>
+      <p className="prose">
+        <strong>{style.stance.label}.</strong> {style.stance.pro}{' '}
+        <span className="muted">{style.stance.con}</span>
+      </p>
+      <Ledger>
+        <LedgerRow
+          label="Combinations"
+          value={
+            style.signatureCombo
+              ? `${style.signatureCombo} (signature)`
+              : style.favouriteCombos.join(', ')
+          }
+        />
+        {style.favouriteSubs.length > 0 && (
+          <LedgerRow
+            label="Submissions"
+            value={
+              style.signatureSub
+                ? `${style.signatureSub} (signature)`
+                : style.favouriteSubs.join(', ')
+            }
+          />
+        )}
+        <LedgerRow label="Clinch" value={`${style.clinch.label}: ${style.clinch.note.toLowerCase()}`} />
+        {style.chainWrestling && <LedgerRow label="Chain wrestling" value={style.chainWrestling} />}
+        {style.legLocks && <LedgerRow label="Leg locks" value={style.legLocks} />}
+        {style.stanceSwitching && <LedgerRow label="Switches stance" value={style.stanceSwitching} />}
+      </Ledger>
+    </Card>
   );
 }

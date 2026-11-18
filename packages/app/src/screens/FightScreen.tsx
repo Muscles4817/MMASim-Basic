@@ -17,6 +17,7 @@ import {
   type FightEvent,
   type FightNight,
   type FightResult,
+  type InFightInjuryKind,
   type Fighter,
   type Judge,
   type Referee,
@@ -812,6 +813,14 @@ function FightSummary({
             redSub={`of ${result.stats.red.significantStrikesAttempted}`}
             blueSub={`of ${result.stats.blue.significantStrikesAttempted}`}
           />
+          {/* Doc 36: a burst is a drilled pattern now, and the ones that land two deep are the craft. */}
+          <OptionalStat
+            redName={redName}
+            blueName={blueName}
+            label="Combinations landed"
+            red={result.stats.red.combinationsLanded}
+            blue={result.stats.blue.combinationsLanded}
+          />
           {/*
             Damage, which was the one statistic the panel did not show — and it carries the
             heaviest weight on every judge archetype in the game. A player looking at a card
@@ -834,12 +843,31 @@ function FightSummary({
             redSub={`of ${result.stats.red.takedownsAttempted}`}
             blueSub={`of ${result.stats.blue.takedownsAttempted}`}
           />
+          <OptionalStat
+            redName={redName}
+            blueName={blueName}
+            label="Chained re-shots"
+            red={result.stats.red.chainLinks}
+            blue={result.stats.blue.chainLinks}
+          />
           <StatComparison
             redName={redName}
             blueName={blueName}
             label="Control time"
             red={result.stats.red.controlSeconds}
             blue={result.stats.blue.controlSeconds}
+            format={clock}
+          />
+          {/*
+            Whose back was on the cage, and for how long — the number that says who walked whom
+            down. Lower is better, which is why the label says what it is.
+          */}
+          <OptionalStat
+            redName={redName}
+            blueName={blueName}
+            label="Back on the fence"
+            red={result.stats.red.fenceSeconds}
+            blue={result.stats.blue.fenceSeconds}
             format={clock}
           />
           <StatComparison
@@ -872,6 +900,7 @@ function FightSummary({
             blue={result.stats.blue.submissionAttempts}
           />
         </div>
+        <InjuryList result={result} redName={redName} blueName={blueName} />
       </Card>
 
       {isDecisionMethod(result.method) && (
@@ -1364,4 +1393,67 @@ function resultSentence(result: FightResult, red?: Fighter, blue?: Fighter): str
     result.winnerId === result.redId ? red : result.winnerId === result.blueId ? blue : undefined;
   if (!winner) return 'The fight is a draw.';
   return `${displayName(winner)} wins in round ${result.round}.`;
+}
+
+/**
+ * A statistic older saves do not carry (doc 36 added it), and that is noise when both corners are
+ * at zero. Rendered only when there is something to compare.
+ */
+function OptionalStat(props: Omit<Parameters<typeof StatComparison>[0], 'red' | 'blue'> & {
+  red: number | undefined;
+  blue: number | undefined;
+}) {
+  const red = props.red ?? 0;
+  const blue = props.blue ?? 0;
+  if (red + blue === 0) return null;
+  return <StatComparison {...props} red={red} blue={blue} />;
+}
+
+const INJURY_WORDS: Readonly<Record<InFightInjuryKind, string>> = {
+  hand: 'hand',
+  foot: 'foot',
+  rib: 'ribs',
+  eye: 'eye',
+  elbow: 'elbow',
+  shoulder: 'shoulder',
+  knee: 'knee',
+  ankle: 'ankle',
+  neck: 'neck',
+};
+
+/**
+ * What got hurt during the fight and when. An injury changes the rest of the fight — a broken hand
+ * stops the right hand, a bad knee stops the shot — and a player reading a late collapse deserves
+ * to know it started with something in round two.
+ */
+export function InjuryList({
+  result,
+  redName,
+  blueName,
+}: {
+  result: FightResult;
+  redName: string;
+  blueName: string;
+}) {
+  const rows = (['red', 'blue'] as const).flatMap((corner) =>
+    (result.injuries?.[corner] ?? []).map((injury) => ({
+      corner,
+      name: corner === 'red' ? redName : blueName,
+      injury,
+    })),
+  );
+  if (rows.length === 0) return null;
+  return (
+    <div style={{ marginTop: 'var(--space-3)' }}>
+      <h3 className="fight-stats__subhead">Hurt during the fight</h3>
+      <ul className="prose" style={{ fontSize: 'var(--text-sm)' }}>
+        {rows.map(({ corner, name, injury }, i) => (
+          <li key={`${corner}-${i}`}>
+            {name}: {injury.severity >= 0.6 ? 'badly injured' : 'injured'} {INJURY_WORDS[injury.kind]}{' '}
+            <span className="muted">(round {injury.round})</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }

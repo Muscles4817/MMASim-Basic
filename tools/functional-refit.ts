@@ -23,13 +23,15 @@
  *
  * ## Result after doc 36
  *
- * Unconstrained, the fit runs cardio to its bound and drops `GAME_PLANNING` to 0.15, which breaks
- * the rating's design claims (see the note on `CARDIO_WEIGHT_MAX`). Held to them, no vector beat the
- * shipped constants on the hold-out set. They were kept.
+ * Against unplanned round robins, held to the design claims, nothing beat the old constants. Against
+ * **planned** round robins (`--planned`, the world the rating describes) the old constants were no
+ * better than `overallRating` on matched means, and a structural change — the route bill as a power
+ * mean, `BILL_POWER` — plus a refit took matched means from 0.10 to 0.56 (hold-out 0.554 against
+ * `overallRating`'s 0.154). Those are the shipped constants; see the note on `CARDIO_WEIGHT_MAX`.
  *
  * Usage:
  *   npx vite-node tools/functional-refit.ts --baseline
- *   npx vite-node tools/functional-refit.ts --fit [--scatter 300] [--free-cardio]
+ *   npx vite-node tools/functional-refit.ts --planned --fit [--scatter 300] [--free-cardio]
  *   npx vite-node tools/functional-refit.ts --check v1,v2,... [--holdout]
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -80,19 +82,22 @@ const KEYS = [
   'gamePlanning',
   'contextPower',
   'panelTau',
+  'billPower',
 ] as const;
 type Key = (typeof KEYS)[number];
 type Params = Record<Key, number>;
 
+/** The shipped constants. Before doc 36's planned refit: 10, 18, 10, 0.4, 0.18, 0.45, −2, 12, 1. */
 export const MASTER: Params = {
-  wantTau: 10,
-  rangeGateScale: 18,
-  targetTau: 10,
+  wantTau: 5.4,
+  rangeGateScale: 30,
+  targetTau: 14.2,
   cardioMax: 0.4,
-  durabilityMax: 0.18,
-  gamePlanning: 0.45,
-  contextPower: -2,
-  panelTau: 12,
+  durabilityMax: 0.3,
+  gamePlanning: 0.356,
+  contextPower: -0.556,
+  panelTau: 23.8,
+  billPower: -1.8,
 };
 
 const BOUNDS: Readonly<Record<Key, readonly [number, number]>> = {
@@ -120,6 +125,7 @@ const BOUNDS: Readonly<Record<Key, readonly [number, number]>> = {
    */
   contextPower: [-5, -0.5],
   panelTau: [5, 25],
+  billPower: [-6, 1],
 };
 
 const ANCHORS: Readonly<Record<Key, string>> = {
@@ -131,6 +137,7 @@ const ANCHORS: Readonly<Record<Key, string>> = {
   gamePlanning: 'const GAME_PLANNING = ',
   contextPower: 'const CONTEXT_POWER = ',
   panelTau: 'const PANEL_TAU = ',
+  billPower: 'const BILL_POWER = ',
 };
 
 /** A copy of `functional.ts` whose constants are read from `globalThis` at call time. */

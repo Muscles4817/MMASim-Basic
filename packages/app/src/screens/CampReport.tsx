@@ -129,6 +129,20 @@ export function CampReport({
         )}
       </Card>
 
+      {/*
+        Ratings are half of what a camp does. The other half is what got drilled until it became
+        habit — a pattern thrown more, a submission that is now theirs — and no number shows it.
+      */}
+      {outcome.drilled && outcome.drilled.length > 0 && (
+        <Card title="What got drilled">
+          {outcome.drilled.map((line) => (
+            <p key={line} className="prose" style={{ fontSize: 'var(--text-sm)' }}>
+              {line}
+            </p>
+          ))}
+        </Card>
+      )}
+
       {(outcome.healed?.length || outcome.notes.length > (outcome.injury ? 1 : 0)) && (
         <Card title="Everything else that happened">
           {/*

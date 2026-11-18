@@ -57,6 +57,7 @@ export {
   type StyleProfile,
 } from './fight/style.js';
 export * from './fight/submissions.js';
+export * from './fight/styleReport.js';
 export { POST_FIGHT_TYPE, IN_FIGHT_INJURIES, type InFightInjury, type InFightInjuryKind } from './fight/stories.js';
 /*
  * The policy layer stays private — it is the engine's own decision-making and nothing outside the
