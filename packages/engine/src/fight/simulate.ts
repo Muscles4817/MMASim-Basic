@@ -16,7 +16,14 @@ import type { FighterId } from '../core/ids.js';
 import type { Fighter, FinishMethod } from '../domain/fighter.js';
 import type { GamePlan, ReadKey } from '../domain/gameplan.js';
 import { PREP_MAX_BONUS, defaultGamePlan, normaliseGamePlan, prepValue, riskProfile } from '../domain/gameplan.js';
-import { stanceEdge } from './stance.js';
+import {
+  stanceEdge,
+  stanceNow,
+  stanceStyleDefence,
+  stanceStyleOffence,
+  stanceStyleTakedownDefence,
+  wantsToSwitch,
+} from './stance.js';
 import { chooseAction, type Candidate } from './decide.js';
 import {
   ENTRY_EASE,
@@ -28,6 +35,7 @@ import {
   rangeChangeChance,
   stepRange,
   strikeSuitability,
+  RANGE_SHOT_DEFENCE,
   targetFitness,
 } from './range.js';
 import {
@@ -59,11 +67,60 @@ import { defaultJudges, defaultReferee } from '../domain/officials.js';
 import { traitMul } from '../domain/traits.js';
 import { fatiguedEffect, repertoire } from '../ratings/curve.js';
 import * as say from './commentary.js';
+import { remember, resetRoundMemory } from './memory.js';
+import {
+  LEAD_DISCOUNT,
+  PATTERN_NAMES,
+  PATTERNS,
+  TECHNIQUE_SHAPE,
+  choosePattern,
+  setupMultiplier,
+  shotSeconds,
+  type Technique,
+} from './combos.js';
+import {
+  adjustmentLine,
+  cornerAdvice,
+  familyLean,
+  inFightRead,
+  notePattern,
+  patternFamiliarity,
+} from './mind.js';
+import { clinchShot, clinchStyleDefence, clinchStyleOffence, clinchTakedownEdge } from './clinch.js';
+import { GUARD_OPENS, legEntryChance, passTarget, recoverGuard } from './groundGraph.js';
+import {
+  MAX_CHAIN,
+  backExposureChance,
+  chainChance,
+  chainEdge,
+  chainedEntry,
+  frontHeadlockChance,
+  headlockChoke,
+  headlockOption,
+  matReturnChance,
+  scramble,
+} from './wrestling.js';
+import {
+  afterStrikeStory,
+  checkedKick,
+  cornerStops,
+  maybeSecondWind,
+  survivalRoute,
+  survivedLock,
+  type StoryContext,
+} from './stories.js';
+import {
+  chooseSubmission,
+  submissionsFrom,
+  SUBMISSIONS as SUBMISSION_META,
+  type SubmissionKey,
+} from './submissions.js';
 import {
   applyStrike,
   decayHurt,
   legImpairment,
   shouldRefereeStop,
+  type StrikeOutcome,
 } from './damage.js';
 import {
   createCombatant,
@@ -84,10 +141,10 @@ import {
   type FoulIncident,
 } from './fouls.js';
 import { buildScorecards, emptyTally, readDecision, type RoundTally } from './scoring.js';
-import { accrueFatigue, recoverBetweenRounds, workRate } from './stamina.js';
+import { accrueFatigue, chargeStrike, paceMultiplier, recoverBetweenRounds, workRate } from './stamina.js';
 import {
   GROUND_DOMINANCE,
-  GROUND_POSITIONS,
+  ladderStep,
   OTHER_CORNER,
   STRIKE_TARGETS,
   emptyStats,
@@ -238,6 +295,9 @@ export function simulateFight(config: FightConfig): FightResult {
   resetToStanding(state);
 
   const events: FightEvent[] = [];
+  const beat = { offset: 0 };
+  // Lines from the stool — the corner, a second wind — told after the next bell rather than before it.
+  const fromTheCorner: FightEvent[] = [];
   const tallies: Record<Corner, RoundTally>[] = [];
   let ending: Ending | undefined;
   let endRound: number = rounds;
@@ -245,6 +305,8 @@ export function simulateFight(config: FightConfig): FightResult {
 
   for (let round = 1; round <= rounds && !ending; round++) {
     const roundRng = rng.fork(`round:${round}`);
+    resetRoundMemory(red);
+    resetRoundMemory(blue);
     const tally: Record<Corner, RoundTally> = { red: emptyTally(), blue: emptyTally() };
     tallies.push(tally);
 
@@ -255,6 +317,8 @@ export function simulateFight(config: FightConfig): FightResult {
       kind: 'roundStart',
       text: say.roundStartText(round, rounds),
     });
+    events.push(...fromTheCorner);
+    fromTheCorner.length = 0;
 
     while (clock < roundSeconds) {
       const emit = (
@@ -262,11 +326,11 @@ export function simulateFight(config: FightConfig): FightResult {
         text: string,
         corner?: Corner,
         emphasis?: FightEvent['emphasis'],
-        fact?: { weapon?: Weapon; target?: StrikeTarget; takedown?: TakedownEntry },
+        fact?: { weapon?: Weapon; target?: StrikeTarget; takedown?: TakedownEntry; missed?: boolean },
       ) => {
         events.push({
           round,
-          timeSeconds: Math.round(clock),
+          timeSeconds: Math.min(roundSeconds, Math.round(clock + beat.offset)),
           kind,
           text,
           corner,
@@ -274,9 +338,11 @@ export function simulateFight(config: FightConfig): FightResult {
           weapon: fact?.weapon,
           target: fact?.target,
           takedown: fact?.takedown,
+          missed: fact?.missed,
         });
       };
 
+      beat.offset = 0;
       const exchange = resolveExchange({
         rng: roundRng,
         corners,
@@ -287,6 +353,8 @@ export function simulateFight(config: FightConfig): FightResult {
         totalRounds: rounds,
         secondsRemaining: roundSeconds - clock,
         clockSeconds: clock,
+        roundSeconds,
+        beat,
         emit,
         scoreSoFar: tallies,
       });
@@ -342,6 +410,30 @@ export function simulateFight(config: FightConfig): FightResult {
       break;
     }
 
+    /*
+     * The corner. A fighter too damaged to go on is pulled out on the stool (doc 36 phase 3) —
+     * `'retirement'` was a finish method with narration and nothing that produced it.
+     */
+    if (round < rounds) {
+      const cornerRng = rng.fork(`corner:${round}`);
+      for (const corner of ['red', 'blue'] as const) {
+        if (cornerStops(cornerRng, corners[corner])) {
+          ending = { method: 'retirement', winner: OTHER_CORNER[corner] };
+          endRound = round;
+          endTime = roundSeconds;
+          events.push({
+            round,
+            timeSeconds: roundSeconds,
+            kind: 'finish',
+            emphasis: 'critical',
+            text: `${corners[corner].fighter.lastName}'s corner has seen enough — they will not come out for round ${round + 1}. ${say.fullDisplayName(corners[OTHER_CORNER[corner]])} wins.`,
+          });
+          break;
+        }
+      }
+      if (ending) break;
+    }
+
     // Between rounds: recover and reset to standing.
     if (round < rounds) {
       recoverBetweenRounds(red);
@@ -349,6 +441,33 @@ export function simulateFight(config: FightConfig): FightResult {
       // Sixty seconds and a corner shouting is worth some of the plan back. Never all of it.
       restorePlanIntegrity(red);
       restorePlanIntegrity(blue);
+      // A fighter who just lost a round badly may come out of the corner different.
+      const story: StoryContext = {
+        round: round + 1,
+        rng: rng.fork(`secondWind:${round}`),
+        emit: (kind, text, corner, emphasis) =>
+          fromTheCorner.push({ round: round + 1, timeSeconds: 0, kind, text, corner, emphasis }),
+      };
+      for (const corner of ['red', 'blue'] as const) {
+        const mine = tally[corner];
+        const theirs = tally[OTHER_CORNER[corner]];
+        const of = (t: RoundTally) => t.damageDealt + t.significantStrikes + t.controlSeconds * 0.15;
+        maybeSecondWind(story, corners[corner], of(theirs) > of(mine) * 1.5);
+      }
+      // And the one instruction the corner gets to give. See `mind.ts`.
+      const adviceRng = rng.fork(`advice:${round}`);
+      for (const corner of ['red', 'blue'] as const) {
+        const advice = cornerAdvice(
+          adviceRng,
+          corners[corner],
+          corners[OTHER_CORNER[corner]],
+          tally[corner],
+          tally[OTHER_CORNER[corner]],
+        );
+        if (advice) {
+          fromTheCorner.push({ round: round + 1, timeSeconds: 0, kind: 'note', text: advice.text, corner });
+        }
+      }
       state.unanswered = { red: 0, blue: 0 };
       // Every round starts standing, in the centre. Carrying position across the bell is a
       // rules violation and a large one: without this, a round that ended in mount *begins*
@@ -419,6 +538,7 @@ export function simulateFight(config: FightConfig): FightResult {
     damage: { red: damageReport(red, method, winnerId), blue: damageReport(blue, method, winnerId) },
     fouls: state.fouls,
     deductions: { ...state.deductions },
+    injuries: { red: red.injuries.slice(), blue: blue.injuries.slice() },
   };
 }
 
@@ -457,14 +577,27 @@ interface ExchangeContext {
   secondsRemaining: number;
   /** Seconds elapsed in the current round. */
   clockSeconds: number;
+  roundSeconds: number;
+  /** Seconds into the current exchange, so each line of a burst carries its own time. */
+  beat: { offset: number };
   emit: (
     kind: FightEventKind,
     text: string,
     corner?: Corner,
     emphasis?: FightEvent['emphasis'],
-    fact?: { weapon?: Weapon; target?: StrikeTarget; takedown?: TakedownEntry },
+    fact?: { weapon?: Weapon; target?: StrikeTarget; takedown?: TakedownEntry; missed?: boolean },
   ) => void;
   scoreSoFar: readonly Record<Corner, RoundTally>[];
+}
+
+/** The fight clock in absolute seconds, for memory timestamps. */
+function stochasticRound(rng: Rng, value: number): number {
+  const floor = Math.floor(value);
+  return floor + (rng.next() < value - floor ? 1 : 0);
+}
+
+function nowOf(ctx: ExchangeContext): number {
+  return (ctx.round - 1) * ctx.roundSeconds + ctx.clockSeconds;
 }
 
 interface ExchangeOutcome {
@@ -1012,7 +1145,9 @@ function resolveRangeBeat(ctx: ExchangeContext, actor: Combatant, target: Combat
     denial: groundDenial(target, change === 'close' ? 'close' : 'retreat'),
   });
 
+  const rangeFamily = change === 'close' ? 'rangeClose' : 'rangeRetreat';
   if (rng.chance(chance)) {
+    remember(actor, target, rangeFamily, true, nowOf(ctx));
     const next = stepRange(state.range, change);
     state.range = next;
     state.rangeSettled = 1;
@@ -1027,6 +1162,7 @@ function resolveRangeBeat(ctx: ExchangeContext, actor: Combatant, target: Combat
    * look at you — and both are why trying to fight at a range you cannot hold is expensive rather
    * than merely futile.
    */
+  remember(actor, target, rangeFamily, false, nowOf(ctx));
   state.rangeSettled = clamp01(state.rangeSettled + 0.25);
   emit('range', say.rangeFailText(rng, actor, target, change), target.corner);
   // A counter is thrown at 0.55 of a full burst, so a caught entry takes it to most of one.
@@ -1051,7 +1187,7 @@ export function distanceCandidates(
     {
       key: 'strike',
       capability: fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue),
-      intent: standingBias(stance, 'strike', finishOpportunity(actor, target)),
+      intent: standingBias(stance, 'strike', finishOpportunity(actor, target)) * familyLean(actor, 'punch'),
       opportunity: exploitFactor(actor, actor.attrs.strikingOffence, target.attrs.strikingDefence),
       /*
        * **No gate, because this is the list's residual** — see `Candidate.repertoire`. Throwing
@@ -1064,7 +1200,7 @@ export function distanceCandidates(
       key: 'kick',
       capability:
         fatiguedEffect(actor.attrs.kicking, 'kicking', actor.fatigue) * legImpairment(actor),
-      intent: standingBias(stance, 'kick'),
+      intent: standingBias(stance, 'kick') * familyLean(actor, 'kick'),
       opportunity: exploitFactor(actor, actor.attrs.kicking, target.attrs.strikingDefence),
       /*
        * The gate that makes a boxer a boxer. `kicking: 30` is doc 02's *genuine liability* band,
@@ -1076,7 +1212,7 @@ export function distanceCandidates(
     {
       key: 'takedown',
       capability: fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue),
-      intent: standingBias(stance, 'takedown'),
+      intent: standingBias(stance, 'takedown') * familyLean(actor, 'takedown'),
       /*
        * Read off the derived rating the capability reads, not off `wrestling` — the two say
        * different things and the derived one is the honest answer here. `chainWrestling` averages
@@ -1101,7 +1237,7 @@ export function distanceCandidates(
     {
       key: 'clinchUp',
       capability: fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue),
-      intent: standingBias(stance, 'clinchUp'),
+      intent: standingBias(stance, 'clinchUp') * familyLean(actor, 'clinchEntry'),
       repertoire: repertoire(actor.derived.clinchOffence),
       opportunity:
         entryWeight(actor, 'clinch') *
@@ -1187,7 +1323,7 @@ export function controllingCandidates(
       intent: clinchWorkBias(actor, stance, 'clinchTakedown'),
       // Trips and throws are *this* takedown — the one that comes out of a tie-up — so the entry
       // style that had no route at range gets its route here.
-      opportunity: actor.plan.tactics.entry === 'tripsAndThrows' ? 1.6 : 1,
+      opportunity: (actor.plan.tactics.entry === 'tripsAndThrows' ? 1.6 : 1) * clinchTakedownEdge(actor),
       repertoire: repertoire(actor.derived.chainWrestling),
     },
     {
@@ -1289,8 +1425,9 @@ export function bottomWork(
     {
       key: 'submission',
       capability:
-        groundPosition === 'guard'
-          ? fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) * 0.8
+        groundPosition === 'guard' || groundPosition === 'openGuard' || groundPosition === 'legEntangle'
+          ? fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) *
+            (groundPosition === 'legEntangle' ? 0.95 : 0.8)
           : 0.05,
       intent: bottomWorkBias(actor, stance, 'submission', subChance),
       opportunity: escaping ? 0.5 : 1,
@@ -1430,6 +1567,12 @@ function resolveDistance(
 ): ExchangeOutcome {
   const { rng, state, emit } = ctx;
 
+  // A fighter comfortable in both stances may switch to take — or take back — the open-stance edge.
+  if (wantsToSwitch(rng, actor, target)) {
+    actor.stanceSwitched = !actor.stanceSwitched;
+    emit('note', say.stanceSwitchText(rng, actor, stanceNow(actor)), actor.corner);
+  }
+
   // Footwork first: where this exchange happens is decided before what happens in it.
   const punished = resolveRangeBeat(ctx, actor, target);
   const range = state.range;
@@ -1459,11 +1602,13 @@ function resolveDistance(
     case 'takedown':
       return resolveTakedown(ctx, actor, target, 'distance');
     case 'clinchUp': {
-      const bonus = prepBonus(target, actor, ['fenceClinch']);
+      const bonus = prepBonus(target, actor, ['fenceClinch']) + inFightRead(target, 'clinchEntry');
       const attack = fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue);
       const defend =
         fatiguedEffect(target.derived.clinchDefence, 'strength', target.fatigue) * (1 + bonus);
-      if (rng.chance(attack / (attack + defend))) {
+      const tiedUp = rng.chance(attack / (attack + defend));
+      remember(actor, target, 'clinchEntry', tiedUp, nowOf(ctx));
+      if (tiedUp) {
         state.position = 'clinch';
         state.clinchControl = actor.corner;
         state.placedBy = actor.corner;
@@ -1565,6 +1710,35 @@ function pickShot(
  * the knockout hazard, which turns any accuracy edge into a near-certain knockout. Real
  * three-round fights land 50–100 significant strikes between them.
  */
+/**
+ * The two survival routes that change the position rather than the exchange: grab hold, or shoot.
+ * Returns the outcome when the route resolved the beat, otherwise nothing.
+ */
+function trySurvive(
+  ctx: ExchangeContext,
+  attacker: Combatant,
+  hurt: Combatant,
+  route: ReturnType<typeof survivalRoute>,
+): ExchangeOutcome | undefined {
+  const { rng, state, emit } = ctx;
+  if (route === 'tieUp') {
+    const grab = fatiguedEffect(hurt.derived.clinchOffence, 'strength', hurt.fatigue) * 0.42;
+    const deny = fatiguedEffect(attacker.derived.clinchDefence, 'strength', attacker.fatigue);
+    if (rng.chance(grab / (grab + deny))) {
+      // He smothers the follow-up, but the man who hurt him still owns the tie-up and can keep working.
+      state.position = 'clinch';
+      state.clinchControl = attacker.corner;
+      state.placedBy = hurt.corner;
+      state.stalledSeconds = 0;
+      emit('clinch', `${hurt.fighter.lastName} grabs hold to survive — smothering the follow-up.`, hurt.corner);
+      return { seconds: rng.int(6, 12) };
+    }
+    return undefined;
+  }
+  if (route === 'shoot') return resolveTakedown(ctx, hurt, attacker, 'distance');
+  return undefined;
+}
+
 function resolveStrikeExchange(
   ctx: ExchangeContext,
   actor: Combatant,
@@ -1576,8 +1750,26 @@ function resolveStrikeExchange(
   const { rng } = ctx;
   const seconds = rng.int(6, 14);
 
-  const lead = throwBurst(ctx, actor, target, prefersKick, 1);
+  /*
+   * A hurt man being come at does something about it, and what he does is who he is (doc 36 phase 3,
+   * `survivalRoute`). Before this he did nothing at all: no counter, no clinch, no shot — he stood
+   * there at 0.45 of his defence and waited for the referee.
+   */
+  let route: ReturnType<typeof survivalRoute> | undefined;
+  if (target.hurtSeconds > 0 && ctx.state.position === 'distance') {
+    route = survivalRoute(rng, target);
+    const survived = trySurvive(ctx, actor, target, route);
+    if (survived) return survived;
+  }
+
+  const lead = throwBurst(ctx, actor, target, prefersKick, route === 'run' ? 0.85 : 1, route === 'shell' ? 1.1 : 1);
   if (lead.ending) return { seconds, ending: lead.ending };
+  // Covering up is how fights get stopped: nothing is coming back, and the referee is counting.
+  if (route === 'shell' && lead.landedAny) ctx.state.unanswered[target.corner]++;
+  if (route === 'fireBack' && ctx.state.position === 'distance') {
+    const swing = throwBurst(ctx, target, actor, rng.chance(kickLean(target)), 0.5);
+    if (swing.ending) return { seconds, ending: swing.ending };
+  }
 
   // The counter. Smaller than the lead burst — you are reacting, not initiating — unless
   // countering is the whole plan, which is what makes the `counter` approach worth picking.
@@ -1625,12 +1817,25 @@ interface BurstOutcome {
   ending?: Ending;
 }
 
+/**
+ * The sport's striking volume, as a level.
+ *
+ * Doc 36 phase 2 moved the fade out of volume and into quality (`workRate`, the fatigue rates), which
+ * left rounds two and three throwing far more than they did — an even pair went from 86 strikes
+ * attempted across three rounds to 113, and every finish rate in the roster profile went with it.
+ * Volume is load-bearing for calibration (see `shouldRefereeStop`), so the *total* is put back here
+ * and only the *shape* across rounds changes: the same fight, spread evenly instead of front-loaded.
+ */
+const VOLUME_LEVEL = 0.8;
+
 function throwBurst(
   ctx: ExchangeContext,
   actor: Combatant,
   target: Combatant,
   prefersKick: boolean,
   scale: number,
+  /** A defender covering up is harder to hit cleanly. */
+  defenceScale = 1,
 ): BurstOutcome {
   const { rng, state, tally, emit, referee } = ctx;
 
@@ -1643,11 +1848,73 @@ function throwBurst(
         riskProfile(actor.plan.riskLevel).output,
     ),
   );
-  const burst = Math.max(1, Math.round(base * scale * workRate(actor, false)));
+  // Stochastic rather than nearest rounding: bursts are small integers, and rounding 1.4 down every
+  // time throws away exactly the proportional differences `riskLevel` and fatigue exist to make.
+  const burst = Math.max(
+    1,
+    stochasticRound(
+      rng,
+      base *
+        scale *
+        VOLUME_LEVEL *
+        workRate(actor, false) *
+        paceMultiplier(actor, ctx.round, ctx.totalRounds),
+    ),
+  );
   let landedAny = false;
 
+  /*
+   * What he throws is a pattern, not a list of independent shots (doc 36 phase 2, `combos.ts`).
+   * Slots past the end of the pattern are free shots, chosen exactly as they always were, so a
+   * long burst from a volume puncher is a combination and then whatever he has left.
+   */
+  const pattern = choosePattern(
+    rng,
+    actor.style,
+    prefersKick,
+    ctx.state.range,
+    actor.plan.targeting,
+    kickLean(actor),
+  );
+  const techniques = PATTERNS[pattern];
+  const drilled = actor.style.combos[pattern];
+  const familiar = patternFamiliarity(target, pattern);
+  let slot = 0;
+  let prev: StrikeTarget | 'feint' | undefined;
+  let run = 0;
+  let bestRun = 0;
+  let thrownInPattern = 0;
+
   for (let i = 0; i < burst; i++) {
-    const { target: strikeTarget, weapon } = pickShot(rng, actor, prefersKick, ctx.state.range);
+    let technique: Technique | undefined = slot < techniques.length ? techniques[slot] : undefined;
+    const inPattern = slot < techniques.length;
+    slot++;
+    if (technique === 'feint') {
+      // A feint costs a beat and throws nothing; what it buys is the next shot.
+      prev = 'feint';
+      technique = slot < techniques.length ? techniques[slot] : undefined;
+      slot++;
+    }
+
+    let strikeTarget: StrikeTarget;
+    let weapon: Weapon;
+    const shape =
+      technique && technique !== 'anyKick'
+        ? TECHNIQUE_SHAPE[technique as Exclude<Technique, 'feint' | 'anyKick'>]
+        : undefined;
+    if (technique === 'anyKick') {
+      // A kick, aimed where this fighter aims: the plan and the range pick the target.
+      ({ target: strikeTarget } = pickShot(rng, actor, true, ctx.state.range));
+      weapon = 'kick';
+      technique = undefined;
+    } else if (shape && strikeSuitability(shape.weapon, shape.target, ctx.state.range) >= 0.45) {
+      // A drilled technique the range will not allow is not thrown; he improvises instead.
+      strikeTarget = shape.target;
+      weapon = shape.weapon;
+    } else {
+      technique = undefined;
+      ({ target: strikeTarget, weapon } = pickShot(rng, actor, prefersKick, ctx.state.range));
+    }
     const isKick = weapon === 'kick';
     const reads: ReadKey[] = isKick
       ? strikeTarget === 'legs'
@@ -1659,7 +1926,22 @@ function throwBurst(
         ? ['bodyWork', 'highVolume']
         : ['leadHook', 'counterRight', 'highVolume'];
 
-    const bonus = prepBonus(target, actor, reads);
+    const bonus = prepBonus(target, actor, reads) + inFightRead(target, isKick ? 'kick' : 'punch');
+
+    // The setup: a shot thrown into a reacting defence. The lead of a multi-shot pattern pays for it.
+    const setup =
+      inPattern && prev !== undefined
+        ? setupMultiplier({
+            prev,
+            next: strikeTarget,
+            drilled,
+            actorIq: actor.attrs.fightIq,
+            defenderIq: target.attrs.fightIq,
+            familiar,
+          })
+        : inPattern && techniques.length > 1
+          ? LEAD_DISCOUNT
+          : 1;
 
     const offence =
       fatiguedEffect(
@@ -1670,27 +1952,52 @@ function throwBurst(
       (isKick ? legImpairment(actor) : 1) *
       momentumMultiplier(actor) *
       stanceEdge(actor, target) *
+      stanceStyleOffence(actor, weapon, ctx.state.range) *
+      // A hurt man's punches are wild and slow. Composure decides how much of his craft survives.
+      (actor.hurtSeconds > 0 ? hurtOffence(actor) : 1) *
+      setup *
       traitMul(actor.fighter.traits, 'strikeAccuracy');
 
     const defence =
       fatiguedEffect(target.attrs.strikingDefence, 'strikingDefence', target.fatigue) *
       (1 + bonus) *
-      (target.hurtSeconds > 0 ? 0.45 : 1) *
+      (target.hurtSeconds > 0 ? hurtDefence(target) : 1) *
+      defenceScale *
+      stanceStyleDefence(target, weapon, strikeTarget, ctx.state.range) *
       legImpairment(target);
 
     actor.stats.significantStrikesAttempted++;
     tally[actor.corner].strikesAttempted++;
+    ctx.beat.offset += shotSeconds(rng);
+    chargeStrike(actor, weapon);
 
-    if (!rng.chance(offence / (offence + defence))) {
+    const connects = rng.chance(offence / (offence + defence));
+    remember(actor, target, isKick ? 'kick' : 'punch', connects, nowOf(ctx), strikeTarget, weapon);
+    const wasFeint = prev === 'feint';
+    // Thrown into the guard, landed or not: either way he made the other man react.
+    prev = strikeTarget;
+    if (inPattern) thrownInPattern++;
+    if (!connects) {
+      run = 0;
+      if (weapon === 'kick' && strikeTarget === 'legs' && checkedKick(storyOf(ctx), actor, target)) {
+        emit('note', `${target.fighter.lastName} checks the kick — that one hurt the kicker.`, target.corner);
+      }
       // A missed kick is now narrated as a missed kick. `strikeMissed` never received `isKick`,
       // so every miss in the game read as a missed punch.
       if (i === 0) {
-        emit('strike', say.strikeMissed(rng, actor, strikeTarget, weapon), actor.corner, undefined, {
-          weapon,
-          target: strikeTarget,
-        });
+        emit(
+          'strike',
+          say.strikeMissed(rng, actor, strikeTarget, weapon, technique),
+          actor.corner,
+          undefined,
+          { weapon, target: strikeTarget, missed: true },
+        );
       }
       continue;
+    }
+    if (inPattern) {
+      run++;
+      if (run > bestRun) bestRun = run;
     }
 
     landedAny = true;
@@ -1706,7 +2013,7 @@ function throwBurst(
 
     emit(
       isKick ? 'kick' : 'strike',
-      say.strikeLanded(rng, actor, strikeTarget, weapon, result.flushness),
+      say.strikeLanded(rng, actor, strikeTarget, weapon, result.flushness, technique, wasFeint),
       actor.corner,
       result.flushness >= 2 ? 'major' : undefined,
       { weapon, target: strikeTarget },
@@ -1723,6 +2030,9 @@ function throwBurst(
       break;
     }
 
+    const story = afterStrike(ctx, actor, target, strikeTarget, weapon, result);
+    if (story) return { landedAny: true, ending: story };
+
     if (result.hurt) {
       shiftMomentum(actor, target, 0.35);
       emit('hurt', say.hurtText(rng, target), target.corner, 'major');
@@ -1735,6 +2045,14 @@ function throwBurst(
       }
     }
   }
+
+  const strikeRead = adjustmentLine(target, actor, prefersKick ? 'kick' : 'punch');
+  if (strikeRead) emit('note', strikeRead, strikeRead.startsWith(target.fighter.lastName) ? target.corner : actor.corner);
+
+  if (bestRun >= 2 && thrownInPattern >= 2) {
+    emit('combination', say.combinationText(rng, actor, PATTERN_NAMES[pattern], bestRun), actor.corner);
+  }
+  notePattern(actor, target, pattern);
 
   if (landedAny) {
     shiftMomentum(actor, target, 0.12);
@@ -1812,6 +2130,37 @@ function resolveKnockdown(
     emit('recovered', say.recoveredText(target), target.corner);
   }
   return undefined;
+}
+
+/**
+ * How much of his defence a hurt fighter keeps. Was a flat 0.45 for everybody; composure is
+ * exactly the attribute for this — "performing hurt" is its blurb — and it now decides it, around
+ * the old value for an average fighter.
+ */
+function hurtDefence(c: Combatant): number {
+  return remap(effectiveComposure(c), 30, 95, 0.36, 0.58);
+}
+
+/** How much of his offence a hurt fighter keeps — the other half of `hurtDefence`. */
+function hurtOffence(c: Combatant): number {
+  return remap(effectiveComposure(c), 30, 95, 0.5, 0.78);
+}
+
+function storyOf(ctx: ExchangeContext): StoryContext {
+  return { round: ctx.round, rng: ctx.rng, emit: ctx.emit };
+}
+
+/** What a landed strike does beyond its damage. See `stories.ts`. */
+function afterStrike(
+  ctx: ExchangeContext,
+  actor: Combatant,
+  target: Combatant,
+  strikeTarget: StrikeTarget,
+  weapon: Weapon,
+  result: StrikeOutcome,
+): Ending | undefined {
+  const method = afterStrikeStory(storyOf(ctx), actor, target, strikeTarget, weapon, result);
+  return method ? { method, winner: actor.corner } : undefined;
 }
 
 function shiftMomentum(gainer: Combatant, loser: Combatant, amount: number): void {
@@ -1916,28 +2265,44 @@ function resolveTakedown(
   actor: Combatant,
   target: Combatant,
   from: 'distance' | 'clinch',
+  /** The entry this link of a chain is forced to, when it is one. */
+  chained?: TakedownEntry,
 ): ExchangeOutcome {
   const { rng, state, tally, emit } = ctx;
+  const depth = actor.mem.chainDepth;
 
   const reads: ReadKey[] = from === 'clinch' ? ['bodyLock', 'fenceClinch'] : ['singleLeg', 'doubleLeg'];
-  const bonus = prepBonus(target, actor, reads);
+  const bonus = prepBonus(target, actor, reads) + inFightRead(target, 'takedown');
 
   const offence =
     fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
     momentumMultiplier(actor) *
-    (from === 'clinch' ? 1.25 : 1);
+    (from === 'clinch' ? 1.25 : 1) *
+    // Driving through the shot and stopping it are both partly power (doc 36 phase 9).
+    (fatiguedEffect(actor.attrs.strength, 'strength', actor.fatigue) /
+      fatiguedEffect(target.attrs.strength, 'strength', target.fatigue)) **
+      0.25 *
+    // A hurt man's shot is a desperate one.
+    (actor.hurtSeconds > 0 ? 0.6 : 1) *
+    chainEdge(actor, depth);
 
   const defence =
     fatiguedEffect(target.attrs.takedownDefence, 'takedownDefence', target.fatigue) *
     (1 + bonus) *
     // Chewed-up legs are a chewed-up base. This is the payoff for a calf-kick game plan.
     legImpairment(target) *
+    stanceStyleTakedownDefence(target) *
+    (from === 'distance' ? RANGE_SHOT_DEFENCE[state.range] : 1) *
     (target.hurtSeconds > 0 ? 0.5 : 1);
 
   actor.stats.takedownsAttempted++;
-  const entry = pickTakedownEntry(rng, actor, from);
+  const entry = chained ?? pickTakedownEntry(rng, actor, from);
 
-  if (rng.chance(offence / (offence + defence))) {
+  const lands = rng.chance(offence / (offence + defence));
+  remember(actor, target, 'takedown', lands, nowOf(ctx));
+  const adjusted = adjustmentLine(target, actor, 'takedown');
+  if (adjusted) emit('note', adjusted, adjusted.startsWith(target.fighter.lastName) ? target.corner : actor.corner);
+  if (lands) {
     actor.stats.takedownsLanded++;
     tally[actor.corner].takedowns++;
     state.position = 'ground';
@@ -1946,6 +2311,7 @@ function resolveTakedown(
     state.groundPosition = landingPosition(rng, actor, entry);
     state.stalledSeconds = 0;
     shiftMomentum(actor, target, 0.25);
+    actor.mem.chainDepth = 0;
     emit(
       'takedown',
       say.takedownText(rng, actor, state.groundPosition, entry),
@@ -1964,6 +2330,32 @@ function resolveTakedown(
     undefined,
     { takedown: entry },
   );
+  // Every sprawl costs the man sprawling. Chain wrestling is how a wrestler spends your tank.
+  target.fatigue = clamp01(target.fatigue + 0.008);
+
+  /*
+   * The chain (doc 36 phase 5, `wrestling.ts`). The stuffed shot is the setup for the next one:
+   * the single becomes a double, the double a body lock, and the defender's weight is already
+   * committed to the first.
+   */
+  // A fighter who drilled the answer to his shots drilled the sprawl series too: prepared takedown
+  // reads blunt the chain as well as the first shot.
+  const drilledSprawl = prepBonus(target, actor, ['singleLeg', 'doubleLeg', 'bodyLock']) / PREP_MAX_BONUS;
+  if (depth < MAX_CHAIN && rng.chance(chainChance(actor, depth) * (1 - drilledSprawl * 0.9))) {
+    actor.mem.chainDepth = depth + 1;
+    const next = chainedEntry(rng, entry);
+    emit('note', say.chainText(rng, actor, next), actor.corner);
+    const link = resolveTakedown(ctx, actor, target, from === 'clinch' || next === 'bodyLock' || next === 'trip' ? 'clinch' : 'distance', next);
+    actor.mem.chainDepth = 0;
+    return { seconds: Math.min(20, link.seconds + rng.int(2, 5)), ending: link.ending };
+  }
+  actor.mem.chainDepth = 0;
+
+  // The other side of the sprawl: he came up holding a head.
+  if (from === 'distance' && rng.chance(frontHeadlockChance(target))) {
+    return resolveFrontHeadlock(ctx, target, actor);
+  }
+
   // A stuffed shot from the clinch usually ends up back at distance.
   if (from === 'clinch' && rng.chance(0.5)) {
     state.position = 'distance';
@@ -1974,6 +2366,58 @@ function resolveTakedown(
     state.rangeSettled = 0.25;
   }
   return { seconds: rng.int(6, 12) };
+}
+
+/**
+ * A head in his arms after a sprawl: go behind, choke, or snap him down and reset.
+ *
+ * The beat that gives a wrestler's *defence* an offence of its own, and the home of the guillotine,
+ * the D'Arce and the anaconda — chokes that live off a stuffed shot and that the old engine could
+ * only ever narrate from guard.
+ */
+function resolveFrontHeadlock(ctx: ExchangeContext, holder: Combatant, shooter: Combatant): ExchangeOutcome {
+  const { rng, state, emit } = ctx;
+  emit('note', say.frontHeadlockText(rng, holder, shooter), holder.corner);
+  const option = headlockOption(rng, holder);
+
+  if (option === 'choke') {
+    const key = headlockChoke(rng, holder);
+    const result = lockContest(ctx, holder, shooter, key, 0.95, ['guillotine']);
+    if (result.ending) return { seconds: rng.int(8, 16), ending: result.ending };
+    // Survived it: usually they are left tangled on the floor with the choker underneath.
+    if (rng.chance(0.5)) {
+      state.position = 'ground';
+      state.groundTop = shooter.corner;
+      state.groundPosition = 'guard';
+      state.placedBy = holder.corner;
+      state.stalledSeconds = 0;
+      return { seconds: rng.int(8, 14) };
+    }
+    return { seconds: rng.int(8, 14) };
+  }
+
+  if (option === 'goBehind') {
+    const spin = fatiguedEffect(holder.attrs.scrambling, 'scrambling', holder.fatigue);
+    const turn = fatiguedEffect(shooter.attrs.scrambling, 'scrambling', shooter.fatigue);
+    if (rng.chance(spin / (spin + turn))) {
+      state.position = 'ground';
+      state.groundTop = holder.corner;
+      state.groundPosition = rng.chance(0.35) ? 'back' : 'turtle';
+      state.placedBy = holder.corner;
+      state.stalledSeconds = 0;
+      ctx.tally[holder.corner].takedowns++;
+      holder.stats.takedownsLanded++;
+      holder.stats.takedownsAttempted++;
+      shiftMomentum(holder, shooter, 0.25);
+      emit('takedown', say.goBehindText(rng, holder, state.groundPosition), holder.corner, 'major');
+      return { seconds: rng.int(6, 12) };
+    }
+  }
+
+  // Snapped down and let up, or the go-behind did not come off: back to their feet, close.
+  state.range = TRANSITION_RANGE.stuffedTakedown!;
+  state.rangeSettled = 0.25;
+  return { seconds: rng.int(5, 9) };
 }
 
 // --- Clinch -------------------------------------------------------------------------------
@@ -2005,24 +2449,39 @@ function throwClinchStrike(
 ): Ending | undefined {
   const { rng, state, tally, emit } = ctx;
 
-  const offence =
-    fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) * heldPenalty;
-  const defence = fatiguedEffect(target.derived.clinchDefence, 'strength', target.fatigue);
+  /*
+   * What he throws in a tie-up is his clinch game (doc 36 phase 7, `clinch.ts`): a Thai fighter's
+   * plum and knees, a boxer's dirty boxing and elbows, a wrestler's short shots and thigh knees.
+   * Before this every clinch strike in the game was a knee.
+   */
+  const { weapon, target: strikeTarget } = clinchShot(rng, actor);
+  const craft =
+    weapon === 'punch' || weapon === 'elbow'
+      ? Math.sqrt(
+          fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue) *
+            fatiguedEffect(actor.attrs.strikingOffence, 'strikingOffence', actor.fatigue),
+        )
+      : fatiguedEffect(actor.derived.clinchOffence, 'strength', actor.fatigue);
+  const offence = craft * heldPenalty * clinchStyleOffence(actor);
+  const defence =
+    fatiguedEffect(target.derived.clinchDefence, 'strength', target.fatigue) *
+    clinchStyleDefence(target, weapon, strikeTarget);
   actor.stats.significantStrikesAttempted++;
   tally[actor.corner].strikesAttempted++;
+  chargeStrike(actor, weapon);
 
-  if (!rng.chance(offence / (offence + defence))) return undefined;
+  const connects = rng.chance(offence / (offence + defence));
+  remember(actor, target, 'clinchStrike', connects, nowOf(ctx));
+  if (!connects) return undefined;
 
-  // Clinch work is body-and-knees work; it is how you drain someone standing up.
-  const strikeTarget: StrikeTarget = rng.chance(0.6) ? 'body' : 'head';
-  const result = applyStrike(rng, actor, target, strikeTarget, 'knee');
+  const result = applyStrike(rng, actor, target, strikeTarget, weapon);
   actor.stats.significantStrikesLanded++;
   tally[actor.corner].significantStrikes++;
   tally[actor.corner].damageDealt += result.damage;
   state.stalledSeconds = 0;
   if (result.cut) state.cuts[target.corner] += rng.range(8, 22);
-  emit('strike', say.clinchStrikeText(rng, actor, strikeTarget), actor.corner, undefined, {
-    weapon: 'knee',
+  emit('strike', say.clinchStrikeText(rng, actor, strikeTarget, weapon), actor.corner, undefined, {
+    weapon,
     target: strikeTarget,
   });
 
@@ -2031,7 +2490,7 @@ function throwClinchStrike(
     emit('knockdown', say.knockdownText(rng, actor, target), actor.corner, 'critical');
     return resolveKnockdown(ctx, actor, target, result.flushness);
   }
-  return undefined;
+  return afterStrike(ctx, actor, target, strikeTarget, weapon, result);
 }
 
 /**
@@ -2202,7 +2661,9 @@ function resolveClinch(ctx: ExchangeContext, actor: Combatant, target: Combatant
       actor.stats.escapesAttempted++;
       const escape = fatiguedEffect(actor.derived.clinchDefence, 'strength', actor.fatigue);
       const hold = fatiguedEffect(target.derived.clinchOffence, 'strength', target.fatigue);
-      if (rng.chance(escape / (escape + hold))) {
+      const out = rng.chance(escape / (escape + hold));
+      remember(actor, target, 'escape', out, nowOf(ctx));
+      if (out) {
         actor.stats.escapesLanded++;
         state.position = 'distance';
         state.clinchControl = undefined;
@@ -2333,7 +2794,7 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
    * had no way to say he was still fighting. That is doc 01 § 8 and it is the whole of F1.
    */
   const exits = bottomExits(actor, stance, state.groundPosition);
-  const goingForIt = rng.chance(bottomExitUrgency(stance));
+  const goingForIt = rng.chance(clamp01(bottomExitUrgency(stance) * actor.mem.lean.escape));
 
   let escaping = false;
   if (goingForIt) {
@@ -2341,17 +2802,23 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
     actor.stats.escapesAttempted++;
 
     const bonus = prepBonus(target, actor, route === 'standUp' ? ['wallGetUp'] : ['guardPassing']);
+    // Strength takes a share of both sides: the bridge underneath, the pressure on top (doc 36 phase 9;
+    // the mass experiments found it otherwise barely reached the floor).
     const escape =
-      fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
+      fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) ** 0.8 *
+      fatiguedEffect(actor.attrs.strength, 'strength', actor.fatigue) ** 0.2 *
       legImpairment(actor) *
       (1 - GROUND_DOMINANCE[state.groundPosition] * 0.5);
     const hold =
-      fatiguedEffect(target.attrs.groundControl, 'groundControl', target.fatigue) *
+      fatiguedEffect(target.attrs.groundControl, 'groundControl', target.fatigue) ** 0.8 *
+      fatiguedEffect(target.attrs.strength, 'strength', target.fatigue) ** 0.2 *
       (1 + bonus) *
       // What the man on top is doing with his weight. Hitting you is not holding you.
       topControlFocus(target);
 
-    if (rng.chance(escape / (escape + hold))) {
+    const out = rng.chance(escape / (escape + hold));
+    remember(actor, target, 'escape', out, nowOf(ctx));
+    if (out) {
       actor.stats.escapesLanded++;
       if (route === 'sweep') {
         state.groundTop = actor.corner;
@@ -2359,6 +2826,20 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
         state.placedBy = actor.corner;
         shiftMomentum(actor, target, 0.3);
         emit('sweep', say.sweepText(rng, actor), actor.corner, 'major');
+      } else if (rng.chance(matReturnChance(target, actor))) {
+        /*
+         * Up — and straight back down. The mat return is what makes a wrestler's top game a cage
+         * rather than a position: the get-up succeeds and costs the man everything he spent on it.
+         */
+        state.groundPosition = rng.chance(0.3) ? 'back' : rng.chance(0.5) ? 'turtle' : 'halfGuard';
+        state.placedBy = target.corner;
+        target.stats.takedownsAttempted++;
+        target.stats.takedownsLanded++;
+        ctx.tally[target.corner].takedowns++;
+        actor.fatigue = clamp01(actor.fatigue + 0.02);
+        emit('takedown', say.matReturnText(rng, target, actor), target.corner, 'major');
+        state.stalledSeconds = 0;
+        return { seconds: rng.int(8, 14) };
       } else {
         state.position = 'distance';
         state.groundTop = undefined;
@@ -2383,6 +2864,40 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
      * the whole sport and quietly compressed the gap between a striking plan and a wrestling one.
      */
     escaping = true;
+
+    // Getting up the hard way gives up the back to a quick man on top (doc 36 phase 5).
+    if (route === 'standUp' && state.groundPosition !== 'back' && rng.chance(backExposureChance(target))) {
+      const to = GROUND_DOMINANCE[state.groundPosition] >= GROUND_DOMINANCE.sideControl ? 'back' : 'turtle';
+      state.groundPosition = to;
+      shiftMomentum(target, actor, 0.15);
+      emit('positionAdvance', say.backExposedText(rng, actor, target, to), target.corner);
+      return { seconds: rng.int(8, 14) };
+    }
+    // A sweep that does not come off cleanly often turns into a scramble, and anything can come of one.
+    if (route === 'sweep' && rng.chance(0.3)) {
+      const outcome = scramble(rng, actor, target);
+      if (outcome !== 'held') {
+        emit('note', say.scrambleText(rng, actor, target, outcome), outcome === 'backTaken' ? target.corner : actor.corner);
+        if (outcome === 'bothUp') {
+          state.position = 'distance';
+          state.groundTop = undefined;
+          state.groundPosition = 'guard';
+          state.placedBy = undefined;
+          state.range = TRANSITION_RANGE.standUp!;
+          state.rangeSettled = 0;
+        } else if (outcome === 'reversed') {
+          state.groundTop = actor.corner;
+          state.groundPosition = 'halfGuard';
+          state.placedBy = actor.corner;
+          shiftMomentum(actor, target, 0.25);
+        } else {
+          state.groundPosition = 'back';
+          shiftMomentum(target, actor, 0.25);
+        }
+        state.stalledSeconds = 0;
+        return { seconds: rng.int(8, 14) };
+      }
+    }
   }
 
   const work = chooseAction(
@@ -2390,7 +2905,22 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
     bottomWork(actor, stance, state.groundPosition, subChance, escaping),
   );
   actor.stats.bottomWorkBeats++;
-  if (work === 'submission') return resolveSubmission(ctx, actor, target, true);
+  if (work === 'submission') {
+    // A leg-locker does not attack the neck from guard; he goes for a leg (`groundGraph.ts`).
+    if (rng.chance(legEntryChance(actor, state.groundPosition))) {
+      const dive = fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue);
+      const base = fatiguedEffect(target.attrs.groundControl, 'groundControl', target.fatigue);
+      if (!rng.chance(dive / (dive + base))) {
+        // Stuffed: the leg was pulled out and he is flattened.
+        state.groundPosition = 'halfGuard';
+        state.stalledSeconds = 0;
+        return { seconds: rng.int(8, 14) };
+      }
+      state.groundPosition = 'legEntangle';
+      emit('positionAdvance', say.legEntryText(rng, actor), actor.corner);
+    }
+    return resolveSubmission(ctx, actor, target, true);
+  }
 
   /*
    * Framing and hand-fighting, resolved as pressure toward a referee stand-up rather than as a new
@@ -2413,7 +2943,15 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
    */
   const held = rng.chance(frame / (frame + press));
   state.stalledSeconds += held ? 24 : 18;
-  if (held) emit('note', `${say.surname(actor)} frames and hand-fights, giving them nothing.`);
+  if (held) {
+    const back = recoverGuard(rng, state.groundPosition, actor, target);
+    if (back) {
+      state.groundPosition = back;
+      emit('note', say.guardRecoveryText(rng, actor, back), actor.corner);
+    } else {
+      emit('note', `${say.surname(actor)} frames and hand-fights, giving them nothing.`);
+    }
+  }
   return maybeRefStandUp(ctx, rng.int(10, 20));
 }
 
@@ -2443,13 +2981,18 @@ function resolveGroundTop(
 
   if (intent === 'advancePosition') {
     const bonus = prepBonus(target, actor, ['guardPassing', 'backTake']);
-    const pass = fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue);
+    const pass =
+      fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue) ** 0.8 *
+      fatiguedEffect(actor.attrs.strength, 'strength', actor.fatigue) ** 0.2;
     const retain =
-      fatiguedEffect(target.attrs.scrambling, 'scrambling', target.fatigue) * (1 + bonus);
+      fatiguedEffect(target.attrs.scrambling, 'scrambling', target.fatigue) ** 0.8 *
+      fatiguedEffect(target.attrs.strength, 'strength', target.fatigue) ** 0.2 *
+      (1 + bonus);
 
-    if (rng.chance(pass / (pass + retain))) {
-      const idx = GROUND_POSITIONS.indexOf(state.groundPosition);
-      const next = GROUND_POSITIONS[Math.min(idx + 1, GROUND_POSITIONS.length - 1)]!;
+    const passes = rng.chance(pass / (pass + retain));
+    remember(actor, target, 'pass', passes, nowOf(ctx));
+    if (passes) {
+      const next = passTarget(rng, state.groundPosition, actor) ?? state.groundPosition;
       if (next !== state.groundPosition) {
         state.groundPosition = next;
         state.stalledSeconds = 0;
@@ -2458,6 +3001,8 @@ function resolveGroundTop(
         return { seconds: rng.int(10, 20) };
       }
     }
+    // A closed guard worked on and held often opens — which is where sweeps and leg entries live.
+    if (state.groundPosition === 'guard' && rng.chance(GUARD_OPENS)) state.groundPosition = 'openGuard';
     state.stalledSeconds += 15;
     return maybeRefStandUp(ctx, rng.int(8, 16));
   }
@@ -2476,7 +3021,9 @@ function resolveGroundTop(
     for (let i = 0; i < shots; i++) {
       actor.stats.significantStrikesAttempted++;
       tally[actor.corner].strikesAttempted++;
-      if (!rng.chance(offence / (offence + defence))) continue;
+      const connects = rng.chance(offence / (offence + defence));
+      remember(actor, target, 'groundStrike', connects, nowOf(ctx), undefined, undefined);
+      if (!connects) continue;
       landed++;
       /*
        * Punches and elbows, and the position decides which.
@@ -2502,6 +3049,9 @@ function resolveGroundTop(
         shiftMomentum(actor, target, 0.4);
         emit('knockdown', say.knockdownText(rng, actor, target), actor.corner, 'critical');
       }
+
+      const story = afterStrike(ctx, actor, target, groundTarget, groundWeapon, result);
+      if (story) return { seconds: 10, ending: story };
 
       if (result.knockdown || target.hurtSeconds > 0) {
         state.unanswered[target.corner]++;
@@ -2547,16 +3097,64 @@ function resolveSubmission(
   target: Combatant,
   fromBottom: boolean,
 ): ExchangeOutcome {
-  const { rng, state, tally, emit } = ctx;
+  const { rng, state } = ctx;
   const dominance = GROUND_DOMINANCE[state.groundPosition];
-  const name = rng.pick(say.SUBMISSIONS[state.groundPosition]);
+  const key =
+    chooseSubmission(
+      rng,
+      actor.style.subs,
+      submissionsFrom(state.groundPosition, !fromBottom),
+      actor.mem.lastSubFailed,
+    ) ?? 'guillotine';
 
   const reads: ReadKey[] = state.groundPosition === 'back' ? ['backTake'] : ['guillotine'];
+  const result = lockContest(ctx, actor, target, key, fromBottom ? 0.75 : 0.6 + dominance, reads);
+  if (result.ending) return { seconds: rng.int(8, 20), ending: result.ending };
+
+  /*
+   * A failed attack off the back usually costs position — and a failed leg lock costs more than
+   * that: the man who escapes a heel hook comes out on top, past the legs.
+   */
+  if (fromBottom) {
+    if (state.groundPosition === 'legEntangle') {
+      state.groundPosition = rng.chance(0.5) ? 'halfGuard' : 'sideControl';
+    } else if (rng.chance(0.35)) {
+      state.groundPosition = ladderStep(state.groundPosition);
+    }
+  }
+  state.stalledSeconds = 0;
+  return { seconds: rng.int(9, 18) };
+}
+
+/**
+ * The submission contest itself: deep or not, finished or not, and what a survived lock costs.
+ *
+ * Shared by the floor and the front headlock. The hold's own profile enters the contest
+ * (`submissions.ts`): a technical hold leans on `submissions` alone and a pressure hold lets
+ * `strength` carry part of it; a back choke finishes more often once deep than a kneebar does.
+ * A drilled hold — a signature — is executed a little cleaner, and only a little.
+ */
+function lockContest(
+  ctx: ExchangeContext,
+  actor: Combatant,
+  target: Combatant,
+  key: SubmissionKey,
+  positionScale: number,
+  reads: ReadKey[],
+): { deep: boolean; ending?: Ending } {
+  const { rng, tally, emit } = ctx;
+  const meta = SUBMISSION_META[key];
+  const name = meta.label;
   const bonus = prepBonus(target, actor, reads);
 
+  const craft = fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue);
+  const squeeze = fatiguedEffect(actor.attrs.strength, 'strength', actor.fatigue);
+  const drilled = actor.style.signatureSub === key ? 1.08 : 1;
   const attack =
-    fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) *
-    (fromBottom ? 0.75 : 0.6 + dominance) *
+    craft ** (0.7 + 0.3 * meta.technicality) *
+    squeeze ** (0.3 - 0.3 * meta.technicality) *
+    drilled *
+    positionScale *
     (target.hurtSeconds > 0 ? 1.5 : 1);
   const defend =
     fatiguedEffect(target.derived.submissionDefence, 'submissions', target.fatigue) * (1 + bonus);
@@ -2566,6 +3164,7 @@ function resolveSubmission(
 
   const edge = clamp01(attack / (attack + defend));
   const deep = rng.chance(edge);
+  remember(actor, target, 'submission', deep, nowOf(ctx));
   emit('submissionAttempt', say.submissionAttemptText(actor, target, name, deep), actor.corner, deep ? 'major' : undefined);
 
   if (deep) {
@@ -2579,20 +3178,17 @@ function resolveSubmission(
     // attempt what it should be — a scoring event, not a fight-ender.
     const priorAttempts = Math.max(0, actor.stats.submissionAttempts - 1);
     const familiarity = 1 / (1 + SUBMISSION_REPEAT_DECAY * priorAttempts);
-    const finishChance = clamp01(SUBMISSION_FINISH_RATE * edge ** 3 * familiarity);
+    const finishChance = clamp01(SUBMISSION_FINISH_RATE * edge ** 3 * familiarity * meta.finishing);
     if (rng.chance(finishChance)) {
-      return { seconds: rng.int(8, 20), ending: { method: 'submission', winner: actor.corner, submissionName: name } };
+      return { deep, ending: { method: 'submission', winner: actor.corner, submissionName: name } };
     }
   }
 
+  actor.mem.lastSubFailed = key;
+  // A deep lock that was survived rather than escaped may have cost the joint.
+  if (deep) survivedLock(storyOf(ctx), target, meta.injury, edge);
   emit('submissionEscape', say.submissionEscapeText(rng, target), target.corner);
-  // A failed submission from the bottom often costs position; from the top it costs little.
-  if (fromBottom && rng.chance(0.35)) {
-    const idx = GROUND_POSITIONS.indexOf(state.groundPosition);
-    state.groundPosition = GROUND_POSITIONS[Math.min(idx + 1, GROUND_POSITIONS.length - 1)]!;
-  }
-  state.stalledSeconds = 0;
-  return { seconds: rng.int(9, 18) };
+  return { deep };
 }
 
 /** Referee stand-up when the ground position has stalled. Their tendency decides how fast. */

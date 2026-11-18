@@ -628,7 +628,11 @@ describe('over a card', () => {
 
     expect(wrestler.perFight, report).toBeGreaterThan(3);
     expect(guard.perFight, report).toBeGreaterThan(5);
-    expect(grinder.perFight, report).toBeGreaterThan(7);
+    // 7 → 6 by doc 36 phase 6, and not by the gate this guards: the ground became a graph in which
+    // the man underneath recovers guard, scrambles and gives up the back, so a grinder spends less of
+    // a fight in the dominant positions his attacks come from (7.5 → ~6.5 per fight). The gate itself
+    // still reads a hard 1 for all three, which is the claim.
+    expect(grinder.perFight, report).toBeGreaterThan(6);
   });
 
   it('is why an unplanned fighter is a worse fighter, which is what D19 was about', () => {
@@ -765,8 +769,10 @@ describe('over a card', () => {
       // overshooting into under-booking his control is the same defect with the sign flipped.
       striker: [0.8, 1.25],
       // Not closed, not a split error, and not a level either — see above.
-      // Measured 3.63: 3.74 before D24, 3.31 after it, 3.63 after D25's floor.
-      journeyman: [2.9, 4.1],
+      // Measured 3.63: 3.74 before D24, 3.31 after it, 3.63 after D25's floor — and **2.27 after
+      // doc 36**, whose ground (guard recovery, scrambles, get-ups that stick) gives a journeyman
+      // under Full more control time against this field. The gap is narrower, not gone.
+      journeyman: [1.8, 4.1],
     };
     /*
      * **Measured on the striker and the journeyman rather than on the Olympic boxer**, and the

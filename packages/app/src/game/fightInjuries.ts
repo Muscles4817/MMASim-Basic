@@ -20,6 +20,7 @@ import {
   exposureFrom,
   fightInjuryChance,
   rollInjury,
+  POST_FIGHT_TYPE,
   type Corner,
   type Fighter,
   type Injury,
@@ -80,7 +81,31 @@ export function settleFightInjuries(input: {
     notes.push(`${fighter.lastName} was concussed and is suspended on medical grounds.`);
   }
 
-  if (rng.chance(fightInjuryChance(fighter, exposure, day))) {
+  /*
+   * What broke during the fight is what he leaves with (doc 36 phase 3). The engine now produces
+   * named injuries in the cage — a hand on a skull, a knee in a heel hook — and the medical makes
+   * them official rather than rolling a second, unrelated one.
+   */
+  const tonight = result.injuries?.[corner] ?? [];
+  for (const hurt of tonight) {
+    const type = POST_FIGHT_TYPE[hurt.kind];
+    if (injuries.some((i) => i.type === type && i.day === day)) continue;
+    injuries = [
+      ...injuries,
+      rollInjury({
+        fighter,
+        source: 'fight',
+        day,
+        rng: rng.fork(`${fighter.id as string}:${hurt.kind}`),
+        history: injuries,
+        type,
+        severity: hurt.severity,
+      }),
+    ];
+    notes.push(`${fighter.lastName} leaves with the ${type} injury picked up in the fight.`);
+  }
+
+  if (tonight.length === 0 && rng.chance(fightInjuryChance(fighter, exposure, day))) {
     const fresh = rollInjury({
       fighter,
       source: 'fight',

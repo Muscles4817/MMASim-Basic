@@ -267,22 +267,30 @@ interface Fingerprint {
  * Andrade goes 0.97 → 0.84 and Romero 0.90 → 0.86 because a 5'1" fighter and a heavily muscled one
  * have removable mass a flat percentage of the limit cannot see.
  */
+/*
+ * **Re-recorded by doc 36 (the combat simulation plan), and on purpose the largest move yet.** Every
+ * matchup moves in every currency, because the change is to the fight itself rather than to one
+ * decision: bursts are drilled patterns, fatigue costs quality rather than half the volume,
+ * wrestling chains, the floor is a graph, the clinch has weapons, and fighters read, adjust and are
+ * coached. Punches per fight rose with the flatter round-by-round output; the population calibration
+ * (`roster-profile`) is held separately and still passes.
+ */
 const BASELINE: Readonly<Record<string, Fingerprint>> = {
   'striker-v-grinder': {
-    punches: 20.408,
-    kicks: 8.518,
-    takedowns: 6.4,
-    submissions: 5.953,
-    clinchEntries: 2.105,
-    getUps: 1.95,
-    advances: 3.688,
-    sweeps: 1.085,
-    distanceSeconds: 330.71,
-    clinchSeconds: 39.683,
-    groundSeconds: 423.472,
-    koRate: 0.272,
-    submissionRate: 0.18,
-    meanRound: 2.355,
+    punches: 22.482,
+    kicks: 7.313,
+    takedowns: 7.322,
+    submissions: 6.122,
+    clinchEntries: 1.938,
+    getUps: 2.09,
+    advances: 3.678,
+    sweeps: 1.618,
+    distanceSeconds: 356.357,
+    clinchSeconds: 38.937,
+    groundSeconds: 457.13,
+    koRate: 0.253,
+    submissionRate: 0.178,
+    meanRound: 2.465,
   },
   /*
    * **Re-recorded by the repertoire gate (doc 31 § D16), and this is the only matchup it moved.**
@@ -301,36 +309,36 @@ const BASELINE: Readonly<Record<string, Fingerprint>> = {
    * shape is where it was.
    */
   'contender-v-canFodder': {
-    punches: 12.88,
-    kicks: 3.758,
-    takedowns: 3.068,
-    submissions: 4.023,
-    clinchEntries: 1.242,
-    getUps: 0.783,
-    advances: 1.927,
-    sweeps: 0.263,
-    distanceSeconds: 160.65,
-    clinchSeconds: 24.703,
-    groundSeconds: 209.713,
-    koRate: 0.62,
-    submissionRate: 0.29,
-    meanRound: 1.565,
+    punches: 12.407,
+    kicks: 2.612,
+    takedowns: 3.042,
+    submissions: 3.812,
+    clinchEntries: 1.123,
+    getUps: 0.762,
+    advances: 1.708,
+    sweeps: 0.348,
+    distanceSeconds: 151.24,
+    clinchSeconds: 23.092,
+    groundSeconds: 207.2,
+    koRate: 0.637,
+    submissionRate: 0.318,
+    meanRound: 1.555,
   },
   'guardPlayer-v-smotherer': {
-    punches: 16.073,
-    kicks: 3.525,
-    takedowns: 8.47,
-    submissions: 10.102,
-    clinchEntries: 3.702,
-    getUps: 2.077,
-    advances: 4.773,
-    sweeps: 1.515,
-    distanceSeconds: 334.663,
-    clinchSeconds: 71.865,
-    groundSeconds: 551.483,
+    punches: 17.072,
+    kicks: 2.343,
+    takedowns: 9.13,
+    submissions: 9.968,
+    clinchEntries: 3.43,
+    getUps: 2.148,
+    advances: 4.657,
+    sweeps: 1.753,
+    distanceSeconds: 324.193,
+    clinchSeconds: 65.173,
+    groundSeconds: 565.93,
     koRate: 0.032,
-    submissionRate: 0.203,
-    meanRound: 2.735,
+    submissionRate: 0.195,
+    meanRound: 2.747,
   },
 };
 
@@ -400,6 +408,15 @@ describe('rearranging the decision layer changed nothing about the fights', () =
     (name, mkRed, mkBlue) => {
       const actual = fingerprint(name, mkRed(), mkBlue());
       const expected = BASELINE[name]!;
+      // `RECORD_FINGERPRINT=1` prints the new baseline instead of asserting, for a change that moves
+      // these on purpose. Paste the output over `BASELINE` and say why in the comment above it.
+      if (process.env.RECORD_FINGERPRINT) {
+        const rounded = Object.fromEntries(
+          Object.entries(actual).map(([k, v]) => [k, Number((v as number).toFixed(3))]),
+        );
+        console.log(`RECORD ${name} ${JSON.stringify(rounded)}`);
+        return;
+      }
 
       for (const key of Object.keys(expected) as (keyof Fingerprint)[]) {
         // Rounded to the precision the baseline was recorded at, then compared exactly.

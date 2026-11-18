@@ -170,6 +170,14 @@ export const ENTRY_EASE = shapeOnly({ outside: 0.5, boxing: 1, pocket: 1.55 });
  * and put the calibration somewhere very strange very quickly, so this is a nudge on top of
  * behaviour rather than the mechanism.
  */
+/**
+ * How much harder a shot is to land from each range: a level change from kicking range is seen
+ * coming, one from the pocket is not. Doc 36 phase 9 — distance *is* takedown defence, and without
+ * this an outside fighter only ever saw fewer shots, never worse ones, so keeping range against a
+ * chain wrestler bought nothing. Neutral at boxing range, where most shots start.
+ */
+export const RANGE_SHOT_DEFENCE = shapeOnly({ outside: 1.3, boxing: 1, pocket: 0.85 });
+
 export const RANGE_HAZARD = shapeOnly({ outside: 0.92, boxing: 1, pocket: 1.08 });
 
 /** Counter opportunity by range: in the pocket everything comes back. */

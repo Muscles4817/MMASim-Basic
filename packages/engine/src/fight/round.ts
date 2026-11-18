@@ -108,7 +108,7 @@ const UNDERNEATH_SCALE = 1.76;
  * *against* the full simulator, so the calibration moved with it. 15.5 would now over-state a
  * Reduced round by just over the 30% the parity suite allows on its two most lopsided matchups.
  */
-const BASE_ATTEMPTS = 15.0;
+const BASE_ATTEMPTS = 12.0;
 
 /**
  * How much of a round the two fighters can spend in controlling positions.

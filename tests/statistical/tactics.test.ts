@@ -618,7 +618,9 @@ describe('the fight a player asked for is the fight they got', () => {
     expect(wrestle.takedownsAttempted, message).toBeGreaterThan(strike.takedownsAttempted * 2.5);
     expect(wrestle.pocketShare, message).toBeGreaterThan(strike.pocketShare * 3);
     // And he does it by closing, not by standing at boxing range hoping.
-    expect(wrestle.rangeAttempts, message).toBeGreaterThan(strike.rangeAttempts * 1.4);
+    // 1.4 → 1.3 by doc 36 phase 4: both fighters now adjust in the fight and between rounds, so a
+    // striker being walked down works harder at the range he wants than one with a static plan did.
+    expect(wrestle.rangeAttempts, message).toBeGreaterThan(strike.rangeAttempts * 1.3);
   });
 
   it('makes the clinch grinder tie up rather than settle for standing near somebody', () => {
@@ -716,6 +718,13 @@ describe('the fight a player asked for is the fight they got', () => {
     expect(getUp.escapeRate, message).toBeGreaterThan(unplanned.escapeRate);
     expect(unplanned.submissionAttempts, message).toBeGreaterThan(getUp.submissionAttempts * 2);
     // And it is worth winning the fight over, not merely worth looking different.
-    expect(getUp.winRate, message).toBeGreaterThan(unplanned.winRate * 1.2);
+    /*
+     * 1.2 → 1.05 by doc 36. The *unplanned* fighter is no longer static: he reads the fight, leans
+     * away from what is failing and hears a corner between rounds (phase 4), so the gap a plan opens
+     * over no plan is smaller than it was against a fighter who did the same thing for fifteen
+     * minutes. And getting up against an 82-ground-control wrestler now meets mat returns and back
+     * exposure (phase 5). The plan still wins more; it is no longer worth a fifth again.
+     */
+    expect(getUp.winRate, message).toBeGreaterThan(unplanned.winRate * 1.05);
   });
 });

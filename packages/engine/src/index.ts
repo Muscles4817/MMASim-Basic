@@ -45,6 +45,19 @@ export * from './fight/fouls.js';
 export * from './fight/broadcast.js';
 export * from './fight/simulate.js';
 export * from './fight/round.js';
+export {
+  CLINCH_GAMES,
+  COMBO_KEYS,
+  STANCE_STYLES,
+  styleOf as fighterStyleOf,
+  type ClinchGame,
+  type ComboKey,
+  type StanceStyle,
+  type StyleOverride,
+  type StyleProfile,
+} from './fight/style.js';
+export * from './fight/submissions.js';
+export { POST_FIGHT_TYPE, IN_FIGHT_INJURIES, type InFightInjury, type InFightInjuryKind } from './fight/stories.js';
 /*
  * The policy layer stays private — it is the engine's own decision-making and nothing outside the
  * fight has any business calling it — except for this one function, which answers a question the

@@ -6,7 +6,9 @@
  */
 
 import { clamp01, remap } from '../core/math.js';
+import type { Rng } from '../core/rng.js';
 import type { Combatant } from './profile.js';
+import type { Range, StrikeTarget, Weapon } from './types.js';
 
 /**
  * The open-stance edge, as a multiplier on both contests a fight is decided in.
@@ -59,9 +61,96 @@ import type { Combatant } from './profile.js';
  */
 const STANCE_EDGE = 0.14;
 
+/**
+ * Which foot leads *right now*. A fighter who has switched tonight — a chopped-up lead leg, or a
+ * switch-hitter's choice (doc 36 phases 3 and 8) — stands the other way round.
+ */
+export function stanceNow(c: Combatant): 'orthodox' | 'southpaw' | 'switch' {
+  const base = c.fighter.stance;
+  if (!c.stanceSwitched || base === 'switch') return base;
+  return base === 'orthodox' ? 'southpaw' : 'orthodox';
+}
+
 export function stanceEdge(actor: Combatant, target: Combatant): number {
-  if (actor.fighter.stance !== 'southpaw') return 1;
-  if (target.fighter.stance !== 'orthodox') return 1;
+  if (stanceNow(actor) !== 'southpaw') return 1;
+  if (stanceNow(target) !== 'orthodox') return 1;
   const solved = clamp01(remap(target.attrs.fightIq, 40, 90, 0, 0.68));
   return 1 + STANCE_EDGE * (1 - solved);
+}
+
+// --- Stance styles (doc 36 phase 8) -----------------------------------------------------------
+
+/**
+ * What a stance *shape* buys and costs, as a multiplier on the defender's striking defence against
+ * this shot. See `StanceStyle` in `style.ts` for the four shapes and why each trade is what it is.
+ *
+ * Every row has a pro and a con, and the magnitudes are small on purpose — a stance is a lean, not a
+ * superpower, and the style it belongs to already lives in the fighter's ratings.
+ */
+export function stanceStyleDefence(
+  defender: Combatant,
+  weapon: Weapon,
+  target: StrikeTarget,
+  range: Range,
+): number {
+  switch (defender.style.stanceStyle) {
+    case 'bladed':
+      // Side-on: the head and body are far away down a straight line, and the lead leg is a gift.
+      if (target === 'legs') return 0.72;
+      if (weapon === 'punch' && range !== 'pocket') return 1.2;
+      return 1;
+    case 'square':
+      // Squared up: kicks get checked (`checkedKick`) and the clinch is home, but the centre line is
+      // open to the jab and the straight.
+      if (weapon === 'punch' && target === 'head' && range !== 'pocket') return 0.82;
+      if (weapon === 'kick') return 1.12;
+      return 1;
+    case 'crouched':
+      // Low and wide: the body and legs are hard to find; the head is low and a kick or an uppercut finds it.
+      if (target === 'body') return 1.15;
+      if (weapon === 'kick' && target === 'head') return 0.75;
+      if (weapon === 'punch' && target === 'head' && range === 'pocket') return 0.84;
+      return 1;
+    default:
+      return 1;
+  }
+}
+
+/** And against the takedown: the crouch sprawls best, a bladed stance turns its hips away worst. */
+export function stanceStyleTakedownDefence(defender: Combatant): number {
+  switch (defender.style.stanceStyle) {
+    case 'crouched':
+      return 1.3;
+    case 'bladed':
+      return 0.82;
+    case 'square':
+      return 0.9;
+    default:
+      return 1;
+  }
+}
+
+/** The bladed stance's linear attack: kicks from the outside arrive sooner. */
+export function stanceStyleOffence(actor: Combatant, weapon: Weapon, range: Range): number {
+  if (actor.style.stanceStyle === 'bladed' && weapon === 'kick' && range === 'outside') return 1.08;
+  if (actor.style.stanceStyle === 'crouched' && weapon === 'kick') return 0.9;
+  return 1;
+}
+
+/**
+ * Whether a fighter switches stance this exchange, on purpose.
+ *
+ * Two reasons, and only fighters comfortable doing it act on them (`stanceSwitching`): to *take*
+ * the open-stance edge from an orthodox opponent by going southpaw, and to switch back once the
+ * opponent has adjusted. A compromised lead leg is the third reason and is handled in `stories.ts`.
+ */
+export function wantsToSwitch(rng: Rng, c: Combatant, opponent: Combatant): boolean {
+  const now = stanceNow(c);
+  const opp = stanceNow(opponent);
+  const gain = now === 'orthodox' && opp === 'orthodox' ? 1 : now === 'southpaw' && opp === 'southpaw' ? 0.6 : 0.25;
+  const p =
+    c.fighter.stance === 'switch' || c.legsCompromised ? 0 : c.style.stanceSwitching * 0.05 * gain;
+  // One draw whatever the answer, so a switch-hitter and his mirror stay on the same random stream —
+  // `stance.test.ts` compares them on paired seeds and requires them identical.
+  return rng.next() < p;
 }

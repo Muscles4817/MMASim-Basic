@@ -26,7 +26,9 @@ describe('simulateFight — structural guarantees', () => {
       // structure rather than length: every fight opens a round and reaches a conclusion.
       expect(r.events[0]?.kind).toBe('roundStart');
       expect(['finish', 'decision']).toContain(r.events[r.events.length - 1]?.kind);
-      if (r.method === 'draw') expect(r.winnerId).toBeUndefined();
+      // A no contest has no winner either — it was always reachable through `rollNoContest`, and a
+      // seed that happens to land on one is the rules working, not a broken result.
+      if (r.method === 'draw' || r.method === 'noContest') expect(r.winnerId).toBeUndefined();
       else expect([r.redId, r.blueId]).toContain(r.winnerId);
     }
   });

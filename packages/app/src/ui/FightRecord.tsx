@@ -31,7 +31,7 @@ const METHOD_LABEL: Readonly<Record<FinishMethod, string>> = {
   draw: 'Draw',
   noContest: 'No contest',
   dq: 'Disqualification',
-  retirement: 'Retirement',
+  retirement: 'TKO (corner stoppage)',
   doctorStoppage: 'Doctor stoppage',
 };
 

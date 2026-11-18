@@ -17,13 +17,24 @@ import { RANGE_EXERTION } from './range.js';
 import { effect } from '../ratings/curve.js';
 import { bodyDrag } from './damage.js';
 import { CLINCH_HELD_COST, GROUND_BOTTOM_COST, POSITION_COST, type Combatant } from './profile.js';
-import type { GroundPosition, Position, Range } from './types.js';
+import type { GroundPosition, Position, Range, Weapon } from './types.js';
 
-/** Fatigue added by one second of average-intensity action at distance, for Cardio 50. */
-const BASE_FATIGUE_PER_SECOND = 0.0016;
+/**
+ * Fatigue added by one second of average-intensity action at distance, for Cardio 50.
+ *
+ * Doc 36 phase 2: 0.0016 → 0.0010, with `BASE_ROUND_RECOVERY` 0.28 → 0.38. Measured on an even
+ * pair of 50-cardio fighters on AI plans, the old pair averaged **0.77 fatigue through round two and
+ * 0.91 through round three** — an average professional was all but empty halfway through a
+ * three-round fight, which is where the halving of output came from. Now 0.17 / 0.46 / 0.68: tired
+ * by the third, and still a fighter.
+ */
+const BASE_FATIGUE_PER_SECOND = 0.0011;
+
+/** How much of output is tied to the tank. See `workRate`. */
+export const WORK_RATE_GAS = 0.5;
 
 /** Fraction of accumulated fatigue an average fighter sheds during a one-minute rest. */
-const BASE_ROUND_RECOVERY = 0.28;
+const BASE_ROUND_RECOVERY = 0.34;
 
 export interface FatigueContext {
   position: Position;
@@ -113,6 +124,64 @@ export function recoverBetweenRounds(c: Combatant, restSeconds = 60): void {
 export function workRate(c: Combatant, needsFinish: boolean): number {
   const gasLeft = 1 - c.fatigue;
   const desperation = needsFinish ? 0.35 : 0;
-  const base = clamp01(gasLeft * 0.85 + 0.15 + desperation);
+  /*
+   * Doc 36 phase 2: the fade. This was `gasLeft × 0.85 + 0.15`, which spent the whole tank on
+   * *volume* — an average fighter threw half as much in round three as in round one (41 → 20 strikes
+   * attempted, docs/reviews/19 §2), where the sport loses perhaps a sixth. Fatigue already costs
+   * speed, accuracy, power and defence through `fatiguedEffect`; volume is the part a tired fighter
+   * holds on to longest, because he can still choose to throw. A gassed fighter still slows down —
+   * about a third of his output at an empty tank — but the fade lives mostly in *quality* now.
+   */
+  const base = clamp01(gasLeft * WORK_RATE_GAS + (1 - WORK_RATE_GAS) + desperation);
   return clamp01(base * traitMul(c.fighter.traits, 'strikeOutput'));
+}
+
+/**
+ * How a fighter spreads his output across the fight. Doc 36 phase 2.
+ *
+ * A smart, disciplined fighter paces: a little under full output while the fight is long, and a
+ * surge when the end is in sight. An aggressive, undisciplined one comes out hot and pays for it.
+ * Small on purpose — the tank is `cardio`'s job; this is the *choice* of how to spend it.
+ */
+export function paceMultiplier(c: Combatant, round: number, totalRounds: number): number {
+  const p = c.fighter.personality;
+  const planner = clamp01(((c.attrs.fightIq - 50) / 45) * 0.6 + ((p.discipline - 50) / 50) * 0.4);
+  const hothead = clamp01(((p.aggression - 55) / 45) * 0.7 + ((50 - p.discipline) / 50) * 0.3);
+  const last = round === totalRounds;
+  const first = round === 1;
+  return (
+    (first ? 1 + hothead * 0.08 - planner * 0.05 : 1) * (last ? 1 + planner * 0.08 - hothead * 0.04 : 1)
+  );
+}
+
+/**
+ * What one thrown strike costs the tank, for Cardio 50. Kicks cost more: a missed kick is a leg
+ * swung through the air and a body rotated with it.
+ *
+ * Doc 36 phase 2. Fatigue used to be charged per *second* only, so a volume puncher and a man
+ * standing still at the same range tired identically, and the only thing that made throwing more
+ * expensive was `riskLevel`'s small exertion term. Once volume stopped being the thing fatigue
+ * removed, nothing at all priced output — and the reckless plan, which buys its output for free,
+ * became the correct answer (`risk.test.ts`). About a quarter of an average round's fatigue now
+ * comes from what a fighter throws; the per-second rate was reduced to match.
+ */
+const STRIKE_COST: Readonly<Record<Weapon, number>> = {
+  punch: 0.00176,
+  kick: 0.00180,
+  knee: 0.00248,
+  elbow: 0.00138,
+};
+
+export function chargeStrike(c: Combatant, weapon: Weapon): void {
+  const cardio = effect(c.attrs.cardio, 1.2);
+  c.fatigue = clamp01(
+    c.fatigue +
+      (STRIKE_COST[weapon] *
+        // Sitting down on a shot costs more than flicking it — the other half of `commitment`.
+        riskProfile(c.plan.riskLevel).commitment ** 3 *
+        (1 + c.cutPenalty * 0.45) *
+        bodyDrag(c) *
+        traitMul(c.fighter.traits, 'fatigueRate')) /
+        cardio,
+  );
 }

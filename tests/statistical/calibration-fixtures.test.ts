@@ -193,7 +193,10 @@ describe('calibration fixtures span the rates a refit has to fit', () => {
     volume: 20, // measured 35.3x
     control: 15, // measured 23.9x, and 20.1x on the worst of three fight blocks
     hazard: 60, // measured 159.1x
-    conversion: 20, // measured 43.8x
+    // measured 43.8x; 15.3x after doc 36, whose submission contest reads each hold's technicality
+    // (part `strength` for pressure holds) and lets a failed hold chain into its partner — so a
+    // fighter with no submission game converts less badly than he did, and the span narrows.
+    conversion: 12,
   };
 
   it.each(RATES)('%s varies across the set', (rate) => {

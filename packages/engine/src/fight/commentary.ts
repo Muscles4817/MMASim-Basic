@@ -6,6 +6,7 @@
  * given a commentator's voice without any risk of changing an outcome.
  */
 
+import type { Technique } from './combos.js';
 import type { Rng } from '../core/rng.js';
 import { displayName } from '../domain/fighter.js';
 import type { Combatant } from './profile.js';
@@ -76,7 +77,11 @@ const MISS_VERBS = [
   'has it slipped —',
 ];
 
-const GROUND_POSITION_NAMES: Readonly<Record<GroundPosition, string>> = {
+export const GROUND_POSITION_NAMES: Readonly<Record<GroundPosition, string>> = {
+  legEntangle: 'tangled in the legs',
+  openGuard: 'in open guard',
+  turtle: 'riding the turtle',
+  northSouth: 'in north-south',
   guard: 'in guard',
   halfGuard: 'in half guard',
   sideControl: 'in side control',
@@ -84,13 +89,64 @@ const GROUND_POSITION_NAMES: Readonly<Record<GroundPosition, string>> = {
   back: 'on the back',
 };
 
-export const SUBMISSIONS: Readonly<Record<GroundPosition, readonly string[]>> = {
-  guard: ['triangle', 'armbar', 'omoplata', 'guillotine'],
-  halfGuard: ['kimura', 'arm-triangle', 'D’Arce'],
-  sideControl: ['arm-triangle', 'kimura', 'north-south choke'],
-  mount: ['armbar', 'arm-triangle', 'mounted guillotine'],
-  back: ['rear-naked choke', 'body triangle to RNC', 'bulldog choke'],
+
+/**
+ * The words for a technique `combos.ts` resolved, by lead foot.
+ *
+ * Doc 36 phase 2. When resolution knows *which* punch it was, the narrator does not get to pick:
+ * an orthodox fighter's power hand is his right and a southpaw's is his left, and a "straight left"
+ * from an orthodox fighter is a jab. Free shots still draw from `VOCABULARY`, filtered below.
+ */
+const TECHNIQUE_WORDS: Readonly<
+  Record<Exclude<Technique, 'feint' | 'anyKick'>, (southpaw: boolean) => readonly string[]>
+> = {
+  jab: () => ['a stiff jab', 'a snapping jab', 'a jab'],
+  straight: (sp) =>
+    sp ? ['a straight left', 'a straight left down the middle'] : ['a right hand down the pipe', 'a straight right'],
+  hook: (sp) => (sp ? ['a right hook', 'a short right hook'] : ['a left hook', 'a short left hook']),
+  uppercut: () => ['an uppercut', 'a short uppercut'],
+  overhand: (sp) => (sp ? ['an overhand left', 'a looping left hand'] : ['an overhand right', 'a looping right hand']),
+  bodyHook: (sp) =>
+    sp ? ['a right hook to the body', 'a digging right to the ribs'] : ['a left hook to the liver', 'a digging left to the body'],
+  bodyStraight: (sp) => (sp ? ['a straight left to the body'] : ['a straight right to the body']),
+  lowKick: () => ['a low kick to the thigh', 'a chopping leg kick'],
+  calfKick: () => ['a calf kick', 'a calf kick that buckles the leg'],
+  bodyKick: (sp) => (sp ? ['a left kick to the body', 'a roundhouse to the ribs'] : ['a body kick', 'a roundhouse to the ribs']),
+  headKick: () => ['a head kick', 'a high kick'],
+  teep: () => ['a teep to the midsection', 'a push kick to the body'],
 };
+
+/**
+ * Showpiece techniques from the free vocabulary, and the skill a fighter needs before the narrator
+ * will credit him with one. A 50-kicking wrestler does not land spinning back kicks; the audit found
+ * one doing exactly that (docs/reviews/19 §8).
+ */
+const FLASH_FLOOR: Readonly<Record<string, number>> = {
+  'a spinning back kick': 80,
+  'a question-mark kick': 78,
+  'a switch high kick': 68,
+  'a jumping knee to the head': 72,
+  'a check hook': 70,
+};
+
+function freeWords(attacker: Combatant, weapon: Weapon, target: StrikeTarget): readonly string[] {
+  const skill = weapon === 'kick' || weapon === 'knee' ? attacker.attrs.kicking : attacker.attrs.strikingOffence;
+  const all = VOCABULARY[weapon][target];
+  const ok = all.filter((w) => (FLASH_FLOOR[w] ?? 0) <= skill);
+  return ok.length > 0 ? ok : all;
+}
+
+function wordsFor(
+  attacker: Combatant,
+  weapon: Weapon,
+  target: StrikeTarget,
+  technique?: Technique,
+): readonly string[] {
+  if (technique && technique !== 'feint' && technique !== 'anyKick') {
+    return TECHNIQUE_WORDS[technique](attacker.fighter.stance === 'southpaw');
+  }
+  return freeWords(attacker, weapon, target);
+}
 
 export function strikeLanded(
   rng: Rng,
@@ -98,9 +154,11 @@ export function strikeLanded(
   target: StrikeTarget,
   weapon: Weapon,
   flushness: number,
+  technique?: Technique,
+  afterFeint = false,
 ): string {
-  const move = rng.pick(VOCABULARY[weapon][target]);
-  const name = surname(attacker);
+  const move = rng.pick(wordsFor(attacker, weapon, target, technique));
+  const name = afterFeint ? `${surname(attacker)} feints, then` : surname(attacker);
   if (flushness >= 2.0) return `${name} lands ${move} — flush, and that hurt.`;
   if (flushness >= 1.3) return `${name} lands ${move} clean.`;
   if (flushness <= 0.4) return `${name} gets ${move} through, but it was partially blocked.`;
@@ -112,10 +170,27 @@ export function strikeMissed(
   attacker: Combatant,
   target: StrikeTarget,
   weapon: Weapon,
+  technique?: Technique,
 ): string {
   // Takes the weapon, which it never used to. `strikeMissed` was called without `isKick`, so
   // every missed kick in the game was narrated as a missed punch.
-  return `${surname(attacker)} ${rng.pick(MISS_VERBS)} ${rng.pick(VOCABULARY[weapon][target])}.`;
+  return `${surname(attacker)} ${rng.pick(MISS_VERBS)} ${rng.pick(wordsFor(attacker, weapon, target, technique))}.`;
+}
+
+/** Two or more links of a drilled pattern landing in a row. Doc 36 phase 2. */
+export function combinationText(rng: Rng, attacker: Combatant, pattern: string, landed: number): string {
+  const name = surname(attacker);
+  if (landed >= 3) {
+    return rng.pick([
+      `${name} puts the whole of ${pattern} together — every shot lands.`,
+      `Beautiful combination from ${name}: ${pattern}, all of it on target.`,
+    ]);
+  }
+  return rng.pick([
+    `${name} strings ${pattern} together.`,
+    `${name} lands ${pattern} — that is the combination they have been drilling.`,
+    `Nice sequence from ${name}, ${pattern} finds a home.`,
+  ]);
 }
 
 /**
@@ -124,8 +199,28 @@ export function strikeMissed(
  * Every clinch strike in the game used to be the same hardcoded sentence, built in `simulate.ts`
  * where no other line lives. It is prose, so it belongs here, and it varies like everything else.
  */
-export function clinchStrikeText(rng: Rng, attacker: Combatant, target: StrikeTarget): string {
-  return `${surname(attacker)} ${rng.pick(['digs', 'drives', 'thuds'])} ${rng.pick(VOCABULARY.knee[target])} in against the fence.`;
+export function clinchStrikeText(
+  rng: Rng,
+  attacker: Combatant,
+  target: StrikeTarget,
+  weapon: Weapon = 'knee',
+): string {
+  if (weapon === 'knee') {
+    return `${surname(attacker)} ${rng.pick(['digs', 'drives', 'thuds'])} ${rng.pick(VOCABULARY.knee[target])} in against the fence.`;
+  }
+  const words: Readonly<Record<'punch' | 'elbow' | 'kick', Readonly<Partial<Record<StrikeTarget, readonly string[]>>>>> = {
+    punch: {
+      head: ['a short uppercut inside', 'a dirty-boxing hook off the collar tie', 'short punches in the tie-up'],
+      body: ['short hooks to the body in the tie-up', 'a digging uppercut to the body'],
+    },
+    elbow: {
+      head: ['a short elbow in the clinch', 'an elbow as they break'],
+      body: ['an elbow to the ribs'],
+    },
+    kick: { legs: ['a stomp to the foot'] },
+  };
+  const list = words[weapon as 'punch' | 'elbow' | 'kick'][target] ?? VOCABULARY[weapon][target];
+  return `${surname(attacker)} lands ${rng.pick(list)}.`;
 }
 
 export function knockdownText(rng: Rng, attacker: Combatant, defender: Combatant): string {
@@ -305,6 +400,28 @@ export function rangeFailText(
   ]);
 }
 
+export function legEntryText(rng: Rng, attacker: Combatant): string {
+  return rng.pick([
+    `${surname(attacker)} dives on a leg — they are hunting a leg lock!`,
+    `${surname(attacker)} spins underneath and entangles the legs.`,
+  ]);
+}
+
+export function guardRecoveryText(rng: Rng, defender: Combatant, to: GroundPosition): string {
+  const BOTTOM_NAMES: Partial<Record<GroundPosition, string>> = {
+    guard: 'closed guard',
+    openGuard: 'open guard',
+    halfGuard: 'half guard',
+    turtle: 'the turtle',
+    sideControl: 'side control',
+  };
+  const where = BOTTOM_NAMES[to] ?? 'a better position';
+  return rng.pick([
+    `${surname(defender)} shrimps out and recovers to ${where}.`,
+    `Good hips from ${surname(defender)}, who works back to ${where}.`,
+  ]);
+}
+
 export function advanceText(attacker: Combatant, to: GroundPosition): string {
   return `${surname(attacker)} advances — now ${GROUND_POSITION_NAMES[to]}.`;
 }
@@ -433,4 +550,77 @@ export function finishText(
 export function roundStartText(round: number, totalRounds: number): string {
   if (round === totalRounds && totalRounds === 5) return `Round ${round} — championship round.`;
   return `Round ${round}.`;
+}
+
+// --- Wrestling sequences (doc 36 phase 5) ----------------------------------------------------
+
+const ENTRY_WORDS: Readonly<Record<TakedownEntry, string>> = {
+  doubleLeg: 'the double',
+  singleLeg: 'the single',
+  reactiveShot: 'another shot',
+  bodyLock: 'the body lock',
+  trip: 'the trip',
+};
+
+export function chainText(rng: Rng, actor: Combatant, next: TakedownEntry): string {
+  return rng.pick([
+    `${surname(actor)} does not let go — straight into ${ENTRY_WORDS[next]}.`,
+    `${surname(actor)} chains it: stuffed, and immediately switching to ${ENTRY_WORDS[next]}.`,
+    `Relentless from ${surname(actor)}, who keeps working, now for ${ENTRY_WORDS[next]}.`,
+  ]);
+}
+
+export function frontHeadlockText(rng: Rng, holder: Combatant, shooter: Combatant): string {
+  return rng.pick([
+    `${surname(holder)} sprawls and comes up with ${surname(shooter)}'s head in a front headlock.`,
+    `${surname(holder)} snaps ${surname(shooter)} down off the shot and has the front headlock.`,
+  ]);
+}
+
+export function goBehindText(rng: Rng, holder: Combatant, to: GroundPosition): string {
+  return to === 'back'
+    ? `${surname(holder)} spins behind off the front headlock and takes the back!`
+    : rng.pick([
+        `${surname(holder)} goes behind and rides the turtle.`,
+        `${surname(holder)} spins to the back and has them turtled up.`,
+      ]);
+}
+
+export function matReturnText(rng: Rng, top: Combatant, bottom: Combatant): string {
+  return rng.pick([
+    `${surname(bottom)} makes it to the feet — and ${surname(top)} drags them straight back down.`,
+    `Mat return from ${surname(top)}! ${surname(bottom)} worked so hard to get up and is right back on the floor.`,
+  ]);
+}
+
+export function backExposedText(rng: Rng, bottom: Combatant, top: Combatant, to: GroundPosition): string {
+  return to === 'back'
+    ? `${surname(bottom)} turns to get up and gives up the back — ${surname(top)} takes it!`
+    : rng.pick([
+        `${surname(bottom)} turtles to get up and ${surname(top)} is all over the back.`,
+        `${surname(bottom)} turns away to stand, and ${surname(top)} rides the turtle.`,
+      ]);
+}
+
+export function scrambleText(
+  rng: Rng,
+  bottom: Combatant,
+  top: Combatant,
+  outcome: 'bothUp' | 'reversed' | 'backTaken',
+): string {
+  switch (outcome) {
+    case 'bothUp':
+      return rng.pick([`A wild scramble — and both of them come up on their feet.`, `Scramble! They separate and reset standing.`]);
+    case 'reversed':
+      return `${surname(bottom)} wins the scramble and comes up on top!`;
+    case 'backTaken':
+      return `${surname(bottom)} tries to come up and ${surname(top)} wins the scramble — taking the back!`;
+  }
+}
+
+export function stanceSwitchText(rng: Rng, c: Combatant, now: string): string {
+  return rng.pick([
+    `${surname(c)} switches to ${now}.`,
+    `${surname(c)} changes stance — fighting ${now} now.`,
+  ]);
 }

@@ -68,7 +68,7 @@ export const WEAPON_PROFILE: Readonly<Record<Weapon, WeaponProfile>> = {
    * `strikingOffence`, and most fighters' kicking is the lower of the two. So the profile only
    * has to state the part the roll cannot: when a kick lands, it lands with a shin.
    */
-  kick: { damage: 1.32, hazard: 1.5, cut: 0.1, accuracy: 'kicking' },
+  kick: { damage: 1.4, hazard: 1.7, cut: 0.1, accuracy: 'kicking' },
   /*
    * The heaviest strike in the sport and the one that ends clinch exchanges. Its scarcity is
    * structural rather than a number here: knees only exist in the clinch, which resolves 0.68
