@@ -29,6 +29,7 @@ import type { Corner, DamageRegion, FightStats, StrikeTarget } from './types.js'
 import { emptyStats, type GroundPosition, type Position } from './types.js';
 import { styleOf, type StyleProfile } from './style.js';
 import { createMemory, type FightMemory } from './memory.js';
+import type { InFightInjury } from './stories.js';
 
 /**
  * Does this fighter reach for striking or for grappling first? 0.15 … 0.85.
@@ -145,6 +146,14 @@ export interface Combatant {
   style: StyleProfile;
   /** What this fighter remembers of the fight so far. Doc 36 phase 1. */
   mem: FightMemory;
+
+  /** Injuries picked up tonight. Doc 36 phase 3, `stories.ts`. */
+  injuries: InFightInjury[];
+  /** The lead leg has been chopped down far enough that he cannot stand on it properly. */
+  legsCompromised: boolean;
+  /** Fighting out of the other stance tonight — a compromised leg, or a switch-hitter's choice. */
+  stanceSwitched: boolean;
+  secondWindUsed: boolean;
 }
 
 /**
@@ -224,7 +233,9 @@ export function createCombatant(corner: Corner, fighter: Fighter, plan: GamePlan
   return {
     corner,
     fighter,
-    attrs: fighter.attributes,
+    // A copy, not the fighter's own object: an injury picked up tonight lowers *tonight's* numbers
+    // (`stories.ts`), and the roster's fighter must leave the cage with the ratings he walked in with.
+    attrs: { ...fighter.attributes },
     derived: deriveRatings(fighter.attributes),
     plan,
     tendencies: deriveTendencies(fighter),
@@ -257,6 +268,10 @@ export function createCombatant(corner: Corner, fighter: Fighter, plan: GamePlan
 
     style: styleOf(fighter),
     mem: createMemory(),
+    injuries: [],
+    legsCompromised: false,
+    stanceSwitched: false,
+    secondWindUsed: false,
   };
 }
 

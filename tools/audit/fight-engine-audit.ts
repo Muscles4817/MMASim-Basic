@@ -90,6 +90,17 @@ for (const [name, mkR, mkB] of pairs) {
   let positionChanges = 0;
   let sameSubRepeat = 0,
     subAttempts = 0;
+  const stories: Record<string, number> = {};
+  const STORY: [string, RegExp][] = [
+    ['bodyFold', /folds —|doubles over/],
+    ['legGone', /leg simply will not/],
+    ['legHobbled', /lead leg is buckling|limping now/],
+    ['checked', /checks the kick/],
+    ['injury', /shaking out the hand|limping on the kicking foot|holding the ribs|eye swelling|favouring the arm|shoulder hanging|weight on that leg|damaged ankle|stiff in the neck/],
+    ['secondWind', /second wind|walking forward again/],
+    ['survivalClinch', /grabs hold to survive/],
+    ['combination', /./],
+  ];
   let phaseTime = { distance: 0, clinch: 0, ground: 0 } as Record<string, number>;
 
   for (let i = 0; i < N; i++) {
@@ -102,6 +113,7 @@ for (const [name, mkR, mkB] of pairs) {
     inc(methods, r.method);
     const ev = r.events;
     for (const e of ev) {
+      for (const [k, re] of STORY) if ((k === 'combination' ? e.kind === 'combination' : e.kind !== 'combination') && re.test(e.text)) inc(stories, k);
       inc(kinds, e.kind);
       if (e.weapon) inc(weapons, `${e.weapon}/${e.target}`);
       if (
@@ -266,6 +278,7 @@ for (const [name, mkR, mkB] of pairs) {
     `| same sub repeated in fight ${pct(sameSubRepeat / Math.max(1, subAttempts))}`,
   );
   console.log('takedown entries:', fmt(tdEntries));
+  console.log('stories per 100 fights:', Object.entries(stories).map(([k, v]) => `${k} ${(100 * v / N).toFixed(1)}`).join(', '));
   console.log(`distinct landed strike descriptions: ${strikeLines.size}`);
   console.log(
     'event kinds/fight:',

@@ -9,6 +9,7 @@
 import type { FighterId } from '../core/ids.js';
 import type { FinishMethod } from '../domain/fighter.js';
 import type { FoulIncident } from './fouls.js';
+import type { InFightInjury } from './stories.js';
 
 export type Corner = 'red' | 'blue';
 
@@ -406,6 +407,12 @@ export interface FightResult {
   deductions: Record<Corner, number>;
   /** Set when the referee's tendencies materially changed the result. Used by commentary. */
   refereeNote?: string;
+  /**
+   * Injuries picked up during the fight, per corner (doc 36 phase 3). The post-fight medical in
+   * `app/game/fightInjuries.ts` makes these official rather than rolling a different injury. Optional
+   * because a stored result written before this existed has none.
+   */
+  injuries?: Record<Corner, readonly InFightInjury[]>;
 }
 
 /**

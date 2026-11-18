@@ -71,7 +71,16 @@ import {
   type Technique,
 } from './combos.js';
 import { inFightRead, notePattern, patternFamiliarity } from './mind.js';
-import { afterStrikeStory } from './stories.js';
+import {
+  afterStrikeStory,
+  checkedKick,
+  cornerStops,
+  maybeSecondWind,
+  survivalRoute,
+  survivedLock,
+  type InFightInjury,
+  type StoryContext,
+} from './stories.js';
 import { chooseSubmission, submissionsFrom, SUBMISSIONS as SUBMISSION_META } from './submissions.js';
 import {
   applyStrike,
@@ -363,6 +372,30 @@ export function simulateFight(config: FightConfig): FightResult {
       break;
     }
 
+    /*
+     * The corner. A fighter too damaged to go on is pulled out on the stool (doc 36 phase 3) —
+     * `'retirement'` was a finish method with narration and nothing that produced it.
+     */
+    if (round < rounds) {
+      const cornerRng = rng.fork(`corner:${round}`);
+      for (const corner of ['red', 'blue'] as const) {
+        if (cornerStops(cornerRng, corners[corner])) {
+          ending = { method: 'retirement', winner: OTHER_CORNER[corner] };
+          endRound = round;
+          endTime = roundSeconds;
+          events.push({
+            round,
+            timeSeconds: roundSeconds,
+            kind: 'finish',
+            emphasis: 'critical',
+            text: `${corners[corner].fighter.lastName}'s corner has seen enough — they will not come out for round ${round + 1}. ${say.fullDisplayName(corners[OTHER_CORNER[corner]])} wins.`,
+          });
+          break;
+        }
+      }
+      if (ending) break;
+    }
+
     // Between rounds: recover and reset to standing.
     if (round < rounds) {
       recoverBetweenRounds(red);
@@ -370,6 +403,19 @@ export function simulateFight(config: FightConfig): FightResult {
       // Sixty seconds and a corner shouting is worth some of the plan back. Never all of it.
       restorePlanIntegrity(red);
       restorePlanIntegrity(blue);
+      // A fighter who just lost a round badly may come out of the corner different.
+      const story: StoryContext = {
+        round: round + 1,
+        rng: rng.fork(`secondWind:${round}`),
+        emit: (kind, text, corner, emphasis) =>
+          events.push({ round: round + 1, timeSeconds: 0, kind, text, corner, emphasis }),
+      };
+      for (const corner of ['red', 'blue'] as const) {
+        const mine = tally[corner];
+        const theirs = tally[OTHER_CORNER[corner]];
+        const of = (t: RoundTally) => t.damageDealt + t.significantStrikes + t.controlSeconds * 0.15;
+        maybeSecondWind(story, corners[corner], of(theirs) > of(mine) * 1.5);
+      }
       state.unanswered = { red: 0, blue: 0 };
       // Every round starts standing, in the centre. Carrying position across the bell is a
       // rules violation and a large one: without this, a round that ended in mount *begins*
@@ -440,6 +486,7 @@ export function simulateFight(config: FightConfig): FightResult {
     damage: { red: damageReport(red, method, winnerId), blue: damageReport(blue, method, winnerId) },
     fouls: state.fouls,
     deductions: { ...state.deductions },
+    injuries: { red: red.injuries.slice(), blue: blue.injuries.slice() },
   };
 }
 
@@ -1604,6 +1651,34 @@ function pickShot(
  * the knockout hazard, which turns any accuracy edge into a near-certain knockout. Real
  * three-round fights land 50–100 significant strikes between them.
  */
+/**
+ * The two survival routes that change the position rather than the exchange: grab hold, or shoot.
+ * Returns the outcome when the route resolved the beat, otherwise nothing.
+ */
+function trySurvive(
+  ctx: ExchangeContext,
+  attacker: Combatant,
+  hurt: Combatant,
+  route: ReturnType<typeof survivalRoute>,
+): ExchangeOutcome | undefined {
+  const { rng, state, emit } = ctx;
+  if (route === 'tieUp') {
+    const grab = fatiguedEffect(hurt.derived.clinchOffence, 'strength', hurt.fatigue) * 0.8;
+    const deny = fatiguedEffect(attacker.derived.clinchDefence, 'strength', attacker.fatigue);
+    if (rng.chance(grab / (grab + deny))) {
+      state.position = 'clinch';
+      state.clinchControl = hurt.corner;
+      state.placedBy = hurt.corner;
+      state.stalledSeconds = 0;
+      emit('clinch', `${hurt.fighter.lastName} grabs hold to survive — smothering the follow-up.`, hurt.corner);
+      return { seconds: rng.int(6, 12) };
+    }
+    return undefined;
+  }
+  if (route === 'shoot') return resolveTakedown(ctx, hurt, attacker, 'distance');
+  return undefined;
+}
+
 function resolveStrikeExchange(
   ctx: ExchangeContext,
   actor: Combatant,
@@ -1615,8 +1690,26 @@ function resolveStrikeExchange(
   const { rng } = ctx;
   const seconds = rng.int(6, 14);
 
-  const lead = throwBurst(ctx, actor, target, prefersKick, 1);
+  /*
+   * A hurt man being come at does something about it, and what he does is who he is (doc 36 phase 3,
+   * `survivalRoute`). Before this he did nothing at all: no counter, no clinch, no shot — he stood
+   * there at 0.45 of his defence and waited for the referee.
+   */
+  let route: ReturnType<typeof survivalRoute> | undefined;
+  if (target.hurtSeconds > 0 && ctx.state.position === 'distance') {
+    route = survivalRoute(rng, target);
+    const survived = trySurvive(ctx, actor, target, route);
+    if (survived) return survived;
+  }
+
+  const lead = throwBurst(ctx, actor, target, prefersKick, route === 'run' ? 0.5 : 1, route === 'shell' ? 1.35 : 1);
   if (lead.ending) return { seconds, ending: lead.ending };
+  // Covering up is how fights get stopped: nothing is coming back, and the referee is counting.
+  if (route === 'shell' && lead.landedAny) ctx.state.unanswered[target.corner]++;
+  if (route === 'fireBack' && ctx.state.position === 'distance') {
+    const swing = throwBurst(ctx, target, actor, rng.chance(kickLean(target)), 0.75);
+    if (swing.ending) return { seconds, ending: swing.ending };
+  }
 
   // The counter. Smaller than the lead burst — you are reacting, not initiating — unless
   // countering is the whole plan, which is what makes the `counter` approach worth picking.
@@ -1681,6 +1774,8 @@ function throwBurst(
   target: Combatant,
   prefersKick: boolean,
   scale: number,
+  /** A defender covering up is harder to hit cleanly. */
+  defenceScale = 1,
 ): BurstOutcome {
   const { rng, state, tally, emit, referee } = ctx;
 
@@ -1796,6 +1891,7 @@ function throwBurst(
       fatiguedEffect(target.attrs.strikingDefence, 'strikingDefence', target.fatigue) *
       (1 + bonus) *
       (target.hurtSeconds > 0 ? 0.45 : 1) *
+      defenceScale *
       legImpairment(target);
 
     actor.stats.significantStrikesAttempted++;
@@ -1811,6 +1907,9 @@ function throwBurst(
     if (inPattern) thrownInPattern++;
     if (!connects) {
       run = 0;
+      if (weapon === 'kick' && strikeTarget === 'legs' && checkedKick(storyOf(ctx), actor, target)) {
+        emit('note', `${target.fighter.lastName} checks the kick — that one hurt the kicker.`, target.corner);
+      }
       // A missed kick is now narrated as a missed kick. `strikeMissed` never received `isKick`,
       // so every miss in the game read as a missed punch.
       if (i === 0) {
@@ -1958,6 +2057,10 @@ function resolveKnockdown(
   return undefined;
 }
 
+function storyOf(ctx: ExchangeContext): StoryContext {
+  return { round: ctx.round, rng: ctx.rng, emit: ctx.emit };
+}
+
 /** What a landed strike does beyond its damage. See `stories.ts`. */
 function afterStrike(
   ctx: ExchangeContext,
@@ -1967,7 +2070,7 @@ function afterStrike(
   weapon: Weapon,
   result: StrikeOutcome,
 ): Ending | undefined {
-  const method = afterStrikeStory({ round: ctx.round }, actor, target, strikeTarget, weapon, result);
+  const method = afterStrikeStory(storyOf(ctx), actor, target, strikeTarget, weapon, result);
   return method ? { method, winner: actor.corner } : undefined;
 }
 
@@ -2192,7 +2295,7 @@ function throwClinchStrike(
     emit('knockdown', say.knockdownText(rng, actor, target), actor.corner, 'critical');
     return resolveKnockdown(ctx, actor, target, result.flushness);
   }
-  return undefined;
+  return afterStrike(ctx, actor, target, strikeTarget, 'knee', result);
 }
 
 /**
@@ -2671,6 +2774,9 @@ function resolveGroundTop(
         emit('knockdown', say.knockdownText(rng, actor, target), actor.corner, 'critical');
       }
 
+      const story = afterStrike(ctx, actor, target, groundTarget, groundWeapon, result);
+      if (story) return { seconds: 10, ending: story };
+
       if (result.knockdown || target.hurtSeconds > 0) {
         state.unanswered[target.corner]++;
         if (shouldRefereeStop(target, ctx.referee.stoppageTrigger, state.unanswered[target.corner])) {
@@ -2762,6 +2868,8 @@ function resolveSubmission(
   }
 
   actor.mem.lastSubFailed = key;
+  // A deep lock that was survived rather than escaped may have cost the joint.
+  if (deep) survivedLock(storyOf(ctx), target, SUBMISSION_META[key].injury, edge);
   emit('submissionEscape', say.submissionEscapeText(rng, target), target.corner);
   // A failed submission from the bottom often costs position; from the top it costs little.
   if (fromBottom && rng.chance(0.35)) {

@@ -59,9 +59,19 @@ import type { Combatant } from './profile.js';
  */
 const STANCE_EDGE = 0.14;
 
+/**
+ * Which foot leads *right now*. A fighter who has switched tonight — a chopped-up lead leg, or a
+ * switch-hitter's choice (doc 36 phases 3 and 8) — stands the other way round.
+ */
+export function stanceNow(c: Combatant): 'orthodox' | 'southpaw' | 'switch' {
+  const base = c.fighter.stance;
+  if (!c.stanceSwitched || base === 'switch') return base;
+  return base === 'orthodox' ? 'southpaw' : 'orthodox';
+}
+
 export function stanceEdge(actor: Combatant, target: Combatant): number {
-  if (actor.fighter.stance !== 'southpaw') return 1;
-  if (target.fighter.stance !== 'orthodox') return 1;
+  if (stanceNow(actor) !== 'southpaw') return 1;
+  if (stanceNow(target) !== 'orthodox') return 1;
   const solved = clamp01(remap(target.attrs.fightIq, 40, 90, 0, 0.68));
   return 1 + STANCE_EDGE * (1 - solved);
 }

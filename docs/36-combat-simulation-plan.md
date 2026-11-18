@@ -200,3 +200,17 @@ unchanged apart from RNG draw order. `intent-authority` golden re-recorded.
 - `mass-experiments` C1.
 - `reduced-fidelity` ×3 (needs the Reduced refit).
 - `intent-authority` golden (re-record at the end).
+
+### Phase 3 — landed
+`stories.ts`, per 100 fights in the audit matchups:
+- Body-shot folds: 1–10, some ending in TKO. A fold is more likely once body damage has built up.
+- Compromised lead leg: 1–2, which forces a stance switch. A leg-kick TKO past 76 leg damage.
+- Checked low kicks: 2–110, by stance style. A square stance checks most.
+- In-fight injuries: hand on a skull, foot on a check, rib, swollen eye, and joints from survived locks (more often for stubborn fighters).
+- Hurt fighters choose a survival route by character: tie up, shoot, shell (invites the stoppage), fire back, or run.
+- Once-a-fight second wind, driven by resilience and composure.
+- Corner retirement between rounds, about 0.3–1.7 %.
+
+In-fight injuries are returned on `FightResult.injuries` and made official by
+`app/game/fightInjuries.ts`. Combatants carry their own attribute copy, so tonight's injuries never
+touch the stored fighter.
