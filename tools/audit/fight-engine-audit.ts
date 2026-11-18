@@ -99,6 +99,12 @@ for (const [name, mkR, mkB] of pairs) {
     ['injury', /shaking out the hand|limping on the kicking foot|holding the ribs|eye swelling|favouring the arm|shoulder hanging|weight on that leg|damaged ankle|stiff in the neck/],
     ['secondWind', /second wind|walking forward again/],
     ['survivalClinch', /grabs hold to survive/],
+    ['chainLink', /does not let go|chains it|Relentless from/],
+    ['frontHeadlock', /front headlock/],
+    ['matReturn', /Mat return|drags them straight back/],
+    ['backExposed', /gives up the back|turtles to get up|turns away to stand/],
+    ['scramble', /scramble/i],
+    ['corner', /^In .* corner:/],
     ['combination', /./],
   ];
   let phaseTime = { distance: 0, clinch: 0, ground: 0 } as Record<string, number>;
@@ -140,16 +146,13 @@ for (const [name, mkR, mkB] of pairs) {
     const actionKinds = ['strike', 'kick', 'takedown', 'takedownStuffed', 'clinch', 'clinchBreak'];
     const acts = ev.filter((e) => actionKinds.includes(e.kind));
     for (let k = 0; k + 1 < acts.length; k++) {
-      const a = acts[k]!,
-        b = acts[k + 1]!;
-      const bIsTdBySame =
-        b.takedown &&
-        ((b.kind === 'takedown' && b.corner === a.corner) ||
-          (b.kind === 'takedownStuffed' && b.corner !== a.corner));
-      if (a.kind === 'takedownStuffed') {
-        chainTDopp++;
-        if (bIsTdBySame && a.corner === b.corner) chainTD++;
-      }
+      const a = acts[k]!, b = acts[k + 1]!;
+      if (a.kind !== 'takedownStuffed') continue;
+      // The stuffed event is told from the defender's corner; the shooter is the other one.
+      const shooter = a.corner === 'red' ? 'blue' : 'red';
+      chainTDopp++;
+      const again = (b.kind === 'takedown' && b.corner === shooter) || (b.kind === 'takedownStuffed' && b.corner === a.corner);
+      if (again) chainTD++;
     }
     // base rate: TD attempts / all distance actions
     for (const a of acts) {

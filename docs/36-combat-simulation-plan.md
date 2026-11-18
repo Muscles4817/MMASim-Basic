@@ -228,3 +228,14 @@ Open, carried to phase 9:
 - Upsets at 54.7 % against 55 %.
 - C1 round-three volume.
 - `calibration-fixtures` confound canary.
+
+### Phase 5 — landed
+`wrestling.ts`:
+- **Chains.** A stuffed shot re-links (single → double → body lock → trip), driven by `chainWrestling`, the plan and the tank. Each link gets a growing edge and every sprawl costs the defender gas.
+- **Front headlock** off a sprawl: go-behind (turtle or back), a front-headlock choke from the repertoire (guillotine, D'Arce, anaconda), or a snap-down reset.
+- **Mat returns** when the bottom fighter stands.
+- **Back exposure** when a get-up fails.
+- **Scrambles** off failed sweeps: both up, reversed, or back taken.
+
+Measured, P(re-shot | stuffed) against the baseline takedown share: grinder **59 % vs 17 %** (was 2.9 % vs 17.8 %), even pair 17 % vs 13 % (was 4 % vs 13 %).
+The submission contest now reads the hold's technicality (submissions against strength), its finishing factor and a small signature bonus.

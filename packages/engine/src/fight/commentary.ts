@@ -509,3 +509,69 @@ export function roundStartText(round: number, totalRounds: number): string {
   if (round === totalRounds && totalRounds === 5) return `Round ${round} — championship round.`;
   return `Round ${round}.`;
 }
+
+// --- Wrestling sequences (doc 36 phase 5) ----------------------------------------------------
+
+const ENTRY_WORDS: Readonly<Record<TakedownEntry, string>> = {
+  doubleLeg: 'the double',
+  singleLeg: 'the single',
+  reactiveShot: 'another shot',
+  bodyLock: 'the body lock',
+  trip: 'the trip',
+};
+
+export function chainText(rng: Rng, actor: Combatant, next: TakedownEntry): string {
+  return rng.pick([
+    `${surname(actor)} does not let go — straight into ${ENTRY_WORDS[next]}.`,
+    `${surname(actor)} chains it: stuffed, and immediately switching to ${ENTRY_WORDS[next]}.`,
+    `Relentless from ${surname(actor)}, who keeps working, now for ${ENTRY_WORDS[next]}.`,
+  ]);
+}
+
+export function frontHeadlockText(rng: Rng, holder: Combatant, shooter: Combatant): string {
+  return rng.pick([
+    `${surname(holder)} sprawls and comes up with ${surname(shooter)}'s head in a front headlock.`,
+    `${surname(holder)} snaps ${surname(shooter)} down off the shot and has the front headlock.`,
+  ]);
+}
+
+export function goBehindText(rng: Rng, holder: Combatant, to: GroundPosition): string {
+  return to === 'back'
+    ? `${surname(holder)} spins behind off the front headlock and takes the back!`
+    : rng.pick([
+        `${surname(holder)} goes behind and rides the turtle.`,
+        `${surname(holder)} spins to the back and has them turtled up.`,
+      ]);
+}
+
+export function matReturnText(rng: Rng, top: Combatant, bottom: Combatant): string {
+  return rng.pick([
+    `${surname(bottom)} makes it to the feet — and ${surname(top)} drags them straight back down.`,
+    `Mat return from ${surname(top)}! ${surname(bottom)} worked so hard to get up and is right back on the floor.`,
+  ]);
+}
+
+export function backExposedText(rng: Rng, bottom: Combatant, top: Combatant, to: GroundPosition): string {
+  return to === 'back'
+    ? `${surname(bottom)} turns to get up and gives up the back — ${surname(top)} takes it!`
+    : rng.pick([
+        `${surname(bottom)} turtles to get up and ${surname(top)} is all over the back.`,
+        `${surname(bottom)} turns away to stand, and ${surname(top)} rides the turtle.`,
+      ]);
+}
+
+export function scrambleText(
+  rng: Rng,
+  bottom: Combatant,
+  top: Combatant,
+  outcome: 'bothUp' | 'reversed' | 'backTaken',
+): string {
+  switch (outcome) {
+    case 'bothUp':
+      return rng.pick([`A wild scramble — and both of them come up on their feet.`, `Scramble! They separate and reset standing.`]);
+    case 'reversed':
+      return `${surname(bottom)} wins the scramble and comes up on top!`;
+    case 'backTaken':
+      return `${surname(bottom)} tries to come up and ${surname(top)} wins the scramble — taking the back!`;
+  }
+}

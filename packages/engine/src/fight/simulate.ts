@@ -72,6 +72,18 @@ import {
 } from './combos.js';
 import { cornerAdvice, familyLean, inFightRead, notePattern, patternFamiliarity } from './mind.js';
 import {
+  MAX_CHAIN,
+  backExposureChance,
+  chainChance,
+  chainEdge,
+  chainedEntry,
+  frontHeadlockChance,
+  headlockChoke,
+  headlockOption,
+  matReturnChance,
+  scramble,
+} from './wrestling.js';
+import {
   afterStrikeStory,
   checkedKick,
   cornerStops,
@@ -81,7 +93,12 @@ import {
   type InFightInjury,
   type StoryContext,
 } from './stories.js';
-import { chooseSubmission, submissionsFrom, SUBMISSIONS as SUBMISSION_META } from './submissions.js';
+import {
+  chooseSubmission,
+  submissionsFrom,
+  SUBMISSIONS as SUBMISSION_META,
+  type SubmissionKey,
+} from './submissions.js';
 import {
   applyStrike,
   decayHurt,
@@ -2203,8 +2220,11 @@ function resolveTakedown(
   actor: Combatant,
   target: Combatant,
   from: 'distance' | 'clinch',
+  /** The entry this link of a chain is forced to, when it is one. */
+  chained?: TakedownEntry,
 ): ExchangeOutcome {
   const { rng, state, tally, emit } = ctx;
+  const depth = actor.mem.chainDepth;
 
   const reads: ReadKey[] = from === 'clinch' ? ['bodyLock', 'fenceClinch'] : ['singleLeg', 'doubleLeg'];
   const bonus = prepBonus(target, actor, reads) + inFightRead(target, 'takedown');
@@ -2212,7 +2232,8 @@ function resolveTakedown(
   const offence =
     fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
     momentumMultiplier(actor) *
-    (from === 'clinch' ? 1.25 : 1);
+    (from === 'clinch' ? 1.25 : 1) *
+    chainEdge(actor, depth);
 
   const defence =
     fatiguedEffect(target.attrs.takedownDefence, 'takedownDefence', target.fatigue) *
@@ -2222,7 +2243,7 @@ function resolveTakedown(
     (target.hurtSeconds > 0 ? 0.5 : 1);
 
   actor.stats.takedownsAttempted++;
-  const entry = pickTakedownEntry(rng, actor, from);
+  const entry = chained ?? pickTakedownEntry(rng, actor, from);
 
   const lands = rng.chance(offence / (offence + defence));
   remember(actor, target, 'takedown', lands, nowOf(ctx));
@@ -2235,6 +2256,7 @@ function resolveTakedown(
     state.groundPosition = landingPosition(rng, actor, entry);
     state.stalledSeconds = 0;
     shiftMomentum(actor, target, 0.25);
+    actor.mem.chainDepth = 0;
     emit(
       'takedown',
       say.takedownText(rng, actor, state.groundPosition, entry),
@@ -2253,6 +2275,29 @@ function resolveTakedown(
     undefined,
     { takedown: entry },
   );
+  // Every sprawl costs the man sprawling. Chain wrestling is how a wrestler spends your tank.
+  target.fatigue = clamp01(target.fatigue + 0.008);
+
+  /*
+   * The chain (doc 36 phase 5, `wrestling.ts`). The stuffed shot is the setup for the next one:
+   * the single becomes a double, the double a body lock, and the defender's weight is already
+   * committed to the first.
+   */
+  if (depth < MAX_CHAIN && rng.chance(chainChance(actor, depth))) {
+    actor.mem.chainDepth = depth + 1;
+    const next = chainedEntry(rng, entry);
+    emit('note', say.chainText(rng, actor, next), actor.corner);
+    const link = resolveTakedown(ctx, actor, target, from === 'clinch' || next === 'bodyLock' || next === 'trip' ? 'clinch' : 'distance', next);
+    actor.mem.chainDepth = 0;
+    return { seconds: Math.min(20, link.seconds + rng.int(2, 5)), ending: link.ending };
+  }
+  actor.mem.chainDepth = 0;
+
+  // The other side of the sprawl: he came up holding a head.
+  if (from === 'distance' && rng.chance(frontHeadlockChance(target))) {
+    return resolveFrontHeadlock(ctx, target, actor);
+  }
+
   // A stuffed shot from the clinch usually ends up back at distance.
   if (from === 'clinch' && rng.chance(0.5)) {
     state.position = 'distance';
@@ -2263,6 +2308,58 @@ function resolveTakedown(
     state.rangeSettled = 0.25;
   }
   return { seconds: rng.int(6, 12) };
+}
+
+/**
+ * A head in his arms after a sprawl: go behind, choke, or snap him down and reset.
+ *
+ * The beat that gives a wrestler's *defence* an offence of its own, and the home of the guillotine,
+ * the D'Arce and the anaconda — chokes that live off a stuffed shot and that the old engine could
+ * only ever narrate from guard.
+ */
+function resolveFrontHeadlock(ctx: ExchangeContext, holder: Combatant, shooter: Combatant): ExchangeOutcome {
+  const { rng, state, emit } = ctx;
+  emit('note', say.frontHeadlockText(rng, holder, shooter), holder.corner);
+  const option = headlockOption(rng, holder);
+
+  if (option === 'choke') {
+    const key = headlockChoke(rng, holder);
+    const result = lockContest(ctx, holder, shooter, key, 0.95, ['guillotine']);
+    if (result.ending) return { seconds: rng.int(8, 16), ending: result.ending };
+    // Survived it: usually they are left tangled on the floor with the choker underneath.
+    if (rng.chance(0.5)) {
+      state.position = 'ground';
+      state.groundTop = shooter.corner;
+      state.groundPosition = 'guard';
+      state.placedBy = holder.corner;
+      state.stalledSeconds = 0;
+      return { seconds: rng.int(8, 14) };
+    }
+    return { seconds: rng.int(8, 14) };
+  }
+
+  if (option === 'goBehind') {
+    const spin = fatiguedEffect(holder.attrs.scrambling, 'scrambling', holder.fatigue);
+    const turn = fatiguedEffect(shooter.attrs.scrambling, 'scrambling', shooter.fatigue);
+    if (rng.chance(spin / (spin + turn))) {
+      state.position = 'ground';
+      state.groundTop = holder.corner;
+      state.groundPosition = rng.chance(0.35) ? 'back' : 'turtle';
+      state.placedBy = holder.corner;
+      state.stalledSeconds = 0;
+      ctx.tally[holder.corner].takedowns++;
+      holder.stats.takedownsLanded++;
+      holder.stats.takedownsAttempted++;
+      shiftMomentum(holder, shooter, 0.25);
+      emit('takedown', say.goBehindText(rng, holder, state.groundPosition), holder.corner, 'major');
+      return { seconds: rng.int(6, 12) };
+    }
+  }
+
+  // Snapped down and let up, or the go-behind did not come off: back to their feet, close.
+  state.range = TRANSITION_RANGE.stuffedTakedown!;
+  state.rangeSettled = 0.25;
+  return { seconds: rng.int(5, 9) };
 }
 
 // --- Clinch -------------------------------------------------------------------------------
@@ -2654,6 +2751,20 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
         state.placedBy = actor.corner;
         shiftMomentum(actor, target, 0.3);
         emit('sweep', say.sweepText(rng, actor), actor.corner, 'major');
+      } else if (rng.chance(matReturnChance(target, actor))) {
+        /*
+         * Up — and straight back down. The mat return is what makes a wrestler's top game a cage
+         * rather than a position: the get-up succeeds and costs the man everything he spent on it.
+         */
+        state.groundPosition = rng.chance(0.3) ? 'back' : rng.chance(0.5) ? 'turtle' : 'halfGuard';
+        state.placedBy = target.corner;
+        target.stats.takedownsAttempted++;
+        target.stats.takedownsLanded++;
+        ctx.tally[target.corner].takedowns++;
+        actor.fatigue = clamp01(actor.fatigue + 0.02);
+        emit('takedown', say.matReturnText(rng, target, actor), target.corner, 'major');
+        state.stalledSeconds = 0;
+        return { seconds: rng.int(8, 14) };
       } else {
         state.position = 'distance';
         state.groundTop = undefined;
@@ -2678,6 +2789,40 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
      * the whole sport and quietly compressed the gap between a striking plan and a wrestling one.
      */
     escaping = true;
+
+    // Getting up the hard way gives up the back to a quick man on top (doc 36 phase 5).
+    if (route === 'standUp' && state.groundPosition !== 'back' && rng.chance(backExposureChance(target))) {
+      const to = GROUND_DOMINANCE[state.groundPosition] >= GROUND_DOMINANCE.sideControl ? 'back' : 'turtle';
+      state.groundPosition = to;
+      shiftMomentum(target, actor, 0.15);
+      emit('positionAdvance', say.backExposedText(rng, actor, target, to), target.corner);
+      return { seconds: rng.int(8, 14) };
+    }
+    // A sweep that does not come off cleanly often turns into a scramble, and anything can come of one.
+    if (route === 'sweep' && rng.chance(0.3)) {
+      const outcome = scramble(rng, actor, target);
+      if (outcome !== 'held') {
+        emit('note', say.scrambleText(rng, actor, target, outcome), outcome === 'backTaken' ? target.corner : actor.corner);
+        if (outcome === 'bothUp') {
+          state.position = 'distance';
+          state.groundTop = undefined;
+          state.groundPosition = 'guard';
+          state.placedBy = undefined;
+          state.range = TRANSITION_RANGE.standUp!;
+          state.rangeSettled = 0;
+        } else if (outcome === 'reversed') {
+          state.groundTop = actor.corner;
+          state.groundPosition = 'halfGuard';
+          state.placedBy = actor.corner;
+          shiftMomentum(actor, target, 0.25);
+        } else {
+          state.groundPosition = 'back';
+          shiftMomentum(target, actor, 0.25);
+        }
+        state.stalledSeconds = 0;
+        return { seconds: rng.int(8, 14) };
+      }
+    }
   }
 
   const work = chooseAction(
@@ -2848,7 +2993,7 @@ function resolveSubmission(
   target: Combatant,
   fromBottom: boolean,
 ): ExchangeOutcome {
-  const { rng, state, tally, emit } = ctx;
+  const { rng, state } = ctx;
   const dominance = GROUND_DOMINANCE[state.groundPosition];
   const key =
     chooseSubmission(
@@ -2857,14 +3002,55 @@ function resolveSubmission(
       submissionsFrom(state.groundPosition, !fromBottom),
       actor.mem.lastSubFailed,
     ) ?? 'guillotine';
-  const name = SUBMISSION_META[key].label;
 
   const reads: ReadKey[] = state.groundPosition === 'back' ? ['backTake'] : ['guillotine'];
+  const result = lockContest(ctx, actor, target, key, fromBottom ? 0.75 : 0.6 + dominance, reads);
+  if (result.ending) return { seconds: rng.int(8, 20), ending: result.ending };
+
+  /*
+   * A failed attack off the back usually costs position — and a failed leg lock costs more than
+   * that: the man who escapes a heel hook comes out on top, past the legs.
+   */
+  if (fromBottom) {
+    if (state.groundPosition === 'legEntangle') {
+      state.groundPosition = rng.chance(0.5) ? 'halfGuard' : 'sideControl';
+    } else if (rng.chance(0.35)) {
+      state.groundPosition = ladderStep(state.groundPosition);
+    }
+  }
+  state.stalledSeconds = 0;
+  return { seconds: rng.int(9, 18) };
+}
+
+/**
+ * The submission contest itself: deep or not, finished or not, and what a survived lock costs.
+ *
+ * Shared by the floor and the front headlock. The hold's own profile enters the contest
+ * (`submissions.ts`): a technical hold leans on `submissions` alone and a pressure hold lets
+ * `strength` carry part of it; a back choke finishes more often once deep than a kneebar does.
+ * A drilled hold — a signature — is executed a little cleaner, and only a little.
+ */
+function lockContest(
+  ctx: ExchangeContext,
+  actor: Combatant,
+  target: Combatant,
+  key: SubmissionKey,
+  positionScale: number,
+  reads: ReadKey[],
+): { deep: boolean; ending?: Ending } {
+  const { rng, tally, emit } = ctx;
+  const meta = SUBMISSION_META[key];
+  const name = meta.label;
   const bonus = prepBonus(target, actor, reads);
 
+  const craft = fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue);
+  const squeeze = fatiguedEffect(actor.attrs.strength, 'strength', actor.fatigue);
+  const drilled = actor.style.signatureSub === key ? 1.08 : 1;
   const attack =
-    fatiguedEffect(actor.attrs.submissions, 'submissions', actor.fatigue) *
-    (fromBottom ? 0.75 : 0.6 + dominance) *
+    craft ** (0.7 + 0.3 * meta.technicality) *
+    squeeze ** (0.3 - 0.3 * meta.technicality) *
+    drilled *
+    positionScale *
     (target.hurtSeconds > 0 ? 1.5 : 1);
   const defend =
     fatiguedEffect(target.derived.submissionDefence, 'submissions', target.fatigue) * (1 + bonus);
@@ -2888,22 +3074,17 @@ function resolveSubmission(
     // attempt what it should be — a scoring event, not a fight-ender.
     const priorAttempts = Math.max(0, actor.stats.submissionAttempts - 1);
     const familiarity = 1 / (1 + SUBMISSION_REPEAT_DECAY * priorAttempts);
-    const finishChance = clamp01(SUBMISSION_FINISH_RATE * edge ** 3 * familiarity);
+    const finishChance = clamp01(SUBMISSION_FINISH_RATE * edge ** 3 * familiarity * meta.finishing);
     if (rng.chance(finishChance)) {
-      return { seconds: rng.int(8, 20), ending: { method: 'submission', winner: actor.corner, submissionName: name } };
+      return { deep, ending: { method: 'submission', winner: actor.corner, submissionName: name } };
     }
   }
 
   actor.mem.lastSubFailed = key;
   // A deep lock that was survived rather than escaped may have cost the joint.
-  if (deep) survivedLock(storyOf(ctx), target, SUBMISSION_META[key].injury, edge);
+  if (deep) survivedLock(storyOf(ctx), target, meta.injury, edge);
   emit('submissionEscape', say.submissionEscapeText(rng, target), target.corner);
-  // A failed submission from the bottom often costs position; from the top it costs little.
-  if (fromBottom && rng.chance(0.35)) {
-    state.groundPosition = ladderStep(state.groundPosition);
-  }
-  state.stalledSeconds = 0;
-  return { seconds: rng.int(9, 18) };
+  return { deep };
 }
 
 /** Referee stand-up when the ground position has stalled. Their tendency decides how fast. */
