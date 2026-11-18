@@ -628,7 +628,11 @@ describe('over a card', () => {
 
     expect(wrestler.perFight, report).toBeGreaterThan(3);
     expect(guard.perFight, report).toBeGreaterThan(5);
-    expect(grinder.perFight, report).toBeGreaterThan(7);
+    // 7 → 6 by doc 36 phase 6, and not by the gate this guards: the ground became a graph in which
+    // the man underneath recovers guard, scrambles and gives up the back, so a grinder spends less of
+    // a fight in the dominant positions his attacks come from (7.5 → ~6.5 per fight). The gate itself
+    // still reads a hard 1 for all three, which is the claim.
+    expect(grinder.perFight, report).toBeGreaterThan(6);
   });
 
   it('is why an unplanned fighter is a worse fighter, which is what D19 was about', () => {

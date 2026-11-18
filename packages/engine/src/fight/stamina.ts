@@ -31,7 +31,7 @@ import type { GroundPosition, Position, Range, Weapon } from './types.js';
 const BASE_FATIGUE_PER_SECOND = 0.0011;
 
 /** How much of output is tied to the tank. See `workRate`. */
-export const WORK_RATE_GAS = 0.4;
+export const WORK_RATE_GAS = 0.5;
 
 /** Fraction of accumulated fatigue an average fighter sheds during a one-minute rest. */
 const BASE_ROUND_RECOVERY = 0.34;
@@ -167,7 +167,7 @@ export function paceMultiplier(c: Combatant, round: number, totalRounds: number)
  */
 const STRIKE_COST: Readonly<Record<Weapon, number>> = {
   punch: 0.00176,
-  kick: 0.00286,
+  kick: 0.00180,
   knee: 0.00248,
   elbow: 0.00138,
 };

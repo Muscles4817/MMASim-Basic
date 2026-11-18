@@ -1,0 +1,266 @@
+/**
+ * The claims doc 36 (the combat simulation plan) makes about the fight, as tests.
+ *
+ * Each block is one of § 0's testable claims, measured on seeded fights with a tolerance sized to
+ * the sample. Together they are the regression guard for the audit's findings: an engine that loses
+ * any of these has gone back to resolving every exchange as if nothing had happened before it.
+ */
+
+import { describe, expect, it } from 'vitest';
+import {
+  ARCHETYPES,
+  makeFighter,
+  planFor,
+  simulateFight,
+  type Fighter,
+  type FightResult,
+} from '@mmasim/engine';
+
+function run(red: Fighter, blue: Fighter, n: number, seed: string, planned = true): FightResult[] {
+  const out: FightResult[] = [];
+  for (let i = 0; i < n; i++) {
+    out.push(
+      simulateFight({
+        boutId: `${seed}-${i}`,
+        red: { fighter: red, plan: planned ? planFor(red, blue) : undefined },
+        blue: { fighter: blue, plan: planned ? planFor(blue, red) : undefined },
+      }),
+    );
+  }
+  return out;
+}
+
+const even = () => [
+  makeFighter({ id: 'fighter_a', lastName: 'A' }),
+  makeFighter({ id: 'fighter_b', lastName: 'B' }),
+] as const;
+
+describe('claim 7 — the fight ebbs rather than collapses', () => {
+  it('fades by round three, but by a fifth to a third rather than by half', () => {
+    const [a, b] = even();
+    const att = [0, 0, 0];
+    let n = 0;
+    for (const r of run(a, b, 400, 'depth-fade')) {
+      if (!r.method.startsWith('decision') || r.roundStats?.length !== 3) continue;
+      n++;
+      r.roundStats.forEach((t, k) => (att[k]! += t.red.strikesAttempted + t.blue.strikesAttempted));
+    }
+    const ratio = att[2]! / att[0]!;
+    // Before doc 36 this read 0.48: an average professional threw half as much in the third.
+    expect(ratio, `R3/R1 output ${ratio.toFixed(2)} over ${n} decisions`).toBeGreaterThan(0.6);
+    expect(ratio, `R3/R1 output ${ratio.toFixed(2)} over ${n} decisions`).toBeLessThan(0.92);
+  });
+});
+
+describe('claim 1 — sequence matters', () => {
+  it('makes a chain wrestler shoot again after a stuffed shot more often than he shoots at all', () => {
+    let after = 0;
+    let stuffed = 0;
+    let shots = 0;
+    let actions = 0;
+    for (const r of run(ARCHETYPES.grinder(), ARCHETYPES.striker(), 300, 'depth-chain')) {
+      const acts = r.events.filter((e) =>
+        ['strike', 'kick', 'takedown', 'takedownStuffed', 'clinch', 'clinchBreak'].includes(e.kind),
+      );
+      for (let i = 0; i < acts.length; i++) {
+        const e = acts[i]!;
+        const byGrinder =
+          (e.kind === 'takedown' && e.corner === 'red') || (e.kind === 'takedownStuffed' && e.corner === 'blue');
+        if (e.corner === 'red' || e.kind === 'takedownStuffed') actions++;
+        if (byGrinder) shots++;
+        if (e.kind === 'takedownStuffed' && e.corner === 'blue' && i + 1 < acts.length) {
+          stuffed++;
+          const n = acts[i + 1]!;
+          if ((n.kind === 'takedown' && n.corner === 'red') || (n.kind === 'takedownStuffed' && n.corner === 'blue')) after++;
+        }
+      }
+    }
+    const chain = after / stuffed;
+    const base = shots / actions;
+    // Before doc 36: 2.9 % after a stuffed shot against a 17.8 % base rate — it ran backwards.
+    expect(chain, `re-shot ${chain.toFixed(3)} vs base ${base.toFixed(3)}`).toBeGreaterThan(base * 1.25);
+  });
+
+  it('narrates combinations, which the event vocabulary had and nothing emitted', () => {
+    const [a, b] = even();
+    const combos = run(a, b, 100, 'depth-combo').reduce(
+      (s, r) => s + r.events.filter((e) => e.kind === 'combination').length,
+      0,
+    );
+    expect(combos / 100).toBeGreaterThan(1);
+  });
+});
+
+describe('claim 2 — fighters learn during the fight', () => {
+  it('makes a wrestler whose shots were stuffed shoot less later than one whose shots landed', () => {
+    const w = makeFighter({
+      id: 'fighter_w',
+      lastName: 'W',
+      attributes: { wrestling: 72, groundControl: 75, strikingOffence: 50, kicking: 40, fightIq: 80 },
+    });
+    const s = makeFighter({
+      id: 'fighter_s',
+      lastName: 'S',
+      attributes: { takedownDefence: 85, strikingOffence: 70, kicking: 60, wrestling: 45 },
+    });
+    const b: Record<'stuffed' | 'landed', { a: number; n: number }> = {
+      stuffed: { a: 0, n: 0 },
+      landed: { a: 0, n: 0 },
+    };
+    for (const r of run(w, s, 2500, 'depth-adapt')) {
+      if (r.round < 3) continue;
+      const mine = (rd: number) =>
+        r.events.filter(
+          (e) =>
+            e.round === rd &&
+            e.takedown &&
+            ((e.kind === 'takedown' && e.corner === 'red') || (e.kind === 'takedownStuffed' && e.corner === 'blue')),
+        );
+      const r1 = mine(1);
+      if (r1.length < 2) continue;
+      const rate = r1.filter((e) => e.kind === 'takedown').length / r1.length;
+      const key = rate === 0 ? 'stuffed' : rate === 1 ? 'landed' : undefined;
+      if (!key) continue;
+      b[key].a += mine(3).length;
+      b[key].n++;
+    }
+    const stuffed = b.stuffed.a / b.stuffed.n;
+    const landed = b.landed.a / b.landed.n;
+    // Before doc 36 this ran the other way: 2.63 against 2.46.
+    expect(stuffed, `R3 shots after a stuffed R1 ${stuffed.toFixed(2)} vs a landed one ${landed.toFixed(2)}`).toBeLessThan(
+      landed,
+    );
+  });
+
+  it('has the corner speak between rounds', () => {
+    const [a, b] = even();
+    const lines = run(a, b, 100, 'depth-corner').reduce(
+      (s, r) => s + r.events.filter((e) => /^In .* corner:/.test(e.text)).length,
+      0,
+    );
+    expect(lines / 100).toBeGreaterThan(0.5);
+  });
+});
+
+describe('claim 6 — damage creates stories, rarely', () => {
+  const fights = (() => {
+    const [a, b] = even();
+    return [
+      ...run(a, b, 600, 'depth-story-even'),
+      ...run(ARCHETYPES.olympicBoxer(), ARCHETYPES.pointKarateka(), 600, 'depth-story-strike'),
+    ];
+  })();
+
+  it('lets a body shot fold a fighter, a few times in a hundred fights', () => {
+    const folds = fights.filter((r) => r.events.some((e) => /folds —|doubles over/.test(e.text))).length;
+    const share = folds / fights.length;
+    expect(share).toBeGreaterThan(0.005);
+    expect(share).toBeLessThan(0.15);
+  });
+
+  it('breaks things during fights, and reports them for the medical', () => {
+    const hurt = fights.filter((r) => (r.injuries?.red.length ?? 0) + (r.injuries?.blue.length ?? 0) > 0).length;
+    const share = hurt / fights.length;
+    expect(share).toBeGreaterThan(0.01);
+    expect(share).toBeLessThan(0.2);
+  });
+
+  it('lets a corner retire a fighter, but rarely', () => {
+    const share = fights.filter((r) => r.method === 'retirement').length / fights.length;
+    expect(share).toBeGreaterThan(0);
+    expect(share).toBeLessThan(0.03);
+  });
+});
+
+describe('claim 4 — what a fighter has drilled shows', () => {
+  it('gives a submission specialist a signature that dominates his attempts', () => {
+    const gp = ARCHETYPES.guardPlayer();
+    const names: Record<string, number> = {};
+    for (const r of run(gp, ARCHETYPES.grinder(), 300, 'depth-sig')) {
+      for (const e of r.events) {
+        if (e.kind !== 'submissionAttempt' || e.corner !== 'red') continue;
+        const name = e.text.match(/(?:goes for|has) the (.+?)(?: locked|\.$)/)?.[1] ?? '?';
+        names[name] = (names[name] ?? 0) + 1;
+      }
+    }
+    const counts = Object.values(names).sort((x, y) => y - x);
+    const total = counts.reduce((x, y) => x + y, 0);
+    // Before doc 36 the top four were 20.6 / 20.5 / 20.4 / 19.8 % — no signature at all.
+    expect(counts[0]! / total, JSON.stringify(names)).toBeGreaterThan(0.25);
+    expect(Object.keys(names).length, JSON.stringify(names)).toBeGreaterThan(5);
+  });
+
+  it('keeps leg locks to the fighters with a leg-lock game', () => {
+    const legLocker = { ...makeFighter({ id: 'fighter_ll', lastName: 'LL', attributes: { submissions: 85, scrambling: 75 } }), style: { legLocks: 0.9 } };
+    const wrestler = { ...makeFighter({ id: 'fighter_wr', lastName: 'WR', attributes: { wrestling: 85, submissions: 55 } }), style: { legLocks: 0 } };
+    const legs = (f: Fighter) =>
+      run(f, ARCHETYPES.grinder(), 200, `depth-legs-${f.id}`).reduce(
+        (s, r) =>
+          s +
+          r.events.filter(
+            (e) => e.kind === 'submissionAttempt' && e.corner === 'red' && /heel hook|kneebar|ankle lock|toe hold/.test(e.text),
+          ).length,
+        0,
+      );
+    expect(legs(legLocker)).toBeGreaterThan(20);
+    expect(legs(wrestler)).toBe(0);
+  });
+});
+
+describe('claim 8 — a stance shape buys something and costs something', () => {
+  const base = makeFighter({ id: 'fighter_me', lastName: 'Me' });
+  const kicker = makeFighter({ id: 'fighter_k', lastName: 'K', attributes: { kicking: 85, strikingOffence: 60 } });
+  const wrestler = makeFighter({
+    id: 'fighter_w',
+    lastName: 'W',
+    attributes: { wrestling: 82, groundControl: 75, strikingOffence: 45 },
+  });
+  const tdAgainst = (style: 'standard' | 'crouched' | 'bladed') => {
+    let a = 0;
+    let l = 0;
+    for (const r of run({ ...base, style: { stanceStyle: style } }, wrestler, 800, `depth-st-td`, false)) {
+      a += r.stats.blue.takedownsAttempted;
+      l += r.stats.blue.takedownsLanded;
+    }
+    return l / a;
+  };
+  const legsAbsorbed = (style: 'standard' | 'bladed') =>
+    run({ ...base, style: { stanceStyle: style } }, kicker, 800, `depth-st-legs`, false).reduce(
+      (s, r) => s + r.stats.blue.strikesByTarget.legs,
+      0,
+    );
+
+  it('makes a crouched stance harder to take down and a bladed one easier', () => {
+    const standard = tdAgainst('standard');
+    expect(tdAgainst('crouched')).toBeLessThan(standard - 0.03);
+    expect(tdAgainst('bladed')).toBeGreaterThan(standard + 0.02);
+  });
+
+  it('makes a bladed stance pay for its reach in leg kicks', () => {
+    expect(legsAbsorbed('bladed')).toBeGreaterThan(legsAbsorbed('standard') * 1.05);
+  });
+});
+
+describe('claim 5 — every phase has depth', () => {
+  it('throws more than knees in the clinch', () => {
+    let knees = 0;
+    let other = 0;
+    for (const r of run(ARCHETYPES.olympicBoxer(), ARCHETYPES.smotherer(), 200, 'depth-clinch')) {
+      for (const e of r.events) {
+        if (!e.weapon || e.missed || !/tie-up|clinch|collar tie|as they break|against the fence|in the clinch|stomp/.test(e.text)) continue;
+        if (e.weapon === 'knee') knees++;
+        else other++;
+      }
+    }
+    // Before doc 36 every clinch strike in the game was a knee.
+    expect(other, `knees ${knees} other ${other}`).toBeGreaterThan(knees * 0.3);
+  });
+
+  it('takes backs from more places than mount', () => {
+    let backs = 0;
+    for (const r of run(ARCHETYPES.grinder(), ARCHETYPES.striker(), 300, 'depth-back')) {
+      backs += r.events.filter((e) => /takes the back|gives up the back|spins behind|rides the turtle|turtled up/.test(e.text)).length;
+    }
+    expect(backs / 300).toBeGreaterThan(0.2);
+  });
+});

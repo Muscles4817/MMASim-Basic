@@ -67,9 +67,13 @@ export function roundImpression(
   };
 
   for (const e of inRound) {
-    const corner = e.corner as Corner;
+    // A `hurt` line is told from the corner of the man who was hurt; the beat belongs to the man who
+    // hurt him. Doc 36 phase 3 added body-shot and leg-kick hurt lines, which made the mis-credit
+    // large enough to move the booth's agreement with the judges.
+    const corner = e.kind === 'hurt' ? OTHER_CORNER[e.corner as Corner] : (e.corner as Corner);
     // A knockdown is not one beat. Nothing else in a round moves an audience like it.
     const weight = e.kind === 'knockdown' ? 4 : e.emphasis === 'major' ? 2 : 1;
+    if (e.missed) continue;
     if (STRIKING_KINDS.has(e.kind)) weights[corner].striking += weight;
     else if (GRAPPLING_KINDS.has(e.kind)) weights[corner].grappling += weight;
   }

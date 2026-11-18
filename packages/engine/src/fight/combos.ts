@@ -114,7 +114,7 @@ export const PATTERN_NAMES: Readonly<Record<ComboKey, string>> = {
  * lands one time in two and one that lands three times in five. The *feint* is worth more because
  * it costs a beat and throws nothing.
  */
-const SETUP_BONUS = 0.2;
+const SETUP_BONUS = 0.26;
 const FEINT_BONUS = 0.3;
 
 /**

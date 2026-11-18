@@ -95,6 +95,13 @@ describe('a biased booth misleads the audience', () => {
   });
 
   it('still gets an even-handed read broadly right', () => {
-    expect(agreementRate(0, results)).toBeGreaterThan(0.85);
+    /*
+     * 0.85 → 0.80 by doc 36. The booth reads a round from the beats it can see and the judges score
+     * control time it cannot, and the reworked engine spends more of a fight in grappling exchanges
+     * the booth has no line for (guard recovery, riding, mat returns resolving to control). Two booth
+     * bugs were fixed on the way — `hurt` lines credited to the fighter who was hurt, and missed
+     * strikes counted as offence — and neither moved this, which is how the cause was found.
+     */
+    expect(agreementRate(0, results)).toBeGreaterThan(0.8);
   });
 });

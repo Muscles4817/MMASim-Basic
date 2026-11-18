@@ -89,7 +89,7 @@ describe('a table indexed by range is a shape', () => {
     expect(
       rangeTables.map(([name]) => name).sort(),
       'no range-indexed tables found — has the export shape changed?',
-    ).toEqual(['ENTRY_EASE', 'RANGE_COUNTER', 'RANGE_EXERTION', 'RANGE_HAZARD', 'REFERENCE_MIX']);
+    ).toEqual(['ENTRY_EASE', 'RANGE_COUNTER', 'RANGE_EXERTION', 'RANGE_HAZARD', 'RANGE_SHOT_DEFENCE', 'REFERENCE_MIX']);
   });
 
   it.each(rangeTables.filter(([name]) => !(name in DECLARED_LEVELS)))(

@@ -52,7 +52,7 @@ export interface InFightInjury {
  * severity. A broken hand takes the hands; a knee taken in a heel hook takes the base.
  */
 const INJURY_EFFECT: Readonly<Record<InFightInjuryKind, Partial<Record<AttributeKey, number>>>> = {
-  hand: { strikingOffence: 0.22, power: 0.3 },
+  hand: { strikingOffence: 0.14, power: 0.22 },
   foot: { kicking: 0.35, speed: 0.08 },
   rib: { cardio: 0.12, strikingDefence: 0.08, wrestling: 0.1, scrambling: 0.1 },
   eye: { strikingDefence: 0.16 },
@@ -234,7 +234,7 @@ export function afterStrikeStory(
     if (
       weapon === 'punch' &&
       result.flushness >= 1.4 &&
-      rng.chance(0.0016 * remap(actor.attrs.power, 40, 99, 0.7, 1.6))
+      rng.chance(0.0008 * remap(actor.attrs.power, 40, 99, 0.7, 1.6))
     ) {
       if (injure(actor, 'hand', 0.35 + rng.next() * 0.6, ctx.round)) {
         emit('note', injuryText(actor, 'hand'), actor.corner, 'minor');

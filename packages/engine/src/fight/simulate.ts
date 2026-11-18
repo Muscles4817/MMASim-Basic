@@ -35,6 +35,7 @@ import {
   rangeChangeChance,
   stepRange,
   strikeSuitability,
+  RANGE_SHOT_DEFENCE,
   targetFitness,
 } from './range.js';
 import {
@@ -319,7 +320,7 @@ export function simulateFight(config: FightConfig): FightResult {
         text: string,
         corner?: Corner,
         emphasis?: FightEvent['emphasis'],
-        fact?: { weapon?: Weapon; target?: StrikeTarget; takedown?: TakedownEntry },
+        fact?: { weapon?: Weapon; target?: StrikeTarget; takedown?: TakedownEntry; missed?: boolean },
       ) => {
         events.push({
           round,
@@ -331,6 +332,7 @@ export function simulateFight(config: FightConfig): FightResult {
           weapon: fact?.weapon,
           target: fact?.target,
           takedown: fact?.takedown,
+          missed: fact?.missed,
         });
       };
 
@@ -577,7 +579,7 @@ interface ExchangeContext {
     text: string,
     corner?: Corner,
     emphasis?: FightEvent['emphasis'],
-    fact?: { weapon?: Weapon; target?: StrikeTarget; takedown?: TakedownEntry },
+    fact?: { weapon?: Weapon; target?: StrikeTarget; takedown?: TakedownEntry; missed?: boolean },
   ) => void;
   scoreSoFar: readonly Record<Corner, RoundTally>[];
 }
@@ -1714,11 +1716,12 @@ function trySurvive(
 ): ExchangeOutcome | undefined {
   const { rng, state, emit } = ctx;
   if (route === 'tieUp') {
-    const grab = fatiguedEffect(hurt.derived.clinchOffence, 'strength', hurt.fatigue) * 0.8;
+    const grab = fatiguedEffect(hurt.derived.clinchOffence, 'strength', hurt.fatigue) * 0.42;
     const deny = fatiguedEffect(attacker.derived.clinchDefence, 'strength', attacker.fatigue);
     if (rng.chance(grab / (grab + deny))) {
+      // He smothers the follow-up, but the man who hurt him still owns the tie-up and can keep working.
       state.position = 'clinch';
-      state.clinchControl = hurt.corner;
+      state.clinchControl = attacker.corner;
       state.placedBy = hurt.corner;
       state.stalledSeconds = 0;
       emit('clinch', `${hurt.fighter.lastName} grabs hold to survive — smothering the follow-up.`, hurt.corner);
@@ -1753,12 +1756,12 @@ function resolveStrikeExchange(
     if (survived) return survived;
   }
 
-  const lead = throwBurst(ctx, actor, target, prefersKick, route === 'run' ? 0.5 : 1, route === 'shell' ? 1.35 : 1);
+  const lead = throwBurst(ctx, actor, target, prefersKick, route === 'run' ? 0.85 : 1, route === 'shell' ? 1.1 : 1);
   if (lead.ending) return { seconds, ending: lead.ending };
   // Covering up is how fights get stopped: nothing is coming back, and the referee is counting.
   if (route === 'shell' && lead.landedAny) ctx.state.unanswered[target.corner]++;
   if (route === 'fireBack' && ctx.state.position === 'distance') {
-    const swing = throwBurst(ctx, target, actor, rng.chance(kickLean(target)), 0.75);
+    const swing = throwBurst(ctx, target, actor, rng.chance(kickLean(target)), 0.5);
     if (swing.ending) return { seconds, ending: swing.ending };
   }
 
@@ -1981,7 +1984,7 @@ function throwBurst(
           say.strikeMissed(rng, actor, strikeTarget, weapon, technique),
           actor.corner,
           undefined,
-          { weapon, target: strikeTarget },
+          { weapon, target: strikeTarget, missed: true },
         );
       }
       continue;
@@ -2266,6 +2269,12 @@ function resolveTakedown(
     fatiguedEffect(actor.derived.chainWrestling, 'wrestling', actor.fatigue) *
     momentumMultiplier(actor) *
     (from === 'clinch' ? 1.25 : 1) *
+    // Driving through the shot and stopping it are both partly power (doc 36 phase 9).
+    (fatiguedEffect(actor.attrs.strength, 'strength', actor.fatigue) /
+      fatiguedEffect(target.attrs.strength, 'strength', target.fatigue)) **
+      0.25 *
+    // A hurt man's shot is a desperate one.
+    (actor.hurtSeconds > 0 ? 0.6 : 1) *
     chainEdge(actor, depth);
 
   const defence =
@@ -2274,6 +2283,7 @@ function resolveTakedown(
     // Chewed-up legs are a chewed-up base. This is the payoff for a calf-kick game plan.
     legImpairment(target) *
     stanceStyleTakedownDefence(target) *
+    (from === 'distance' ? RANGE_SHOT_DEFENCE[state.range] : 1) *
     (target.hurtSeconds > 0 ? 0.5 : 1);
 
   actor.stats.takedownsAttempted++;
@@ -2317,7 +2327,10 @@ function resolveTakedown(
    * the single becomes a double, the double a body lock, and the defender's weight is already
    * committed to the first.
    */
-  if (depth < MAX_CHAIN && rng.chance(chainChance(actor, depth))) {
+  // A fighter who drilled the answer to his shots drilled the sprawl series too: prepared takedown
+  // reads blunt the chain as well as the first shot.
+  const drilledSprawl = prepBonus(target, actor, ['singleLeg', 'doubleLeg', 'bodyLock']) / PREP_MAX_BONUS;
+  if (depth < MAX_CHAIN && rng.chance(chainChance(actor, depth) * (1 - drilledSprawl * 0.9))) {
     actor.mem.chainDepth = depth + 1;
     const next = chainedEntry(rng, entry);
     emit('note', say.chainText(rng, actor, next), actor.corner);
@@ -2778,12 +2791,16 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
     actor.stats.escapesAttempted++;
 
     const bonus = prepBonus(target, actor, route === 'standUp' ? ['wallGetUp'] : ['guardPassing']);
+    // Strength takes a share of both sides: the bridge underneath, the pressure on top (doc 36 phase 9;
+    // the mass experiments found it otherwise barely reached the floor).
     const escape =
-      fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) *
+      fatiguedEffect(actor.attrs.scrambling, 'scrambling', actor.fatigue) ** 0.8 *
+      fatiguedEffect(actor.attrs.strength, 'strength', actor.fatigue) ** 0.2 *
       legImpairment(actor) *
       (1 - GROUND_DOMINANCE[state.groundPosition] * 0.5);
     const hold =
-      fatiguedEffect(target.attrs.groundControl, 'groundControl', target.fatigue) *
+      fatiguedEffect(target.attrs.groundControl, 'groundControl', target.fatigue) ** 0.8 *
+      fatiguedEffect(target.attrs.strength, 'strength', target.fatigue) ** 0.2 *
       (1 + bonus) *
       // What the man on top is doing with his weight. Hitting you is not holding you.
       topControlFocus(target);
@@ -2953,9 +2970,13 @@ function resolveGroundTop(
 
   if (intent === 'advancePosition') {
     const bonus = prepBonus(target, actor, ['guardPassing', 'backTake']);
-    const pass = fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue);
+    const pass =
+      fatiguedEffect(actor.attrs.groundControl, 'groundControl', actor.fatigue) ** 0.8 *
+      fatiguedEffect(actor.attrs.strength, 'strength', actor.fatigue) ** 0.2;
     const retain =
-      fatiguedEffect(target.attrs.scrambling, 'scrambling', target.fatigue) * (1 + bonus);
+      fatiguedEffect(target.attrs.scrambling, 'scrambling', target.fatigue) ** 0.8 *
+      fatiguedEffect(target.attrs.strength, 'strength', target.fatigue) ** 0.2 *
+      (1 + bonus);
 
     const passes = rng.chance(pass / (pass + retain));
     remember(actor, target, 'pass', passes, nowOf(ctx));

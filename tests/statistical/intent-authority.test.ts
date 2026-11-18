@@ -267,22 +267,30 @@ interface Fingerprint {
  * Andrade goes 0.97 → 0.84 and Romero 0.90 → 0.86 because a 5'1" fighter and a heavily muscled one
  * have removable mass a flat percentage of the limit cannot see.
  */
+/*
+ * **Re-recorded by doc 36 (the combat simulation plan), and on purpose the largest move yet.** Every
+ * matchup moves in every currency, because the change is to the fight itself rather than to one
+ * decision: bursts are drilled patterns, fatigue costs quality rather than half the volume,
+ * wrestling chains, the floor is a graph, the clinch has weapons, and fighters read, adjust and are
+ * coached. Punches per fight rose with the flatter round-by-round output; the population calibration
+ * (`roster-profile`) is held separately and still passes.
+ */
 const BASELINE: Readonly<Record<string, Fingerprint>> = {
   'striker-v-grinder': {
-    punches: 20.233,
-    kicks: 8.39,
-    takedowns: 6.267,
-    submissions: 5.875,
-    clinchEntries: 2.068,
-    getUps: 1.98,
-    advances: 3.74,
-    sweeps: 1.085,
-    distanceSeconds: 325.85,
-    clinchSeconds: 38.838,
-    groundSeconds: 418.73,
-    koRate: 0.278,
-    submissionRate: 0.178,
-    meanRound: 2.327,
+    punches: 22.418,
+    kicks: 7.273,
+    takedowns: 7.305,
+    submissions: 6.15,
+    clinchEntries: 1.935,
+    getUps: 2.09,
+    advances: 3.675,
+    sweeps: 1.612,
+    distanceSeconds: 355.063,
+    clinchSeconds: 38.923,
+    groundSeconds: 456.61,
+    koRate: 0.235,
+    submissionRate: 0.18,
+    meanRound: 2.462,
   },
   /*
    * **Re-recorded by the repertoire gate (doc 31 § D16), and this is the only matchup it moved.**
@@ -301,36 +309,36 @@ const BASELINE: Readonly<Record<string, Fingerprint>> = {
    * shape is where it was.
    */
   'contender-v-canFodder': {
-    punches: 12.87,
-    kicks: 3.762,
-    takedowns: 3.102,
-    submissions: 3.833,
-    clinchEntries: 1.253,
-    getUps: 0.808,
-    advances: 1.83,
-    sweeps: 0.268,
-    distanceSeconds: 163.11,
-    clinchSeconds: 25.037,
-    groundSeconds: 204.578,
-    koRate: 0.625,
-    submissionRate: 0.293,
+    punches: 12.398,
+    kicks: 2.608,
+    takedowns: 3.032,
+    submissions: 3.807,
+    clinchEntries: 1.122,
+    getUps: 0.76,
+    advances: 1.702,
+    sweeps: 0.348,
+    distanceSeconds: 150.903,
+    clinchSeconds: 23.072,
+    groundSeconds: 206.887,
+    koRate: 0.638,
+    submissionRate: 0.315,
     meanRound: 1.553,
   },
   'guardPlayer-v-smotherer': {
-    punches: 15.983,
-    kicks: 3.513,
-    takedowns: 8.355,
-    submissions: 10.07,
-    clinchEntries: 3.727,
-    getUps: 2.043,
-    advances: 4.735,
-    sweeps: 1.517,
-    distanceSeconds: 331.163,
-    clinchSeconds: 71.478,
-    groundSeconds: 553.105,
-    koRate: 0.038,
-    submissionRate: 0.192,
-    meanRound: 2.732,
+    punches: 17.092,
+    kicks: 2.337,
+    takedowns: 9.123,
+    submissions: 10.022,
+    clinchEntries: 3.425,
+    getUps: 2.147,
+    advances: 4.673,
+    sweeps: 1.757,
+    distanceSeconds: 323.59,
+    clinchSeconds: 65.005,
+    groundSeconds: 567.512,
+    koRate: 0.03,
+    submissionRate: 0.197,
+    meanRound: 2.75,
   },
 };
 

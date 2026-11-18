@@ -76,9 +76,17 @@ describe('what a trait is worth', () => {
     ).toBeLessThan(5);
   });
 
-  it('is a bigger deal than any attribute, which it should not be', () => {
+  it('is no longer a bigger deal than the attributes, and must not become one again', () => {
     /*
-     * **Tripwire.** This asserts the defect rather than the design.
+     * **Inverted by doc 36 phase 9, as the tripwire below asked.** The fatigue rework (a slower tank,
+     * a harder bite, strikes that cost gas) took `cardioMachine` from +23.4 to about +13, under the
+     * `wrestling` yardstick it used to dwarf (now ~22 on the same probe). It stays a strong trait —
+     * a bottomless tank should be — and this bound holds it below the best attribute rather than
+     * above every one.
+     *
+     * The original tripwire, for the record:
+     *
+     * **Tripwire.** This asserted the defect rather than the design.
      *
      * `cardioMachine` is worth more than sixty rating points of anything — measured +23.4 against
      * `wrestling`'s 13.6 — because `fatigueRate` 0.78 and `recoveryRate` 1.25 are both enormous
@@ -86,7 +94,8 @@ describe('what a trait is worth', () => {
      * fix is to invert it to an upper bound in line with the attribute yardstick rather than to
      * delete it.
      */
-    expect(price('cardioMachine'), `cardioMachine ${price('cardioMachine')}pp`).toBeGreaterThan(15);
+    expect(price('cardioMachine'), `cardioMachine ${price('cardioMachine')}pp`).toBeLessThan(20);
+    expect(price('cardioMachine'), `cardioMachine ${price('cardioMachine')}pp`).toBeGreaterThan(5);
   });
 
   it('charges more for a headhunter than for being a worse fighter', () => {

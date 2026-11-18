@@ -37,12 +37,12 @@ export const MAX_CHAIN = 2;
 export function chainChance(c: Combatant, depth: number): number {
   const tank = remap(c.fatigue, 0.2, 0.85, 1, 0.35);
   const plan = c.plan.tactics.entry === 'proactiveWrestling' ? 1.35 : 1;
-  return clamp01(c.style.chainWrestling * 0.62 * tank * plan * (depth === 0 ? 1 : 0.6));
+  return clamp01(c.style.chainWrestling * 0.42 * tank * plan * (depth === 0 ? 1 : 0.6));
 }
 
 /** How much the defender is behind on the second and third link — his weight is already committed. */
 export function chainEdge(c: Combatant, depth: number): number {
-  return 1 + depth * (0.1 + c.style.chainWrestling * 0.15);
+  return 1 + depth * (0.05 + c.style.chainWrestling * 0.08);
 }
 
 /** The next entry in a chain is a different one: the single becomes a double, the double a single. */
@@ -69,7 +69,7 @@ export function chainedEntry(rng: Rng, last: TakedownEntry): TakedownEntry {
 export function frontHeadlockChance(holder: Combatant): number {
   const game = (holder.attrs.wrestling + holder.attrs.submissions) / 2;
   const trait = holder.fighter.traits.includes('sprawlAndBrawl') ? 0.6 : 1;
-  return clamp01(0.16 * remap(game, 40, 90, 0.35, 1.45) * trait);
+  return clamp01(0.1 * remap(game, 40, 90, 0.35, 1.45) * trait);
 }
 
 export type HeadlockOption = 'goBehind' | 'choke' | 'snapReset';
@@ -100,14 +100,14 @@ export function headlockChoke(rng: Rng, holder: Combatant): SubmissionKey {
 export function matReturnChance(top: Combatant, bottom: Combatant): number {
   const attack = fatiguedEffect(top.derived.chainWrestling, 'wrestling', top.fatigue) * top.style.chainWrestling;
   const base = fatiguedEffect(bottom.attrs.takedownDefence, 'takedownDefence', bottom.fatigue);
-  return clamp01(0.55 * (attack / (attack + base * 0.6)) * (bottom.legsCompromised ? 1.3 : 1) * top.mem.lean.takedown);
+  return clamp01(0.28 * (attack / (attack + base * 0.6)) * (bottom.legsCompromised ? 1.3 : 1) * top.mem.lean.takedown);
 }
 
 /**
  * Getting up the hard way: turning to the knees gives up the back if the man on top is quick.
  */
 export function backExposureChance(top: Combatant): number {
-  return clamp01(0.1 * remap(top.attrs.scrambling, 40, 90, 0.5, 1.4));
+  return clamp01(0.07 * remap(top.attrs.scrambling, 40, 90, 0.5, 1.4));
 }
 
 export type ScrambleOutcome = 'bothUp' | 'reversed' | 'backTaken' | 'held';

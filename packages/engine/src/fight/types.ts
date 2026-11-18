@@ -182,6 +182,8 @@ export interface FightEvent {
   target?: StrikeTarget;
   /** How the takedown was entered, when this event is about one — landed or stuffed. */
   takedown?: TakedownEntry;
+  /** Set on a strike line that narrates a *miss*. Doc 36: the booth was counting misses as offence. */
+  missed?: boolean;
 }
 
 export type FightEventKind =
