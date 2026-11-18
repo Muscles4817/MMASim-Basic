@@ -294,3 +294,12 @@ Failing after phase 8, all calibration (see phase 9):
 - Cage geography: fence position, cutting off the cage.
 - A late-fight payoff for body work beyond fatigue.
 - Wrestling is the most valuable attribute by a wide margin (≈22 pp swing against striking ≈8): defensible for the sport, but worth a deliberate decision.
+
+### Reduced resolver — re-aligned
+The joint refit tool (`tools/reduced-refit.ts --fit`, about three hours) improved its own objective, the RMS log-ratio over four rates on 10 calibration matchups, from 0.379 to 0.283. But it made *outcome* agreement on the `reduced-fidelity` archetype matchups worse (9 failures against 4), so it was **not shipped**.
+
+The real gap was one number. Full's volume fell by `VOLUME_LEVEL` 0.8 in phase 2, so Reduced's `BASE_ATTEMPTS` went 15 → 12. Every reduced-fidelity, -direction and -clinch check is back inside its bounds. A future joint refit should add the fidelity suite's outcome metrics to its objective, not only the four rates.
+
+### Final state
+- `npm test`: **171 files, 2,421 tests, all passing.** Typecheck and lint clean.
+- The long-sim tier was verified before the Reduced change (20-year world: KO/TKO 31.0 %, SUB 19.9 %, DEC 47.0 %) and re-run after it.
