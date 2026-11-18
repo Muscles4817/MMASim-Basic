@@ -37,6 +37,7 @@
  */
 
 import { clamp, clamp01, remap } from '../core/math.js';
+import { craftVolume } from './combos.js';
 import { createRng, type Rng } from '../core/rng.js';
 import type { FighterId } from '../core/ids.js';
 import type { FinishMethod } from '../domain/fighter.js';
@@ -632,7 +633,9 @@ function attemptsFor(
     riskProfile(a.plan.riskLevel).exertion ** 0.5 *
     // Damped, because plenty of a grappler's volume comes from on top of somebody rather than
     // from choosing to strike at range, and `position` below already pays him for that.
-    strikingAppetite(a) ** 0.35;
+    strikingAppetite(a) ** 0.35 *
+    // What the full engine's `craftVolume` gives a skilled striker, over the round's weapon mix.
+    craftVolume(a, kickLean(a));
 
   /*
    * Top position is a place to work from; bottom position is a place to *survive* in — and how

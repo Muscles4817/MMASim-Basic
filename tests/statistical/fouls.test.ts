@@ -65,7 +65,10 @@ describe('foul rates across a population', () => {
     // fight time without the underlying rate having changed. `averages well under one foul
     // per fight` below is the assertion that would catch a real regression here.
     expect(stats.pctWithAnyFoul).toBeGreaterThan(12);
-    expect(stats.pctWithAnyFoul).toBeLessThan(40);
+    // 40 → 45 by doc 36's wrestling-economy pass, for the same reason as the nudge above: a flatter
+    // cardio curve means fewer fighters gas into a stoppage, so fights run longer and a per-exchange
+    // hazard shows up in a slightly larger share of them (40.6 % measured). Still a minority.
+    expect(stats.pctWithAnyFoul).toBeLessThan(45);
   });
 
   it('deducts a point at roughly the rate the sport does', () => {

@@ -88,6 +88,7 @@ import {
   PATTERNS,
   TECHNIQUE_SHAPE,
   choosePattern,
+  craftVolume,
   setupMultiplier,
   shotSeconds,
   type Technique,
@@ -155,7 +156,7 @@ import {
   type FoulIncident,
 } from './fouls.js';
 import { buildScorecards, emptyTally, readDecision, type RoundTally } from './scoring.js';
-import { accrueFatigue, chargeStrike, paceMultiplier, recoverBetweenRounds, workRate } from './stamina.js';
+import { EFFORT, accrueFatigue, chargeEffort, chargeStrike, paceMultiplier, recoverBetweenRounds, workRate } from './stamina.js';
 import {
   GROUND_DOMINANCE,
   ladderStep,
@@ -1917,7 +1918,8 @@ function throwBurst(
         scale *
         VOLUME_LEVEL *
         workRate(actor, false) *
-        paceMultiplier(actor, ctx.round, ctx.totalRounds),
+        paceMultiplier(actor, ctx.round, ctx.totalRounds) *
+        craftVolume(actor, prefersKick ? 1 : 0),
     ),
   );
   let landedAny = false;
@@ -2360,6 +2362,11 @@ function resolveTakedown(
 
   const lands = rng.chance(offence / (offence + defence));
   remember(actor, target, 'takedown', lands, nowOf(ctx));
+  // The shot costs the shooter, more when it is stuffed and more on every link of a chain.
+  chargeEffort(
+    actor,
+    EFFORT.shot + (lands ? 0 : EFFORT.stuffed) + depth * EFFORT.chainLink,
+  );
   const adjusted = adjustmentLine(target, actor, 'takedown');
   if (adjusted) emit('note', adjusted, adjusted.startsWith(target.fighter.lastName) ? target.corner : actor.corner);
   if (lands) {
@@ -2392,7 +2399,7 @@ function resolveTakedown(
     { takedown: entry },
   );
   // Every sprawl costs the man sprawling. Chain wrestling is how a wrestler spends your tank.
-  target.fatigue = clamp01(target.fatigue + 0.008);
+  chargeEffort(target, EFFORT.sprawl);
 
   /*
    * The chain (doc 36 phase 5, `wrestling.ts`). The stuffed shot is the setup for the next one:
@@ -2885,6 +2892,7 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
     remember(actor, target, 'escape', out, nowOf(ctx));
     if (out) {
       actor.stats.escapesLanded++;
+      chargeEffort(actor, EFFORT.getUp);
       if (route === 'sweep') {
         state.groundTop = actor.corner;
         state.groundPosition = 'guard';
@@ -2929,6 +2937,7 @@ function resolveGround(ctx: ExchangeContext, actor: Combatant, target: Combatant
      * the whole sport and quietly compressed the gap between a striking plan and a wrestling one.
      */
     escaping = true;
+    chargeEffort(actor, EFFORT.failedGetUp);
 
     // Getting up the hard way gives up the back to a quick man on top (doc 36 phase 5).
     if (route === 'standUp' && state.groundPosition !== 'back' && rng.chance(backExposureChance(target))) {

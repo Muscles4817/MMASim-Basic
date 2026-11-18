@@ -42,6 +42,7 @@ import {
   generateFighter,
   makeFighter,
   overallRating,
+  planFor,
   simulateFight,
   type Attributes,
   type BandContext,
@@ -55,8 +56,18 @@ const VARIANT = join(RATINGS, '__fit_functional.ts');
 const CACHE_DIR = join(HERE, '..', 'node_modules', '.cache', 'functional-refit');
 /** `--holdout` simulates the same populations on different seeds, to check a fit generalises. */
 const HOLDOUT = process.argv.includes('--holdout');
+/**
+ * `--planned` gives every fighter the plan `planFor` would, as every AI fighter in the game has. The
+ * rating describes fighters in that world — where an opponent's camp *does* target the hole — and the
+ * unplanned round robin under-charges exploitability: measured, an exploitable striker beats a
+ * level-70 all-rounder 59 % of the time unplanned and loses 60 % planned.
+ */
+const PLANNED = process.argv.includes('--planned');
 const SEED_TAG = HOLDOUT ? 'holdout:' : '';
-const CACHE = join(CACHE_DIR, HOLDOUT ? 'holdout.json' : 'populations.json');
+const CACHE = join(
+  CACHE_DIR,
+  `${HOLDOUT ? 'holdout' : 'populations'}${PLANNED ? '-planned' : ''}.json`,
+);
 
 // --- The parameters -----------------------------------------------------------------------------
 
@@ -102,7 +113,12 @@ const BOUNDS: Readonly<Record<Key, readonly [number, number]>> = {
    * rewarding a fighter's own preference, not a reason to stop describing exploitability.
    */
   gamePlanning: [0.35, 0.8],
-  contextPower: [-5, 0.5],
+  /*
+   * Capped at −0.5: a power mean at or above zero stops charging a fighter for his weakest context,
+   * and `functional.test.ts`'s design claims fail with it ("charges a hole to whoever can put you in
+   * it"). Charging holes is what the rating is for, so it is a constraint and not a fitted value.
+   */
+  contextPower: [-5, -0.5],
   panelTau: [5, 25],
 };
 
@@ -157,8 +173,14 @@ function roundRobin(label: string, fighters: readonly Fighter[], fights: number)
           boutId: seed,
           seed,
           rounds: 3,
-          red: { fighter: fighters[i]! },
-          blue: { fighter: fighters[j]! },
+          red: {
+            fighter: fighters[i]!,
+            plan: PLANNED ? planFor(fighters[i]!, fighters[j]!) : undefined,
+          },
+          blue: {
+            fighter: fighters[j]!,
+            plan: PLANNED ? planFor(fighters[j]!, fighters[i]!) : undefined,
+          },
         });
         bouts[i]!++;
         bouts[j]!++;
